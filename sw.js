@@ -1,4 +1,4 @@
-const CACHE_NAME = "navi-pwa-v1";
+const CACHE_NAME = "navi-pwa-v3";
 const APP_SHELL = [
   "/",
   "/index.html",
