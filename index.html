@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#141412">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Navi">
+  <meta name="description" content="Navi, Shaya's Claude-powered pocket chat.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="icon" href="/icons/icon-192.png">
+  <title>Navi</title>
+  <style>
+    :root {
+      --bg: #141412;
+      --ink: #ede9e0;
+      --brass: #c9a45c;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      overflow: hidden;
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+
+    .app {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bottom);
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: var(--bg);
+    }
+
+    .fallback {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .fallback a {
+      color: #141412;
+      background: var(--brass);
+      border-radius: 999px;
+      display: inline-block;
+      margin-top: 16px;
+      padding: 11px 18px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <iframe
+      src="https://claude.site/public/artifacts/46857011-4ff9-4028-8bb3-cc3a92e0682c/embed"
+      title="Navi"
+      allow="clipboard-write"
+      allowfullscreen>
+    </iframe>
+    <noscript>
+      <div class="fallback">
+        <div>
+          <strong>Navi needs JavaScript.</strong>
+          <br>
+          Open the Claude artifact directly.
+          <br>
+          <a href="https://claude.ai/public/artifacts/46857011-4ff9-4028-8bb3-cc3a92e0682c">Open Navi</a>
+        </div>
+      </div>
+    </noscript>
+  </main>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/sw.js").catch(function () {});
+      });
+    }
+  </script>
+</body>
+</html>

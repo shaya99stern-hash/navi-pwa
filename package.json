@@ -1,0 +1,9 @@
+{
+  "name": "navi-pwa",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "npx serve .",
+    "build": "echo Static PWA ready"
+  }
+}
