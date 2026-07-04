@@ -1,4 +1,4 @@
-const CACHE_NAME = "navi-pwa-v2";
+const CACHE_NAME = "navi-pwa-v3";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -26,7 +26,6 @@ self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   if (url.origin !== location.origin) return;
-  if (url.pathname.startsWith("/api/")) return;
 
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request))

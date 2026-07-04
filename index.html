@@ -1,276 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Navi">
-<meta name="theme-color" content="#141412">
-<meta name="description" content="Navi, Shaya's Claude-powered pocket chat.">
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="icon" href="/icons/icon-192.png">
-<title>Navi</title>
-<!--
-════════════════════════════════════════════════════════════════
-DEPLOY NOTES (Vercel — no build step)
-This is the self-contained Navi app. It talks to Claude through the
-same-origin serverless proxy at /api/chat (see api/chat.js), so no API
-key ever ships to the client. Set ANTHROPIC_API_KEY in
-Vercel → Project → Settings → Environment Variables, then redeploy.
-Companion files: manifest.webmanifest, sw.js, /icons/*.
-════════════════════════════════════════════════════════════════
--->
-<style>
-:root{
-  --bg:#141412; --panel:#1E1D1A; --panel-2:#26241F; --line:#33302A;
-  --ink:#EDE9E0; --ink-dim:#9C968A; --ink-faint:#6B665C;
-  --brass:#C9A45C; --brass-deep:#A98842;
-  --radius:22px; --pad:16px;
-  --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
-}
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;overscroll-behavior:none}
-body{
-  background:var(--bg); color:var(--ink);
-  font:16px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
-  display:flex; flex-direction:column;
-}
-::selection{background:rgba(201,164,92,.3)}
-
-/* ── Header ─────────────────────────── */
-header{
-  padding:calc(var(--safe-top) + 12px) var(--pad) 12px;
-  display:flex; align-items:center; justify-content:space-between;
-  border-bottom:1px solid transparent; transition:border-color .3s;
-  position:sticky; top:0; background:linear-gradient(var(--bg) 70%,transparent); z-index:5;
-}
-header.scrolled{border-color:var(--line)}
-.brand{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:.02em}
-.spark{width:20px;height:20px;flex:none}
-.model-chip{
-  font-size:12.5px;color:var(--ink-dim);background:var(--panel);
-  border:1px solid var(--line);padding:5px 11px;border-radius:99px;
-  display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;
-}
-.model-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--brass)}
-#newChat{background:none;border:none;color:var(--ink-dim);font-size:20px;cursor:pointer;padding:4px 8px;line-height:1}
-
-/* ── Stage / greeting ───────────────── */
-main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column}
-#greet{
-  flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;
-  gap:10px;padding:24px;text-align:center;animation:rise .6s ease both;
-}
-#greet h1{
-  font-family:"New York",ui-serif,Georgia,"Times New Roman",serif;
-  font-weight:500;font-size:clamp(30px,8.5vw,42px);letter-spacing:-.01em;color:var(--ink);
-}
-#greet h1 em{font-style:italic;color:var(--brass)}
-#greet p{color:var(--ink-faint);font-size:14px;max-width:280px}
-.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px;padding:0 8px}
-.chip{
-  background:var(--panel);border:1px solid var(--line);color:var(--ink-dim);
-  padding:9px 15px;border-radius:99px;font-size:13.5px;cursor:pointer;transition:.15s;
-}
-.chip:active{transform:scale(.96);background:var(--panel-2)}
-@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-
-/* ── Messages ───────────────────────── */
-#thread{display:none;flex-direction:column;gap:14px;padding:18px var(--pad) 24px;max-width:760px;width:100%;margin:0 auto}
-.msg{max-width:86%;animation:rise .35s ease both}
-.msg.user{
-  align-self:flex-end;background:var(--panel-2);border:1px solid var(--line);
-  padding:11px 15px;border-radius:var(--radius);border-bottom-right-radius:8px;
-}
-.msg.ai{align-self:flex-start;padding:2px 2px 2px 0}
-.msg.ai .who{
-  font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--brass);margin-bottom:6px;font-weight:600;
-}
-.msg.ai .body{color:var(--ink)}
-.msg.err .body{color:#D98B7A}
-.body p{margin:0 0 .7em}.body p:last-child{margin:0}
-.body strong{color:#fff}
-.body code{
-  font:13px ui-monospace,"SF Mono",Menlo,monospace;
-  background:var(--panel);border:1px solid var(--line);padding:1.5px 6px;border-radius:6px;
-}
-.body pre{
-  background:var(--panel);border:1px solid var(--line);border-radius:12px;
-  padding:12px 14px;overflow-x:auto;margin:.7em 0;
-}
-.body pre code{background:none;border:none;padding:0;white-space:pre}
-.body ul,.body ol{margin:0 0 .7em 1.2em}
-.body li{margin:.2em 0}
-
-/* typing indicator */
-.typing{display:flex;gap:5px;padding:8px 2px}
-.typing i{width:6px;height:6px;border-radius:50%;background:var(--brass);opacity:.4;animation:pulse 1.1s infinite}
-.typing i:nth-child(2){animation-delay:.18s}.typing i:nth-child(3){animation-delay:.36s}
-@keyframes pulse{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
-
-/* ── Composer ───────────────────────── */
-#composer{
-  padding:10px var(--pad) calc(var(--safe-bot) + 12px);
-  background:linear-gradient(transparent,var(--bg) 30%);
-}
-.box{
-  max-width:760px;margin:0 auto;background:var(--panel);
-  border:1px solid var(--line);border-radius:26px;padding:6px 6px 6px 18px;
-  display:flex;align-items:flex-end;gap:8px;transition:border-color .2s;
-}
-.box:focus-within{border-color:var(--brass-deep)}
-textarea{
-  flex:1;background:none;border:none;outline:none;resize:none;color:var(--ink);
-  font:16px/1.45 inherit;max-height:132px;padding:8px 0;
-}
-textarea::placeholder{color:var(--ink-faint)}
-#send{
-  width:38px;height:38px;flex:none;border:none;border-radius:50%;cursor:pointer;
-  background:var(--brass);color:#141412;display:flex;align-items:center;justify-content:center;
-  transition:.15s;font-size:17px;
-}
-#send:disabled{background:var(--panel-2);color:var(--ink-faint)}
-#send:not(:disabled):active{transform:scale(.92)}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#141412">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Navi">
+  <meta name="description" content="Navi, Shaya's Claude-powered pocket chat.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="icon" href="/icons/icon-192.png">
+  <title>Navi</title>
+  <style>
+    :root{
+      --bg:#141412; --ink:#ede9e0; --muted:#9a958a; --brass:#c9a45c;
+      --safe-top:env(safe-area-inset-top,0px);
+      --safe-bottom:env(safe-area-inset-bottom,0px);
+    }
+    *{box-sizing:border-box;}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+      -webkit-font-smoothing:antialiased;
+      font:16px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;}
+    .wrap{position:fixed;inset:0;display:grid;place-items:center;
+      padding:calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 24px);}
+    .card{width:100%;max-width:340px;text-align:center;}
+    .logo{width:76px;height:76px;border-radius:20px;margin:0 auto 20px;display:block;}
+    h1{font-size:27px;letter-spacing:-.02em;margin:0 0 6px;}
+    p{color:var(--muted);margin:0 0 26px;font-size:15px;}
+    .btn{display:block;width:100%;background:var(--brass);color:#141412;
+      border:0;border-radius:14px;padding:16px 18px;font-size:17px;font-weight:700;
+      text-decoration:none;-webkit-tap-highlight-color:transparent;}
+    .btn:active{opacity:.85;}
+    .hint{margin-top:16px;font-size:13px;color:var(--muted);line-height:1.45;}
+  </style>
 </head>
 <body>
-
-<header id="hdr">
-  <div class="brand">
-    <svg class="spark" viewBox="0 0 24 24" fill="none">
-      <path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9L4.9 19.1" stroke="#C9A45C" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-    Navi
-  </div>
-  <div style="display:flex;align-items:center;gap:8px">
-    <div class="model-chip" id="modelChip"><span class="dot"></span><span id="modelName">Sonnet 4.6</span></div>
-    <button id="newChat" title="New chat" aria-label="New chat">＋</button>
-  </div>
-</header>
-
-<main id="main">
-  <div id="greet">
-    <h1><span id="greetWord">Evening</span>, <em>Shaya</em></h1>
-    <p>Direct answers. No fluff. Ask anything.</p>
-    <div class="chips" id="chips"></div>
-  </div>
-  <div id="thread" role="log" aria-live="polite"></div>
-</main>
-
-<div id="composer">
-  <div class="box">
-    <textarea id="input" rows="1" placeholder="Ask Navi…" aria-label="Message"></textarea>
-    <button id="send" disabled aria-label="Send">↑</button>
-  </div>
-</div>
-
-<script>
-/* ═══ CONFIG ═══════════════════════════════════════════════ */
-const API_ENDPOINT = "/api/chat"; // same-origin serverless proxy — keeps the key server-side (see api/chat.js)
-const MODEL = "claude-sonnet-4-6";
-const SYSTEM = `You are Navi, Shaya's personal AI. Style: direct, zero fluff, immediately actionable, mobile-friendly brevity. Use short paragraphs. Bold key numbers/actions. No pleasantries, no padding, no "great question". If a request is vague, ask ONE targeted question, then execute.`;
-
-/* ═══ STATE (in-memory — session-scoped, matches app intent) ═══ */
-let history = [];   // {role, content}
-let busy = false;
-
-/* ═══ DOM ══════════════════════════════════════════════════ */
-const $ = id => document.getElementById(id);
-const main=$("main"), greet=$("greet"), thread=$("thread"),
-      input=$("input"), send=$("send"), hdr=$("hdr");
-
-/* time-aware greeting */
-const h = new Date().getHours();
-$("greetWord").textContent = h<5?"Late night":h<12?"Morning":h<17?"Afternoon":"Evening";
-
-/* suggestion chips */
-const SUGGESTIONS = [
-  "Draft a cold outreach text",
-  "Break this problem down",
-  "Give me a 3-step plan",
-  "Explain like I'm busy"
-];
-SUGGESTIONS.forEach(t=>{
-  const b=document.createElement("button");
-  b.className="chip"; b.textContent=t;
-  b.onclick=()=>{ input.value=t+": "; input.focus(); grow(); toggleSend(); };
-  $("chips").appendChild(b);
-});
-
-/* composer behavior */
-function grow(){ input.style.height="auto"; input.style.height=Math.min(input.scrollHeight,132)+"px"; }
-function toggleSend(){ send.disabled = busy || !input.value.trim(); }
-input.addEventListener("input", ()=>{ grow(); toggleSend(); });
-input.addEventListener("keydown", e=>{
-  if(e.key==="Enter" && !e.shiftKey && !("ontouchstart" in window)){ e.preventDefault(); submit(); }
-});
-send.addEventListener("click", submit);
-$("newChat").addEventListener("click", ()=>{
-  history=[]; thread.innerHTML=""; thread.style.display="none"; greet.style.display="flex";
-});
-main.addEventListener("scroll", ()=> hdr.classList.toggle("scrolled", main.scrollTop>8));
-
-/* ═══ RENDER ═══════════════════════════════════════════════ */
-function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-function md(s){
-  // fenced code first
-  s = esc(s).replace(/```(\w*)\n([\s\S]*?)```/g, (_,l,c)=>`<pre><code>${c}</code></pre>`);
-  s = s.replace(/`([^`\n]+)`/g,"<code>$1</code>")
-       .replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>")
-       .replace(/^### (.*)$/gm,"<strong>$1</strong>")
-       .replace(/^[-•] (.*)$/gm,"<li>$1</li>")
-       .replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g,"<ul>$1</ul>");
-  return s.split(/\n{2,}/).map(p=>/^<(pre|ul)/.test(p.trim())?p:`<p>${p.replace(/\n/g,"<br>")}</p>`).join("");
-}
-function addMsg(role, html, extra=""){
-  greet.style.display="none"; thread.style.display="flex";
-  const d=document.createElement("div");
-  d.className=`msg ${role} ${extra}`;
-  d.innerHTML = role==="ai" ? `<div class="who">Navi</div><div class="body">${html}</div>` : `<div class="body">${html}</div>`;
-  thread.appendChild(d);
-  main.scrollTo({top:main.scrollHeight, behavior:"smooth"});
-  return d;
-}
-
-/* ═══ CORE INTELLIGENCE ════════════════════════════════════ */
-async function submit(){
-  const text=input.value.trim();
-  if(!text || busy) return;
-  busy=true; input.value=""; grow(); toggleSend();
-
-  addMsg("user", esc(text).replace(/\n/g,"<br>"));
-  history.push({role:"user", content:text});
-
-  const wait=addMsg("ai", `<div class="typing"><i></i><i></i><i></i></div>`);
-  try{
-    const res = await fetch(API_ENDPOINT,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ model:MODEL, max_tokens:1000, system:SYSTEM, messages:history })
-    });
-    const data = await res.json();
-    const reply = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n") || "(empty response)";
-    history.push({role:"assistant", content:reply});
-    wait.querySelector(".body").innerHTML = md(reply);
-  }catch(err){
-    wait.classList.add("err");
-    wait.querySelector(".body").innerHTML = "<p>Connection failed. Check network and retry.</p>";
-    history.pop(); // keep history consistent
-  }
-  busy=false; toggleSend();
-  main.scrollTo({top:main.scrollHeight, behavior:"smooth"});
-}
-
-/* ═══ PWA registration ═════════════════════════════════════ */
-try{
-  if("serviceWorker" in navigator && location.protocol==="https:"){
-    navigator.serviceWorker.register("/sw.js").catch(()=>{});
-  }
-}catch(e){}
-</script>
+  <main class="wrap">
+    <div class="card">
+      <img class="logo" src="/icons/icon-192.png" alt="">
+      <h1>Navi</h1>
+      <p>Your Claude-powered pocket chat.</p>
+      <a class="btn" href="https://claude.ai/public/artifacts/46857011-4ff9-4028-8bb3-cc3a92e0682c" target="_blank" rel="noopener">Open Navi</a>
+      <div class="hint">Chat runs on Claude — no API key needed.</div>
+    </div>
+  </main>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/sw.js").catch(function () {});
+      });
+    }
+  </script>
 </body>
 </html>
