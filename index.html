@@ -18,21 +18,31 @@
       --safe-top:env(safe-area-inset-top,0px);
       --safe-bottom:env(safe-area-inset-bottom,0px);
     }
-    *{box-sizing:border-box;}
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
-      -webkit-font-smoothing:antialiased;
-      font:16px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;}
-    .wrap{position:fixed;inset:0;display:grid;place-items:center;
-      padding:calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 24px);}
-    .card{width:100%;max-width:340px;text-align:center;}
-    .logo{width:76px;height:76px;border-radius:20px;margin:0 auto 20px;display:block;}
-    h1{font-size:27px;letter-spacing:-.02em;margin:0 0 6px;}
-    p{color:var(--muted);margin:0 0 26px;font-size:15px;}
-    .btn{display:block;width:100%;background:var(--brass);color:#141412;
-      border:0;border-radius:14px;padding:16px 18px;font-size:17px;font-weight:700;
-      text-decoration:none;-webkit-tap-highlight-color:transparent;}
-    .btn:active{opacity:.85;}
-    .hint{margin-top:16px;font-size:13px;color:var(--muted);line-height:1.45;}
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+    html,body{height:100%;margin:0;color:var(--ink);
+      background:
+        radial-gradient(120% 80% at 50% -10%, #1f1e1a 0%, #141412 60%) no-repeat,
+        var(--bg);
+      -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+      font:17px/1.47 -apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",sans-serif;}
+    .wrap{position:fixed;inset:0;display:flex;flex-direction:column;
+      justify-content:center;align-items:center;
+      padding:calc(var(--safe-top) + 28px) 22px calc(var(--safe-bottom) + 28px);}
+    .card{width:100%;max-width:360px;text-align:center;
+      display:flex;flex-direction:column;align-items:center;}
+    .logo{width:88px;height:88px;border-radius:22px;margin:0 0 22px;display:block;
+      box-shadow:0 12px 34px rgba(0,0,0,.5), inset 0 0 0 .5px rgba(255,255,255,.06);}
+    h1{font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-.028em;margin:0 0 8px;
+      font-family:-apple-system,"SF Pro Display",BlinkMacSystemFont,sans-serif;}
+    .sub{color:var(--muted);margin:0 0 34px;font-size:16px;max-width:280px;}
+    .btn{display:flex;align-items:center;justify-content:center;gap:8px;
+      width:100%;background:var(--brass);color:#141412;
+      border:0;border-radius:15px;padding:16px 18px;font-size:17px;font-weight:600;
+      letter-spacing:-.01em;text-decoration:none;
+      box-shadow:0 6px 18px rgba(201,164,92,.28);transition:transform .12s ease,opacity .12s ease;}
+    .btn:active{transform:scale(.97);opacity:.9;}
+    .btn svg{width:18px;height:18px;}
+    .hint{margin-top:18px;font-size:13px;color:var(--muted);line-height:1.5;max-width:300px;}
   </style>
 </head>
 <body>
@@ -40,9 +50,12 @@
     <div class="card">
       <img class="logo" src="/icons/icon-192.png" alt="">
       <h1>Navi</h1>
-      <p>Your Claude-powered pocket chat.</p>
-      <a class="btn" href="https://claude.site/public/artifacts/46857011-4ff9-4028-8bb3-cc3a92e0682c/embed" target="_blank" rel="noopener">Open Navi</a>
-      <div class="hint">Opens the web chat in-app — no API key needed.</div>
+      <p class="sub">Your Claude-powered pocket chat.</p>
+      <a class="btn" href="https://claude.site/public/artifacts/46857011-4ff9-4028-8bb3-cc3a92e0682c/embed" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 5l8 7-8 7" stroke="#141412" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Open Navi
+      </a>
+      <div class="hint">Opens the web chat in-app. Sign in once with your Google account — no API key needed.</div>
     </div>
   </main>
   <script>
