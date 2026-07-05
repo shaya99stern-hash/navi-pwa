@@ -1,11 +1,16 @@
 {
+  "id": "/",
   "name": "Navi",
   "short_name": "Navi",
   "description": "Navi, Shaya's Claude-powered pocket chat.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone"],
   "orientation": "portrait",
+  "categories": ["productivity", "utilities"],
   "background_color": "#141412",
   "theme_color": "#141412",
   "icons": [

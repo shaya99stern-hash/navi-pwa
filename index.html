@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
   <meta name="theme-color" content="#141412">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Navi">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="format-detection" content="telephone=no">
   <meta name="description" content="Navi, Shaya's Claude-powered pocket chat.">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -18,37 +20,48 @@
       --safe-top:env(safe-area-inset-top,0px);
       --safe-bottom:env(safe-area-inset-bottom,0px);
     }
-    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-    html,body{height:100%;margin:0;color:var(--ink);
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+      -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
+    html,body{height:100%;margin:0;color:var(--ink);overflow:hidden;
+      overscroll-behavior:none;touch-action:manipulation;
       background:
-        radial-gradient(120% 80% at 50% -10%, #1f1e1a 0%, #141412 60%) no-repeat,
+        radial-gradient(130% 90% at 50% -12%, #201e19 0%, #141412 58%) no-repeat,
         var(--bg);
       -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
       font:17px/1.47 -apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",sans-serif;}
     .wrap{position:fixed;inset:0;display:flex;flex-direction:column;
       justify-content:center;align-items:center;
-      padding:calc(var(--safe-top) + 28px) 22px calc(var(--safe-bottom) + 28px);}
+      padding:calc(var(--safe-top) + 28px) 24px calc(var(--safe-bottom) + 30px);}
     .card{width:100%;max-width:360px;text-align:center;
       display:flex;flex-direction:column;align-items:center;}
-    .logo{width:88px;height:88px;border-radius:22px;margin:0 0 22px;display:block;
-      box-shadow:0 12px 34px rgba(0,0,0,.5), inset 0 0 0 .5px rgba(255,255,255,.06);}
-    h1{font-size:34px;line-height:1.05;font-weight:700;letter-spacing:-.028em;margin:0 0 8px;
-      font-family:-apple-system,"SF Pro Display",BlinkMacSystemFont,sans-serif;}
-    .sub{color:var(--muted);margin:0 0 34px;font-size:16px;max-width:280px;}
+    .logo{width:96px;height:96px;border-radius:24px;margin:0 0 24px;display:block;
+      box-shadow:0 16px 40px rgba(0,0,0,.55), inset 0 0 0 .5px rgba(255,255,255,.07);
+      animation:pop .6s cubic-bezier(.2,.8,.2,1) both;}
+    h1{font-size:36px;line-height:1.04;font-weight:700;letter-spacing:-.03em;margin:0 0 8px;
+      font-family:-apple-system,"SF Pro Display",BlinkMacSystemFont,sans-serif;
+      animation:rise .55s ease .06s both;}
+    .sub{color:var(--muted);margin:0 0 36px;font-size:16px;max-width:280px;
+      animation:rise .55s ease .12s both;}
     .btn{display:flex;align-items:center;justify-content:center;gap:8px;
       width:100%;background:var(--brass);color:#141412;
-      border:0;border-radius:15px;padding:16px 18px;font-size:17px;font-weight:600;
-      letter-spacing:-.01em;text-decoration:none;
-      box-shadow:0 6px 18px rgba(201,164,92,.28);transition:transform .12s ease,opacity .12s ease;}
-    .btn:active{transform:scale(.97);opacity:.9;}
+      border:0;border-radius:16px;padding:17px 18px;font-size:17px;font-weight:600;
+      letter-spacing:-.01em;text-decoration:none;cursor:pointer;
+      box-shadow:0 8px 22px rgba(201,164,92,.30);
+      transition:transform .12s ease,opacity .12s ease,box-shadow .12s ease;
+      animation:rise .55s ease .18s both;}
+    .btn:active{transform:scale(.965);opacity:.92;box-shadow:0 4px 14px rgba(201,164,92,.22);}
     .btn svg{width:18px;height:18px;}
-    .hint{margin-top:18px;font-size:13px;color:var(--muted);line-height:1.5;max-width:300px;}
+    .hint{margin-top:18px;font-size:13px;color:var(--muted);line-height:1.5;max-width:300px;
+      animation:rise .55s ease .24s both;}
+    @keyframes pop{from{opacity:0;transform:scale(.86)}to{opacity:1;transform:scale(1)}}
+    @keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
   </style>
 </head>
 <body>
   <main class="wrap">
     <div class="card">
-      <img class="logo" src="/icons/icon-192.png" alt="">
+      <img class="logo" src="/icons/icon-192.png" alt="" draggable="false">
       <h1>Navi</h1>
       <p class="sub">Your Claude-powered pocket chat.</p>
       <a class="btn" href="https://claude.ai/public/artifacts/46857011-4ff9-4028-8bb3-cc3a92e0682c" target="_blank" rel="noopener">
