@@ -174,7 +174,7 @@ export async function runComposite(options: CompositeOptions): Promise<{ text: s
         ],
         maxOutputTokens: MAX_COUNCIL_TOKENS,
         maxRetries: 0,
-        timeout: { totalMs: 24_000 },
+        timeout: { totalMs: 16_000 },
         abortSignal
       });
       return result.text.trim();
@@ -210,8 +210,8 @@ export async function runComposite(options: CompositeOptions): Promise<{ text: s
       }
     ],
     maxOutputTokens: MAX_SYNTHESIS_TOKENS,
-    maxRetries: 1,
-    timeout: { totalMs: 26_000 },
+    maxRetries: 0,
+    timeout: { totalMs: 18_000 },
     abortSignal
   });
 
@@ -238,8 +238,8 @@ export async function runComposite(options: CompositeOptions): Promise<{ text: s
       }
     ],
     maxOutputTokens: MAX_VERIFY_TOKENS,
-    maxRetries: 1,
-    timeout: { totalMs: 26_000 },
+    maxRetries: 0,
+    timeout: { totalMs: 18_000 },
     abortSignal
   });
 
