@@ -144,7 +144,7 @@ function imageGenerationIntent(text: string, hasImageAttachment: boolean): boole
   const creationVerb = /\b(generate|create|make|draw|illustrate|render|design|produce)\b[\s\S]{0,90}\b(image|picture|photo|portrait|illustration|artwork|wallpaper|poster|logo|icon)\b/i;
   const visualFirst = /^\s*(?:(?:a|an|the|some|random)\s+)?(?:image|picture|photo|portrait|illustration|artwork|wallpaper|poster|logo|icon)\s+(?:of|showing|depicting|with)\b/i;
   const directDrawing = /\b(draw|illustrate|visualize|paint|sketch|render)\s+(?:me\s+)?\b/i;
-  const editAttached = hasImageAttachment && /\b(edit|change|remove|replace|add|enhance|retouch|restore|upscale|recolor|professional|fix|crop|make)\b/i;
+  const editAttached = hasImageAttachment && /\b(edit|change|remove|replace|add|enhance|retouch|restore|upscale|recolor|professional|fix|crop|make)\b/i.test(text);
   const explicitImageMode = /\b(text[- ]to[- ]image|image generation|generate an image|generate a picture|make me an image|make me a picture)\b/i;
   return creationVerb.test(text) || visualFirst.test(text) || directDrawing.test(text) || editAttached || explicitImageMode.test(text);
 }
