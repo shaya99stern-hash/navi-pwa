@@ -5,6 +5,8 @@ const DB_NAME = "navi-local-v3";
 const DB_VERSION = 1;
 const STORE = "state";
 
+type PreferenceInput = Omit<Partial<NaviPreferences>, "preset"> & { preset?: unknown };
+
 export type LocalState = {
   chats: StoredChat[];
   preferences: NaviPreferences;
@@ -78,7 +80,7 @@ function normalizePreset(value: unknown): ModelPreset {
   return map[String(value ?? "auto")] ?? "auto";
 }
 
-function mergePreferences(value?: Partial<NaviPreferences> & { preset?: unknown }): NaviPreferences {
+function mergePreferences(value?: PreferenceInput): NaviPreferences {
   return {
     ...DEFAULT_PREFERENCES,
     ...value,
