@@ -1,9 +1,10 @@
 import type { UIMessage } from "ai";
 
+export type SwarmPreset = "navi-fable" | "navi-sol";
+
 export type ModelPreset =
   | "auto"
-  | "navi-5"
-  | "navi-sol-5-6"
+  | SwarmPreset
   | "gemini-direct"
   | "groq-direct"
   | "huggingface-direct";

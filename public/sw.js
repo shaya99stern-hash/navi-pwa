@@ -1,4 +1,4 @@
-const VERSION = "navi-shell-v6";
+const VERSION = "navi-shell-v7";
 const STATIC_CACHE = `${VERSION}-static`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const OFFLINE_URL = "/offline";

@@ -10,7 +10,7 @@ import {
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { createProviderModel, getProviderAvailability, selectDirectRoute } from "@/lib/ai/providers";
 import { runComposite } from "@/lib/ai/swarm";
-import type { ModelPreset, NaviStreamStatus, ResponseStyle, ToolPolicy } from "@/lib/ai/types";
+import type { ModelPreset, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { gatherMcpMetadata } from "@/lib/mcp";
 
 export const runtime = "edge";
@@ -18,7 +18,7 @@ export const maxDuration = 60;
 
 type ChatRequestBody = {
   messages?: UIMessage[];
-  preset?: ModelPreset;
+  preset?: unknown;
   style?: ResponseStyle;
   tools?: Partial<ToolPolicy>;
   threadSummary?: string;
@@ -27,6 +27,7 @@ type ChatRequestBody = {
 
 type RateBucket = { count: number; resetAt: number };
 type FilePart = { mediaType?: string; url?: string; filename?: string };
+type Effort = "normal" | "complex" | "extreme";
 
 const REQUEST_WINDOW_MS = 60_000;
 const REQUESTS_PER_WINDOW = 14;
@@ -35,8 +36,8 @@ const MAX_SERIALIZED_CHARACTERS = 18_000_000;
 const MAX_OUTPUT_TOKENS = 1_900;
 const ALLOWED_PRESETS = new Set<ModelPreset>([
   "auto",
-  "navi-5",
-  "navi-sol-5-6",
+  "navi-fable",
+  "navi-sol",
   "gemini-direct",
   "groq-direct",
   "huggingface-direct"
@@ -57,6 +58,19 @@ const IMAGE_MEDIA_TYPES = new Set<ImageAttachment["mimeType"]>(["image/jpeg", "i
 
 const globalRateState = globalThis as typeof globalThis & { __naviV4RateBuckets?: Map<string, RateBucket> };
 const rateBuckets = globalRateState.__naviV4RateBuckets ?? (globalRateState.__naviV4RateBuckets = new Map());
+
+function normalizePreset(value: unknown): ModelPreset {
+  const legacy: Record<string, ModelPreset> = {
+    "navi-5": "navi-fable",
+    "fable-5": "navi-fable",
+    "navi-sol-5-6": "navi-sol",
+    "opus-4-8": "navi-sol"
+  };
+  const normalized = legacy[String(value ?? "")] ?? value;
+  return typeof normalized === "string" && ALLOWED_PRESETS.has(normalized as ModelPreset)
+    ? normalized as ModelPreset
+    : "auto";
+}
 
 function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
@@ -133,7 +147,7 @@ function validateFiles(messages: UIMessage[]): string | null {
   return totalEstimatedBytes > 10_000_000 ? "Combined attachments exceed the 10 MB request limit." : null;
 }
 
-function complexity(text: string): "normal" | "complex" | "extreme" {
+function complexity(text: string): Effort {
   const extreme = text.length > 1_800 || /\b(exhaustive|deep audit|production-ready|entire codebase|long-horizon|multi-agent|research report|principal architect)\b/i.test(text);
   if (extreme) return "extreme";
   const complex = text.length > 650 || /\b(architecture|audit|analy[sz]e|debug|proof|strategy|compare|research|legal|financial|medical|typescript|javascript|react|next\.?js|python|sql|multi-step|comprehensive)\b/i.test(text);
@@ -253,6 +267,13 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+function resolveAutoPreset(effort: Effort, providerCount: number, hasFiles: boolean): ModelPreset {
+  if (providerCount < 2 || hasFiles) return "auto";
+  if (effort === "extreme") return "navi-sol";
+  if (effort === "complex") return "navi-fable";
+  return "auto";
+}
+
 export async function POST(request: Request): Promise<Response> {
   if (!isSameOrigin(request)) return Response.json({ error: "Cross-origin requests are not allowed." }, { status: 403 });
   if (isRateLimited(clientIdentifier(request))) return Response.json({ error: "Too many requests. Try again shortly." }, { status: 429, headers: { "Retry-After": "60" } });
@@ -278,7 +299,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const currentImageAttachments = imageAttachments(lastUserMessage);
   const imageRequested = imageGenerationIntent(lastUserText, currentImageAttachments.length > 0);
-  const preset = body.preset && ALLOWED_PRESETS.has(body.preset) ? body.preset : "auto";
+  const preset = normalizePreset(body.preset);
   const style = body.style && ALLOWED_STYLES.has(body.style) ? body.style : "balanced";
   const tools: ToolPolicy = {
     web: body.tools?.web === true,
@@ -290,13 +311,7 @@ export async function POST(request: Request): Promise<Response> {
   const hasFiles = fileParts(messages).length > 0;
   const effort = complexity(lastUserText);
   const artifactRequested = !imageRequested && tools.artifacts && artifactIntent(lastUserText);
-  const resolvedPreset: ModelPreset = preset === "auto"
-    ? effort === "extreme" && providerCount >= 2 && !hasFiles
-      ? "navi-sol-5-6"
-      : effort === "complex" && providerCount >= 2 && !hasFiles
-        ? "navi-5"
-        : "auto"
-    : preset;
+  const resolvedPreset = preset === "auto" ? resolveAutoPreset(effort, providerCount, hasFiles) : preset;
   const origin = new URL(request.url).origin;
 
   const stream = createUIMessageStream({
@@ -329,11 +344,19 @@ export async function POST(request: Request): Promise<Response> {
         : "";
       const modelMessages = await convertToModelMessages(redactGeneratedImages(messages));
 
-      if (resolvedPreset === "navi-5" || resolvedPreset === "navi-sol-5-6") {
-        writer.write(statusChunk({ stage: "plan", detail: "Planning a high-confidence response." }));
+      if (resolvedPreset === "navi-fable" || resolvedPreset === "navi-sol") {
+        const swarmProfile: SwarmPreset = resolvedPreset;
+        writer.write(statusChunk({
+          stage: "plan",
+          detail: swarmProfile === "navi-fable"
+            ? "Planning staged long-horizon work."
+            : "Planning independent parallel workstreams."
+        }));
         const result = await runComposite({
-          profile: resolvedPreset,
+          profile: swarmProfile,
           messages: modelMessages,
+          requestText: lastUserText,
+          effort,
           origin,
           style,
           tools,
