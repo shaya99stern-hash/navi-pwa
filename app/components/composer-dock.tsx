@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Square } from "lucide-react";
+import { ArrowUp, Mic, Paperclip, SlidersHorizontal, Square } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
 
@@ -14,6 +14,8 @@ type Props = {
   onChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
+  onFiles: (files: FileList | null) => void;
+  onOpenTools: () => void;
 };
 
 type ProviderStatus = {
@@ -24,9 +26,25 @@ type ProviderStatus = {
   };
 };
 
-export function ComposerDock({ value, generating, online, attachmentCount, statusText, haptics, onChange, onSend, onStop }: Props) {
+export function ComposerDock({
+  value,
+  generating,
+  online,
+  attachmentCount,
+  statusText,
+  haptics,
+  onChange,
+  onSend,
+  onStop,
+  onFiles,
+  onOpenTools
+}: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
   const [sending, setSending] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
   const [providerReady, setProviderReady] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -50,6 +68,7 @@ export function ComposerDock({ value, generating, online, attachmentCount, statu
       });
     return () => {
       cancelled = true;
+      recognitionRef.current?.abort?.();
     };
   }, []);
 
@@ -75,6 +94,49 @@ export function ComposerDock({ value, generating, online, attachmentCount, statu
     }
   }
 
+  function toggleVoice() {
+    if (listening) {
+      recognitionRef.current?.stop?.();
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setVoiceMessage("Voice dictation is not supported in this browser.");
+      haptic("warning", haptics);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = navigator.language || "en-US";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onstart = () => {
+      setListening(true);
+      setVoiceMessage("Listening…");
+      haptic("selection", haptics);
+    };
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        transcript += event.results[index][0]?.transcript ?? "";
+      }
+      if (transcript.trim()) onChange(`${value}${value.trim() ? " " : ""}${transcript.trim()}`);
+    };
+    recognition.onerror = () => {
+      setListening(false);
+      setVoiceMessage("Voice input stopped. Try again.");
+      haptic("error", haptics);
+    };
+    recognition.onend = () => {
+      setListening(false);
+      setVoiceMessage(null);
+      textareaRef.current?.focus();
+    };
+    recognitionRef.current = recognition;
+    recognition.start();
+  }
+
   const canSend = online && available && !generating && Boolean(value.trim() || attachmentCount);
   const blocked = !online || !available;
   const placeholder = !online
@@ -82,18 +144,30 @@ export function ComposerDock({ value, generating, online, attachmentCount, statu
     : !available
       ? "AI provider setup required"
       : "Message Navi";
-  const footer = !online
-    ? "Offline · saved drafts will not send automatically"
-    : !available
-      ? "Add a Gemini, Groq, or Hugging Face key in Vercel to enable Navi"
-      : attachmentCount
-        ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready · ${statusText}`
-        : statusText;
+  const footer = voiceMessage
+    ?? (!online
+      ? "Offline · your draft is saved locally"
+      : !available
+        ? "Add a Gemini, Groq, or Hugging Face key in Vercel to enable Navi"
+        : attachmentCount
+          ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready · ${statusText}`
+          : statusText);
 
   return (
     <div className="composer-dock shrink-0 px-4 pt-2">
       <div className="mx-auto w-full max-w-[760px]">
-        <form onSubmit={submit} className={`flex min-h-[52px] items-end gap-2 rounded-[24px] border border-[var(--border-strong)] bg-elev-1 px-2 py-2 pl-4 shadow-composer transition-transform duration-[90ms] ${sending ? "scale-[0.98]" : "scale-100"}`}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/jpeg,image/png,image/webp,image/gif,text/plain,text/markdown,text/csv,application/json,application/pdf"
+          className="hidden"
+          onChange={(event) => {
+            onFiles(event.currentTarget.files);
+            event.currentTarget.value = "";
+          }}
+        />
+        <form onSubmit={submit} className={`composer-surface rounded-[26px] border border-[var(--border-strong)] bg-elev-1 p-2 shadow-composer transition-transform duration-[90ms] ${sending ? "scale-[0.985]" : "scale-100"}`}>
           <textarea
             ref={textareaRef}
             value={value}
@@ -107,19 +181,45 @@ export function ComposerDock({ value, generating, online, attachmentCount, statu
             disabled={blocked}
             placeholder={placeholder}
             aria-label="Message Navi"
-            className="max-h-40 min-h-9 min-w-0 flex-1 overflow-y-auto bg-transparent py-1.5 text-base/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
+            className="max-h-40 min-h-10 w-full overflow-y-auto bg-transparent px-2 py-2 text-[16px]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
           />
-          <button
-            type={generating ? "button" : "submit"}
-            onClick={generating ? onStop : undefined}
-            disabled={!generating && !canSend}
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors duration-[100ms] ${generating || canSend ? "bg-accent text-white active:bg-accent-pressed" : "bg-elev-3 text-disabled"}`}
-            aria-label={generating ? "Stop response" : "Send message"}
-          >
-            {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={20} strokeWidth={2.4} />}
-          </button>
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={blocked || generating}
+                className="composer-action"
+                aria-label="Add files or images"
+              >
+                <Paperclip size={18} />
+              </button>
+              <button type="button" onClick={onOpenTools} className="composer-action" aria-label="Open tools and settings">
+                <SlidersHorizontal size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={toggleVoice}
+                disabled={blocked || generating}
+                className={`composer-action ${listening ? "bg-accent text-white" : ""}`}
+                aria-label={listening ? "Stop voice input" : "Start voice input"}
+                aria-pressed={listening}
+              >
+                <Mic size={18} />
+              </button>
+            </div>
+            <button
+              type={generating ? "button" : "submit"}
+              onClick={generating ? onStop : undefined}
+              disabled={!generating && !canSend}
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-white shadow-sm active:scale-95 active:bg-accent-pressed" : "bg-elev-3 text-disabled"}`}
+              aria-label={generating ? "Stop response" : "Send message"}
+            >
+              {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={20} strokeWidth={2.4} />}
+            </button>
+          </div>
         </form>
-        <div className={`flex min-h-7 items-center justify-center px-3 text-center text-[11px]/[14px] font-semibold ${blocked ? "text-warning" : "text-tertiary"}`}>
+        <div className={`flex min-h-7 items-center justify-center px-3 text-center text-[11px]/[14px] font-semibold ${blocked || voiceMessage ? "text-warning" : "text-tertiary"}`} role="status" aria-live="polite">
           {footer}
         </div>
       </div>
