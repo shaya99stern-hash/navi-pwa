@@ -1,104 +1,59 @@
-const CACHE_VERSION = "navi-shell-v2";
-const APP_SHELL = ["/", "/manifest.json", "/offline.html"];
+const VERSION = "navi-shell-v3";
+const STATIC_CACHE = `${VERSION}-static`;
+const RUNTIME_CACHE = `${VERSION}-runtime`;
+const SHELL = ["/", "/manifest.webmanifest", "/offline.html", "/icon", "/apple-icon"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_VERSION)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    Promise.all([
-      caches.keys().then((cacheNames) =>
-        Promise.all(
-          cacheNames
-            .filter((cacheName) => cacheName.startsWith("navi-") && cacheName !== CACHE_VERSION)
-            .map((cacheName) => caches.delete(cacheName))
-        )
-      ),
-      self.clients.claim()
-    ])
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith("navi-") && ![STATIC_CACHE, RUNTIME_CACHE].includes(key)).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") {
-    self.skipWaiting();
-  }
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-
-  if (request.method !== "GET") {
-    return;
-  }
-
+  if (request.method !== "GET") return;
   const url = new URL(request.url);
-
-  if (url.pathname.startsWith("/api/")) {
-    return;
-  }
+  if (url.pathname.startsWith("/api/")) return;
+  if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone));
-          }
+          if (response.ok) caches.open(RUNTIME_CACHE).then((cache) => cache.put("/", response.clone()));
           return response;
         })
-        .catch(async () =>
-          (await caches.match(request)) ||
-          (await caches.match("/")) ||
-          (await caches.match("/offline.html"))
-        )
+        .catch(async () => (await caches.match(request)) || (await caches.match("/")) || (await caches.match("/offline.html")))
     );
     return;
   }
 
-  if (url.origin !== self.location.origin) {
-    return;
-  }
-
-  const isImmutableAsset =
-    url.pathname.startsWith("/_next/static/") ||
-    request.destination === "font" ||
-    request.destination === "image";
-
-  if (isImmutableAsset) {
+  const immutable = url.pathname.startsWith("/_next/static/") || request.destination === "font" || request.destination === "image";
+  if (immutable) {
     event.respondWith(
-      caches.match(request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-
-        return fetch(request).then((networkResponse) => {
-          if (networkResponse.ok && networkResponse.type === "basic") {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone));
-          }
-          return networkResponse;
-        });
-      })
+      caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+        if (response.ok) caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone()));
+        return response;
+      }))
     );
     return;
   }
 
   event.respondWith(
     fetch(request)
-      .then((networkResponse) => {
-        if (networkResponse.ok && networkResponse.type === "basic") {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone));
-        }
-        return networkResponse;
+      .then((response) => {
+        if (response.ok) caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
+        return response;
       })
       .catch(() => caches.match(request))
   );
