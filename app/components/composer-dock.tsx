@@ -16,9 +16,18 @@ type Props = {
   onStop: () => void;
 };
 
+type ProviderStatus = {
+  providers?: {
+    gemini?: boolean;
+    groq?: boolean;
+    openrouter?: boolean;
+  };
+};
+
 export function ComposerDock({ value, generating, online, attachmentCount, statusText, haptics, onChange, onSend, onStop }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [sending, setSending] = useState(false);
+  const [providerReady, setProviderReady] = useState<boolean | null>(null);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -27,8 +36,27 @@ export function ComposerDock({ value, generating, online, attachmentCount, statu
     textarea.style.height = `${Math.min(160, Math.max(24, textarea.scrollHeight))}px`;
   }, [value]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/models", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: ProviderStatus) => {
+        if (cancelled) return;
+        const providers = data.providers;
+        setProviderReady(Boolean(providers?.gemini || providers?.groq || providers?.openrouter));
+      })
+      .catch(() => {
+        if (!cancelled) setProviderReady(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const available = providerReady !== false;
+
   function send() {
-    if ((!value.trim() && attachmentCount === 0) || generating || !online) return;
+    if ((!value.trim() && attachmentCount === 0) || generating || !online || !available) return;
     setSending(true);
     haptic("impact-light", haptics);
     window.setTimeout(() => setSending(false), 100);
@@ -47,7 +75,20 @@ export function ComposerDock({ value, generating, online, attachmentCount, statu
     }
   }
 
-  const canSend = online && !generating && Boolean(value.trim() || attachmentCount);
+  const canSend = online && available && !generating && Boolean(value.trim() || attachmentCount);
+  const blocked = !online || !available;
+  const placeholder = !online
+    ? "Navi is offline"
+    : !available
+      ? "AI provider setup required"
+      : "Message Navi";
+  const footer = !online
+    ? "Offline · saved drafts will not send automatically"
+    : !available
+      ? "Add a Gemini, Groq, or OpenRouter key in Vercel to enable AI"
+      : attachmentCount
+        ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready · ${statusText}`
+        : statusText;
 
   return (
     <div className="composer-dock shrink-0 px-4 pt-2">
@@ -63,8 +104,8 @@ export function ComposerDock({ value, generating, online, attachmentCount, statu
             autoCapitalize="sentences"
             autoCorrect="on"
             spellCheck
-            disabled={!online}
-            placeholder={online ? "Message Navi" : "Navi is offline"}
+            disabled={blocked}
+            placeholder={placeholder}
             aria-label="Message Navi"
             className="max-h-40 min-h-9 min-w-0 flex-1 overflow-y-auto bg-transparent py-1.5 text-base/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
           />
@@ -78,8 +119,8 @@ export function ComposerDock({ value, generating, online, attachmentCount, statu
             {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={20} strokeWidth={2.4} />}
           </button>
         </form>
-        <div className={`flex min-h-7 items-center justify-center px-3 text-center text-[11px]/[14px] font-semibold ${online ? "text-tertiary" : "text-warning"}`}>
-          {!online ? "Offline · saved drafts will not send automatically" : attachmentCount ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready · ${statusText}` : statusText}
+        <div className={`flex min-h-7 items-center justify-center px-3 text-center text-[11px]/[14px] font-semibold ${blocked ? "text-warning" : "text-tertiary"}`}>
+          {footer}
         </div>
       </div>
     </div>
