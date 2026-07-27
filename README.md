@@ -1,13 +1,21 @@
 # Navi PWA
 
-Navi is a small iPhone-friendly PWA wrapper around the published Claude Artifact.
+Navi is a self-contained Next.js App Router PWA with an iOS-first chat interface, local on-device conversation history, streaming responses, and free-tier routing through OpenRouter and Groq.
 
-Live artifact:
-https://claude.ai/public/artifacts/46857011-4ff9-4028-8bb3-cc3a92e0682c
+## Vercel environment variables
 
-Embed used by the app:
-https://claude.site/public/artifacts/46857011-4ff9-4028-8bb3-cc3a92e0682c/embed
+Add at least one of these server-side variables in Vercel Project Settings:
 
-## iPhone Install
+- `OPENROUTER_API_KEY`
+- `GROQ_API_KEY`
 
-Open the Vercel URL in Safari, tap Share, then tap Add to Home Screen.
+Do not prefix them with `NEXT_PUBLIC_`.
+
+## Free-only routes
+
+- OpenRouter: `openrouter/free`
+- Groq: `openai/gpt-oss-120b`
+- Groq: `llama-3.3-70b-versatile`
+- Groq: `llama-3.1-8b-instant`
+
+Availability and rate limits are controlled by each provider. The application does not contain paid model IDs.
