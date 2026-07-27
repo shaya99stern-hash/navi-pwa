@@ -209,7 +209,7 @@ async function generateWithGemini(options: {
         input,
         response_format: {
           type: "image",
-          mime_type: "image/png",
+          mime_type: "image/jpeg",
           aspect_ratio: options.dimensions.aspectRatio,
           image_size: "1K"
         }
@@ -237,7 +237,7 @@ async function generateWithHuggingFace(options: {
 }): Promise<ImageBlock> {
   const token = huggingFaceToken();
   if (!token) throw new Error("Hugging Face image generation is unavailable.");
-  const model = process.env.HF_IMAGE_MODEL?.trim() || "black-forest-labs/FLUX.1-schnell";
+  const model = process.env.HF_IMAGE_MODEL?.trim() || "stabilityai/stable-diffusion-3-medium-diffusers";
   const encodedModel = model.split("/").map(encodeURIComponent).join("/");
   const timed = timedSignal(options.abortSignal, 32_000);
   try {
@@ -252,7 +252,7 @@ async function generateWithHuggingFace(options: {
         parameters: {
           width: options.dimensions.width,
           height: options.dimensions.height,
-          num_inference_steps: 4
+          num_inference_steps: 28
         }
       }),
       signal: timed.signal,
