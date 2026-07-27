@@ -33,13 +33,24 @@ export function sanitizeSvgText(svg: string): string {
 }
 
 export function sanitizeArtifactHtml(html: string): string {
-  return html
+  const inlineScripts: string[] = [];
+  const withoutExternalScripts = html.replace(/<script\b[^>]*\bsrc\s*=\s*("|')[^"']+\1[^>]*>[\s\S]*?<\/script>/gi, "");
+  const protectedHtml = withoutExternalScripts.replace(/<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi, (_full, script: string) => {
+    const index = inlineScripts.push(script) - 1;
+    return `__NAVI_INLINE_SCRIPT_${index}__`;
+  });
+
+  const sanitizedMarkup = protectedHtml
     .replace(/<\/?(?:iframe|object|embed|base|link)\b[^>]*>/gi, "")
     .replace(/<meta\b[^>]*http-equiv\s*=\s*("|')?refresh\1?[^>]*>/gi, "")
-    .replace(/<script\b[^>]*\bsrc\s*=\s*("|')[^"']+\1[^>]*>[\s\S]*?<\/script>/gi, "")
     .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
     .replace(/\s(?:action|formaction|target)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
     .replace(/\s(?:href|src)\s*=\s*("|')\s*(?:https?:|javascript:|data:text\/html)[\s\S]*?\1/gi, "");
+
+  return sanitizedMarkup.replace(/__NAVI_INLINE_SCRIPT_(\d+)__/g, (_token, rawIndex: string) => {
+    const script = inlineScripts[Number(rawIndex)] ?? "";
+    return `<script>${script}</script>`;
+  });
 }
 
 export function buildArtifactDocument(payload: ArtifactPayload, theme: "dark" | "light"): string {
