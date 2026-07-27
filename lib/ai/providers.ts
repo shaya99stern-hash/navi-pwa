@@ -89,6 +89,10 @@ function huggingFaceToken(): string | undefined {
   });
 }
 
+export function getHuggingFaceToken(): string | undefined {
+  return huggingFaceToken();
+}
+
 export function getProviderAvailability(): ProviderAvailability {
   return {
     gemini: Boolean(geminiApiKey()),
