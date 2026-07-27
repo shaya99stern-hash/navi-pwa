@@ -1,9 +1,11 @@
-import type { NaviPreferences, StoredChat } from "../ai/types";
+import type { ModelPreset, NaviPreferences, StoredChat } from "../ai/types";
 import { DEFAULT_PREFERENCES, sortChats } from "../chat";
 
 const DB_NAME = "navi-local-v3";
 const DB_VERSION = 1;
 const STORE = "state";
+
+type PreferenceInput = Omit<Partial<NaviPreferences>, "preset"> & { preset?: unknown };
 
 export type LocalState = {
   chats: StoredChat[];
@@ -59,10 +61,30 @@ export async function clearLocalState(): Promise<void> {
   database.close();
 }
 
-function mergePreferences(value?: Partial<NaviPreferences>): NaviPreferences {
+function normalizePreset(value: unknown): ModelPreset {
+  const map: Record<string, ModelPreset> = {
+    auto: "auto",
+    "navi-5": "navi-5",
+    "navi-sol-5-6": "navi-sol-5-6",
+    "gemini-direct": "gemini-direct",
+    "groq-direct": "groq-direct",
+    "huggingface-direct": "huggingface-direct",
+    "fable-5": "navi-5",
+    "opus-4-8": "navi-sol-5-6",
+    "groq-balanced": "navi-5",
+    "groq-reasoning": "navi-sol-5-6",
+    "groq-fast": "groq-direct",
+    "gemini-flash": "gemini-direct",
+    "openrouter-free": "huggingface-direct"
+  };
+  return map[String(value ?? "auto")] ?? "auto";
+}
+
+function mergePreferences(value?: PreferenceInput): NaviPreferences {
   return {
     ...DEFAULT_PREFERENCES,
     ...value,
+    preset: normalizePreset(value?.preset),
     tools: { ...DEFAULT_PREFERENCES.tools, ...(value?.tools ?? {}) },
     connectedMcpServers: Array.isArray(value?.connectedMcpServers) ? value.connectedMcpServers : []
   };
@@ -82,21 +104,15 @@ function migrateLegacyState(): Partial<LocalState> {
         preview: typeof chat.preview === "string" ? chat.preview : "Saved conversation",
         updatedAt: typeof chat.updatedAt === "number" ? chat.updatedAt : Date.now(),
         pinned: Boolean(chat.pinned),
+        summary: typeof chat.summary === "string" ? chat.summary : undefined,
+        attachments: Array.isArray(chat.attachments) ? chat.attachments : undefined,
         messages: chat.messages ?? []
       }));
-
-    const presetMap: Record<string, NaviPreferences["preset"]> = {
-      auto: "auto",
-      "openrouter-free": "openrouter-free",
-      "groq-fast": "groq-fast",
-      "groq-balanced": "fable-5",
-      "groq-reasoning": "opus-4-8"
-    };
 
     return {
       chats: sortChats(chats),
       preferences: mergePreferences({
-        preset: presetMap[String(legacyPreferences.route ?? "auto")] ?? "auto",
+        preset: legacyPreferences.preset ?? legacyPreferences.route,
         style: (legacyPreferences.style as NaviPreferences["style"]) ?? "balanced",
         saveHistory: typeof legacyPreferences.saveHistory === "boolean" ? legacyPreferences.saveHistory : true
       })
@@ -124,9 +140,14 @@ export async function loadLocalState(): Promise<LocalState> {
     };
   }
 
+  const normalizedPreferences = mergePreferences(storedPreferences);
+  if (storedPreferences?.preset !== normalizedPreferences.preset) {
+    await setLocalValue("preferences", normalizedPreferences);
+  }
+
   return {
     chats: sortChats(storedChats ?? []),
-    preferences: mergePreferences(storedPreferences),
+    preferences: normalizedPreferences,
     draft: storedDraft ?? ""
   };
 }

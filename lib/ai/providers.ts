@@ -3,11 +3,15 @@ import type { ModelPreset, ProviderName, ProviderRoute, ToolPolicy } from "./typ
 
 export type ProviderAvailability = Record<ProviderName, boolean>;
 
+function huggingFaceToken(): string | undefined {
+  return process.env.HF_TOKEN ?? process.env.HUGGINGFACE_API_KEY ?? process.env.HUGGING_FACE_API_KEY;
+}
+
 export function getProviderAvailability(): ProviderAvailability {
   return {
     gemini: Boolean(process.env.GEMINI_API_KEY),
     groq: Boolean(process.env.GROQ_API_KEY),
-    openrouter: Boolean(process.env.OPENROUTER_API_KEY)
+    huggingface: Boolean(huggingFaceToken())
   };
 }
 
@@ -36,35 +40,93 @@ export function createProviderModel(route: ProviderRoute, origin: string): any {
     return provider.chatModel(route.model);
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured.");
+  const apiKey = huggingFaceToken();
+  if (!apiKey) throw new Error("HF_TOKEN is not configured.");
   const provider = createOpenAICompatible({
-    name: "openrouter",
+    name: "huggingface",
     apiKey,
-    baseURL: "https://openrouter.ai/api/v1",
+    baseURL: "https://router.huggingface.co/v1",
     includeUsage: true,
     headers: {
       "HTTP-Referer": origin,
-      "X-OpenRouter-Title": "Navi"
+      "X-Title": "Navi"
     }
   });
   return provider.chatModel(route.model);
 }
 
+const hfPolicy = process.env.HF_ROUTING_POLICY === "fastest" ? "fastest" : "cheapest";
+const hf = (model: string, label: string, capability: ProviderRoute["capability"]): ProviderRoute => ({
+  provider: "huggingface",
+  model: `${model}:${hfPolicy}`,
+  label,
+  capability
+});
+
 export const ROUTES = {
-  geminiFlash: { provider: "gemini", model: "gemini-3.6-flash", label: "Gemini Flash", capability: "multimodal" },
-  geminiSubagent: { provider: "gemini", model: "gemini-3.5-flash-lite", label: "Gemini Flash-Lite", capability: "fast" },
-  groqReasoning: { provider: "groq", model: "openai/gpt-oss-120b", label: "Groq GPT-OSS 120B", capability: "reasoning" },
-  groqFast: { provider: "groq", model: "openai/gpt-oss-20b", label: "Groq GPT-OSS 20B", capability: "fast" },
-  groqTools: { provider: "groq", model: "groq/compound", label: "Groq Compound", capability: "tools" },
-  openRouterFree: { provider: "openrouter", model: "openrouter/free", label: "OpenRouter Free", capability: "balanced" }
+  geminiVision: {
+    provider: "gemini",
+    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    label: "Gemini",
+    capability: "multimodal"
+  },
+  geminiSynthesis: {
+    provider: "gemini",
+    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    label: "Gemini",
+    capability: "long-context"
+  },
+  groqReasoning: {
+    provider: "groq",
+    model: process.env.GROQ_REASONING_MODEL ?? "openai/gpt-oss-120b",
+    label: "Groq reasoning",
+    capability: "reasoning"
+  },
+  groqFast: {
+    provider: "groq",
+    model: process.env.GROQ_FAST_MODEL ?? "openai/gpt-oss-20b",
+    label: "Groq fast",
+    capability: "fast"
+  },
+  groqTools: {
+    provider: "groq",
+    model: process.env.GROQ_TOOL_MODEL ?? "groq/compound",
+    label: "Groq tools",
+    capability: "tools"
+  },
+  hfGptOss: hf("openai/gpt-oss-120b", "HF GPT-OSS 120B", "reasoning"),
+  hfDeepSeek: hf("deepseek-ai/DeepSeek-V3.2", "HF DeepSeek V3.2", "reasoning"),
+  hfGlm: hf("zai-org/GLM-5.2", "HF GLM 5.2", "long-context"),
+  hfQwen: hf("Qwen/Qwen3.6-35B-A3B", "HF Qwen 3.6", "multimodal"),
+  hfKimi: hf("moonshotai/Kimi-K2.6", "HF Kimi K2.6", "coding"),
+  hfMiniMax: hf("MiniMaxAI/MiniMax-M2.7", "HF MiniMax M2.7", "balanced")
 } satisfies Record<string, ProviderRoute>;
 
-export function availableDraftRoutes(availability: ProviderAvailability, tools: ToolPolicy): ProviderRoute[] {
+function configuredHfRoutes(): ProviderRoute[] {
+  const custom = process.env.HF_SWARM_MODELS
+    ?.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 12)
+    .map((model, index) => hf(model, `HF specialist ${index + 1}`, "balanced"));
+  return custom?.length
+    ? custom
+    : [ROUTES.hfGptOss, ROUTES.hfDeepSeek, ROUTES.hfGlm, ROUTES.hfQwen, ROUTES.hfKimi, ROUTES.hfMiniMax];
+}
+
+export function availableSwarmRoutes(availability: ProviderAvailability, tools: ToolPolicy): ProviderRoute[] {
+  const hfRoutes = availability.huggingface ? configuredHfRoutes() : [];
   const routes: ProviderRoute[] = [];
-  if (availability.gemini) routes.push(ROUTES.geminiSubagent);
+
+  // Interleave providers so a configured Gemini, Groq and Hugging Face key all
+  // contribute to the hidden councils instead of one provider monopolizing them.
+  if (availability.gemini) routes.push(ROUTES.geminiSynthesis);
+  if (hfRoutes[0]) routes.push(hfRoutes[0]);
   if (availability.groq) routes.push(tools.web || tools.code ? ROUTES.groqTools : ROUTES.groqReasoning);
-  if (availability.openrouter) routes.push(ROUTES.openRouterFree);
+  if (hfRoutes[1]) routes.push(hfRoutes[1]);
+  if (availability.groq) routes.push(ROUTES.groqFast);
+  if (hfRoutes[2]) routes.push(hfRoutes[2]);
+  routes.push(...hfRoutes.slice(3));
   return routes;
 }
 
@@ -78,50 +140,55 @@ export function selectDirectRoute(options: {
   const { preset, availability, hasFiles, tools, complex } = options;
 
   if (hasFiles) {
-    if (!availability.gemini) throw new Error("File and image input requires GEMINI_API_KEY in this deployment.");
-    return ROUTES.geminiFlash;
+    if (availability.gemini) return ROUTES.geminiVision;
+    if (availability.huggingface) return ROUTES.hfQwen;
+    throw new Error("File and image input requires Gemini or a Hugging Face vision route.");
+  }
+
+  if (preset === "huggingface-direct") {
+    if (!availability.huggingface) throw new Error("HF_TOKEN is not configured.");
+    return complex ? ROUTES.hfGptOss : ROUTES.hfQwen;
+  }
+  if (preset === "gemini-direct") {
+    if (!availability.gemini) throw new Error("GEMINI_API_KEY is not configured.");
+    return ROUTES.geminiSynthesis;
+  }
+  if (preset === "groq-direct") {
+    if (!availability.groq) throw new Error("GROQ_API_KEY is not configured.");
+    return tools.web || tools.code ? ROUTES.groqTools : complex ? ROUTES.groqReasoning : ROUTES.groqFast;
   }
 
   if ((tools.web || tools.code) && availability.groq) return ROUTES.groqTools;
-
-  if (preset === "gemini-flash") {
-    if (!availability.gemini) throw new Error("GEMINI_API_KEY is not configured.");
-    return ROUTES.geminiFlash;
-  }
-
-  if (preset === "groq-fast") {
-    if (!availability.groq) throw new Error("GROQ_API_KEY is not configured.");
-    return ROUTES.groqFast;
-  }
-
-  if (preset === "openrouter-free") {
-    if (!availability.openrouter) throw new Error("OPENROUTER_API_KEY is not configured.");
-    return ROUTES.openRouterFree;
-  }
-
+  if (complex && availability.huggingface) return ROUTES.hfGptOss;
   if (complex && availability.groq) return ROUTES.groqReasoning;
-  if (availability.gemini) return ROUTES.geminiFlash;
+  if (availability.gemini) return ROUTES.geminiSynthesis;
+  if (availability.huggingface) return ROUTES.hfQwen;
   if (availability.groq) return ROUTES.groqFast;
-  if (availability.openrouter) return ROUTES.openRouterFree;
-  throw new Error("No AI provider key is configured in Vercel.");
+  throw new Error("No Gemini, Groq, or Hugging Face credential is configured in Vercel.");
 }
 
-export function selectSynthesisRoute(availability: ProviderAvailability, profile: "fable-5" | "opus-4-8"): ProviderRoute {
-  if (profile === "opus-4-8" && availability.groq) return ROUTES.groqReasoning;
-  if (availability.gemini) return ROUTES.geminiFlash;
+export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-sol-5-6"): ProviderRoute {
+  // Gemini is the preferred long-context reconciler when configured. Hugging
+  // Face and Groq remain active in councils and verification.
+  if (availability.gemini) return ROUTES.geminiSynthesis;
+  if (profile === "navi-sol-5-6" && availability.huggingface) return ROUTES.hfGptOss;
+  if (profile === "navi-5" && availability.huggingface) return ROUTES.hfGlm;
   if (availability.groq) return ROUTES.groqReasoning;
-  if (availability.openrouter) return ROUTES.openRouterFree;
   throw new Error("No synthesis provider is configured.");
 }
 
 export function selectVerificationRoute(
   availability: ProviderAvailability,
-  synthesisProvider: ProviderName
+  synthesisProvider: ProviderName,
+  profile: "navi-5" | "navi-sol-5-6"
 ): ProviderRoute {
+  // Prefer a different provider from synthesis for adversarial verification.
   if (synthesisProvider !== "groq" && availability.groq) return ROUTES.groqReasoning;
-  if (synthesisProvider !== "gemini" && availability.gemini) return ROUTES.geminiFlash;
-  if (synthesisProvider !== "openrouter" && availability.openrouter) return ROUTES.openRouterFree;
+  if (synthesisProvider !== "huggingface" && availability.huggingface) {
+    return profile === "navi-sol-5-6" ? ROUTES.hfDeepSeek : ROUTES.hfGptOss;
+  }
+  if (synthesisProvider !== "gemini" && availability.gemini) return ROUTES.geminiSynthesis;
+  if (availability.huggingface) return ROUTES.hfGptOss;
   if (availability.groq) return ROUTES.groqReasoning;
-  if (availability.gemini) return ROUTES.geminiFlash;
-  return ROUTES.openRouterFree;
+  return ROUTES.geminiSynthesis;
 }

@@ -2,11 +2,11 @@ import type { UIMessage } from "ai";
 
 export type ModelPreset =
   | "auto"
-  | "fable-5"
-  | "opus-4-8"
-  | "gemini-flash"
-  | "groq-fast"
-  | "openrouter-free";
+  | "navi-5"
+  | "navi-sol-5-6"
+  | "gemini-direct"
+  | "groq-direct"
+  | "huggingface-direct";
 
 export type ResponseStyle = "balanced" | "concise" | "detailed";
 export type ThemePreference = "dark" | "light" | "system";
@@ -57,13 +57,13 @@ export type MenuSection =
   | "personalization"
   | "system";
 
-export type ProviderName = "gemini" | "groq" | "openrouter";
+export type ProviderName = "gemini" | "groq" | "huggingface";
 
 export type ProviderRoute = {
   provider: ProviderName;
   model: string;
   label: string;
-  capability: "fast" | "balanced" | "reasoning" | "multimodal" | "tools";
+  capability: "fast" | "balanced" | "reasoning" | "multimodal" | "tools" | "long-context" | "coding";
 };
 
 export type ArtifactKind = "html" | "svg";
