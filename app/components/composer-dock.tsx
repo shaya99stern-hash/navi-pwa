@@ -20,7 +20,7 @@ type ProviderStatus = {
   providers?: {
     gemini?: boolean;
     groq?: boolean;
-    openrouter?: boolean;
+    huggingface?: boolean;
   };
 };
 
@@ -43,7 +43,7 @@ export function ComposerDock({ value, generating, online, attachmentCount, statu
       .then((data: ProviderStatus) => {
         if (cancelled) return;
         const providers = data.providers;
-        setProviderReady(Boolean(providers?.gemini || providers?.groq || providers?.openrouter));
+        setProviderReady(Boolean(providers?.gemini || providers?.groq || providers?.huggingface));
       })
       .catch(() => {
         if (!cancelled) setProviderReady(null);
@@ -85,7 +85,7 @@ export function ComposerDock({ value, generating, online, attachmentCount, statu
   const footer = !online
     ? "Offline · saved drafts will not send automatically"
     : !available
-      ? "Add a Gemini, Groq, or OpenRouter key in Vercel to enable AI"
+      ? "Add a Gemini, Groq, or Hugging Face key in Vercel to enable Navi"
       : attachmentCount
         ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready · ${statusText}`
         : statusText;
