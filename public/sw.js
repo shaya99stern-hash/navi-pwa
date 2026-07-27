@@ -1,16 +1,33 @@
-const VERSION = "navi-shell-v5";
+const VERSION = "navi-shell-v6";
 const STATIC_CACHE = `${VERSION}-static`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
-const SHELL = ["/", "/manifest.webmanifest", "/offline.html", "/icon", "/apple-icon"];
+const OFFLINE_URL = "/offline";
+const SHELL = [
+  "/",
+  OFFLINE_URL,
+  "/manifest.webmanifest",
+  "/icon",
+  "/apple-icon",
+  "/pwa-icon-192",
+  "/pwa-icon-maskable"
+];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(
+    caches.open(STATIC_CACHE)
+      .then((cache) => cache.addAll(SHELL))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key.startsWith("navi-") && ![STATIC_CACHE, RUNTIME_CACHE].includes(key)).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key.startsWith("navi-") && ![STATIC_CACHE, RUNTIME_CACHE].includes(key))
+          .map((key) => caches.delete(key))
+      ))
       .then(() => self.clients.claim())
   );
 });
@@ -23,23 +40,35 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.pathname.startsWith("/api/")) return;
   if (url.origin !== self.location.origin) return;
+
+  // API reads and all authenticated server state remain network-only.
+  if (url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) caches.open(RUNTIME_CACHE).then((cache) => cache.put("/", response.clone()));
+          if (response.ok) {
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
+          }
           return response;
         })
-        .catch(async () => (await caches.match(request)) || (await caches.match("/")) || (await caches.match("/offline.html")))
+        .catch(async () => (
+          (await caches.match(request))
+          || (await caches.match("/"))
+          || (await caches.match(OFFLINE_URL))
+        ))
     );
     return;
   }
 
-  const immutable = url.pathname.startsWith("/_next/static/") || request.destination === "font" || request.destination === "image";
-  if (immutable) {
+  const cacheFirst = url.pathname.startsWith("/_next/static/")
+    || request.destination === "font"
+    || request.destination === "image"
+    || /\.(?:png|jpg|jpeg|webp|svg|woff2?)$/i.test(url.pathname);
+
+  if (cacheFirst) {
     event.respondWith(
       caches.match(request).then((cached) => cached || fetch(request).then((response) => {
         if (response.ok) caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone()));
@@ -49,12 +78,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Stale-while-revalidate for same-origin static resources.
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response.ok) caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
-        return response;
-      })
-      .catch(() => caches.match(request))
+    caches.match(request).then((cached) => {
+      const network = fetch(request)
+        .then((response) => {
+          if (response.ok) caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
+          return response;
+        })
+        .catch(() => cached);
+      return cached || network;
+    })
   );
 });
