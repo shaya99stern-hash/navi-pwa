@@ -115,10 +115,18 @@ function configuredHfRoutes(): ProviderRoute[] {
 }
 
 export function availableSwarmRoutes(availability: ProviderAvailability, tools: ToolPolicy): ProviderRoute[] {
+  const hfRoutes = availability.huggingface ? configuredHfRoutes() : [];
   const routes: ProviderRoute[] = [];
-  if (availability.huggingface) routes.push(...configuredHfRoutes());
+
+  // Interleave providers so a configured Gemini, Groq and Hugging Face key all
+  // contribute to the hidden councils instead of one provider monopolizing them.
   if (availability.gemini) routes.push(ROUTES.geminiSynthesis);
-  if (availability.groq) routes.push(tools.web || tools.code ? ROUTES.groqTools : ROUTES.groqReasoning, ROUTES.groqFast);
+  if (hfRoutes[0]) routes.push(hfRoutes[0]);
+  if (availability.groq) routes.push(tools.web || tools.code ? ROUTES.groqTools : ROUTES.groqReasoning);
+  if (hfRoutes[1]) routes.push(hfRoutes[1]);
+  if (availability.groq) routes.push(ROUTES.groqFast);
+  if (hfRoutes[2]) routes.push(hfRoutes[2]);
+  routes.push(...hfRoutes.slice(3));
   return routes;
 }
 
@@ -160,11 +168,12 @@ export function selectDirectRoute(options: {
 }
 
 export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-sol-5-6"): ProviderRoute {
+  // Gemini is the preferred long-context reconciler when configured. Hugging
+  // Face and Groq remain active in councils and verification.
+  if (availability.gemini) return ROUTES.geminiSynthesis;
   if (profile === "navi-sol-5-6" && availability.huggingface) return ROUTES.hfGptOss;
   if (profile === "navi-5" && availability.huggingface) return ROUTES.hfGlm;
-  if (availability.gemini) return ROUTES.geminiSynthesis;
   if (availability.groq) return ROUTES.groqReasoning;
-  if (availability.huggingface) return ROUTES.hfGptOss;
   throw new Error("No synthesis provider is configured.");
 }
 
@@ -173,6 +182,7 @@ export function selectVerificationRoute(
   synthesisProvider: ProviderName,
   profile: "navi-5" | "navi-sol-5-6"
 ): ProviderRoute {
+  // Prefer a different provider from synthesis for adversarial verification.
   if (synthesisProvider !== "groq" && availability.groq) return ROUTES.groqReasoning;
   if (synthesisProvider !== "huggingface" && availability.huggingface) {
     return profile === "navi-sol-5-6" ? ROUTES.hfDeepSeek : ROUTES.hfGptOss;
