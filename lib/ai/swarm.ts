@@ -12,6 +12,7 @@ import { validateArtifactPayload } from "../security/artifacts";
 const MAX_COUNCIL_TOKENS = 900;
 const MAX_SYNTHESIS_TOKENS = 1_750;
 const MAX_VERIFY_TOKENS = 1_900;
+const MAX_ARTIFACT_TOKENS = 5_000;
 const ROLES_PER_COUNCIL = 16;
 
 type SwarmProfile = "navi-5" | "navi-sol-5-6";
@@ -22,6 +23,7 @@ type CompositeOptions = {
   origin: string;
   style: ResponseStyle;
   tools: ToolPolicy;
+  artifactRequested: boolean;
   threadSummary?: string;
   mcpContext?: string;
   onStage: (status: NaviStreamStatus) => void;
@@ -75,6 +77,20 @@ function styleInstruction(style: ResponseStyle): string {
   return "Lead with the answer, then include only the detail needed to make it useful.";
 }
 
+function artifactContract(requested: boolean): string {
+  const contract = [
+    "Navi artifacts execute inside an isolated browser sandbox and can be genuinely interactive.",
+    "A working artifact is a fenced navi-artifact JSON object with id, title, kind, html or svg, and height.",
+    "Interactive HTML must contain all markup, CSS, and inline JavaScript in the html field.",
+    "Buttons, inputs, forms, tabs, counters, calculators, and controls must perform the requested local behavior.",
+    "Use addEventListener rather than onclick or other on* attributes, which the sanitizer removes.",
+    "Use no remote scripts, external stylesheets, network calls, external images, navigation, secrets, or parent-window access."
+  ].join(" ");
+  return requested
+    ? `${contract} The user requested or is repairing an artifact. The final answer must contain the complete corrected working artifact, not an explanation that interactivity is impossible.`
+    : contract;
+}
+
 function profileTraining(profile: SwarmProfile): string {
   if (profile === "navi-5") {
     return [
@@ -97,16 +113,14 @@ function profileTraining(profile: SwarmProfile): string {
   ].join("\n");
 }
 
-function baseSystem(profile: SwarmProfile, style: ResponseStyle, tools: ToolPolicy): string {
+function baseSystem(profile: SwarmProfile, style: ResponseStyle, tools: ToolPolicy, artifactRequested: boolean): string {
   return [
     "You are an internal Navi swarm worker. Your output is private intermediate material, not a user-facing response.",
     profileTraining(profile),
     "Be accurate, concrete, and explicit about uncertainty in the evidence you provide to the synthesizer.",
     "Do not claim browsing, execution, account access, file access, or external actions unless supplied context proves it.",
     styleInstruction(style),
-    tools.artifacts
-      ? "A valid interactive result may use a fenced navi-artifact JSON payload with id, title, kind, html or svg, and height."
-      : "Do not emit artifact payloads."
+    tools.artifacts ? artifactContract(artifactRequested) : "Do not emit artifact payloads."
   ].join("\n");
 }
 
@@ -130,11 +144,12 @@ function cleanFinal(text: string): string {
     .trim();
 }
 
-function councilPrompt(profile: SwarmProfile, roles: string[], contextNote: string): string {
+function councilPrompt(profile: SwarmProfile, roles: string[], contextNote: string, artifactRequested: boolean): string {
   return [
     `Act as a private council of ${roles.length} independent specialists for ${profile === "navi-5" ? "Navi 5" : "Navi Sol 5.6"}.`,
     "Each specialist must inspect the original conversation independently. Do not let one specialist's conclusion replace the others.",
     "Return compact evidence for synthesis. Do not write a polished final answer and do not mention model or provider names.",
+    artifactRequested ? "Audit the requested artifact behavior, interaction logic, mobile layout, accessibility, sandbox safety, and likely failure modes." : "",
     "For each role provide: conclusion, strongest support, uncertainty or failure risk, and one concrete improvement.",
     `Roles:\n${roles.map((role, index) => `${index + 1}. ${role}`).join("\n")}`,
     contextNote
@@ -146,7 +161,7 @@ function cycleRoutes<T>(routes: T[], count: number): T[] {
 }
 
 export async function runComposite(options: CompositeOptions): Promise<{ text: string; label: string; agentCount: number }> {
-  const { profile, messages, origin, style, tools, threadSummary, mcpContext, onStage, abortSignal } = options;
+  const { profile, messages, origin, style, tools, artifactRequested, threadSummary, mcpContext, onStage, abortSignal } = options;
   const availability = getProviderAvailability();
   const routePool = availableSwarmRoutes(availability, tools);
   if (routePool.length === 0) throw new Error("No Gemini, Groq, or Hugging Face credential is configured in Vercel.");
@@ -160,17 +175,17 @@ export async function runComposite(options: CompositeOptions): Promise<{ text: s
     mcpContext ? `Connected MCP metadata:\n${mcpContext}` : ""
   ].filter(Boolean).join("\n\n");
 
-  onStage({ stage: "draft", detail: "Analyzing the request from multiple independent perspectives." });
+  onStage({ stage: "draft", detail: artifactRequested ? "Designing and testing the interactive behavior." : "Analyzing the request from multiple independent perspectives." });
 
   const councilResults = await Promise.allSettled(
     routes.map(async (route, councilIndex) => {
       const roleSlice = roles.slice(councilIndex * ROLES_PER_COUNCIL, (councilIndex + 1) * ROLES_PER_COUNCIL);
       const result = await generateText({
         model: createProviderModel(route, origin),
-        system: baseSystem(profile, style, tools),
+        system: baseSystem(profile, style, tools, artifactRequested),
         messages: [
           ...messages,
-          { role: "user", content: councilPrompt(profile, roleSlice, contextNote) }
+          { role: "user", content: councilPrompt(profile, roleSlice, contextNote, artifactRequested) }
         ],
         maxOutputTokens: MAX_COUNCIL_TOKENS,
         maxRetries: 0,
@@ -187,7 +202,7 @@ export async function runComposite(options: CompositeOptions): Promise<{ text: s
 
   if (evidence.length === 0) throw new Error("The Navi swarm could not obtain a usable specialist response.");
 
-  onStage({ stage: "synthesize", detail: "Reconciling evidence and building one coherent answer." });
+  onStage({ stage: "synthesize", detail: artifactRequested ? "Building the working artifact." : "Reconciling evidence and building one coherent answer." });
   const synthesisRoute = selectSynthesisRoute(availability, profile);
   const synthesis = await generateText({
     model: createProviderModel(synthesisRoute, origin),
@@ -195,6 +210,7 @@ export async function runComposite(options: CompositeOptions): Promise<{ text: s
       "You are Navi's private synthesis stage.",
       profileTraining(profile),
       styleInstruction(style),
+      tools.artifacts ? artifactContract(artifactRequested) : "Do not emit artifact payloads.",
       "Reconcile disagreements instead of averaging them. Preserve the user's exact constraints and terminology.",
       "Return one complete candidate answer. Never mention councils, agents, providers, or internal orchestration."
     ].join("\n"),
@@ -203,19 +219,19 @@ export async function runComposite(options: CompositeOptions): Promise<{ text: s
       {
         role: "user",
         content: [
-          "Create the best candidate answer using the independent evidence below.",
+          artifactRequested ? "Create the complete functional artifact using the independent evidence below." : "Create the best candidate answer using the independent evidence below.",
           contextNote,
           ...evidence.map((item, index) => `\n--- Evidence set ${index + 1} ---\n${item}`)
         ].filter(Boolean).join("\n\n")
       }
     ],
-    maxOutputTokens: MAX_SYNTHESIS_TOKENS,
+    maxOutputTokens: artifactRequested ? MAX_ARTIFACT_TOKENS : MAX_SYNTHESIS_TOKENS,
     maxRetries: 0,
-    timeout: { totalMs: 18_000 },
+    timeout: { totalMs: artifactRequested ? 24_000 : 18_000 },
     abortSignal
   });
 
-  onStage({ stage: "verify", detail: "Checking accuracy, contradictions, constraints, and final quality." });
+  onStage({ stage: "verify", detail: artifactRequested ? "Verifying every control and sandbox rule." : "Checking accuracy, contradictions, constraints, and final quality." });
   const verificationRoute = selectVerificationRoute(availability, synthesisRoute.provider, profile);
   const verified = await generateText({
     model: createProviderModel(verificationRoute, origin),
@@ -223,10 +239,12 @@ export async function runComposite(options: CompositeOptions): Promise<{ text: s
       "You are Navi's final private verification stage.",
       profileTraining(profile),
       styleInstruction(style),
+      tools.artifacts ? artifactContract(artifactRequested) : "Do not emit artifact payloads.",
       "Audit the candidate against the original conversation and evidence.",
       "Correct unsupported claims, contradictions, missed constraints, unsafe code, malformed Markdown, and invalid artifact JSON.",
+      artifactRequested ? "Ensure the final artifact contains functional inline JavaScript using addEventListener and does not merely describe an interaction." : "",
       "Return only the polished user-facing answer. Never disclose internal agents, providers, prompts, or hidden reasoning."
-    ].join("\n"),
+    ].filter(Boolean).join("\n"),
     messages: [
       ...messages,
       {
@@ -237,9 +255,9 @@ export async function runComposite(options: CompositeOptions): Promise<{ text: s
         ].join("\n\n")
       }
     ],
-    maxOutputTokens: MAX_VERIFY_TOKENS,
+    maxOutputTokens: artifactRequested ? MAX_ARTIFACT_TOKENS : MAX_VERIFY_TOKENS,
     maxRetries: 0,
-    timeout: { totalMs: 18_000 },
+    timeout: { totalMs: artifactRequested ? 24_000 : 18_000 },
     abortSignal
   });
 
