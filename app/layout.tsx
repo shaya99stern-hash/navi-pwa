@@ -4,17 +4,45 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import "./shell.css";
 import PWARegister from "./pwa-register";
+import WebVitals from "./web-vitals";
+
+const siteUrl = "https://navisonnet.vercel.app";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   applicationName: "Navi",
-  title: { default: "Navi", template: "%s · Navi" },
-  description: "Navi is a premium, local-first AI companion.",
+  title: { default: "Navi — Private AI Workspace", template: "%s · Navi" },
+  description: "A private, local-first AI workspace for conversations, files, images, interactive tools, and long-running projects.",
   manifest: "/manifest.webmanifest",
+  alternates: { canonical: "/" },
+  keywords: ["Navi", "NaviOS", "AI workspace", "AI assistant", "private AI", "PWA"],
   formatDetection: { telephone: false, address: false, email: false },
   appleWebApp: { capable: true, title: "Navi", statusBarStyle: "black-translucent" },
   icons: {
-    icon: [{ url: "/icon", type: "image/png", sizes: "512x512" }],
+    icon: [
+      { url: "/pwa-icon-192", type: "image/png", sizes: "192x192" },
+      { url: "/icon", type: "image/png", sizes: "512x512" }
+    ],
     apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }]
+  },
+  openGraph: {
+    type: "website",
+    url: siteUrl,
+    siteName: "Navi",
+    title: "Navi — Private AI Workspace",
+    description: "Conversations, files, images, tools, and multi-provider AI in one installable workspace.",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Navi private AI workspace" }]
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Navi — Private AI Workspace",
+    description: "Conversations, files, images, tools, and multi-provider AI in one installable workspace.",
+    images: ["/opengraph-image"]
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large" }
   }
 };
 
@@ -26,8 +54,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   colorScheme: "dark light",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0B0D12" },
-    { media: "(prefers-color-scheme: light)", color: "#F5F7FB" }
+    { media: "(prefers-color-scheme: dark)", color: "#100F0D" },
+    { media: "(prefers-color-scheme: light)", color: "#F4EEE6" }
   ]
 };
 
@@ -41,12 +69,13 @@ try {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" data-theme="dark" className="dark" suppressHydrationWarning>
+    <html lang="en-US" data-theme="dark" className="dark" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body>
         <PWARegister />
+        <WebVitals />
         {children}
       </body>
     </html>
