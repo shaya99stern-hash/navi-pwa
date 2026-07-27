@@ -122,19 +122,39 @@ function complexity(text: string): "normal" | "complex" | "extreme" {
   return complex ? "complex" : "normal";
 }
 
+function artifactIntent(text: string): boolean {
+  return /\b(artifact|interactive|button|form|widget|calculator|dashboard|prototype|mini[- ]?app|tool|game|quiz|control|input|dropdown|toggle|slider)\b/i.test(text)
+    || /\b(click|press|tap)\b[\s\S]{0,50}\b(work|working|respond|button|control)\b/i.test(text);
+}
+
 function styleInstruction(style: ResponseStyle): string {
   if (style === "concise") return "Keep the response compact and direct. Avoid redundant framing.";
   if (style === "detailed") return "Give a complete, structured explanation with relevant context and implementation detail.";
   return "Lead with the direct answer, then include the detail needed to make it useful.";
 }
 
+function artifactInstruction(requested: boolean): string {
+  const contract = [
+    "Navi artifacts are real interactive documents rendered in an isolated browser sandbox.",
+    "Emit them as a fenced navi-artifact JSON block containing id, title, kind, html or svg, and height.",
+    "For interactive HTML, include all markup, CSS, and JavaScript inside the html field. Buttons, inputs, forms, tabs, counters, calculators, and other controls must actually work.",
+    "Use inline script with addEventListener. Do not use onclick or other on* attributes because those are removed by the sanitizer.",
+    "Do not use remote scripts, external stylesheets, network requests, external images, navigation, secrets, or parent-window access.",
+    "The sandbox supports local state, DOM updates, validation, calculations, and clipboard actions."
+  ].join(" ");
+  return requested
+    ? `${contract} The user is requesting or repairing an interactive result. Produce the complete working artifact now. Do not claim artifacts are static or that controls cannot be pressed. If an earlier artifact was unresponsive, replace it with a corrected functional artifact.`
+    : contract;
+}
+
 function systemPrompt(options: {
   style: ResponseStyle;
   tools: ToolPolicy;
+  artifactRequested: boolean;
   threadSummary?: string;
   mcpContext?: string;
 }): string {
-  const { style, tools, threadSummary, mcpContext } = options;
+  const { style, tools, artifactRequested, threadSummary, mcpContext } = options;
   return [
     "You are Navi.",
     "Identify yourself only as Navi. Do not impersonate or claim to literally be an underlying provider model.",
@@ -144,9 +164,7 @@ function systemPrompt(options: {
     styleInstruction(style),
     tools.web ? "Web capability is enabled only when the selected route actually supplies it." : "Web capability is disabled.",
     tools.code ? "Code-execution capability is enabled only when the selected route actually supplies it." : "Code execution is disabled.",
-    tools.artifacts
-      ? "For a genuinely useful interactive output, emit a fenced navi-artifact JSON block with id, title, kind, html or svg, and height. Never include secrets or remote script tags."
-      : "Interactive artifact output is disabled.",
+    tools.artifacts ? artifactInstruction(artifactRequested) : "Interactive artifact output is disabled.",
     threadSummary ? `Compact summary of older turns:\n${threadSummary.slice(0, 8_000)}` : "",
     mcpContext ? `Connected MCP resource metadata:\n${mcpContext}` : ""
   ].filter(Boolean).join("\n\n");
@@ -157,7 +175,7 @@ function streamError(error: unknown): string {
   console.error("Navi stream error:", error);
   const lower = message.toLowerCase();
   if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "Navi reached a provider limit. Try again shortly or select another Navi mode.";
-  if (lower.includes("api_key") || lower.includes("api key") || lower.includes("hf_token") || lower.includes("401")) return "A server-side Gemini, Groq, or Hugging Face credential is missing or invalid.";
+  if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401")) return "A server-side Gemini, Groq, or Hugging Face credential is missing or invalid.";
   if (lower.includes("timeout") || lower.includes("aborted")) return "The selected Navi mode took too long. Try again or select a direct mode.";
   return message || "Navi could not complete the response.";
 }
@@ -224,6 +242,7 @@ export async function POST(request: Request): Promise<Response> {
   const providerCount = Object.values(availability).filter(Boolean).length;
   const hasFiles = fileParts(messages).length > 0;
   const effort = complexity(lastUserText);
+  const artifactRequested = tools.artifacts && artifactIntent(lastUserText);
   const resolvedPreset: ModelPreset = preset === "auto"
     ? effort === "extreme" && providerCount >= 2 && !hasFiles
       ? "navi-sol-5-6"
@@ -251,6 +270,7 @@ export async function POST(request: Request): Promise<Response> {
           origin,
           style,
           tools,
+          artifactRequested,
           threadSummary: body.threadSummary?.slice(0, 8_000),
           mcpContext,
           onStage: (status) => writer.write(statusChunk(status)),
@@ -275,10 +295,10 @@ export async function POST(request: Request): Promise<Response> {
         tools,
         complex: effort !== "normal"
       });
-      writer.write(statusChunk({ stage: "stream", detail: "Preparing the response." }));
+      writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : "Preparing the response." }));
       const result = streamText({
         model: createProviderModel(route, origin),
-        system: systemPrompt({ style, tools, threadSummary: body.threadSummary, mcpContext }),
+        system: systemPrompt({ style, tools, artifactRequested, threadSummary: body.threadSummary, mcpContext }),
         messages: modelMessages,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         maxRetries: 1,
