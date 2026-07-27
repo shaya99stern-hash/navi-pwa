@@ -29,16 +29,24 @@ const nextConfig = {
         ]
       },
       {
+        source: "/manifest.webmanifest",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+          { key: "Content-Type", value: "application/manifest+json; charset=utf-8" }
+        ]
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "Content-Security-Policy", value: contentSecurityPolicy },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
-          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "X-DNS-Prefetch-Control", value: "off" },
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+            value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()"
           }
         ]
       }
