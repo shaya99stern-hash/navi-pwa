@@ -77,6 +77,17 @@ export type ArtifactPayload = {
   height?: number;
 };
 
+export type GeneratedImagePayload = {
+  id: string;
+  title: string;
+  alt: string;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  data: string;
+  prompt: string;
+  width?: number;
+  height?: number;
+};
+
 export type NaviStreamStatus = {
   stage: "gather" | "plan" | "draft" | "synthesize" | "verify" | "stream" | "complete";
   detail: string;
