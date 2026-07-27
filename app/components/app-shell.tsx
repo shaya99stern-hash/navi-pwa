@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
-import { Menu } from "lucide-react";
+import { Menu, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { AttachmentMeta, NaviPreferences, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
 import { DEFAULT_PREFERENCES, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
@@ -10,6 +10,7 @@ import { clearLocalState, loadLocalState, setLocalValue } from "@/lib/storage/in
 import { haptic } from "@/lib/ui/haptics";
 import { ComposerDock } from "./composer-dock";
 import { HistoryDrawer } from "./history-drawer";
+import { LaunchSurface } from "./launch-surface";
 import { MessageRow } from "./message-row";
 import { UnifiedTopMenu } from "./unified-top-menu";
 
@@ -412,8 +413,8 @@ export function AppShell() {
           <Menu size={21} />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[17px]/6 font-semibold tracking-[-0.01em] text-primary">{activeChat?.title ?? "Navi"}</div>
-          {activeChat ? <div className="truncate text-[11px]/[14px] font-semibold text-tertiary">Local thread</div> : null}
+          <div className="truncate text-[17px]/6 font-semibold tracking-[-0.01em] text-primary">{activeChat?.title ?? "New conversation"}</div>
+          <div className="truncate text-[11px]/[14px] font-semibold text-tertiary">{activeChat ? "Local thread" : "Private AI workspace"}</div>
         </div>
         <UnifiedTopMenu
           open={menuOpen}
@@ -430,6 +431,13 @@ export function AppShell() {
         />
       </header>
 
+      {!online ? (
+        <div className="offline-banner flex min-h-10 items-center justify-center gap-2 border-y border-[var(--accent-warning)] bg-elev-2 px-4 text-center text-[12px]/4 font-semibold text-warning" role="status">
+          <WifiOff size={15} />
+          Offline · chats and drafts remain available locally
+        </div>
+      ) : null}
+
       <main
         ref={scrollRef}
         data-scroll-region="true"
@@ -437,24 +445,7 @@ export function AppShell() {
         onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 3)}
       >
         {messages.length === 0 ? (
-          <div className="navi-launch flex min-h-full flex-col items-center justify-center px-4 pb-24 pt-8">
-            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-[20px] border border-[var(--border-subtle)] bg-elev-2 text-[26px] font-semibold tracking-[-0.08em] text-primary shadow-menu">N</div>
-            <h1 className="text-center text-2xl/[30px] font-semibold text-primary">What can I help with?</h1>
-            <p className="mt-2 max-w-sm text-center text-[13px]/[18px] font-medium text-tertiary">Use the Navi menu for models, tools, files, connections and settings.</p>
-            <div className="mt-7 grid w-full max-w-md gap-2">
-              {["Plan a complex project", "Explain and compare an idea", "Create a secure interactive artifact"].map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  disabled={!online}
-                  onClick={() => setDraft(prompt)}
-                  className="min-h-12 rounded-2xl border border-[var(--border-subtle)] bg-elev-1 px-4 text-left text-[15px]/[22px] font-medium text-secondary active:bg-elev-2 disabled:opacity-50"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </div>
+          <LaunchSurface online={online} haptics={preferences.haptics} onPrompt={setDraft} />
         ) : (
           <div className="mx-auto w-full max-w-[760px] px-4 py-5">
             <div className="message-stack flex flex-col">
@@ -469,17 +460,17 @@ export function AppShell() {
               ))}
             </div>
             {status === "submitted" || (streamStatus && generating) ? (
-              <div className="mt-3 flex min-h-10 items-center gap-2 text-[12px]/4 font-medium text-tertiary">
+              <div className="mt-3 flex min-h-10 items-center gap-2 text-[12px]/4 font-medium text-tertiary" role="status" aria-live="polite">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
                 {statusText}
               </div>
             ) : null}
             {error ? (
-              <div className="mt-4 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-4">
+              <div className="mt-4 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
                 <p className="text-[13px]/[18px] font-medium text-primary">{error.message || "Navi could not complete that response."}</p>
                 <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={retry} className="min-h-10 rounded-xl bg-accent px-4 text-[13px]/[18px] font-semibold text-white active:bg-accent-pressed">Try again</button>
-                  <button type="button" onClick={clearError} className="min-h-10 rounded-xl px-4 text-[13px]/[18px] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
+                  <button type="button" onClick={retry} className="min-h-11 rounded-xl bg-accent px-4 text-[13px]/[18px] font-semibold text-white active:bg-accent-pressed">Try again</button>
+                  <button type="button" onClick={clearError} className="min-h-11 rounded-xl px-4 text-[13px]/[18px] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
                 </div>
               </div>
             ) : null}
@@ -488,7 +479,7 @@ export function AppShell() {
       </main>
 
       {attachmentError ? (
-        <div className="mx-4 mb-1 rounded-2xl border border-[var(--accent-warning)] bg-elev-2 px-3 py-2 text-center text-[12px]/4 font-medium text-warning">{attachmentError}</div>
+        <div className="mx-4 mb-1 rounded-2xl border border-[var(--accent-warning)] bg-elev-2 px-3 py-2 text-center text-[12px]/4 font-medium text-warning" role="alert">{attachmentError}</div>
       ) : null}
       <ComposerDock
         value={draft}
@@ -499,6 +490,11 @@ export function AppShell() {
         haptics={preferences.haptics}
         onChange={setDraft}
         onSend={() => void submit()}
+        onFiles={addFiles}
+        onOpenTools={() => {
+          updatePreferences({ ...preferences, lastMenuSection: "tools" });
+          setMenuOpen(true);
+        }}
         onStop={() => {
           stop();
           setStreamStatus(null);
