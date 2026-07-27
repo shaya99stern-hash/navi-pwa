@@ -1,4 +1,4 @@
-const VERSION = "navi-shell-v3";
+const VERSION = "navi-shell-v4";
 const STATIC_CACHE = `${VERSION}-static`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const SHELL = ["/", "/manifest.webmanifest", "/offline.html", "/icon", "/apple-icon"];
