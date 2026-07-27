@@ -64,15 +64,17 @@ export async function clearLocalState(): Promise<void> {
 function normalizePreset(value: unknown): ModelPreset {
   const map: Record<string, ModelPreset> = {
     auto: "auto",
-    "navi-5": "navi-5",
-    "navi-sol-5-6": "navi-sol-5-6",
+    "navi-fable": "navi-fable",
+    "navi-sol": "navi-sol",
+    "navi-5": "navi-fable",
+    "navi-sol-5-6": "navi-sol",
     "gemini-direct": "gemini-direct",
     "groq-direct": "groq-direct",
     "huggingface-direct": "huggingface-direct",
-    "fable-5": "navi-5",
-    "opus-4-8": "navi-sol-5-6",
-    "groq-balanced": "navi-5",
-    "groq-reasoning": "navi-sol-5-6",
+    "fable-5": "navi-fable",
+    "opus-4-8": "navi-sol",
+    "groq-balanced": "navi-fable",
+    "groq-reasoning": "navi-sol",
     "groq-fast": "groq-direct",
     "gemini-flash": "gemini-direct",
     "openrouter-free": "huggingface-direct"
