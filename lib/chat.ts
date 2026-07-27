@@ -2,12 +2,12 @@ import type { UIMessage } from "ai";
 import type { ModelPreset, NaviPreferences, ResponseStyle, StoredChat } from "./ai/types";
 
 export const MODEL_PRESETS: Array<{ id: ModelPreset; label: string; detail: string; composite: boolean }> = [
-  { id: "auto", label: "Navi Auto", detail: "Chooses the most reliable path for the request", composite: false },
-  { id: "fable-5", label: "Fable 5 — Navi MoA", detail: "Navi composite preset · narrative and reasoning", composite: true },
-  { id: "opus-4-8", label: "Opus 4.8 — Navi MoA", detail: "Navi composite preset · strongest verification", composite: true },
-  { id: "gemini-flash", label: "Gemini Flash Free", detail: "Direct Gemini Flash route", composite: false },
-  { id: "groq-fast", label: "Groq Fast", detail: "Direct low-latency Groq route", composite: false },
-  { id: "openrouter-free", label: "OpenRouter Free", detail: "Direct OpenRouter free-model router", composite: false }
+  { id: "auto", label: "Navi Auto", detail: "Chooses the best direct or swarm path", composite: false },
+  { id: "navi-5", label: "Navi 5", detail: "64-agent long-horizon knowledge and coding swarm", composite: true },
+  { id: "navi-sol-5-6", label: "Navi Sol 5.6", detail: "96-agent flagship reasoning, design and verification swarm", composite: true },
+  { id: "huggingface-direct", label: "Hugging Face Direct", detail: "Best currently available Hugging Face route", composite: false },
+  { id: "gemini-direct", label: "Gemini Direct", detail: "Direct Gemini multimodal route", composite: false },
+  { id: "groq-direct", label: "Groq Direct", detail: "Direct low-latency reasoning route", composite: false }
 ];
 
 export const RESPONSE_STYLES: Array<{ id: ResponseStyle; label: string }> = [
