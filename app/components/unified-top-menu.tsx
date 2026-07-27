@@ -1,10 +1,15 @@
 "use client";
 
-import { Check, ChevronDown, ChevronRight, FilePlus2, LoaderCircle, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, FilePlus2, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, ModelPreset, NaviPreferences, ResponseStyle } from "@/lib/ai/types";
 import type { PublicMcpServer } from "@/lib/mcp";
 import { MODEL_PRESETS, RESPONSE_STYLES } from "@/lib/chat";
+import {
+  PWA_UPDATE_STATUS_EVENT,
+  requestPwaUpdate,
+  type PwaUpdateStatus
+} from "@/lib/pwa-update";
 import { haptic } from "@/lib/ui/haptics";
 
 type ProviderAvailability = { gemini: boolean; groq: boolean; huggingface: boolean };
@@ -24,6 +29,10 @@ type Props = {
 };
 
 const EMPTY_PROVIDERS: ProviderAvailability = { gemini: false, groq: false, huggingface: false };
+const DEFAULT_UPDATE_STATUS: PwaUpdateStatus = {
+  phase: "idle",
+  message: "Checks for the latest version, refreshes the app shell, and reopens Navi. Chats stay saved."
+};
 const SECTIONS: Array<{ id: MenuSection; label: string }> = [
   { id: "current", label: "Current mode" },
   { id: "models", label: "Models" },
@@ -72,6 +81,16 @@ export function UnifiedTopMenu({
   const [connecting, setConnecting] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProviderAvailability>(EMPTY_PROVIDERS);
+  const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus>(DEFAULT_UPDATE_STATUS);
+
+  useEffect(() => {
+    const receiveUpdateStatus = (event: Event) => {
+      const detail = (event as CustomEvent<PwaUpdateStatus>).detail;
+      if (detail?.phase && detail.message) setUpdateStatus(detail);
+    };
+    window.addEventListener(PWA_UPDATE_STATUS_EVENT, receiveUpdateStatus);
+    return () => window.removeEventListener(PWA_UPDATE_STATUS_EVENT, receiveUpdateStatus);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -108,6 +127,12 @@ export function UnifiedTopMenu({
     haptic("selection", preferences.haptics);
   }
 
+  function refreshAndUpdate() {
+    setUpdateStatus({ phase: "checking", message: "Checking for the newest Navi version…" });
+    haptic("impact-light", preferences.haptics);
+    requestPwaUpdate();
+  }
+
   async function toggleServer(server: PublicMcpServer) {
     const connected = preferences.connectedMcpServers.includes(server.id);
     if (connected) {
@@ -141,6 +166,7 @@ export function UnifiedTopMenu({
     providers.gemini && "Gemini",
     providers.groq && "Groq"
   ].filter(Boolean).join(" · ") || "No provider keys detected";
+  const updateBusy = updateStatus.phase === "checking" || updateStatus.phase === "downloading" || updateStatus.phase === "restarting";
 
   return (
     <>
@@ -260,11 +286,20 @@ export function UnifiedTopMenu({
 
               {section === "system" ? (
                 <div className="divide-y divide-[var(--border-subtle)]">
+                  <button type="button" onClick={refreshAndUpdate} disabled={updateBusy} className="flex min-h-[70px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-elev-2 disabled:opacity-70">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px]/[22px] font-medium text-primary">Refresh & Update Navi</span>
+                      <span className={`block text-[12px]/4 font-medium ${updateStatus.phase === "error" ? "text-danger" : "text-tertiary"}`}>{updateStatus.message}</span>
+                    </span>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-elev-2 text-secondary">
+                      <RefreshCw size={18} className={updateBusy ? "animate-spin" : ""} />
+                    </span>
+                  </button>
                   <SettingRow title="Local history" detail="Threads and drafts stay in IndexedDB on this device" action={<Toggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />} />
                   <button type="button" onClick={() => { onOpenHistory(); onClose(); }} className="flex min-h-[58px] w-full items-center justify-between px-4 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Conversation history<ChevronRight size={18} /></button>
                   <button type="button" onClick={() => { onClearThread(); onClose(); }} className="min-h-[58px] w-full px-4 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Clear current thread</button>
                   <button type="button" onClick={() => { if (window.confirm("Clear all Navi history and settings from this device?")) { onClearData(); onClose(); } }} className="min-h-[58px] w-full px-4 text-left text-[15px]/[22px] font-medium text-danger active:bg-elev-2">Clear all local data</button>
-                  <div className="px-4 py-5 text-[12px]/4 font-medium text-tertiary">Navi 4.0 · Private multi-provider swarms · Server credentials never enter the browser.</div>
+                  <div className="px-4 py-5 text-[12px]/4 font-medium text-tertiary">Navi 4.0 · Automatic app updates · Private multi-provider swarms.</div>
                 </div>
               ) : null}
             </div>
