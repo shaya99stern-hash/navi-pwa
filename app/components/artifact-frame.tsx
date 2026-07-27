@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronUp, MousePointerClick } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArtifactPayload } from "@/lib/ai/types";
 import { buildArtifactDocument } from "@/lib/security/artifacts";
@@ -8,6 +8,7 @@ import { haptic } from "@/lib/ui/haptics";
 
 export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPayload; theme: "dark" | "light"; haptics: boolean }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [expanded, setExpanded] = useState(true);
   const [visible, setVisible] = useState(false);
   const [height, setHeight] = useState(payload.height ?? 360);
@@ -31,15 +32,17 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
 
   useEffect(() => {
     function receive(event: MessageEvent) {
+      if (event.source !== iframeRef.current?.contentWindow) return;
       const data = event.data as { type?: string; id?: string; height?: number };
       if (data.id !== payload.id) return;
       if ((data.type === "artifact:ready" || data.type === "artifact:resize") && typeof data.height === "number") {
         setHeight(Math.min(900, Math.max(180, data.height)));
       }
+      if (data.type === "artifact:interaction") haptic("selection", haptics);
     }
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
-  }, [payload.id]);
+  }, [haptics, payload.id]);
 
   function toggle() {
     setExpanded((value) => !value);
@@ -56,8 +59,9 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
       <div className="overflow-hidden transition-[height] duration-[180ms]" style={{ height: expanded ? height : 0 }}>
         {visible && expanded ? (
           <iframe
+            ref={iframeRef}
             title={payload.title}
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-forms"
             referrerPolicy="no-referrer"
             loading="lazy"
             allow="clipboard-read; clipboard-write"
@@ -67,7 +71,7 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
           />
         ) : null}
       </div>
-      <div className="flex min-h-9 items-center gap-2 border-t border-[var(--border-subtle)] px-4 text-[11px]/[14px] font-semibold text-tertiary"><ExternalLink size={13} />Isolated sandbox · no parent access</div>
+      <div className="flex min-h-9 items-center gap-2 border-t border-[var(--border-subtle)] px-4 text-[11px]/[14px] font-semibold text-tertiary"><MousePointerClick size={13} />Interactive sandbox · no network or parent access</div>
     </div>
   );
 }
