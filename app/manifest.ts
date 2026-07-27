@@ -24,17 +24,10 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       {
-        name: "New conversation",
-        short_name: "New chat",
-        description: "Start a new Navi conversation",
-        url: "/?new=1",
-        icons: [{ src: "/pwa-icon-192", sizes: "192x192", type: "image/png" }]
-      },
-      {
-        name: "Open tools",
-        short_name: "Tools",
-        description: "Open Navi tools, files, and connections",
-        url: "/?menu=tools",
+        name: "Open Navi",
+        short_name: "Open Navi",
+        description: "Open the private Navi workspace",
+        url: "/",
         icons: [{ src: "/pwa-icon-192", sizes: "192x192", type: "image/png" }]
       }
     ],
