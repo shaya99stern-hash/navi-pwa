@@ -3,22 +3,118 @@ import type { ModelPreset, ProviderName, ProviderRoute, ToolPolicy } from "./typ
 
 export type ProviderAvailability = Record<ProviderName, boolean>;
 
+function usableSecret(value: string | undefined): string | undefined {
+  const secret = value?.trim();
+  if (!secret || /^(?:undefined|null|none|changeme|your[_ -]?key)$/i.test(secret)) return undefined;
+  return secret;
+}
+
+function firstSecret(values: Array<string | undefined>): string | undefined {
+  for (const value of values) {
+    const secret = usableSecret(value);
+    if (secret) return secret;
+  }
+  return undefined;
+}
+
+function normalizedEnvironmentKey(key: string): string {
+  return key.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function environmentSecret(options: {
+  keyMatches: (normalizedKey: string) => boolean;
+  valuePrefixes: string[];
+}): string | undefined {
+  for (const [key, rawValue] of Object.entries(process.env)) {
+    const value = usableSecret(rawValue);
+    if (!value) continue;
+    if (options.keyMatches(normalizedEnvironmentKey(key))) return value;
+  }
+
+  for (const rawValue of Object.values(process.env)) {
+    const value = usableSecret(rawValue);
+    if (value && options.valuePrefixes.some((prefix) => value.startsWith(prefix))) return value;
+  }
+
+  return undefined;
+}
+
+function geminiApiKey(): string | undefined {
+  return firstSecret([
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_KEY,
+    process.env.GOOGLE_GEMINI_API_KEY,
+    process.env.GOOGLE_AI_API_KEY,
+    process.env.GOOGLE_API_KEY
+  ]) ?? environmentSecret({
+    keyMatches: (key) => key.includes("GEMINI") && (key.includes("KEY") || key.includes("TOKEN")),
+    valuePrefixes: ["AIza"]
+  });
+}
+
+function groqApiKey(): string | undefined {
+  return firstSecret([
+    process.env.GROQ_API_KEY,
+    process.env.GROQ_KEY,
+    process.env.GROQ_TOKEN,
+    process.env.GROQ_API_TOKEN,
+    process.env.GROQ_SECRET_KEY
+  ]) ?? environmentSecret({
+    keyMatches: (key) => key.includes("GROQ") && (key.includes("KEY") || key.includes("TOKEN") || key.includes("SECRET")),
+    valuePrefixes: ["gsk_"]
+  });
+}
+
 function huggingFaceToken(): string | undefined {
-  return process.env.HF_TOKEN ?? process.env.HUGGINGFACE_API_KEY ?? process.env.HUGGING_FACE_API_KEY;
+  return firstSecret([
+    process.env.HF_TOKEN,
+    process.env.HF_API_TOKEN,
+    process.env.HF_API_KEY,
+    process.env.HF_ACCESS_TOKEN,
+    process.env.HUGGINGFACE_API_KEY,
+    process.env.HUGGING_FACE_API_KEY,
+    process.env.HUGGINGFACE_TOKEN,
+    process.env.HUGGING_FACE_TOKEN,
+    process.env.HUGGINGFACE_HUB_TOKEN,
+    process.env.HUGGING_FACE_HUB_TOKEN,
+    process.env.HUGGINGFACE_ACCESS_TOKEN,
+    process.env.HUGGING_FACE_ACCESS_TOKEN
+  ]) ?? environmentSecret({
+    keyMatches: (key) => {
+      const namedHuggingFace = key.includes("HUGGINGFACE") && (key.includes("KEY") || key.includes("TOKEN") || key.includes("SECRET"));
+      const namedHf = key.startsWith("HF") && (key.includes("KEY") || key.includes("TOKEN") || key.includes("SECRET"));
+      return namedHuggingFace || namedHf;
+    },
+    valuePrefixes: ["hf_"]
+  });
 }
 
 export function getProviderAvailability(): ProviderAvailability {
   return {
-    gemini: Boolean(process.env.GEMINI_API_KEY),
-    groq: Boolean(process.env.GROQ_API_KEY),
+    gemini: Boolean(geminiApiKey()),
+    groq: Boolean(groqApiKey()),
     huggingface: Boolean(huggingFaceToken())
+  };
+}
+
+export function getProviderStackStatus() {
+  const providers = getProviderAvailability();
+  const active = Object.values(providers).filter(Boolean).length;
+  return {
+    providers,
+    active,
+    total: 3,
+    fullStack: active === 3,
+    missing: (Object.entries(providers) as Array<[ProviderName, boolean]>)
+      .filter(([, ready]) => !ready)
+      .map(([provider]) => provider)
   };
 }
 
 export function createProviderModel(route: ProviderRoute, origin: string): any {
   if (route.provider === "gemini") {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
+    const apiKey = geminiApiKey();
+    if (!apiKey) throw new Error("A Gemini API credential is not configured.");
     const provider = createOpenAICompatible({
       name: "gemini",
       apiKey,
@@ -29,8 +125,8 @@ export function createProviderModel(route: ProviderRoute, origin: string): any {
   }
 
   if (route.provider === "groq") {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) throw new Error("GROQ_API_KEY is not configured.");
+    const apiKey = groqApiKey();
+    if (!apiKey) throw new Error("A Groq API credential is not configured.");
     const provider = createOpenAICompatible({
       name: "groq",
       apiKey,
@@ -41,7 +137,7 @@ export function createProviderModel(route: ProviderRoute, origin: string): any {
   }
 
   const apiKey = huggingFaceToken();
-  if (!apiKey) throw new Error("HF_TOKEN is not configured.");
+  if (!apiKey) throw new Error("A Hugging Face API credential is not configured.");
   const provider = createOpenAICompatible({
     name: "huggingface",
     apiKey,
@@ -118,8 +214,6 @@ export function availableSwarmRoutes(availability: ProviderAvailability, tools: 
   const hfRoutes = availability.huggingface ? configuredHfRoutes() : [];
   const routes: ProviderRoute[] = [];
 
-  // Interleave providers so a configured Gemini, Groq and Hugging Face key all
-  // contribute to the hidden councils instead of one provider monopolizing them.
   if (availability.gemini) routes.push(ROUTES.geminiSynthesis);
   if (hfRoutes[0]) routes.push(hfRoutes[0]);
   if (availability.groq) routes.push(tools.web || tools.code ? ROUTES.groqTools : ROUTES.groqReasoning);
@@ -146,15 +240,15 @@ export function selectDirectRoute(options: {
   }
 
   if (preset === "huggingface-direct") {
-    if (!availability.huggingface) throw new Error("HF_TOKEN is not configured.");
+    if (!availability.huggingface) throw new Error("A Hugging Face API credential is not configured.");
     return complex ? ROUTES.hfGptOss : ROUTES.hfQwen;
   }
   if (preset === "gemini-direct") {
-    if (!availability.gemini) throw new Error("GEMINI_API_KEY is not configured.");
+    if (!availability.gemini) throw new Error("A Gemini API credential is not configured.");
     return ROUTES.geminiSynthesis;
   }
   if (preset === "groq-direct") {
-    if (!availability.groq) throw new Error("GROQ_API_KEY is not configured.");
+    if (!availability.groq) throw new Error("A Groq API credential is not configured.");
     return tools.web || tools.code ? ROUTES.groqTools : complex ? ROUTES.groqReasoning : ROUTES.groqFast;
   }
 
@@ -168,8 +262,6 @@ export function selectDirectRoute(options: {
 }
 
 export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-sol-5-6"): ProviderRoute {
-  // Gemini is the preferred long-context reconciler when configured. Hugging
-  // Face and Groq remain active in councils and verification.
   if (availability.gemini) return ROUTES.geminiSynthesis;
   if (profile === "navi-sol-5-6" && availability.huggingface) return ROUTES.hfGptOss;
   if (profile === "navi-5" && availability.huggingface) return ROUTES.hfGlm;
@@ -182,7 +274,6 @@ export function selectVerificationRoute(
   synthesisProvider: ProviderName,
   profile: "navi-5" | "navi-sol-5-6"
 ): ProviderRoute {
-  // Prefer a different provider from synthesis for adversarial verification.
   if (synthesisProvider !== "groq" && availability.groq) return ROUTES.groqReasoning;
   if (synthesisProvider !== "huggingface" && availability.huggingface) {
     return profile === "navi-sol-5-6" ? ROUTES.hfDeepSeek : ROUTES.hfGptOss;
