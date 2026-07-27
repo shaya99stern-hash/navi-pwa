@@ -1,32 +1,43 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: "class",
-  content: ["./app/**/*.{js,ts,jsx,tsx,mdx}"],
+  darkMode: ["class", '[data-theme="dark"]'],
+  content: ["./app/**/*.{js,ts,jsx,tsx,mdx}", "./lib/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       fontFamily: {
         sans: [
+          "ui-sans-serif",
+          "system-ui",
           "-apple-system",
           "BlinkMacSystemFont",
-          "SF Pro Display",
           "SF Pro Text",
+          "SF Pro Display",
           "Inter",
-          "system-ui",
+          "Segoe UI",
           "sans-serif"
         ]
       },
       colors: {
-        navi: {
-          background: "#0d0d0d",
-          elevated: "#171717",
-          surface: "#212121",
-          border: "#303030",
-          muted: "#a3a3a3"
-        }
+        app: "var(--bg-app)",
+        "elev-1": "var(--bg-elev-1)",
+        "elev-2": "var(--bg-elev-2)",
+        "elev-3": "var(--bg-elev-3)",
+        overlay: "var(--bg-overlay)",
+        primary: "var(--text-primary)",
+        secondary: "var(--text-secondary)",
+        tertiary: "var(--text-tertiary)",
+        disabled: "var(--text-disabled)",
+        accent: "var(--accent-primary)",
+        "accent-pressed": "var(--accent-primary-pressed)",
+        info: "var(--accent-info)",
+        success: "var(--accent-success)",
+        warning: "var(--accent-warning)",
+        danger: "var(--accent-danger)"
       },
       boxShadow: {
-        menu: "0 24px 70px rgba(0, 0, 0, 0.62)",
-        composer: "0 -16px 45px rgba(13, 13, 13, 0.82)"
+        menu: "0 18px 50px rgba(0,0,0,.24)",
+        dock: "0 -18px 48px rgba(0,0,0,.20)",
+        composer: "0 10px 32px var(--shadow-base)"
       }
     }
   },

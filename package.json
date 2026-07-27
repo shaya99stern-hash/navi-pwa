@@ -1,8 +1,8 @@
 {
   "name": "navi-pwa",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "Navi — an iOS-first, free-tier AI chat PWA.",
+  "description": "Navi — a premium, local-first AI orchestration PWA.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -19,9 +19,11 @@
     "lucide-react": "0.468.0",
     "next": "16.2.11",
     "openai": "6.49.0",
+    "prism-react-renderer": "2.4.1",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-markdown": "10.1.0",
+    "rehype-sanitize": "6.0.0",
     "remark-gfm": "4.0.1",
     "workbox-window": "7.3.0"
   },
