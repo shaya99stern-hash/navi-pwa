@@ -1,7 +1,7 @@
 export const PWA_UPDATE_REQUEST_EVENT = "navi:pwa-update-request";
 export const PWA_UPDATE_STATUS_EVENT = "navi:pwa-update-status";
 
-export type PwaUpdatePhase = "idle" | "checking" | "downloading" | "restarting" | "current" | "error";
+export type PwaUpdatePhase = "idle" | "checking" | "available" | "downloading" | "restarting" | "current" | "error";
 
 export type PwaUpdateStatus = {
   phase: PwaUpdatePhase;
