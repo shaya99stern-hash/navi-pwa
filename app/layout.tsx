@@ -5,6 +5,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 
 import {
   getClerkPublishableKey,
+  getNaviAuthCanonicalOrigin,
   hasClerkUserAllowlist,
   isClerkConfigured,
   isClerkUserAllowed
@@ -17,7 +18,7 @@ import { ViewportMetrics } from "./components/viewport-metrics";
 import PWARegister from "./pwa-register";
 import WebVitals from "./web-vitals";
 
-const siteUrl = "https://navisonnet.vercel.app";
+const siteUrl = getNaviAuthCanonicalOrigin() ?? "https://navisonnet.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

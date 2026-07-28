@@ -34,6 +34,10 @@ function normalizeOrigin(value: string | undefined): string | undefined {
   }
 }
 
+export function getNaviAuthCanonicalOrigin(): string | undefined {
+  return normalizeOrigin(process.env.NAVI_AUTH_CANONICAL_ORIGIN?.trim());
+}
+
 /**
  * Clerk's `azp` claim is checked against exact trusted origins to prevent a
  * session cookie leaked by another subdomain from being accepted by Navi.
@@ -53,6 +57,7 @@ export function getClerkAuthorizedParties(): string[] {
 
   return Array.from(new Set([
     "https://navisonnet.vercel.app",
+    "https://navisonnet.navikeep.org",
     ...configured,
     ...vercelOrigins,
     ...localOrigins

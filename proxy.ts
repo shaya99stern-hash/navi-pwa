@@ -1,7 +1,11 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { isClerkConfigured, isClerkUserAllowed } from "@/lib/auth/config";
+import {
+  getNaviAuthCanonicalOrigin,
+  isClerkConfigured,
+  isClerkUserAllowed
+} from "@/lib/auth/config";
 import { getRequestClerkUserId } from "@/lib/auth/session";
 
 function isPublicRoute(pathname: string) {
@@ -15,6 +19,15 @@ function isPublicRoute(pathname: string) {
 /** Defense in depth. Route handlers must authorize sensitive operations themselves. */
 export async function proxy(request: NextRequest) {
   if (!isClerkConfigured()) return NextResponse.next();
+
+  const canonicalOrigin = getNaviAuthCanonicalOrigin();
+  if (canonicalOrigin && request.nextUrl.origin !== canonicalOrigin) {
+    const destination = new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, canonicalOrigin);
+    const response = NextResponse.redirect(destination, 307);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  }
+
   if (isPublicRoute(request.nextUrl.pathname)) return NextResponse.next();
 
   const userId = await getRequestClerkUserId(request);
