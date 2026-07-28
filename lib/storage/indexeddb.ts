@@ -1,4 +1,4 @@
-import type { ModelPreset, NaviPreferences, StoredChat } from "../ai/types";
+import type { ConnectorAccessMode, ModelPreset, NaviPreferences, NaviProject, StoredChat } from "../ai/types";
 import { DEFAULT_PREFERENCES, sortChats } from "../chat";
 
 const DB_NAME = "navi-local-v3";
@@ -11,6 +11,8 @@ export type LocalState = {
   chats: StoredChat[];
   preferences: NaviPreferences;
   draft: string;
+  projects: NaviProject[];
+  activeProjectId: string | null;
 };
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -82,14 +84,38 @@ function normalizePreset(value: unknown): ModelPreset {
   return map[String(value ?? "auto")] ?? "auto";
 }
 
+function normalizeConnectorMode(value: unknown): ConnectorAccessMode {
+  return value === "auto" || value === "always" ? value : "ask";
+}
+
 function mergePreferences(value?: PreferenceInput): NaviPreferences {
   return {
     ...DEFAULT_PREFERENCES,
     ...value,
     preset: normalizePreset(value?.preset),
     tools: { ...DEFAULT_PREFERENCES.tools, ...(value?.tools ?? {}) },
-    connectedMcpServers: Array.isArray(value?.connectedMcpServers) ? value.connectedMcpServers : []
+    connectedMcpServers: Array.isArray(value?.connectedMcpServers) ? value.connectedMcpServers : [],
+    connectorAccessMode: normalizeConnectorMode(value?.connectorAccessMode)
   };
+}
+
+function normalizeProjects(value: unknown): NaviProject[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const project = item as Partial<NaviProject>;
+    if (typeof project.id !== "string" || typeof project.name !== "string") return [];
+    const createdAt = typeof project.createdAt === "number" ? project.createdAt : Date.now();
+    return [{
+      id: project.id,
+      name: project.name,
+      instructions: typeof project.instructions === "string" ? project.instructions : "",
+      knowledge: Array.isArray(project.knowledge) ? project.knowledge.filter((entry): entry is string => typeof entry === "string").slice(0, 100) : [],
+      createdAt,
+      updatedAt: typeof project.updatedAt === "number" ? project.updatedAt : createdAt,
+      syncState: project.syncState === "synced" || project.syncState === "attention" ? project.syncState : "local"
+    }];
+  }).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 function migrateLegacyState(): Partial<LocalState> {
@@ -108,6 +134,8 @@ function migrateLegacyState(): Partial<LocalState> {
         pinned: Boolean(chat.pinned),
         summary: typeof chat.summary === "string" ? chat.summary : undefined,
         attachments: Array.isArray(chat.attachments) ? chat.attachments : undefined,
+        projectId: typeof chat.projectId === "string" ? chat.projectId : undefined,
+        connectorAccessMode: normalizeConnectorMode(chat.connectorAccessMode),
         messages: chat.messages ?? []
       }));
 
@@ -117,7 +145,9 @@ function migrateLegacyState(): Partial<LocalState> {
         preset: legacyPreferences.preset ?? legacyPreferences.route,
         style: (legacyPreferences.style as NaviPreferences["style"]) ?? "balanced",
         saveHistory: typeof legacyPreferences.saveHistory === "boolean" ? legacyPreferences.saveHistory : true
-      })
+      }),
+      projects: [],
+      activeProjectId: null
     };
   } catch {
     return {};
@@ -125,10 +155,12 @@ function migrateLegacyState(): Partial<LocalState> {
 }
 
 export async function loadLocalState(): Promise<LocalState> {
-  const [storedChats, storedPreferences, storedDraft] = await Promise.all([
+  const [storedChats, storedPreferences, storedDraft, storedProjects, storedActiveProjectId] = await Promise.all([
     getLocalValue<StoredChat[]>("chats"),
     getLocalValue<NaviPreferences>("preferences"),
-    getLocalValue<string>("draft")
+    getLocalValue<string>("draft"),
+    getLocalValue<NaviProject[]>("projects"),
+    getLocalValue<string | null>("activeProjectId")
   ]);
 
   if (!storedChats && !storedPreferences) {
@@ -138,18 +170,27 @@ export async function loadLocalState(): Promise<LocalState> {
     return {
       chats: migrated.chats ?? [],
       preferences: mergePreferences(migrated.preferences),
-      draft: storedDraft ?? ""
+      draft: storedDraft ?? "",
+      projects: normalizeProjects(storedProjects ?? migrated.projects),
+      activeProjectId: storedActiveProjectId ?? migrated.activeProjectId ?? null
     };
   }
 
   const normalizedPreferences = mergePreferences(storedPreferences);
-  if (storedPreferences?.preset !== normalizedPreferences.preset) {
+  if (storedPreferences?.preset !== normalizedPreferences.preset || storedPreferences?.connectorAccessMode !== normalizedPreferences.connectorAccessMode) {
     await setLocalValue("preferences", normalizedPreferences);
   }
+
+  const projects = normalizeProjects(storedProjects);
+  const activeProjectId = typeof storedActiveProjectId === "string" && projects.some((project) => project.id === storedActiveProjectId)
+    ? storedActiveProjectId
+    : null;
 
   return {
     chats: sortChats(storedChats ?? []),
     preferences: normalizedPreferences,
-    draft: storedDraft ?? ""
+    draft: storedDraft ?? "",
+    projects,
+    activeProjectId
   };
 }
