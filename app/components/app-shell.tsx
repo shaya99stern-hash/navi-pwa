@@ -407,14 +407,14 @@ export function AppShell() {
         <button
           type="button"
           onClick={() => setHistoryOpen(true)}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3"
           aria-label="Open conversation history"
         >
           <Menu size={21} />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[17px]/6 font-semibold tracking-[-0.01em] text-primary">{activeChat?.title ?? "New conversation"}</div>
-          <div className="truncate text-[11px]/[14px] font-semibold text-tertiary">{activeChat ? "Local thread" : "Private AI workspace"}</div>
+          <div className="truncate text-[16px]/5 font-semibold tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>
+          <div className="truncate text-[11px]/[14px] font-semibold text-tertiary">{activePreset.label}</div>
         </div>
         <UnifiedTopMenu
           open={menuOpen}
@@ -445,9 +445,18 @@ export function AppShell() {
         onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 3)}
       >
         {messages.length === 0 ? (
-          <LaunchSurface online={online} haptics={preferences.haptics} onPrompt={setDraft} />
+          <LaunchSurface
+            online={online}
+            haptics={preferences.haptics}
+            activeModel={activePreset.label}
+            onPrompt={setDraft}
+            onOpenModels={() => {
+              updatePreferences({ ...preferences, lastMenuSection: "models" });
+              setMenuOpen(true);
+            }}
+          />
         ) : (
-          <div className="mx-auto w-full max-w-[760px] px-4 py-5">
+          <div className="mx-auto w-full max-w-app px-gutter py-5">
             <div className="message-stack flex flex-col">
               {messages.map((message, index) => (
                 <MessageRow
