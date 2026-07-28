@@ -1,7 +1,7 @@
 import "server-only";
 
-import { auth } from "@clerk/nextjs/server";
 import { isClerkConfigured, isClerkUserAllowed } from "./config";
+import { getRequestClerkUserId } from "./session";
 import { isSameOrigin } from "@/lib/security/request";
 
 export async function authorizeApiMutation(request: Request): Promise<Response | null> {
@@ -10,7 +10,7 @@ export async function authorizeApiMutation(request: Request): Promise<Response |
   }
   if (!isClerkConfigured()) return null;
 
-  const { userId } = await auth();
+  const userId = await getRequestClerkUserId(request);
   if (!userId) {
     return Response.json({ error: "Sign in to continue." }, { status: 401 });
   }

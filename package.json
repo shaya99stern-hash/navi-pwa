@@ -13,9 +13,10 @@
     "node": "24.x"
   },
   "dependencies": {
-    "@clerk/nextjs": "^7.5.16",
     "@ai-sdk/openai-compatible": "3.0.14",
     "@ai-sdk/react": "4.0.38",
+    "@clerk/backend": "3.13.2",
+    "@clerk/nextjs": "^7.5.16",
     "ai": "7.0.35",
     "lucide-react": "0.468.0",
     "next": "16.2.11",

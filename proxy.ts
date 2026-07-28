@@ -1,8 +1,12 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
-import type { NextFetchEvent, NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { isClerkConfigured, isClerkUserAllowed } from "@/lib/auth/config";
+import {
+  getNaviAuthCanonicalOrigin,
+  isClerkConfigured,
+  isClerkUserAllowed
+} from "@/lib/auth/config";
+import { getRequestClerkUserId } from "@/lib/auth/session";
 
 function isPublicRoute(pathname: string) {
   return pathname === "/sign-in"
@@ -12,21 +16,46 @@ function isPublicRoute(pathname: string) {
     || pathname === "/access-denied";
 }
 
-const clerkProxy = clerkMiddleware(async (auth, request) => {
-  if (isPublicRoute(request.nextUrl.pathname)) return NextResponse.next();
-  const { userId } = await auth();
-  if (!userId) return NextResponse.redirect(new URL("/sign-in", request.url));
-  if (isClerkUserAllowed(userId)) return NextResponse.next();
-  if (request.nextUrl.pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "This account does not have access to Navi." }, { status: 403 });
-  }
-  return NextResponse.redirect(new URL("/access-denied", request.url));
-});
-
 /** Defense in depth. Route handlers must authorize sensitive operations themselves. */
-export async function proxy(request: NextRequest, event: NextFetchEvent) {
+export async function proxy(request: NextRequest) {
   if (!isClerkConfigured()) return NextResponse.next();
-  return (await clerkProxy(request, event)) ?? NextResponse.next();
+
+  const canonicalOrigin = getNaviAuthCanonicalOrigin();
+  if (canonicalOrigin && request.nextUrl.origin !== canonicalOrigin) {
+    const destination = new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, canonicalOrigin);
+    const response = NextResponse.redirect(destination, 307);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  }
+
+  if (isPublicRoute(request.nextUrl.pathname)) return NextResponse.next();
+
+  const userId = await getRequestClerkUserId(request);
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
+
+  if (!userId) {
+    if (isApiRoute) {
+      return NextResponse.json(
+        { error: "Sign in to continue." },
+        { status: 401, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+    const response = NextResponse.redirect(new URL("/sign-in", request.url));
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  }
+
+  if (isClerkUserAllowed(userId)) return NextResponse.next();
+
+  if (isApiRoute) {
+    return NextResponse.json(
+      { error: "This account does not have access to Navi." },
+      { status: 403, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+  const response = NextResponse.redirect(new URL("/access-denied", request.url));
+  response.headers.set("Cache-Control", "no-store");
+  return response;
 }
 
 export const config = {
