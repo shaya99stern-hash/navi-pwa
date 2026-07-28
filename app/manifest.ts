@@ -17,10 +17,8 @@ export default function manifest(): MetadataRoute.Manifest {
     dir: "ltr",
     categories: ["productivity", "utilities"],
     icons: [
-      { src: "/pwa-icon-192", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/icon", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/pwa-icon-maskable", sizes: "512x512", type: "image/png", purpose: "maskable" },
-      { src: "/apple-icon", sizes: "180x180", type: "image/png", purpose: "any" }
+      { src: "/app-icon.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/app-icon.png", sizes: "192x192", type: "image/png", purpose: "maskable" }
     ],
     shortcuts: [
       {
@@ -28,7 +26,7 @@ export default function manifest(): MetadataRoute.Manifest {
         short_name: "Open Navi",
         description: "Open the private Navi workspace",
         url: "/",
-        icons: [{ src: "/pwa-icon-192", sizes: "192x192", type: "image/png" }]
+        icons: [{ src: "/app-icon.png", sizes: "192x192", type: "image/png" }]
       }
     ],
     screenshots: [

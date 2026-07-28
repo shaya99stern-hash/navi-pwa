@@ -21,11 +21,8 @@ export const metadata: Metadata = {
   formatDetection: { telephone: false, address: false, email: false },
   appleWebApp: { capable: true, title: "Navi", statusBarStyle: "black-translucent" },
   icons: {
-    icon: [
-      { url: "/pwa-icon-192", type: "image/png", sizes: "192x192" },
-      { url: "/icon", type: "image/png", sizes: "512x512" }
-    ],
-    apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }]
+    icon: [{ url: "/app-icon.png", type: "image/png", sizes: "192x192" }],
+    apple: [{ url: "/app-icon.png", type: "image/png", sizes: "192x192" }]
   },
   openGraph: {
     type: "website",
@@ -73,6 +70,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
   return (
     <html lang="en-US" data-theme="dark" className="dark" suppressHydrationWarning>
       <head>
+        <link rel="apple-touch-icon" href="/app-icon.png" />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body>
