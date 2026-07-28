@@ -21,15 +21,17 @@ type BadgeNavigator = Navigator & {
 };
 
 function isStandalone(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
   const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
   return window.matchMedia("(display-mode: standalone)").matches || navigatorWithStandalone.standalone === true;
 }
 
 function isIosDevice(): boolean {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+  return typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
 function recentlyDismissed(): boolean {
+  if (typeof window === "undefined") return false;
   const value = Number(localStorage.getItem(INSTALL_DISMISS_KEY) ?? 0);
   return Number.isFinite(value) && Date.now() - value < INSTALL_DISMISS_MS;
 }
@@ -40,8 +42,11 @@ export function PwaPlatformBanner() {
   const [iosHint, setIosHint] = useState(false);
   const [dismissedUpdate, setDismissedUpdate] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+
     const receiveStatus = (event: Event) => {
       const detail = (event as CustomEvent<PwaUpdateStatus>).detail;
       if (!detail?.phase || !detail.message) return;
@@ -86,11 +91,12 @@ export function PwaPlatformBanner() {
   }, []);
 
   const mode = useMemo<"update" | "install" | "ios" | null>(() => {
+    if (!mounted) return null;
     if (updateStatus?.phase === "available" && !dismissedUpdate) return "update";
     if (!isStandalone() && installPrompt) return "install";
     if (!isStandalone() && iosHint) return "ios";
     return null;
-  }, [dismissedUpdate, installPrompt, iosHint, updateStatus?.phase]);
+  }, [dismissedUpdate, installPrompt, iosHint, mounted, updateStatus?.phase]);
 
   if (!mode) return null;
 
