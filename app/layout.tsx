@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import "./globals.css";
 import "./shell.css";
+import { ViewportMetrics } from "./components/viewport-metrics";
 import PWARegister from "./pwa-register";
 import WebVitals from "./web-vitals";
 
@@ -54,7 +55,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   colorScheme: "dark light",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#100F0D" },
+    { media: "(prefers-color-scheme: dark)", color: "#191614" },
     { media: "(prefers-color-scheme: light)", color: "#F4EEE6" }
   ]
 };
@@ -75,6 +76,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       </head>
       <body>
         <PWARegister />
+        <ViewportMetrics />
         <WebVitals />
         {children}
       </body>
