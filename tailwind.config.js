@@ -15,10 +15,13 @@ module.exports = {
           "Inter",
           "Segoe UI",
           "sans-serif"
-        ]
+        ],
+        display: ["ui-serif", "Georgia", "Cambria", "Times New Roman", "serif"]
       },
       colors: {
         app: "var(--bg-app)",
+        surface: "var(--bg-surface)",
+        card: "var(--bg-card)",
         "elev-1": "var(--bg-elev-1)",
         "elev-2": "var(--bg-elev-2)",
         "elev-3": "var(--bg-elev-3)",
@@ -34,8 +37,25 @@ module.exports = {
         warning: "var(--accent-warning)",
         danger: "var(--accent-danger)"
       },
+      maxWidth: {
+        app: "var(--navi-content-max-width)"
+      },
+      spacing: {
+        gutter: "var(--navi-page-gutter)",
+        section: "var(--navi-section-gap)",
+        header: "var(--navi-header-height)",
+        composer: "var(--navi-composer-min-height)",
+        tap: "var(--navi-tap-target)"
+      },
+      borderRadius: {
+        card: "var(--navi-radius-card)",
+        composer: "var(--navi-radius-composer)",
+        sheet: "var(--navi-radius-sheet)"
+      },
       boxShadow: {
-        menu: "0 18px 50px rgba(0,0,0,.24)",
+        card: "var(--navi-shadow-card)",
+        sheet: "var(--navi-shadow-sheet)",
+        menu: "var(--navi-shadow-sheet)",
         dock: "0 -18px 48px rgba(0,0,0,.20)",
         composer: "0 10px 32px var(--shadow-base)"
       }
