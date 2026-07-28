@@ -12,7 +12,7 @@ import {
   Share2,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { ArtifactPayload } from "@/lib/ai/types";
 import { buildArtifactDocument } from "@/lib/security/artifacts";
 import { haptic } from "@/lib/ui/haptics";
@@ -135,9 +135,21 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
   }
 
   function editWithNavi() {
-    window.dispatchEvent(new CustomEvent("navi:edit-artifact", {
-      detail: { id: payload.id, title: payload.title, kind: payload.kind }
-    }));
+    const textarea = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message Navi"]');
+    const prompt = `Edit the artifact “${payload.title}”: `;
+    if (textarea) {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(textarea, prompt);
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      window.setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(prompt.length, prompt.length);
+      }, 60);
+    } else {
+      window.dispatchEvent(new CustomEvent("navi:edit-artifact", {
+        detail: { id: payload.id, title: payload.title, kind: payload.kind }
+      }));
+    }
     setFullScreen(false);
     setNotice("Edit request added to the composer");
     haptic("selection", haptics);
@@ -149,7 +161,7 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
     haptic("impact-light", haptics);
   }
 
-  const artifactIframe = (className: string, style?: React.CSSProperties) => (
+  const artifactIframe = (className: string, style?: CSSProperties) => (
     <iframe
       ref={iframeRef}
       title={payload.title}
