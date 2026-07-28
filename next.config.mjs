@@ -1,12 +1,18 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
+const developmentEval = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
+
 const contentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${developmentEval} https://clerk.navikeep.org https://*.clerk.accounts.dev`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  "connect-src 'self' https://clerk.navikeep.org https://*.clerk.accounts.dev https://api.clerk.com",
   "worker-src 'self' blob:",
-  "frame-src 'self' data: blob:",
+  "frame-src 'self' data: blob: https://clerk.navikeep.org https://*.clerk.accounts.dev",
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
@@ -18,6 +24,7 @@ const contentSecurityPolicy = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  turbopack: { root: projectRoot },
   async headers() {
     return [
       {

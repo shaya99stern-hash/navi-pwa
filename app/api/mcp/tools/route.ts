@@ -1,8 +1,11 @@
+import { authorizeApiMutation } from "@/lib/auth/api";
 import { callMcp, requiresMcpConfirmation } from "@/lib/mcp";
 
 export const runtime = "edge";
 
 export async function POST(request: Request): Promise<Response> {
+  const authorizationError = await authorizeApiMutation(request);
+  if (authorizationError) return authorizationError;
   try {
     const body = (await request.json()) as {
       serverId?: string;
@@ -26,6 +29,7 @@ export async function POST(request: Request): Promise<Response> {
     console.info("Navi MCP tool invocation", { serverId: body.serverId, toolName: body.toolName, threadId: body.threadId ?? "unknown" });
     return Response.json({ result }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "MCP tool request failed." }, { status: 502 });
+    console.error("Navi MCP tool request failed:", error);
+    return Response.json({ error: "The connector could not complete that tool request." }, { status: 502 });
   }
 }

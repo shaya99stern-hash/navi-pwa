@@ -1,6 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { ClerkProvider } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 
+import {
+  getClerkPublishableKey,
+  hasClerkUserAllowlist,
+  isClerkConfigured,
+  isClerkUserAllowed
+} from "@/lib/auth/config";
 import "./globals.css";
 import "./shell.css";
 import { PwaPlatformBanner } from "./components/pwa-platform-banner";
@@ -66,19 +74,49 @@ try {
 } catch {}
 `;
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  const clerkConfigured = isClerkConfigured();
+  const userId = clerkConfigured ? (await auth()).userId : null;
+  const storageScope = userId ? `clerk:${userId}` : clerkConfigured ? "signed-out" : "guest";
+  const mayMigrateLegacyState = !clerkConfigured
+    || Boolean(userId && hasClerkUserAllowlist() && isClerkUserAllowed(userId));
+  const storageBootScript = `
+try {
+  const scope = ${JSON.stringify(storageScope)};
+  localStorage.setItem('navi.storage.scope.v1', scope);
+  ${mayMigrateLegacyState
+    ? "localStorage.setItem('navi.storage.legacy-owner.v1', scope);"
+    : "localStorage.removeItem('navi.storage.legacy-owner.v1');"}
+} catch {}
+`;
+  const app = clerkConfigured ? (
+    <ClerkProvider
+      publishableKey={getClerkPublishableKey()}
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      signInFallbackRedirectUrl="/"
+      signUpFallbackRedirectUrl="/"
+      signInForceRedirectUrl="/"
+      signUpForceRedirectUrl="/"
+      afterSignOutUrl="/"
+    >
+      {children}
+    </ClerkProvider>
+  ) : children;
+
   return (
     <html lang="en-US" data-theme="dark" className="dark" suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-v4.png" />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        <script dangerouslySetInnerHTML={{ __html: storageBootScript }} />
       </head>
       <body>
         <PWARegister />
         <PwaPlatformBanner />
         <ViewportMetrics />
         <WebVitals />
-        {children}
+        {app}
       </body>
     </html>
   );

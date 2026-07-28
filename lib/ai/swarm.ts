@@ -8,6 +8,7 @@ import {
 } from "./swarm-router";
 import type { NaviStreamStatus, ResponseStyle, ToolPolicy } from "./types";
 import { validateArtifactPayload } from "../security/artifacts";
+import { NAVI_CONSTITUTION } from "./navi-constitution";
 
 const MAX_COUNCIL_TOKENS = 950;
 const MAX_SYNTHESIS_TOKENS = 2_100;
@@ -184,6 +185,7 @@ function councilPrompt(options: {
   const { profile, task, roles, contextNote, artifactRequested } = options;
   return [
     `Act as one private independent workstream inside ${profileLabel(profile)}.`,
+    NAVI_CONSTITUTION,
     profileInstruction(profile),
     taskInstruction(task),
     "Inspect the original conversation independently. Do not copy conclusions from other workstreams and do not write the final user-facing answer.",
@@ -197,6 +199,7 @@ function councilPrompt(options: {
 function candidateSystem(profile: SwarmProfile, task: SwarmTask, style: ResponseStyle, tools: ToolPolicy, artifactRequested: boolean): string {
   return [
     "You are a private candidate-synthesis stage inside Navi.",
+    NAVI_CONSTITUTION,
     profileInstruction(profile),
     taskInstruction(task),
     styleInstruction(style),
@@ -211,6 +214,7 @@ function candidateSystem(profile: SwarmProfile, task: SwarmTask, style: Response
 function verificationSystem(profile: SwarmProfile, task: SwarmTask, style: ResponseStyle, tools: ToolPolicy, artifactRequested: boolean): string {
   return [
     "You are Navi's final private judge and verifier.",
+    NAVI_CONSTITUTION,
     profileInstruction(profile),
     taskInstruction(task),
     styleInstruction(style),
@@ -265,6 +269,7 @@ export async function runComposite(options: CompositeOptions): Promise<{
         model: createProviderModel(route, origin),
         system: [
           "Your response is private intermediate material, not a user-facing message.",
+          NAVI_CONSTITUTION,
           profileInstruction(profile),
           taskInstruction(plan.task),
           "Be concrete and explicit about uncertainty. Never invent browsing, execution, account access, file access, or completed external actions.",

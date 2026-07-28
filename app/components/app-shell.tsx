@@ -2,7 +2,8 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
-import { FolderKanban, Link2, Menu, Mic, Search, WifiOff } from "lucide-react";
+import { FolderKanban, Link2, Menu, Plus, Search, WifiOff } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -72,21 +73,30 @@ function stopSpeaking() {
   if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
-export function AppShell() {
-  const initialChatId = useRef(createId());
-  const [activeId, setActiveId] = useState(initialChatId.current);
+export function AppShell({
+  initialChatId,
+  initialDraft,
+  initialView = "chat"
+}: {
+  initialChatId?: string;
+  initialDraft?: string;
+  initialView?: "chat" | "voice";
+} = {}) {
+  const router = useRouter();
+  const initialChatRef = useRef(initialChatId ?? createId());
+  const [activeId, setActiveId] = useState(initialChatRef.current);
   const [chats, setChats] = useState<StoredChat[]>([]);
   const [projects, setProjects] = useState<NaviProject[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<NaviPreferences>(DEFAULT_PREFERENCES);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft ?? "");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
-  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(initialView === "voice");
   const [speakNextReply, setSpeakNextReply] = useState(false);
   const [online, setOnline] = useState(true);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -163,11 +173,17 @@ export function AppShell() {
         setProjects(state.projects);
         setActiveProjectId(state.activeProjectId);
         setPreferences(state.preferences);
-        setDraft(state.draft);
-        if (state.chats[0]) {
-          setActiveId(state.chats[0].id);
-          setActiveProjectId(state.chats[0].projectId ?? state.activeProjectId);
-          setMessages(state.chats[0].messages);
+        setDraft(initialDraft ?? state.draft);
+        const requestedChat = initialChatId
+          ? state.chats.find((chat) => chat.id === initialChatId)
+          : undefined;
+        if (requestedChat) {
+          setActiveId(requestedChat.id);
+          setActiveProjectId(requestedChat.projectId ?? state.activeProjectId);
+          setMessages(requestedChat.messages);
+        } else {
+          setActiveId(initialChatRef.current);
+          setMessages([]);
         }
       })
       .catch((storageError) => console.error("Navi local-state restore failed:", storageError))
@@ -177,7 +193,7 @@ export function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, [setMessages]);
+  }, [initialChatId, initialDraft, setMessages]);
 
   useEffect(() => {
     const apply = () => {
@@ -307,7 +323,8 @@ export function AppShell() {
     clearError();
     setHistoryOpen(false);
     setMenuOpen(false);
-  }, [clearError, generating, setMessages, stop]);
+    router.push("/new");
+  }, [clearError, generating, router, setMessages, stop]);
 
   const openChat = useCallback((chat: StoredChat) => {
     if (generating) stop();
@@ -322,7 +339,8 @@ export function AppShell() {
     setStreamStatus(null);
     clearError();
     setHistoryOpen(false);
-  }, [clearError, generating, setMessages, stop]);
+    router.push(`/chat/${encodeURIComponent(chat.id)}`);
+  }, [clearError, generating, router, setMessages, stop]);
 
   function mutateChats(mutator: (current: StoredChat[]) => StoredChat[]) {
     setChats((current) => {
@@ -414,6 +432,9 @@ export function AppShell() {
       }));
       setDraft("");
       setPendingFiles([]);
+      if (window.location.pathname === "/" || window.location.pathname === "/new") {
+        window.history.replaceState(window.history.state, "", `/chat/${encodeURIComponent(activeId)}`);
+      }
       if (attachmentMeta.length) {
         mutateChats((current) => {
           const prior = current.find((chat) => chat.id === activeId);
@@ -556,26 +577,11 @@ export function AppShell() {
         </div>
         <button
           type="button"
-          onClick={toggleResearch}
-          className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full active:bg-elev-3 ${preferences.tools.web ? "bg-[var(--selection-bg)] text-accent" : "text-secondary"}`}
-          aria-label={preferences.tools.web ? "Turn off research mode" : "Turn on research mode"}
-          aria-pressed={preferences.tools.web}
+          onClick={newChat}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3"
+          aria-label="New conversation"
         >
-          <Search size={18} />
-          {preferences.tools.web ? <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-accent" /> : null}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setMenuOpen(false);
-            setVoiceOpen(true);
-            haptic("selection", preferences.haptics);
-          }}
-          disabled={generating}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3 disabled:opacity-40"
-          aria-label="Open voice mode"
-        >
-          <Mic size={19} />
+          <Plus size={20} />
         </button>
         <UnifiedTopMenu
           open={menuOpen}
@@ -672,11 +678,23 @@ export function AppShell() {
         generating={generating}
         online={online}
         attachmentCount={pendingFiles.length}
+        modelLabel={activePreset.label}
+        research={preferences.tools.web}
         statusText={activeProject ? `${activeProject.name} · ${statusText}` : statusText}
         haptics={preferences.haptics}
         onChange={setDraft}
         onSend={() => void submit()}
         onFiles={addFiles}
+        onOpenModels={() => {
+          updatePreferences({ ...preferences, lastMenuSection: "models" });
+          setMenuOpen(true);
+        }}
+        onOpenVoice={() => {
+          setMenuOpen(false);
+          setVoiceOpen(true);
+          haptic("selection", preferences.haptics);
+        }}
+        onToggleResearch={toggleResearch}
         onOpenTools={() => {
           updatePreferences({ ...preferences, lastMenuSection: "tools" });
           setMenuOpen(true);

@@ -55,6 +55,7 @@ function geminiApiKey(): string | undefined {
 function groqApiKey(): string | undefined {
   return firstSecret([
     process.env.GROQ_API_KEY,
+    process.env.GROQ_API,
     process.env.GROQ_KEY,
     process.env.GROQ_TOKEN,
     process.env.GROQ_API_TOKEN,
@@ -68,6 +69,9 @@ function groqApiKey(): string | undefined {
 function huggingFaceToken(): string | undefined {
   return firstSecret([
     process.env.HF_TOKEN,
+    process.env.HUGGING_FACE_FINE_GRAINED_API,
+    process.env.fable_read_Hugging_face,
+    process.env.HUGGING_FACE_API_Write,
     process.env.HF_API_TOKEN,
     process.env.HF_API_KEY,
     process.env.HF_ACCESS_TOKEN,

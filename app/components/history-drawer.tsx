@@ -1,6 +1,23 @@
 "use client";
 
-import { MoreHorizontal, Pin, PinOff, Plus, Search, Trash2, X } from "lucide-react";
+import {
+  Clock3,
+  FolderKanban,
+  Home,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  PlugZap,
+  Plus,
+  Search,
+  Shapes,
+  SlidersHorizontal,
+  Trash2,
+  UserRound,
+  X
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { StoredChat } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
@@ -88,9 +105,45 @@ export function HistoryDrawer({ open, chats, activeId, haptics, onClose, onNew, 
       <aside className="drawer-enter safe-top safe-bottom absolute inset-y-0 left-0 flex w-[86vw] max-w-[360px] flex-col border-r border-[var(--border-subtle)] bg-elev-1 shadow-menu">
         <header className="flex h-14 shrink-0 items-center justify-between px-3">
           <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Close history"><X size={21} /></button>
-          <span className="text-[17px]/6 font-semibold tracking-[-0.01em] text-primary">History</span>
+          <span className="flex items-center gap-2 text-[17px]/6 font-semibold tracking-[-0.01em] text-primary">
+            <Image src="/pwa-icon-192-v4.png" alt="" width={28} height={28} className="rounded-[9px]" />
+            Navi
+          </span>
           <button type="button" onClick={onNew} className="flex h-11 w-11 items-center justify-center rounded-full text-primary active:bg-elev-3" aria-label="New conversation"><Plus size={21} /></button>
         </header>
+
+        <nav className="shrink-0 px-2 pb-2" aria-label="Navi">
+          <button type="button" onClick={onNew} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-[14px]/5 font-semibold text-primary active:bg-elev-2">
+            <Plus size={18} className="text-accent" />
+            New chat
+          </button>
+          <Link href="/new" onClick={onClose} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-[14px]/5 font-medium text-primary active:bg-elev-2">
+            <Home size={18} />
+            Home
+          </Link>
+          <Link href="/recents" onClick={onClose} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-[14px]/5 font-medium text-primary active:bg-elev-2">
+            <Clock3 size={18} />
+            Chats
+          </Link>
+          <Link href="/projects" onClick={onClose} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-[14px]/5 font-medium text-primary active:bg-elev-2">
+            <FolderKanban size={18} />
+            Projects
+          </Link>
+          <Link href="/artifacts" onClick={onClose} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-[14px]/5 font-medium text-primary active:bg-elev-2">
+            <Shapes size={18} />
+            Artifacts
+          </Link>
+          <div className="grid grid-cols-2 gap-1">
+            <Link href="/connectors" onClick={onClose} className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-[12px]/4 font-semibold text-secondary active:bg-elev-2">
+              <PlugZap size={16} />
+              Connect
+            </Link>
+            <Link href="/customize" onClick={onClose} className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-[12px]/4 font-semibold text-secondary active:bg-elev-2">
+              <SlidersHorizontal size={16} />
+              Customize
+            </Link>
+          </div>
+        </nav>
 
         <div className="px-3 pb-3">
           <label className="flex min-h-11 items-center gap-2 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-3">
@@ -124,7 +177,15 @@ export function HistoryDrawer({ open, chats, activeId, haptics, onClose, onNew, 
           )) : <div className="px-5 py-10 text-center text-[13px]/[18px] font-medium text-tertiary">No matching conversations.</div>}
         </div>
 
-        <footer className="border-t border-[var(--border-subtle)] px-4 py-3 text-[11px]/[14px] font-semibold text-tertiary">Swipe a row left or long-press for actions. Stored only on this device.</footer>
+        <footer className="border-t border-[var(--border-subtle)] p-2">
+          <Link href="/settings" onClick={onClose} className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-left active:bg-elev-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-elev-3 text-secondary"><UserRound size={17} /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px]/4 font-semibold text-primary">Account & settings</span>
+              <span className="block text-[10px]/4 font-medium text-tertiary">Private local workspace</span>
+            </span>
+          </Link>
+        </footer>
       </aside>
 
       {selected ? (
