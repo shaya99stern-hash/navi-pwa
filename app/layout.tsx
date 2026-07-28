@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import "./globals.css";
 import "./shell.css";
+import { PwaPlatformBanner } from "./components/pwa-platform-banner";
 import { ViewportMetrics } from "./components/viewport-metrics";
 import PWARegister from "./pwa-register";
 import WebVitals from "./web-vitals";
@@ -76,6 +77,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       </head>
       <body>
         <PWARegister />
+        <PwaPlatformBanner />
         <ViewportMetrics />
         <WebVitals />
         {children}
