@@ -116,3 +116,19 @@ export type NaviStreamStatus = {
     | "error";
   detail: string;
 };
+
+/** Honest, server-side diagnostics for composite orchestration. Never expose private reasoning. */
+export type NaviSwarmExecution = {
+  profile: SwarmPreset;
+  configuredRoleCount: number;
+  councilCallsPlanned: number;
+  councilCallsSucceeded: number;
+  providerDiversityAchieved: number;
+  providerDiversityRequired: number;
+  candidateCallsSucceeded: number;
+  verification: "verified" | "verified-fallback" | "candidate-fallback";
+  deadlineMs: number;
+  elapsedMs: number;
+  historyMessagesOmitted: number;
+  attachmentPartsOmitted: number;
+};

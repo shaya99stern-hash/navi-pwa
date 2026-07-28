@@ -13,7 +13,8 @@ function isPublicRoute(pathname: string) {
     || pathname.startsWith("/sign-in/")
     || pathname === "/sign-up"
     || pathname.startsWith("/sign-up/")
-    || pathname === "/access-denied";
+    || pathname === "/access-denied"
+    || pathname === "/api/vitals";
 }
 
 /** Defense in depth. Route handlers must authorize sensitive operations themselves. */
