@@ -2,17 +2,26 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
-import { Menu, WifiOff } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Menu, Mic, Search, WifiOff } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent
+} from "react";
 import type { AttachmentMeta, NaviPreferences, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
 import { DEFAULT_PREFERENCES, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
 import { clearLocalState, loadLocalState, setLocalValue } from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
 import { ComposerDock } from "./composer-dock";
+import { ConversationStatePanel } from "./conversation-state-panel";
 import { HistoryDrawer } from "./history-drawer";
 import { LaunchSurface } from "./launch-surface";
 import { MessageRow } from "./message-row";
 import { UnifiedTopMenu } from "./unified-top-menu";
+import { VoiceModeSheet } from "./voice-mode-sheet";
 
 const MAX_CHATS = 40;
 const MAX_MESSAGES = 60;
@@ -57,6 +66,10 @@ function resolvedTheme(preference: NaviPreferences["theme"]): "dark" | "light" {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
+function stopSpeaking() {
+  if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
 export function AppShell() {
   const initialChatId = useRef(createId());
   const [activeId, setActiveId] = useState(initialChatId.current);
@@ -67,6 +80,8 @@ export function AppShell() {
   const [hydrated, setHydrated] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [speakNextReply, setSpeakNextReply] = useState(false);
   const [online, setOnline] = useState(true);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [scrolled, setScrolled] = useState(false);
@@ -74,6 +89,7 @@ export function AppShell() {
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const edgeStart = useRef<{ x: number; y: number } | null>(null);
+  const priorAssistantId = useRef<string | null>(null);
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
   const {
@@ -92,14 +108,20 @@ export function AppShell() {
       if (part.type === "data-status") setStreamStatus(part.data as NaviStreamStatus);
     },
     onFinish: ({ isError, isAbort }) => {
-      if (!isError && !isAbort) {
-        setStreamStatus({ stage: "complete", detail: "Response complete." });
-        haptic("success", preferences.haptics);
+      if (isAbort) {
+        setStreamStatus({ stage: "interrupted", detail: "You stopped this response." });
+        return;
       }
+      if (isError) {
+        setStreamStatus({ stage: "error", detail: "Navi could not finish the response." });
+        return;
+      }
+      setStreamStatus({ stage: "complete", detail: "Response complete." });
+      haptic("success", preferences.haptics);
     },
     onError: (chatError) => {
       console.error("Navi chat error:", chatError);
-      setStreamStatus(null);
+      setStreamStatus({ stage: "error", detail: chatError.message || "Navi could not finish the response." });
       haptic("error", preferences.haptics);
     }
   });
@@ -108,6 +130,14 @@ export function AppShell() {
   const activeChat = chats.find((chat) => chat.id === activeId);
   const activePreset = MODEL_PRESETS.find((item) => item.id === preferences.preset) ?? MODEL_PRESETS[0];
   const statusText = streamStatus?.detail ?? (generating ? "Navi is working" : activePreset.label);
+
+  const requestBody = useCallback(() => ({
+    preset: preferences.preset,
+    style: preferences.style,
+    tools: preferences.tools,
+    threadSummary: activeChat?.summary ?? compactSummary(messages),
+    connectedMcpServers: preferences.connectedMcpServers
+  }), [activeChat?.summary, messages, preferences]);
 
   useEffect(() => {
     let cancelled = false;
@@ -210,12 +240,32 @@ export function AppShell() {
     return () => cancelAnimationFrame(frame);
   }, [generating, messages, status, streamStatus]);
 
+  useEffect(() => {
+    if (!speakNextReply || generating || !("speechSynthesis" in window)) return;
+    const latest = [...messages].reverse().find((message) => message.role === "assistant" && messageText(message));
+    if (!latest || latest.id === priorAssistantId.current) return;
+    const text = messageText(latest).replace(/```[\s\S]*?```/g, " Code or generated content is available on screen. ").slice(0, 4_000);
+    if (!text) return;
+    stopSpeaking();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = localStorage.getItem("navi.voice.language.v1") || navigator.language || "en-US";
+    utterance.rate = 1;
+    window.speechSynthesis.speak(utterance);
+    priorAssistantId.current = latest.id;
+    setSpeakNextReply(false);
+  }, [generating, messages, speakNextReply]);
+
+  useEffect(() => () => stopSpeaking(), []);
+
   const updatePreferences = useCallback((next: NaviPreferences) => {
     setPreferences(next);
   }, []);
 
   const newChat = useCallback(() => {
     if (generating) stop();
+    stopSpeaking();
+    setVoiceOpen(false);
+    setSpeakNextReply(false);
     setActiveId(createId());
     setMessages([]);
     setDraft("");
@@ -229,6 +279,9 @@ export function AppShell() {
 
   const openChat = useCallback((chat: StoredChat) => {
     if (generating) stop();
+    stopSpeaking();
+    setVoiceOpen(false);
+    setSpeakNextReply(false);
     setActiveId(chat.id);
     setMessages(chat.messages);
     setDraft("");
@@ -291,7 +344,10 @@ export function AppShell() {
     if ((!draft.trim() && pendingFiles.length === 0) || generating || !online) return;
     clearError();
     setAttachmentError(null);
-    setStreamStatus({ stage: "gather", detail: "Preparing your request." });
+    setStreamStatus({
+      stage: "gather",
+      detail: preferences.tools.web ? "Starting research and gathering sources." : "Preparing your request."
+    });
     try {
       const files = pendingFiles.length ? await Promise.all(pendingFiles.map(fileToPart)) : undefined;
       const text = draft.trim() || "Please review the attached file or image.";
@@ -312,40 +368,51 @@ export function AppShell() {
             : current;
         });
       }
-      await sendMessage(
-        { text, files },
-        {
-          body: {
-            preset: preferences.preset,
-            style: preferences.style,
-            tools: preferences.tools,
-            threadSummary: activeChat?.summary ?? compactSummary(messages),
-            connectedMcpServers: preferences.connectedMcpServers
-          }
-        }
-      );
+      await sendMessage({ text, files }, { body: requestBody() });
     } catch (submitError) {
       setAttachmentError(submitError instanceof Error ? submitError.message : "Could not prepare attachments.");
-      setStreamStatus(null);
+      setStreamStatus({ stage: "error", detail: "Could not prepare or send this request." });
+      haptic("error", preferences.haptics);
+    }
+  }
+
+  async function submitVoiceTranscript(text: string, speakReply: boolean) {
+    if (!text.trim() || generating || !online) return;
+    clearError();
+    setAttachmentError(null);
+    setStreamStatus({
+      stage: "gather",
+      detail: preferences.tools.web ? "Starting research for your spoken request." : "Preparing your spoken request."
+    });
+    const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+    priorAssistantId.current = latestAssistant?.id ?? null;
+    setSpeakNextReply(speakReply);
+    try {
+      await sendMessage({ text: text.trim() }, { body: requestBody() });
+    } catch (voiceError) {
+      setSpeakNextReply(false);
+      setStreamStatus({
+        stage: "error",
+        detail: voiceError instanceof Error ? voiceError.message : "Could not send the spoken request."
+      });
       haptic("error", preferences.haptics);
     }
   }
 
   function retry() {
     clearError();
-    void regenerate({
-      body: {
-        preset: preferences.preset,
-        style: preferences.style,
-        tools: preferences.tools,
-        threadSummary: activeChat?.summary ?? compactSummary(messages),
-        connectedMcpServers: preferences.connectedMcpServers
-      }
+    setStreamStatus({
+      stage: "gather",
+      detail: preferences.tools.web ? "Restarting research." : "Retrying your request."
     });
+    void regenerate({ body: requestBody() });
   }
 
   function clearThread() {
     if (generating) stop();
+    stopSpeaking();
+    setVoiceOpen(false);
+    setSpeakNextReply(false);
     setMessages([]);
     setDraft("");
     setPendingFiles([]);
@@ -357,6 +424,7 @@ export function AppShell() {
 
   async function clearData() {
     if (generating) stop();
+    stopSpeaking();
     await clearLocalState();
     localStorage.removeItem("navi.chats.v2");
     localStorage.removeItem("navi.preferences.v2");
@@ -366,6 +434,8 @@ export function AppShell() {
     setDraft("");
     setPendingFiles([]);
     setStreamStatus(null);
+    setVoiceOpen(false);
+    setSpeakNextReply(false);
     setActiveId(createId());
   }
 
@@ -380,6 +450,16 @@ export function AppShell() {
     if (event.clientX - start.x > 62 && Math.abs(event.clientY - start.y) < 70) {
       setHistoryOpen(true);
     }
+  }
+
+  function toggleResearch() {
+    const enabled = !preferences.tools.web;
+    updatePreferences({
+      ...preferences,
+      tools: { ...preferences.tools, web: enabled }
+    });
+    setStreamStatus(null);
+    haptic("selection", preferences.haptics);
   }
 
   return (
@@ -403,7 +483,7 @@ export function AppShell() {
         onDelete={deleteChat}
       />
 
-      <header className="navi-header relative z-50 flex shrink-0 items-center gap-2" data-scrolled={String(scrolled)}>
+      <header className="navi-header relative z-50 flex shrink-0 items-center gap-1" data-scrolled={String(scrolled)}>
         <button
           type="button"
           onClick={() => setHistoryOpen(true)}
@@ -416,6 +496,29 @@ export function AppShell() {
           <div className="truncate text-[16px]/5 font-semibold tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>
           <div className="truncate text-[11px]/[14px] font-semibold text-tertiary">{activePreset.label}</div>
         </div>
+        <button
+          type="button"
+          onClick={toggleResearch}
+          className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full active:bg-elev-3 ${preferences.tools.web ? "bg-[var(--selection-bg)] text-accent" : "text-secondary"}`}
+          aria-label={preferences.tools.web ? "Turn off research mode" : "Turn on research mode"}
+          aria-pressed={preferences.tools.web}
+        >
+          <Search size={18} />
+          {preferences.tools.web ? <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-accent" /> : null}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMenuOpen(false);
+            setVoiceOpen(true);
+            haptic("selection", preferences.haptics);
+          }}
+          disabled={generating}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3 disabled:opacity-40"
+          aria-label="Open voice mode"
+        >
+          <Mic size={19} />
+        </button>
         <UnifiedTopMenu
           open={menuOpen}
           preferences={preferences}
@@ -435,6 +538,11 @@ export function AppShell() {
         <div className="offline-banner flex min-h-10 items-center justify-center gap-2 border-y border-[var(--accent-warning)] bg-elev-2 px-4 text-center text-[12px]/4 font-semibold text-warning" role="status">
           <WifiOff size={15} />
           Offline · chats and drafts remain available locally
+        </div>
+      ) : preferences.tools.web ? (
+        <div className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[11px]/4 font-semibold text-accent" role="status">
+          <Search size={14} />
+          Research mode on · Navi will use available web or connected sources
         </div>
       ) : null}
 
@@ -468,12 +576,11 @@ export function AppShell() {
                 />
               ))}
             </div>
-            {status === "submitted" || (streamStatus && generating) ? (
-              <div className="mt-3 flex min-h-10 items-center gap-2 text-[12px]/4 font-medium text-tertiary" role="status" aria-live="polite">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-                {statusText}
-              </div>
-            ) : null}
+            <ConversationStatePanel
+              research={preferences.tools.web}
+              generating={generating}
+              status={streamStatus}
+            />
             {error ? (
               <div className="mt-4 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
                 <p className="text-[13px]/[18px] font-medium text-primary">{error.message || "Navi could not complete that response."}</p>
@@ -506,8 +613,18 @@ export function AppShell() {
         }}
         onStop={() => {
           stop();
-          setStreamStatus(null);
+          setStreamStatus({ stage: "interrupted", detail: "You stopped this response." });
         }}
+      />
+
+      <VoiceModeSheet
+        open={voiceOpen}
+        busy={generating}
+        online={online}
+        haptics={preferences.haptics}
+        onClose={() => setVoiceOpen(false)}
+        onUseTranscript={(text) => setDraft((current) => `${current}${current.trim() ? " " : ""}${text}`)}
+        onSendTranscript={(text, speakReply) => void submitVoiceTranscript(text, speakReply)}
       />
     </div>
   );
