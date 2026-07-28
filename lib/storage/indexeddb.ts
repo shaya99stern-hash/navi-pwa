@@ -101,11 +101,14 @@ function mergePreferences(value?: PreferenceInput): NaviPreferences {
 
 function normalizeProjects(value: unknown): NaviProject[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
+  return value.flatMap<NaviProject>((item) => {
     if (!item || typeof item !== "object") return [];
     const project = item as Partial<NaviProject>;
     if (typeof project.id !== "string" || typeof project.name !== "string") return [];
     const createdAt = typeof project.createdAt === "number" ? project.createdAt : Date.now();
+    const syncState: NaviProject["syncState"] = project.syncState === "synced" || project.syncState === "attention"
+      ? project.syncState
+      : "local";
     return [{
       id: project.id,
       name: project.name,
@@ -113,7 +116,7 @@ function normalizeProjects(value: unknown): NaviProject[] {
       knowledge: Array.isArray(project.knowledge) ? project.knowledge.filter((entry): entry is string => typeof entry === "string").slice(0, 100) : [],
       createdAt,
       updatedAt: typeof project.updatedAt === "number" ? project.updatedAt : createdAt,
-      syncState: project.syncState === "synced" || project.syncState === "attention" ? project.syncState : "local"
+      syncState
     }];
   }).sort((a, b) => b.updatedAt - a.updatedAt);
 }
