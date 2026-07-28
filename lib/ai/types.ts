@@ -90,6 +90,15 @@ export type GeneratedImagePayload = {
 };
 
 export type NaviStreamStatus = {
-  stage: "gather" | "plan" | "draft" | "synthesize" | "verify" | "stream" | "complete";
+  stage:
+    | "gather"
+    | "plan"
+    | "draft"
+    | "synthesize"
+    | "verify"
+    | "stream"
+    | "complete"
+    | "interrupted"
+    | "error";
   detail: string;
 };
