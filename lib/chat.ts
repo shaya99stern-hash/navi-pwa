@@ -3,8 +3,8 @@ import type { ModelPreset, NaviPreferences, ResponseStyle, StoredChat } from "./
 
 export const MODEL_PRESETS: Array<{ id: ModelPreset; label: string; detail: string; composite: boolean }> = [
   { id: "auto", label: "Navi Auto", detail: "Chooses a direct route, Navi Fable, or Navi Sol", composite: false },
-  { id: "navi-fable", label: "Navi Fable", detail: "72-role long-horizon project, coding, testing, and document swarm", composite: true },
-  { id: "navi-sol", label: "Navi Sol", detail: "96-role parallel reasoning, research, design, and verification swarm", composite: true },
+  { id: "navi-fable", label: "Navi Fable", detail: "Up to 8 long-horizon council calls, with 72 role lenses", composite: true },
+  { id: "navi-sol", label: "Navi Sol", detail: "Up to 10 parallel council calls, with 96 role lenses", composite: true },
   { id: "huggingface-direct", label: "Hugging Face Direct", detail: "Best currently available Hugging Face route", composite: false },
   { id: "gemini-direct", label: "Gemini Direct", detail: "Direct Gemini multimodal route", composite: false },
   { id: "groq-direct", label: "Groq Direct", detail: "Direct low-latency reasoning route", composite: false }

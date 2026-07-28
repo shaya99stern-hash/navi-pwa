@@ -28,9 +28,13 @@ export type SwarmRoutePlan = {
   routes: ProviderRoute[];
   synthesisRoutes: ProviderRoute[];
   verificationRoute: ProviderRoute;
+  /** Ordered verifier fallbacks. The first route is the preferred verifier. */
+  verificationRoutes: ProviderRoute[];
   catalogSize: number;
   selectedHuggingFaceModels: number;
   maxConcurrentCouncils: number;
+  minimumCouncilSuccesses: number;
+  minimumProviderDiversity: number;
 };
 
 type CatalogCache = {
@@ -226,7 +230,11 @@ function selectDiverseModels(models: RouterModel[], profile: SwarmProfile, task:
   const organizationCounts = new Map<string, number>();
 
   for (const model of configured) {
-    if (availableIds.has(model) && !selected.includes(model)) selected.push(model);
+    if (!availableIds.has(model) || selected.includes(model)) continue;
+    const owner = organization(model);
+    if ((organizationCounts.get(owner) ?? 0) >= 2) continue;
+    selected.push(model);
+    organizationCounts.set(owner, (organizationCounts.get(owner) ?? 0) + 1);
     if (selected.length >= count) return selected;
   }
 
@@ -289,6 +297,26 @@ function chooseVerificationRoute(profile: SwarmProfile, availability: ProviderAv
   return profile === "navi-sol" ? ROUTES.geminiSynthesis : ROUTES.geminiSynthesis;
 }
 
+function routeKey(route: ProviderRoute): string {
+  return `${route.provider}:${route.model}`;
+}
+
+/**
+ * A council is useful only when enough independent calls complete. We ask for
+ * provider diversity when the route plan actually offers it; a single-provider
+ * deployment is not falsely rejected for a constraint it cannot meet.
+ */
+export function councilThresholds(routes: ProviderRoute[]): {
+  minimumCouncilSuccesses: number;
+  minimumProviderDiversity: number;
+} {
+  const providerCount = new Set(routes.map((route) => route.provider)).size;
+  return {
+    minimumCouncilSuccesses: routes.length >= 4 ? 3 : Math.min(2, routes.length),
+    minimumProviderDiversity: providerCount >= 2 ? 2 : 1
+  };
+}
+
 export async function buildSwarmRoutePlan(options: {
   profile: SwarmProfile;
   prompt: string;
@@ -325,6 +353,12 @@ export async function buildSwarmRoutePlan(options: {
   if (!councilRoutes.length) throw new Error("No Gemini, Groq, or Hugging Face route is available for this Navi swarm.");
   const synthesisRoutes = chooseSynthesisRoutes(profile, availability, hfRoutes);
   const verificationRoute = chooseVerificationRoute(profile, availability, hfRoutes, synthesisRoutes);
+  const verificationRoutes = uniqueRoutes([
+    verificationRoute,
+    ...synthesisRoutes,
+    ...councilRoutes
+  ]).slice(0, 3);
+  const thresholds = councilThresholds(councilRoutes);
 
   return {
     profile,
@@ -332,9 +366,11 @@ export async function buildSwarmRoutePlan(options: {
     routes: councilRoutes,
     synthesisRoutes,
     verificationRoute,
+    verificationRoutes,
     catalogSize: catalog.length,
     selectedHuggingFaceModels: hfRoutes.length,
-    maxConcurrentCouncils
+    maxConcurrentCouncils,
+    ...thresholds
   };
 }
 

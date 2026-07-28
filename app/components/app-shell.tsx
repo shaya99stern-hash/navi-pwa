@@ -103,9 +103,11 @@ export function AppShell({
   const [scrolled, setScrolled] = useState(false);
   const [streamStatus, setStreamStatus] = useState<NaviStreamStatus | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [emptyResponseError, setEmptyResponseError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const edgeStart = useRef<{ x: number; y: number } | null>(null);
   const priorAssistantId = useRef<string | null>(null);
+  const submitInFlight = useRef(false);
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
   const {
@@ -123,20 +125,30 @@ export function AppShell({
     onData: (part) => {
       if (part.type === "data-status") setStreamStatus(part.data as NaviStreamStatus);
     },
-    onFinish: ({ isError, isAbort }) => {
+    onFinish: ({ message, isError, isAbort }) => {
       if (isAbort) {
+        setEmptyResponseError(null);
         setStreamStatus({ stage: "interrupted", detail: "You stopped this response." });
         return;
       }
       if (isError) {
+        setEmptyResponseError(null);
         setStreamStatus({ stage: "error", detail: "Navi could not finish the response." });
         return;
       }
+      if (!messageText(message)) {
+        setEmptyResponseError("Navi received an empty answer. Try again or choose another model.");
+        setStreamStatus({ stage: "error", detail: "The provider returned no visible answer." });
+        haptic("error", preferences.haptics);
+        return;
+      }
+      setEmptyResponseError(null);
       setStreamStatus({ stage: "complete", detail: "Response complete." });
       haptic("success", preferences.haptics);
     },
     onError: (chatError) => {
       console.error("Navi chat error:", chatError);
+      setEmptyResponseError(null);
       setStreamStatus({ stage: "error", detail: chatError.message || "Navi could not finish the response." });
       haptic("error", preferences.haptics);
     }
@@ -184,6 +196,7 @@ export function AppShell({
         } else {
           setActiveId(initialChatRef.current);
           setMessages([]);
+          if (initialChatId) router.replace("/new");
         }
       })
       .catch((storageError) => console.error("Navi local-state restore failed:", storageError))
@@ -193,7 +206,7 @@ export function AppShell({
     return () => {
       cancelled = true;
     };
-  }, [initialChatId, initialDraft, setMessages]);
+  }, [initialChatId, initialDraft, router, setMessages]);
 
   useEffect(() => {
     const apply = () => {
@@ -304,13 +317,18 @@ export function AppShell({
 
   const updatePreferences = useCallback((next: NaviPreferences) => {
     setPreferences(next);
-    setChats((current) => current.map((chat) => chat.id === activeId
-      ? { ...chat, connectorAccessMode: next.connectorAccessMode }
-      : chat));
+    setChats((current) => {
+      const updated = current.map((chat) => chat.id === activeId
+        ? { ...chat, connectorAccessMode: next.connectorAccessMode }
+        : chat);
+      void setLocalValue("chats", updated);
+      return updated;
+    });
   }, [activeId]);
 
   const newChat = useCallback(() => {
     if (generating) stop();
+    submitInFlight.current = false;
     stopSpeaking();
     setVoiceOpen(false);
     setSpeakNextReply(false);
@@ -319,6 +337,7 @@ export function AppShell({
     setDraft("");
     setPendingFiles([]);
     setAttachmentError(null);
+    setEmptyResponseError(null);
     setStreamStatus(null);
     clearError();
     setHistoryOpen(false);
@@ -337,6 +356,7 @@ export function AppShell({
     setDraft("");
     setPendingFiles([]);
     setStreamStatus(null);
+    setEmptyResponseError(null);
     clearError();
     setHistoryOpen(false);
     router.push(`/chat/${encodeURIComponent(chat.id)}`);
@@ -411,15 +431,17 @@ export function AppShell({
   }
 
   async function submit() {
-    if ((!draft.trim() && pendingFiles.length === 0) || generating || !online) return;
+    if ((!draft.trim() && pendingFiles.length === 0) || !hydrated || submitInFlight.current || generating || !online) return;
+    submitInFlight.current = true;
     clearError();
     setAttachmentError(null);
+    setEmptyResponseError(null);
     setStreamStatus({
       stage: "gather",
       detail: activeProject
         ? `Loading ${activeProject.name} project context.`
         : preferences.tools.web
-          ? "Starting research and gathering sources."
+          ? "Requesting research and source-backed results."
           : "Preparing your request."
     });
     try {
@@ -450,16 +472,20 @@ export function AppShell({
       setAttachmentError(submitError instanceof Error ? submitError.message : "Could not prepare attachments.");
       setStreamStatus({ stage: "error", detail: "Could not prepare or send this request." });
       haptic("error", preferences.haptics);
+    } finally {
+      submitInFlight.current = false;
     }
   }
 
   async function submitVoiceTranscript(text: string, speakReply: boolean) {
-    if (!text.trim() || generating || !online) return;
+    if (!text.trim() || !hydrated || submitInFlight.current || generating || !online) return;
+    submitInFlight.current = true;
     clearError();
     setAttachmentError(null);
+    setEmptyResponseError(null);
     setStreamStatus({
       stage: "gather",
-      detail: activeProject ? `Loading ${activeProject.name} project context.` : preferences.tools.web ? "Starting research for your spoken request." : "Preparing your spoken request."
+      detail: activeProject ? `Loading ${activeProject.name} project context.` : preferences.tools.web ? "Requesting research for your spoken request." : "Preparing your spoken request."
     });
     const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
     priorAssistantId.current = latestAssistant?.id ?? null;
@@ -473,20 +499,29 @@ export function AppShell({
         detail: voiceError instanceof Error ? voiceError.message : "Could not send the spoken request."
       });
       haptic("error", preferences.haptics);
+    } finally {
+      submitInFlight.current = false;
     }
   }
 
   function retry() {
+    if (!hydrated || submitInFlight.current || generating) return;
+    submitInFlight.current = true;
     clearError();
+    setAttachmentError(null);
+    setEmptyResponseError(null);
     setStreamStatus({
       stage: "gather",
-      detail: activeProject ? `Reloading ${activeProject.name} project context.` : preferences.tools.web ? "Restarting research." : "Retrying your request."
+      detail: activeProject ? `Reloading ${activeProject.name} project context.` : preferences.tools.web ? "Retrying with research requested." : "Retrying your request."
     });
-    void regenerate({ body: requestBody() });
+    void regenerate({ body: requestBody() }).finally(() => {
+      submitInFlight.current = false;
+    });
   }
 
   function clearThread() {
     if (generating) stop();
+    submitInFlight.current = false;
     stopSpeaking();
     setVoiceOpen(false);
     setSpeakNextReply(false);
@@ -494,6 +529,7 @@ export function AppShell({
     setDraft("");
     setPendingFiles([]);
     setStreamStatus(null);
+    setEmptyResponseError(null);
     clearError();
     mutateChats((current) => current.filter((chat) => chat.id !== activeId));
     setActiveId(createId());
@@ -513,6 +549,7 @@ export function AppShell({
     setDraft("");
     setPendingFiles([]);
     setStreamStatus(null);
+    setEmptyResponseError(null);
     setVoiceOpen(false);
     setSpeakNextReply(false);
     setActiveId(createId());
@@ -613,7 +650,7 @@ export function AppShell({
       ) : preferences.tools.web ? (
         <div className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[11px]/4 font-semibold text-accent" role="status">
           <Search size={14} />
-          Research mode on · Navi will use available web or connected sources
+          Research requested · live sources are used when the selected route supports them
         </div>
       ) : preferences.connectedMcpServers.length ? (
         <button type="button" onClick={() => setConnectorsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-[var(--border-subtle)] bg-elev-2 px-4 text-center text-[11px]/4 font-semibold text-secondary active:bg-elev-3">
@@ -633,9 +670,12 @@ export function AppShell({
             online={online}
             haptics={preferences.haptics}
             activeModel={activeProject ? `${activeProject.name} · ${activePreset.label}` : activePreset.label}
-            onPrompt={setDraft}
             onOpenModels={() => {
               updatePreferences({ ...preferences, lastMenuSection: "models" });
+              setMenuOpen(true);
+            }}
+            onOpenPrivacy={() => {
+              updatePreferences({ ...preferences, lastMenuSection: "system" });
               setMenuOpen(true);
             }}
           />
@@ -657,12 +697,12 @@ export function AppShell({
               generating={generating}
               status={streamStatus}
             />
-            {error ? (
+            {error || emptyResponseError ? (
               <div className="mt-4 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
-                <p className="text-[13px]/[18px] font-medium text-primary">{error.message || "Navi could not complete that response."}</p>
+                <p className="text-[13px]/[18px] font-medium text-primary">{error?.message || emptyResponseError || "Navi could not complete that response."}</p>
                 <div className="mt-3 flex gap-2">
                   <button type="button" onClick={retry} className="min-h-11 rounded-xl bg-accent px-4 text-[13px]/[18px] font-semibold text-white active:bg-accent-pressed">Try again</button>
-                  <button type="button" onClick={clearError} className="min-h-11 rounded-xl px-4 text-[13px]/[18px] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
+                  <button type="button" onClick={() => { clearError(); setEmptyResponseError(null); }} className="min-h-11 rounded-xl px-4 text-[13px]/[18px] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
                 </div>
               </div>
             ) : null}
@@ -675,6 +715,7 @@ export function AppShell({
       ) : null}
       <ComposerDock
         value={draft}
+        ready={hydrated}
         generating={generating}
         online={online}
         attachmentCount={pendingFiles.length}
@@ -699,8 +740,17 @@ export function AppShell({
           updatePreferences({ ...preferences, lastMenuSection: "tools" });
           setMenuOpen(true);
         }}
+        onOpenProjects={() => {
+          setMenuOpen(false);
+          setProjectsOpen(true);
+        }}
+        onOpenConnectors={() => {
+          setMenuOpen(false);
+          setConnectorsOpen(true);
+        }}
         onStop={() => {
           stop();
+          submitInFlight.current = false;
           setStreamStatus({ stage: "interrupted", detail: "You stopped this response." });
         }}
       />

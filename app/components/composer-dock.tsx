@@ -6,12 +6,14 @@ import {
   Camera,
   ChevronDown,
   FileText,
+  FolderPlus,
+  Globe2,
   Image as ImageIcon,
   Mic,
-  Paperclip,
+  PlugZap,
   Plus,
+  Puzzle,
   Search,
-  SlidersHorizontal,
   Square,
   X
 } from "lucide-react";
@@ -41,9 +43,11 @@ const DOCUMENT_ACCEPT = [
 ].join(",");
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
+const ATTACHMENT_ACCEPT = `${IMAGE_ACCEPT},${DOCUMENT_ACCEPT}`;
 
 type Props = {
   value: string;
+  ready: boolean;
   generating: boolean;
   online: boolean;
   attachmentCount: number;
@@ -59,6 +63,8 @@ type Props = {
   onOpenVoice: () => void;
   onToggleResearch: () => void;
   onOpenTools: () => void;
+  onOpenProjects: () => void;
+  onOpenConnectors: () => void;
 };
 
 type ProviderStatus = {
@@ -109,6 +115,7 @@ function AttachmentPreview({ file }: { file: File }) {
 
 export function ComposerDock({
   value,
+  ready,
   generating,
   online,
   attachmentCount,
@@ -123,13 +130,17 @@ export function ComposerDock({
   onOpenModels,
   onOpenVoice,
   onToggleResearch,
-  onOpenTools
+  onOpenTools,
+  onOpenProjects,
+  onOpenConnectors
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
+  const sourceDialogRef = useRef<HTMLElement>(null);
+  const sourceCloseRef = useRef<HTMLButtonElement>(null);
+  const sourceTriggerRef = useRef<HTMLButtonElement>(null);
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -174,12 +185,46 @@ export function ComposerDock({
     };
   }, []);
 
+  useEffect(() => {
+    if (!sourceMenuOpen) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    sourceCloseRef.current?.focus();
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSourceMenuOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(sourceDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? [])].filter((element) => element.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [sourceMenuOpen]);
+
   const available = providerReady !== false;
-  const canSend = online && available && !generating && Boolean(value.trim() || attachmentCount);
-  const blocked = !online || !available;
+  const canSend = ready && online && available && !generating && Boolean(value.trim() || attachmentCount);
+  const blocked = !ready || !online || !available;
   const hiddenAttachmentCount = Math.max(0, attachmentCount - selectedFiles.length);
 
-  const placeholder = !online
+  const placeholder = !ready
+    ? "Loading your workspace"
+    : !online
     ? "Navi is offline"
     : !available
       ? "AI provider setup required"
@@ -189,7 +234,9 @@ export function ComposerDock({
 
   const footer = voiceMessage
     ?? attachmentMessage
-    ?? (!online
+    ?? (!ready
+      ? "Restoring your local workspace…"
+      : !online
       ? "Offline · your draft is saved locally"
       : !available
         ? "Add a Gemini, Groq, or Hugging Face key in Vercel to enable Navi"
@@ -205,7 +252,7 @@ export function ComposerDock({
   );
 
   function send() {
-    if ((!value.trim() && attachmentCount === 0) || generating || !online || !available) return;
+    if ((!value.trim() && attachmentCount === 0) || !ready || sending || generating || !online || !available) return;
     setSending(true);
     setSourceMenuOpen(false);
     haptic("impact-light", haptics);
@@ -307,6 +354,24 @@ export function ComposerDock({
     onOpenTools();
   }
 
+  function openProjects() {
+    setSourceMenuOpen(false);
+    haptic("selection", haptics);
+    onOpenProjects();
+  }
+
+  function openConnectors() {
+    setSourceMenuOpen(false);
+    haptic("selection", haptics);
+    onOpenConnectors();
+  }
+
+  function enableWebSearch() {
+    setSourceMenuOpen(false);
+    if (!research) onToggleResearch();
+    haptic("selection", haptics);
+  }
+
   function toggleVoice() {
     if (listening) {
       recognitionRef.current?.stop?.();
@@ -361,17 +426,6 @@ export function ComposerDock({
       >
         <div className="mx-auto w-full max-w-app">
           <input
-            ref={imageInputRef}
-            type="file"
-            multiple
-            accept={IMAGE_ACCEPT}
-            className="hidden"
-            onChange={(event) => {
-              addSelectedFiles(event.currentTarget.files);
-              event.currentTarget.value = "";
-            }}
-          />
-          <input
             ref={cameraInputRef}
             type="file"
             accept="image/*"
@@ -386,7 +440,7 @@ export function ComposerDock({
             ref={documentInputRef}
             type="file"
             multiple
-            accept={DOCUMENT_ACCEPT}
+            accept={ATTACHMENT_ACCEPT}
             className="hidden"
             onChange={(event) => {
               addSelectedFiles(event.currentTarget.files);
@@ -453,36 +507,42 @@ export function ComposerDock({
               className="max-h-[168px] min-h-12 w-full overflow-y-auto bg-transparent px-2.5 pb-1 pt-2 text-[16px]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
-            <div className="mt-1 flex min-h-11 items-center gap-1">
-              <button
-                type="button"
-                onClick={openSourceMenu}
-                disabled={blocked || generating}
-                className="composer-action !h-10 !w-10"
-                aria-label="Add files, photos, camera, and connectors"
-                aria-expanded={sourceMenuOpen}
-              >
-                <Plus size={21} />
-              </button>
+            <div className="relative mt-1 flex min-h-11 items-center gap-1">
+              <div className="flex items-center gap-1">
+                <button
+                  ref={sourceTriggerRef}
+                  type="button"
+                  onClick={openSourceMenu}
+                  disabled={blocked || generating}
+                  className="composer-action !h-10 !w-10"
+                  aria-label="Open add menu for files, photos, projects, connectors, plugins, and web search"
+                  aria-expanded={sourceMenuOpen}
+                  aria-controls="navi-add-menu"
+                >
+                  <Plus size={21} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onToggleResearch}
+                  disabled={blocked || generating}
+                  className={`composer-action !h-10 !w-10 ${research ? "bg-[var(--selection-bg)] text-accent" : ""}`}
+                  aria-label={research ? "Turn off web research" : "Turn on web research"}
+                  aria-pressed={research}
+                >
+                  <Search size={17} />
+                </button>
+              </div>
 
               <button
                 type="button"
                 onClick={onOpenModels}
-                className="flex min-h-10 min-w-0 max-w-[112px] items-center gap-1 rounded-full px-2 text-[12px]/4 font-semibold text-primary active:bg-elev-3"
-                aria-label={`Current model: ${modelLabel}. Change model`}
+                disabled={blocked || generating}
+                className="absolute left-1/2 z-10 flex min-h-10 max-w-[132px] -translate-x-1/2 items-center gap-1 rounded-full px-2.5 text-[12px]/4 font-semibold text-primary active:bg-elev-3"
+                aria-label={`Current Navi model: ${modelLabel}. Change model or response profile`}
               >
                 <span className="truncate">{modelLabel}</span>
                 <ChevronDown size={14} className="shrink-0 text-tertiary" />
-              </button>
-
-              <button
-                type="button"
-                onClick={onToggleResearch}
-                className={`composer-action !h-10 !w-10 ${research ? "bg-[var(--selection-bg)] text-accent" : ""}`}
-                aria-label={research ? "Turn off research mode" : "Turn on research mode"}
-                aria-pressed={research}
-              >
-                <Search size={17} />
               </button>
 
               <span className="min-w-0 flex-1" />
@@ -538,6 +598,8 @@ export function ComposerDock({
             className="absolute inset-0 bg-overlay backdrop-blur-[3px]"
           />
           <section
+            ref={sourceDialogRef}
+            id="navi-add-menu"
             role="dialog"
             aria-modal="true"
             aria-label="Add to message"
@@ -550,6 +612,7 @@ export function ComposerDock({
                 <div className="text-[12px]/4 font-medium text-tertiary">Up to six items, 10 MB total</div>
               </div>
               <button
+                ref={sourceCloseRef}
                 type="button"
                 onClick={() => setSourceMenuOpen(false)}
                 className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3"
@@ -559,45 +622,69 @@ export function ComposerDock({
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2" aria-label="Add menu options">
               <button
                 type="button"
-                onClick={() => imageInputRef.current?.click()}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[12px]/4 font-semibold text-primary active:bg-elev-3"
+                onClick={() => documentInputRef.current?.click()}
+                className="flex min-h-[68px] items-center gap-3 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-3 text-left text-[13px]/4 font-semibold text-primary active:bg-elev-3"
               >
                 <ImageIcon size={22} className="text-accent" />
-                Photos
+                <span>Add files/photos</span>
               </button>
               <button
                 type="button"
                 onClick={() => cameraInputRef.current?.click()}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[12px]/4 font-semibold text-primary active:bg-elev-3"
+                className="flex min-h-[68px] items-center gap-3 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-3 text-left text-[13px]/4 font-semibold text-primary active:bg-elev-3"
               >
                 <Camera size={22} className="text-accent" />
-                Camera
+                <span>Take a screenshot/camera</span>
               </button>
               <button
                 type="button"
-                onClick={() => documentInputRef.current?.click()}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[12px]/4 font-semibold text-primary active:bg-elev-3"
+                onClick={openProjects}
+                className="flex min-h-[58px] items-center gap-3 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-3 text-left text-[13px]/4 font-semibold text-primary active:bg-elev-3"
               >
-                <Paperclip size={22} className="text-accent" />
-                Files
+                <FolderPlus size={19} className="text-accent" />
+                <span>Add to project</span>
+              </button>
+              <button
+                type="button"
+                onClick={openTools}
+                className="flex min-h-[58px] items-center gap-3 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-3 text-left text-[13px]/4 font-semibold text-primary active:bg-elev-3"
+              >
+                <Puzzle size={19} className="text-accent" />
+                <span>Skills</span>
+              </button>
+              <button
+                type="button"
+                onClick={openConnectors}
+                className="flex min-h-[58px] items-center gap-3 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-3 text-left text-[13px]/4 font-semibold text-primary active:bg-elev-3"
+              >
+                <PlugZap size={19} className="text-accent" />
+                <span>Add connector</span>
+              </button>
+              <button
+                type="button"
+                onClick={openConnectors}
+                className="flex min-h-[58px] items-center gap-3 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-3 text-left text-[13px]/4 font-semibold text-primary active:bg-elev-3"
+              >
+                <Puzzle size={19} className="text-accent" />
+                <span>Plugins</span>
+              </button>
+              <button
+                type="button"
+                onClick={enableWebSearch}
+                className={`col-span-2 flex min-h-[54px] items-center gap-3 rounded-card border border-[var(--border-subtle)] px-3 text-left text-[13px]/4 font-semibold active:bg-elev-3 ${research ? "bg-[var(--selection-bg)] text-accent" : "bg-elev-2 text-primary"}`}
+              >
+                <Globe2 size={19} className="text-accent" />
+                <span className="min-w-0 flex-1">Web search</span>
+                <span className="text-[11px]/4 font-medium text-tertiary">{research ? "On" : "Off"}</span>
               </button>
             </div>
 
             <div className="mt-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-3 py-2 text-center text-[11px]/4 font-medium text-tertiary">
-              You can also paste screenshots or drag files directly onto the composer.
+              Paste screenshots or drag files onto the composer. Skills and plugins open available Navi controls; no capability is implied until it is configured.
             </div>
-
-            <button
-              type="button"
-              onClick={openTools}
-              className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-[13px]/5 font-semibold text-secondary active:bg-elev-2"
-            >
-              <SlidersHorizontal size={17} />
-              Configure web, code, artifacts, or clear attachments
-            </button>
           </section>
         </div>
       ) : null}

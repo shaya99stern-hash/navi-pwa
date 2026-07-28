@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { ModelPreset, ProviderName, ProviderRoute, ToolPolicy } from "./types";
 
@@ -95,6 +97,10 @@ function huggingFaceToken(): string | undefined {
 
 export function getHuggingFaceToken(): string | undefined {
   return huggingFaceToken();
+}
+
+export function getGroqApiKey(): string | undefined {
+  return groqApiKey();
 }
 
 export function getProviderAvailability(): ProviderAvailability {
@@ -198,6 +204,12 @@ export const ROUTES = {
     label: "Groq tools",
     capability: "tools"
   },
+  groqToolsMini: {
+    provider: "groq",
+    model: process.env.GROQ_TOOL_MINI_MODEL ?? "groq/compound-mini",
+    label: "Groq tools fast",
+    capability: "tools"
+  },
   hfGptOss: hf("openai/gpt-oss-120b", "HF GPT-OSS 120B", "reasoning"),
   hfDeepSeek: hf("deepseek-ai/DeepSeek-V3.2", "HF DeepSeek V3.2", "reasoning"),
   hfGlm: hf("zai-org/GLM-5.2", "HF GLM 5.2", "long-context"),
@@ -257,16 +269,27 @@ export function selectDirectRoute(options: {
   }
   if (preset === "groq-direct") {
     if (!availability.groq) throw new Error("A Groq API credential is not configured.");
-    return tools.web || tools.code ? ROUTES.groqTools : complex ? ROUTES.groqReasoning : ROUTES.groqFast;
+    return tools.web || tools.code
+      ? (tools.web && tools.code) || complex ? ROUTES.groqTools : ROUTES.groqToolsMini
+      : complex ? ROUTES.groqReasoning : ROUTES.groqFast;
   }
 
-  if ((tools.web || tools.code) && availability.groq) return ROUTES.groqTools;
+  if ((tools.web || tools.code) && availability.groq) {
+    return (tools.web && tools.code) || complex ? ROUTES.groqTools : ROUTES.groqToolsMini;
+  }
   if (complex && availability.huggingface) return ROUTES.hfGptOss;
   if (complex && availability.groq) return ROUTES.groqReasoning;
   if (availability.gemini) return ROUTES.geminiSynthesis;
   if (availability.huggingface) return ROUTES.hfQwen;
   if (availability.groq) return ROUTES.groqFast;
   throw new Error("No Gemini, Groq, or Hugging Face credential is configured in Vercel.");
+}
+
+export function selectConnectorToolRoute(availability: ProviderAvailability): ProviderRoute {
+  if (availability.gemini) return ROUTES.geminiSynthesis;
+  if (availability.groq) return ROUTES.groqReasoning;
+  if (availability.huggingface) return ROUTES.hfGptOss;
+  throw new Error("No provider capable of connector tool calling is configured.");
 }
 
 export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-sol-5-6"): ProviderRoute {
