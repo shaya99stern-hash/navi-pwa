@@ -4,13 +4,25 @@ import { useReportWebVitals } from "next/web-vitals";
 
 export default function WebVitals() {
   useReportWebVitals((metric) => {
+    const path = window.location.pathname;
+    if (
+      path === "/sign-in"
+      || path.startsWith("/sign-in/")
+      || path === "/sign-up"
+      || path.startsWith("/sign-up/")
+      || path === "/access-denied"
+      || path === "/offline"
+    ) {
+      return;
+    }
+
     const payload = JSON.stringify({
       id: metric.id,
       name: metric.name,
       value: metric.value,
       rating: metric.rating,
       navigationType: metric.navigationType,
-      path: window.location.pathname,
+      path,
       timestamp: Date.now()
     });
 

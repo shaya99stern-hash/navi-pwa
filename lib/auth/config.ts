@@ -2,17 +2,12 @@ import "server-only";
 
 /**
  * Authentication is intentionally opt-in: local previews and deployments
- * without a publishable key plus a server verification key continue to run
- * without an account wall.
+ * without a publishable key plus Clerk's public JWT verification key continue
+ * to run without an account wall.
  */
 export function getClerkPublishableKey() {
   const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
   return key?.startsWith("pk_") ? key : undefined;
-}
-
-export function getClerkSecretKey() {
-  const key = process.env.CLERK_SECRET_KEY?.trim();
-  return key?.startsWith("sk_") ? key : undefined;
 }
 
 export function getClerkJwtKey() {
@@ -21,7 +16,47 @@ export function getClerkJwtKey() {
 }
 
 export function isClerkConfigured() {
-  return Boolean(getClerkPublishableKey() && (getClerkSecretKey() || getClerkJwtKey()));
+  return Boolean(getClerkPublishableKey() && getClerkJwtKey());
+}
+
+function normalizeOrigin(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const candidate = value.includes("://") ? value : `https://${value}`;
+  try {
+    const url = new URL(candidate);
+    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) return undefined;
+    if (url.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && url.protocol === "http:")) {
+      return undefined;
+    }
+    return url.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Clerk's `azp` claim is checked against exact trusted origins to prevent a
+ * session cookie leaked by another subdomain from being accepted by Navi.
+ */
+export function getClerkAuthorizedParties(): string[] {
+  const configured = (process.env.CLERK_AUTHORIZED_PARTIES ?? "")
+    .split(",")
+    .map((value) => normalizeOrigin(value.trim()));
+  const vercelOrigins = [
+    process.env.VERCEL_URL,
+    process.env.VERCEL_BRANCH_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ].map(normalizeOrigin);
+  const localOrigins = process.env.NODE_ENV === "production"
+    ? []
+    : ["http://localhost:3000", "http://localhost:3100", "http://127.0.0.1:3000", "http://127.0.0.1:3100"];
+
+  return Array.from(new Set([
+    "https://navisonnet.vercel.app",
+    ...configured,
+    ...vercelOrigins,
+    ...localOrigins
+  ].filter((value): value is string => Boolean(value))));
 }
 
 export function getAllowedClerkUserIds(): string[] {

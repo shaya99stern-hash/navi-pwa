@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
-import { auth } from "@clerk/nextjs/server";
 
 import {
   getClerkPublishableKey,
@@ -9,6 +9,7 @@ import {
   isClerkConfigured,
   isClerkUserAllowed
 } from "@/lib/auth/config";
+import { CLERK_SESSION_COOKIE_NAME, verifyClerkSessionToken } from "@/lib/auth/session";
 import "./globals.css";
 import "./shell.css";
 import { PwaPlatformBanner } from "./components/pwa-platform-banner";
@@ -76,7 +77,10 @@ try {
 
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const clerkConfigured = isClerkConfigured();
-  const userId = clerkConfigured ? (await auth()).userId : null;
+  const sessionToken = clerkConfigured
+    ? (await cookies()).get(CLERK_SESSION_COOKIE_NAME)?.value
+    : undefined;
+  const userId = clerkConfigured ? await verifyClerkSessionToken(sessionToken) : null;
   const storageScope = userId ? `clerk:${userId}` : clerkConfigured ? "signed-out" : "guest";
   const mayMigrateLegacyState = !clerkConfigured
     || Boolean(userId && hasClerkUserAllowlist() && isClerkUserAllowed(userId));
@@ -98,7 +102,7 @@ try {
       signUpFallbackRedirectUrl="/"
       signInForceRedirectUrl="/"
       signUpForceRedirectUrl="/"
-      afterSignOutUrl="/"
+      afterSignOutUrl="/sign-in"
     >
       {children}
     </ClerkProvider>
