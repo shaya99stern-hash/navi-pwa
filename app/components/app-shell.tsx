@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
-import { Menu, Mic, Search, WifiOff } from "lucide-react";
+import { FolderKanban, Link2, Menu, Mic, Search, WifiOff } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -11,15 +11,17 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent
 } from "react";
-import type { AttachmentMeta, NaviPreferences, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
+import type { AttachmentMeta, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
 import { DEFAULT_PREFERENCES, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
 import { clearLocalState, loadLocalState, setLocalValue } from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
 import { ComposerDock } from "./composer-dock";
+import { ConnectorsSheet } from "./connectors-sheet";
 import { ConversationStatePanel } from "./conversation-state-panel";
 import { HistoryDrawer } from "./history-drawer";
 import { LaunchSurface } from "./launch-surface";
 import { MessageRow } from "./message-row";
+import { ProjectsSheet } from "./projects-sheet";
 import { UnifiedTopMenu } from "./unified-top-menu";
 import { VoiceModeSheet } from "./voice-mode-sheet";
 
@@ -74,12 +76,16 @@ export function AppShell() {
   const initialChatId = useRef(createId());
   const [activeId, setActiveId] = useState(initialChatId.current);
   const [chats, setChats] = useState<StoredChat[]>([]);
+  const [projects, setProjects] = useState<NaviProject[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<NaviPreferences>(DEFAULT_PREFERENCES);
   const [draft, setDraft] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [speakNextReply, setSpeakNextReply] = useState(false);
   const [online, setOnline] = useState(true);
@@ -128,7 +134,9 @@ export function AppShell() {
 
   const generating = status === "submitted" || status === "streaming";
   const activeChat = chats.find((chat) => chat.id === activeId);
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
   const activePreset = MODEL_PRESETS.find((item) => item.id === preferences.preset) ?? MODEL_PRESETS[0];
+  const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
   const statusText = streamStatus?.detail ?? (generating ? "Navi is working" : activePreset.label);
 
   const requestBody = useCallback(() => ({
@@ -136,8 +144,15 @@ export function AppShell() {
     style: preferences.style,
     tools: preferences.tools,
     threadSummary: activeChat?.summary ?? compactSummary(messages),
-    connectedMcpServers: preferences.connectedMcpServers
-  }), [activeChat?.summary, messages, preferences]);
+    connectedMcpServers: preferences.connectedMcpServers,
+    connectorAccessMode: activeChat?.connectorAccessMode ?? preferences.connectorAccessMode,
+    projectContext: activeProject ? {
+      id: activeProject.id,
+      name: activeProject.name,
+      instructions: activeProject.instructions,
+      knowledge: activeProject.knowledge
+    } : undefined
+  }), [activeChat?.connectorAccessMode, activeChat?.summary, activeProject, messages, preferences]);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,10 +160,13 @@ export function AppShell() {
       .then((state) => {
         if (cancelled) return;
         setChats(state.chats);
+        setProjects(state.projects);
+        setActiveProjectId(state.activeProjectId);
         setPreferences(state.preferences);
         setDraft(state.draft);
         if (state.chats[0]) {
           setActiveId(state.chats[0].id);
+          setActiveProjectId(state.chats[0].projectId ?? state.activeProjectId);
           setMessages(state.chats[0].messages);
         }
       })
@@ -203,6 +221,15 @@ export function AppShell() {
   }, [draft, hydrated]);
 
   useEffect(() => {
+    if (!hydrated) return;
+    const timer = window.setTimeout(() => void Promise.all([
+      setLocalValue("projects", projects),
+      setLocalValue("activeProjectId", activeProjectId)
+    ]), 220);
+    return () => window.clearTimeout(timer);
+  }, [activeProjectId, hydrated, projects]);
+
+  useEffect(() => {
     if (!hydrated || !preferences.saveHistory || messages.length === 0) return;
     const timer = window.setTimeout(() => {
       setChats((current) => {
@@ -215,6 +242,8 @@ export function AppShell() {
           pinned: prior?.pinned ?? false,
           summary: compactSummary(messages),
           attachments: prior?.attachments,
+          projectId: activeProjectId ?? undefined,
+          connectorAccessMode: prior?.connectorAccessMode ?? preferences.connectorAccessMode,
           messages: messages.slice(-MAX_MESSAGES)
         };
         const next = sortChats([nextChat, ...current.filter((chat) => chat.id !== activeId)]).slice(0, MAX_CHATS);
@@ -223,7 +252,7 @@ export function AppShell() {
       });
     }, 360);
     return () => window.clearTimeout(timer);
-  }, [activeId, hydrated, messages, preferences.saveHistory]);
+  }, [activeId, activeProjectId, hydrated, messages, preferences.connectorAccessMode, preferences.saveHistory]);
 
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -259,7 +288,10 @@ export function AppShell() {
 
   const updatePreferences = useCallback((next: NaviPreferences) => {
     setPreferences(next);
-  }, []);
+    setChats((current) => current.map((chat) => chat.id === activeId
+      ? { ...chat, connectorAccessMode: next.connectorAccessMode }
+      : chat));
+  }, [activeId]);
 
   const newChat = useCallback(() => {
     if (generating) stop();
@@ -283,6 +315,7 @@ export function AppShell() {
     setVoiceOpen(false);
     setSpeakNextReply(false);
     setActiveId(chat.id);
+    setActiveProjectId(chat.projectId ?? null);
     setMessages(chat.messages);
     setDraft("");
     setPendingFiles([]);
@@ -310,6 +343,25 @@ export function AppShell() {
   function deleteChat(id: string) {
     mutateChats((current) => current.filter((chat) => chat.id !== id));
     if (activeId === id) newChat();
+  }
+
+  function addProject(project: NaviProject) {
+    setProjects((current) => [project, ...current]);
+  }
+
+  function updateProject(project: NaviProject) {
+    setProjects((current) => current.map((item) => item.id === project.id ? project : item).sort((a, b) => b.updatedAt - a.updatedAt));
+  }
+
+  function deleteProject(id: string) {
+    setProjects((current) => current.filter((project) => project.id !== id));
+    if (activeProjectId === id) setActiveProjectId(null);
+    mutateChats((current) => current.map((chat) => chat.projectId === id ? { ...chat, projectId: undefined } : chat));
+  }
+
+  function selectProject(id: string | null) {
+    setActiveProjectId(id);
+    mutateChats((current) => current.map((chat) => chat.id === activeId ? { ...chat, projectId: id ?? undefined } : chat));
   }
 
   function addFiles(list: FileList | null) {
@@ -346,7 +398,11 @@ export function AppShell() {
     setAttachmentError(null);
     setStreamStatus({
       stage: "gather",
-      detail: preferences.tools.web ? "Starting research and gathering sources." : "Preparing your request."
+      detail: activeProject
+        ? `Loading ${activeProject.name} project context.`
+        : preferences.tools.web
+          ? "Starting research and gathering sources."
+          : "Preparing your request."
     });
     try {
       const files = pendingFiles.length ? await Promise.all(pendingFiles.map(fileToPart)) : undefined;
@@ -382,7 +438,7 @@ export function AppShell() {
     setAttachmentError(null);
     setStreamStatus({
       stage: "gather",
-      detail: preferences.tools.web ? "Starting research for your spoken request." : "Preparing your spoken request."
+      detail: activeProject ? `Loading ${activeProject.name} project context.` : preferences.tools.web ? "Starting research for your spoken request." : "Preparing your spoken request."
     });
     const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
     priorAssistantId.current = latestAssistant?.id ?? null;
@@ -403,7 +459,7 @@ export function AppShell() {
     clearError();
     setStreamStatus({
       stage: "gather",
-      detail: preferences.tools.web ? "Restarting research." : "Retrying your request."
+      detail: activeProject ? `Reloading ${activeProject.name} project context.` : preferences.tools.web ? "Restarting research." : "Retrying your request."
     });
     void regenerate({ body: requestBody() });
   }
@@ -429,6 +485,8 @@ export function AppShell() {
     localStorage.removeItem("navi.chats.v2");
     localStorage.removeItem("navi.preferences.v2");
     setChats([]);
+    setProjects([]);
+    setActiveProjectId(null);
     setPreferences(DEFAULT_PREFERENCES);
     setMessages([]);
     setDraft("");
@@ -494,7 +552,7 @@ export function AppShell() {
         </button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[16px]/5 font-semibold tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>
-          <div className="truncate text-[11px]/[14px] font-semibold text-tertiary">{activePreset.label}</div>
+          <div className="truncate text-[11px]/[14px] font-semibold text-tertiary">{activeProject ? activeProject.name : activePreset.label}</div>
         </div>
         <button
           type="button"
@@ -527,6 +585,8 @@ export function AppShell() {
           onClose={() => setMenuOpen(false)}
           onPreferences={updatePreferences}
           onOpenHistory={() => setHistoryOpen(true)}
+          onOpenProjects={() => { setMenuOpen(false); setProjectsOpen(true); }}
+          onOpenConnectors={() => { setMenuOpen(false); setConnectorsOpen(true); }}
           onFiles={addFiles}
           onClearFiles={() => setPendingFiles([])}
           onClearThread={clearThread}
@@ -537,13 +597,23 @@ export function AppShell() {
       {!online ? (
         <div className="offline-banner flex min-h-10 items-center justify-center gap-2 border-y border-[var(--accent-warning)] bg-elev-2 px-4 text-center text-[12px]/4 font-semibold text-warning" role="status">
           <WifiOff size={15} />
-          Offline · chats and drafts remain available locally
+          Offline · chats, projects, and drafts remain available locally
         </div>
+      ) : activeProject ? (
+        <button type="button" onClick={() => setProjectsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[11px]/4 font-semibold text-accent active:bg-elev-2">
+          <FolderKanban size={14} />
+          Project: {activeProject.name} · {activeProject.knowledge.length} knowledge item{activeProject.knowledge.length === 1 ? "" : "s"}
+        </button>
       ) : preferences.tools.web ? (
         <div className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[11px]/4 font-semibold text-accent" role="status">
           <Search size={14} />
           Research mode on · Navi will use available web or connected sources
         </div>
+      ) : preferences.connectedMcpServers.length ? (
+        <button type="button" onClick={() => setConnectorsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-[var(--border-subtle)] bg-elev-2 px-4 text-center text-[11px]/4 font-semibold text-secondary active:bg-elev-3">
+          <Link2 size={14} />
+          {preferences.connectedMcpServers.length} connector{preferences.connectedMcpServers.length === 1 ? "" : "s"} · {connectorMode}
+        </button>
       ) : null}
 
       <main
@@ -556,7 +626,7 @@ export function AppShell() {
           <LaunchSurface
             online={online}
             haptics={preferences.haptics}
-            activeModel={activePreset.label}
+            activeModel={activeProject ? `${activeProject.name} · ${activePreset.label}` : activePreset.label}
             onPrompt={setDraft}
             onOpenModels={() => {
               updatePreferences({ ...preferences, lastMenuSection: "models" });
@@ -602,7 +672,7 @@ export function AppShell() {
         generating={generating}
         online={online}
         attachmentCount={pendingFiles.length}
-        statusText={statusText}
+        statusText={activeProject ? `${activeProject.name} · ${statusText}` : statusText}
         haptics={preferences.haptics}
         onChange={setDraft}
         onSend={() => void submit()}
@@ -625,6 +695,27 @@ export function AppShell() {
         onClose={() => setVoiceOpen(false)}
         onUseTranscript={(text) => setDraft((current) => `${current}${current.trim() ? " " : ""}${text}`)}
         onSendTranscript={(text, speakReply) => void submitVoiceTranscript(text, speakReply)}
+      />
+
+      <ProjectsSheet
+        open={projectsOpen}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        chats={chats}
+        haptics={preferences.haptics}
+        onClose={() => setProjectsOpen(false)}
+        onCreate={addProject}
+        onUpdate={updateProject}
+        onDelete={deleteProject}
+        onSelect={selectProject}
+      />
+
+      <ConnectorsSheet
+        open={connectorsOpen}
+        preferences={preferences}
+        haptics={preferences.haptics}
+        onClose={() => setConnectorsOpen(false)}
+        onPreferences={updatePreferences}
       />
     </div>
   );
