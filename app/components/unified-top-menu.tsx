@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, ChevronRight, FilePlus2, LoaderCircle, RefreshCw, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, FilePlus2, FolderKanban, Link2, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, ModelPreset, NaviPreferences, ResponseStyle } from "@/lib/ai/types";
 import type { PublicMcpServer } from "@/lib/mcp";
@@ -22,6 +22,8 @@ type Props = {
   onClose: () => void;
   onPreferences: (preferences: NaviPreferences) => void;
   onOpenHistory: () => void;
+  onOpenProjects: () => void;
+  onOpenConnectors: () => void;
   onFiles: (files: FileList | null) => void;
   onClearFiles: () => void;
   onClearThread: () => void;
@@ -70,6 +72,8 @@ export function UnifiedTopMenu({
   onClose,
   onPreferences,
   onOpenHistory,
+  onOpenProjects,
+  onOpenConnectors,
   onFiles,
   onClearFiles,
   onClearThread,
@@ -182,7 +186,7 @@ export function UnifiedTopMenu({
             <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
               <div>
                 <div className="text-[17px]/6 font-semibold tracking-[-0.01em] text-primary">Navi controls</div>
-                <div className="text-[11px]/[14px] font-semibold text-tertiary">Modes, tools, uploads, connections and settings</div>
+                <div className="text-[11px]/[14px] font-semibold text-tertiary">Modes, projects, tools, connectors and settings</div>
               </div>
               <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Close menu"><X size={20} /></button>
             </header>
@@ -204,8 +208,11 @@ export function UnifiedTopMenu({
                     <div className="mt-1 text-[12px]/4 font-medium text-secondary">{activePreset.detail}</div>
                     {activePreset.composite ? <div className="mt-3 text-[12px]/4 font-medium text-tertiary">Specialist deliberation is private. Only Navi’s final response appears in the conversation.</div> : null}
                     <div className="mt-4 border-t border-[var(--border-subtle)] pt-3 text-[12px]/4 font-medium text-tertiary">Available providers: {providerSummary}</div>
+                    <div className="mt-1 text-[12px]/4 font-medium text-tertiary">Connector access: {preferences.connectorAccessMode}</div>
                   </div>
                   <button type="button" onClick={() => selectSection("models")} className="mt-3 flex min-h-12 w-full items-center justify-between rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Change Navi mode<ChevronRight size={18} /></button>
+                  <button type="button" onClick={() => { onOpenProjects(); onClose(); }} className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2"><FolderKanban size={18} className="text-accent" /><span className="min-w-0 flex-1">Projects</span><ChevronRight size={18} /></button>
+                  <button type="button" onClick={() => { onOpenConnectors(); onClose(); }} className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2"><Link2 size={18} className="text-accent" /><span className="min-w-0 flex-1">Connectors</span><ChevronRight size={18} /></button>
                   <button type="button" onClick={() => { onOpenHistory(); onClose(); }} className="flex min-h-12 w-full items-center justify-between rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Open conversation history<ChevronRight size={18} /></button>
                 </div>
               ) : null}
@@ -254,6 +261,7 @@ export function UnifiedTopMenu({
 
               {section === "connections" ? (
                 <div className="p-2">
+                  <button type="button" onClick={() => { onOpenConnectors(); onClose(); }} className="mb-2 flex min-h-12 w-full items-center gap-3 rounded-2xl bg-[var(--selection-bg)] px-3 text-left text-[14px]/5 font-semibold text-primary active:bg-elev-3"><Link2 size={18} className="text-accent" /><span className="min-w-0 flex-1">Open connector manager</span><ChevronRight size={18} /></button>
                   {servers.length ? servers.map((server) => {
                     const connected = preferences.connectedMcpServers.includes(server.id);
                     return (
@@ -295,11 +303,11 @@ export function UnifiedTopMenu({
                       <RefreshCw size={18} className={updateBusy ? "animate-spin" : ""} />
                     </span>
                   </button>
-                  <SettingRow title="Local history" detail="Threads and drafts stay in IndexedDB on this device" action={<Toggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />} />
+                  <SettingRow title="Local history" detail="Threads, projects, and drafts stay in IndexedDB on this device" action={<Toggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />} />
                   <button type="button" onClick={() => { onOpenHistory(); onClose(); }} className="flex min-h-[58px] w-full items-center justify-between px-4 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Conversation history<ChevronRight size={18} /></button>
                   <button type="button" onClick={() => { onClearThread(); onClose(); }} className="min-h-[58px] w-full px-4 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Clear current thread</button>
-                  <button type="button" onClick={() => { if (window.confirm("Clear all Navi history and settings from this device?")) { onClearData(); onClose(); } }} className="min-h-[58px] w-full px-4 text-left text-[15px]/[22px] font-medium text-danger active:bg-elev-2">Clear all local data</button>
-                  <div className="px-4 py-5 text-[12px]/4 font-medium text-tertiary">Navi 4.0 · Automatic app updates · Private multi-provider swarms.</div>
+                  <button type="button" onClick={() => { if (window.confirm("Clear all Navi history, projects, and settings from this device?")) { onClearData(); onClose(); } }} className="min-h-[58px] w-full px-4 text-left text-[15px]/[22px] font-medium text-danger active:bg-elev-2">Clear all local data</button>
+                  <div className="px-4 py-5 text-[12px]/4 font-medium text-tertiary">Navi 4.1 · Projects · Connector approvals · Automatic app updates.</div>
                 </div>
               ) : null}
             </div>

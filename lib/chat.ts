@@ -26,6 +26,7 @@ export const DEFAULT_PREFERENCES: NaviPreferences = {
   saveHistory: true,
   tools: { web: false, code: false, artifacts: true },
   connectedMcpServers: [],
+  connectorAccessMode: "ask",
   lastMenuSection: "current"
 };
 

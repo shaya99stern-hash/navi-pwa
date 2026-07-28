@@ -10,7 +10,7 @@ import {
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { createProviderModel, getProviderAvailability, selectDirectRoute } from "@/lib/ai/providers";
 import { runComposite } from "@/lib/ai/swarm";
-import type { ModelPreset, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
+import type { ConnectorAccessMode, ModelPreset, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { gatherMcpMetadata } from "@/lib/mcp";
 
 export const runtime = "edge";
@@ -23,6 +23,15 @@ type ChatRequestBody = {
   tools?: Partial<ToolPolicy>;
   threadSummary?: string;
   connectedMcpServers?: string[];
+  connectorAccessMode?: unknown;
+  projectContext?: unknown;
+};
+
+type ProjectContextInput = {
+  id?: unknown;
+  name?: unknown;
+  instructions?: unknown;
+  knowledge?: unknown;
 };
 
 type RateBucket = { count: number; resetAt: number };
@@ -70,6 +79,31 @@ function normalizePreset(value: unknown): ModelPreset {
   return typeof normalized === "string" && ALLOWED_PRESETS.has(normalized as ModelPreset)
     ? normalized as ModelPreset
     : "auto";
+}
+
+function normalizeConnectorAccessMode(value: unknown): ConnectorAccessMode {
+  return value === "auto" || value === "always" ? value : "ask";
+}
+
+function projectContextSummary(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  const project = value as ProjectContextInput;
+  const name = typeof project.name === "string" ? project.name.trim().slice(0, 100) : "";
+  if (!name) return "";
+  const instructions = typeof project.instructions === "string" ? project.instructions.trim().slice(0, 4_000) : "";
+  const knowledge = Array.isArray(project.knowledge)
+    ? project.knowledge
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim().slice(0, 700))
+      .filter(Boolean)
+      .slice(0, 30)
+    : [];
+  return [
+    `Active project: ${name}`,
+    instructions ? `Project instructions:\n${instructions}` : "",
+    knowledge.length ? `Project knowledge:\n${knowledge.map((item) => `- ${item}`).join("\n")}` : "",
+    "Treat project instructions and knowledge as durable user-provided context. Do not claim they came from external sources."
+  ].filter(Boolean).join("\n\n").slice(0, 6_000);
 }
 
 function isSameOrigin(request: Request): boolean {
@@ -216,7 +250,7 @@ function systemPrompt(options: {
     tools.web ? "Web capability is enabled only when the selected route actually supplies it." : "Web capability is disabled.",
     tools.code ? "Code-execution capability is enabled only when the selected route actually supplies it." : "Code execution is disabled.",
     tools.artifacts ? artifactInstruction(artifactRequested) : "Interactive artifact output is disabled.",
-    threadSummary ? `Compact summary of older turns:\n${threadSummary.slice(0, 8_000)}` : "",
+    threadSummary ? `Compact summary and active project context:\n${threadSummary.slice(0, 8_000)}` : "",
     mcpContext ? `Connected MCP resource metadata:\n${mcpContext}` : ""
   ].filter(Boolean).join("\n\n");
 }
@@ -306,6 +340,12 @@ export async function POST(request: Request): Promise<Response> {
     code: body.tools?.code === true,
     artifacts: body.tools?.artifacts !== false
   };
+  const connectorAccessMode = normalizeConnectorAccessMode(body.connectorAccessMode);
+  const projectSummary = projectContextSummary(body.projectContext);
+  const threadSummary = [
+    typeof body.threadSummary === "string" ? body.threadSummary.trim().slice(0, 5_000) : "",
+    projectSummary
+  ].filter(Boolean).join("\n\n").slice(0, 8_000);
   const availability = getProviderAvailability();
   const providerCount = Object.values(availability).filter(Boolean).length;
   const hasFiles = fileParts(messages).length > 0;
@@ -318,13 +358,13 @@ export async function POST(request: Request): Promise<Response> {
     originalMessages: messages,
     onError: streamError,
     async execute({ writer }) {
-      writer.write(statusChunk({ stage: "gather", detail: imageRequested ? "Preparing the real image-generation pipeline." : "Preparing context and enabled capabilities." }));
+      writer.write(statusChunk({ stage: "gather", detail: imageRequested ? "Preparing the real image-generation pipeline." : projectSummary ? "Preparing project context and enabled capabilities." : "Preparing context and enabled capabilities." }));
 
       if (imageRequested) {
         writer.write(statusChunk({ stage: "plan", detail: currentImageAttachments.length ? "Preparing the source image and edit instructions." : "Composing the image request." }));
         writer.write(statusChunk({ stage: "draft", detail: "Generating a high-quality raster image." }));
         const payload = await generateNaviImage({
-          prompt: lastUserText,
+          prompt: projectSummary ? `${projectSummary}\n\nCurrent image request:\n${lastUserText}` : lastUserText,
           attachments: currentImageAttachments,
           abortSignal: request.signal
         });
@@ -339,8 +379,9 @@ export async function POST(request: Request): Promise<Response> {
         return;
       }
 
-      const mcpContext = Array.isArray(body.connectedMcpServers) && body.connectedMcpServers.length
-        ? await gatherMcpMetadata(body.connectedMcpServers, request.signal)
+      const allowedConnectorIds = connectorAccessMode === "ask" ? [] : body.connectedMcpServers;
+      const mcpContext = Array.isArray(allowedConnectorIds) && allowedConnectorIds.length
+        ? await gatherMcpMetadata(allowedConnectorIds, request.signal)
         : "";
       const modelMessages = await convertToModelMessages(redactGeneratedImages(messages));
 
@@ -361,7 +402,7 @@ export async function POST(request: Request): Promise<Response> {
           style,
           tools,
           artifactRequested,
-          threadSummary: body.threadSummary?.slice(0, 8_000),
+          threadSummary,
           mcpContext,
           onStage: (status) => writer.write(statusChunk(status)),
           abortSignal: request.signal
@@ -388,7 +429,7 @@ export async function POST(request: Request): Promise<Response> {
       writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : "Preparing the response." }));
       const result = streamText({
         model: createProviderModel(route, origin),
-        system: systemPrompt({ style, tools, artifactRequested, threadSummary: body.threadSummary, mcpContext }),
+        system: systemPrompt({ style, tools, artifactRequested, threadSummary, mcpContext }),
         messages: modelMessages,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         maxRetries: 1,

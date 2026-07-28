@@ -9,8 +9,8 @@ import {
 const AUTO_CHECK_INTERVAL_MS = 15 * 60 * 1_000;
 const AUTO_CHECK_THROTTLE_MS = 5 * 60 * 1_000;
 
-function waitForWorker(worker: ServiceWorker, timeoutMs = 4_000): Promise<void> {
-  if (worker.state === "activated" || worker.state === "redundant") return Promise.resolve();
+function waitForWorker(worker: ServiceWorker, timeoutMs = 6_000): Promise<void> {
+  if (worker.state === "activated" || worker.state === "redundant" || worker.state === "installed") return Promise.resolve();
   return new Promise((resolve) => {
     const finish = () => {
       window.clearTimeout(timer);
@@ -38,7 +38,12 @@ export default function PWARegister() {
     let cancelled = false;
     let registration: ServiceWorkerRegistration | undefined;
     let reloading = false;
+    let applyingUpdate = false;
     let lastAutomaticCheck = 0;
+
+    const showAvailable = (message = "A new Navi version is ready. Update when you are ready.") => {
+      if (!cancelled) emitPwaUpdateStatus({ phase: "available", message });
+    };
 
     const restartWithFreshShell = async () => {
       if (cancelled || reloading) return;
@@ -57,9 +62,10 @@ export default function PWARegister() {
     const applyWaitingWorker = (): boolean => {
       const waiting = registration?.waiting;
       if (!waiting) return false;
-      emitPwaUpdateStatus({ phase: "downloading", message: "Update found. Installing it now…" });
+      applyingUpdate = true;
+      emitPwaUpdateStatus({ phase: "downloading", message: "Installing the ready Navi update…" });
       waiting.postMessage({ type: "SKIP_WAITING" });
-      window.setTimeout(() => void restartWithFreshShell(), 2_000);
+      window.setTimeout(() => void restartWithFreshShell(), 4_000);
       return true;
     };
 
@@ -74,12 +80,22 @@ export default function PWARegister() {
       try {
         registration = registration ?? await navigator.serviceWorker.getRegistration("/");
         if (registration) {
+          if (manual && applyWaitingWorker()) return;
           await registration.update();
-          if (applyWaitingWorker()) return;
+          if (registration.waiting) {
+            if (manual) applyWaitingWorker();
+            else showAvailable();
+            return;
+          }
           if (registration.installing) {
             if (manual) emitPwaUpdateStatus({ phase: "downloading", message: "Downloading the latest Navi version…" });
             await waitForWorker(registration.installing);
-            if (reloading || applyWaitingWorker()) return;
+            if (reloading) return;
+            if (registration.waiting) {
+              if (manual) applyWaitingWorker();
+              else showAvailable();
+              return;
+            }
           }
         }
 
@@ -105,7 +121,10 @@ export default function PWARegister() {
     const visibilityCheck = () => {
       if (document.visibilityState === "visible") automaticCheck();
     };
-    const controllerChanged = () => void restartWithFreshShell();
+    const controllerChanged = () => {
+      if (applyingUpdate) void restartWithFreshShell();
+      else showAvailable("A newer Navi version is active. Restart when you are ready.");
+    };
 
     window.addEventListener(PWA_UPDATE_REQUEST_EVENT, manualCheck);
     window.addEventListener("online", automaticCheck);
@@ -117,13 +136,12 @@ export default function PWARegister() {
       .then(async ({ Workbox }) => {
         if (cancelled) return;
         const workbox = new Workbox("/sw.js", { scope: "/" });
-        workbox.addEventListener("waiting", () => {
-          registration = registration ?? undefined;
-          emitPwaUpdateStatus({ phase: "downloading", message: "A Navi update is ready. Installing it…" });
-          workbox.messageSkipWaiting();
+        workbox.addEventListener("waiting", () => showAvailable());
+        workbox.addEventListener("controlling", () => {
+          if (applyingUpdate) void restartWithFreshShell();
         });
-        workbox.addEventListener("controlling", () => void restartWithFreshShell());
         registration = await workbox.register();
+        if (registration?.waiting) showAvailable();
         window.setTimeout(automaticCheck, 1_200);
       })
       .catch((error) => {

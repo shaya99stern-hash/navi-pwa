@@ -13,6 +13,7 @@ export type ResponseStyle = "balanced" | "concise" | "detailed";
 export type ThemePreference = "dark" | "light" | "system";
 export type DensityPreference = "comfortable" | "compact";
 export type MotionPreference = "full" | "reduced";
+export type ConnectorAccessMode = "ask" | "auto" | "always";
 
 export type ToolPolicy = {
   web: boolean;
@@ -26,6 +27,16 @@ export type AttachmentMeta = {
   size: number;
 };
 
+export type NaviProject = {
+  id: string;
+  name: string;
+  instructions: string;
+  knowledge: string[];
+  createdAt: number;
+  updatedAt: number;
+  syncState: "local" | "synced" | "attention";
+};
+
 export type StoredChat = {
   id: string;
   title: string;
@@ -34,6 +45,8 @@ export type StoredChat = {
   pinned: boolean;
   summary?: string;
   attachments?: AttachmentMeta[];
+  projectId?: string;
+  connectorAccessMode?: ConnectorAccessMode;
   messages: UIMessage[];
 };
 
@@ -47,6 +60,7 @@ export type NaviPreferences = {
   saveHistory: boolean;
   tools: ToolPolicy;
   connectedMcpServers: string[];
+  connectorAccessMode: ConnectorAccessMode;
   lastMenuSection: MenuSection;
 };
 
