@@ -13,6 +13,8 @@ import {
   X
 } from "lucide-react";
 import {
+  type ClipboardEvent,
+  type DragEvent,
   type FormEvent,
   type KeyboardEvent,
   useEffect,
@@ -62,6 +64,10 @@ type ProviderStatus = {
 function formatBytes(bytes: number): string {
   if (bytes < 1_000_000) return `${Math.max(1, Math.round(bytes / 1_000))} KB`;
   return `${(bytes / 1_000_000).toFixed(bytes >= 10_000_000 ? 0 : 1)} MB`;
+}
+
+function fileKey(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`;
 }
 
 function AttachmentPreview({ file }: { file: File }) {
@@ -114,6 +120,7 @@ export function ComposerDock({
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
@@ -207,7 +214,16 @@ export function ComposerDock({
 
   function addSelectedFiles(files: FileList | null) {
     if (!files?.length) return;
-    const incoming = Array.from(files);
+
+    const known = new Set(selectedFiles.map(fileKey));
+    const incoming = Array.from(files).filter((file) => !known.has(fileKey(file)));
+
+    if (!incoming.length) {
+      setAttachmentMessage("Those items are already attached.");
+      haptic("warning", haptics);
+      return;
+    }
+
     const nextCount = attachmentCount + incoming.length;
     const invalid = incoming.find((file) => file.size > MAX_FILE_BYTES);
 
@@ -230,12 +246,39 @@ export function ComposerDock({
       return;
     }
 
+    const transfer = new DataTransfer();
+    incoming.forEach((file) => transfer.items.add(file));
     setSelectedFiles((current) => [...current, ...incoming].slice(0, MAX_ATTACHMENTS));
     setAttachmentMessage(null);
     setSourceMenuOpen(false);
-    onFiles(files);
+    onFiles(transfer.files);
     haptic("selection", haptics);
     window.setTimeout(() => textareaRef.current?.focus(), 80);
+  }
+
+  function paste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = event.clipboardData.files;
+    if (!files?.length) return;
+    addSelectedFiles(files);
+    if (!event.clipboardData.getData("text/plain")) event.preventDefault();
+  }
+
+  function dragOver(event: DragEvent<HTMLDivElement>) {
+    if (blocked || generating) return;
+    event.preventDefault();
+    setDragActive(true);
+  }
+
+  function dragLeave(event: DragEvent<HTMLDivElement>) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setDragActive(false);
+  }
+
+  function drop(event: DragEvent<HTMLDivElement>) {
+    if (blocked || generating) return;
+    event.preventDefault();
+    setDragActive(false);
+    addSelectedFiles(event.dataTransfer.files);
   }
 
   function openSourceMenu() {
@@ -296,7 +339,13 @@ export function ComposerDock({
 
   return (
     <>
-      <div className="navi-composer-dock relative z-40 shrink-0 border-t border-[var(--border-subtle)]">
+      <div
+        className={`navi-composer-dock relative z-40 shrink-0 border-t transition-colors duration-150 ${dragActive ? "border-accent bg-[var(--selection-bg)]" : "border-[var(--border-subtle)]"}`}
+        onDragEnter={dragOver}
+        onDragOver={dragOver}
+        onDragLeave={dragLeave}
+        onDrop={drop}
+      >
         <div className="mx-auto w-full max-w-app">
           <input
             ref={imageInputRef}
@@ -331,6 +380,12 @@ export function ComposerDock({
               event.currentTarget.value = "";
             }}
           />
+
+          {dragActive ? (
+            <div className="mb-2 flex min-h-12 items-center justify-center rounded-2xl border border-dashed border-accent bg-elev-2 px-3 text-[12px]/4 font-semibold text-primary">
+              Drop files here to attach them
+            </div>
+          ) : null}
 
           {attachmentCount ? (
             <div className="mb-2 flex items-center gap-2 overflow-x-auto px-0.5 pb-0.5 scrollbar-none" aria-label="Pending attachments">
@@ -378,6 +433,7 @@ export function ComposerDock({
               value={value}
               onChange={(event) => onChange(event.target.value)}
               onKeyDown={keyDown}
+              onPaste={paste}
               onFocus={() => {
                 setFocused(true);
                 window.setTimeout(() => textareaRef.current?.scrollIntoView({ block: "nearest" }), 120);
@@ -491,10 +547,14 @@ export function ComposerDock({
               </button>
             </div>
 
+            <div className="mt-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-3 py-2 text-center text-[11px]/4 font-medium text-tertiary">
+              You can also paste screenshots or drag files directly onto the composer.
+            </div>
+
             <button
               type="button"
               onClick={openTools}
-              className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-[13px]/5 font-semibold text-secondary active:bg-elev-2"
+              className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-[13px]/5 font-semibold text-secondary active:bg-elev-2"
             >
               <SlidersHorizontal size={17} />
               Configure web, code, artifacts, or clear attachments
