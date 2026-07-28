@@ -17,8 +17,7 @@ export default function manifest(): MetadataRoute.Manifest {
     dir: "ltr",
     categories: ["productivity", "utilities"],
     icons: [
-      { src: "/app-icon.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/app-icon.png", sizes: "192x192", type: "image/png", purpose: "maskable" }
+      { src: "/app-icon-v2.png", sizes: "192x192", type: "image/png", purpose: "any" }
     ],
     shortcuts: [
       {
@@ -26,7 +25,7 @@ export default function manifest(): MetadataRoute.Manifest {
         short_name: "Open Navi",
         description: "Open the private Navi workspace",
         url: "/",
-        icons: [{ src: "/app-icon.png", sizes: "192x192", type: "image/png" }]
+        icons: [{ src: "/app-icon-v2.png", sizes: "192x192", type: "image/png" }]
       }
     ],
     screenshots: [
