@@ -1,13 +1,16 @@
 "use client";
 
 import {
+  AudioLines,
   ArrowUp,
   Camera,
+  ChevronDown,
   FileText,
   Image as ImageIcon,
   Mic,
   Paperclip,
   Plus,
+  Search,
   SlidersHorizontal,
   Square,
   X
@@ -45,11 +48,16 @@ type Props = {
   online: boolean;
   attachmentCount: number;
   statusText: string;
+  modelLabel: string;
+  research: boolean;
   haptics: boolean;
   onChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
   onFiles: (files: FileList | null) => void;
+  onOpenModels: () => void;
+  onOpenVoice: () => void;
+  onToggleResearch: () => void;
   onOpenTools: () => void;
 };
 
@@ -105,11 +113,16 @@ export function ComposerDock({
   online,
   attachmentCount,
   statusText,
+  modelLabel,
+  research,
   haptics,
   onChange,
   onSend,
   onStop,
   onFiles,
+  onOpenModels,
+  onOpenVoice,
+  onToggleResearch,
   onOpenTools
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -415,19 +428,8 @@ export function ComposerDock({
           <form
             onSubmit={submit}
             data-focused={focused ? "true" : "false"}
-            className={`navi-composer flex items-end gap-1 p-1.5 ${sending ? "scale-[0.985]" : "scale-100"}`}
+            className={`navi-composer flex flex-col p-2 ${sending ? "scale-[0.985]" : "scale-100"}`}
           >
-            <button
-              type="button"
-              onClick={openSourceMenu}
-              disabled={blocked || generating}
-              className="composer-action"
-              aria-label="Add photos, camera image, or files"
-              aria-expanded={sourceMenuOpen}
-            >
-              <Plus size={21} />
-            </button>
-
             <textarea
               ref={textareaRef}
               value={value}
@@ -448,40 +450,77 @@ export function ComposerDock({
               disabled={blocked}
               placeholder={placeholder}
               aria-label="Message Navi"
-              className="max-h-[168px] min-h-12 min-w-0 flex-1 overflow-y-auto bg-transparent px-2 py-3 text-[16px]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
+              className="max-h-[168px] min-h-12 w-full overflow-y-auto bg-transparent px-2.5 pb-1 pt-2 text-[16px]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
-            <button
-              type="button"
-              onClick={openTools}
-              className="composer-action"
-              aria-label="Open tools and attachment settings"
-            >
-              <SlidersHorizontal size={18} />
-            </button>
-
-            {!value.trim() && !attachmentCount && !generating ? (
+            <div className="mt-1 flex min-h-11 items-center gap-1">
               <button
                 type="button"
-                onClick={toggleVoice}
-                disabled={blocked}
-                className={`composer-action ${listening ? "bg-accent text-white" : ""}`}
-                aria-label={listening ? "Stop voice input" : "Start voice input"}
-                aria-pressed={listening}
+                onClick={openSourceMenu}
+                disabled={blocked || generating}
+                className="composer-action !h-10 !w-10"
+                aria-label="Add files, photos, camera, and connectors"
+                aria-expanded={sourceMenuOpen}
               >
-                <Mic size={18} />
+                <Plus size={21} />
               </button>
-            ) : null}
 
-            <button
-              type={generating ? "button" : "submit"}
-              onClick={generating ? onStop : undefined}
-              disabled={!generating && !canSend}
-              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-white shadow-sm active:scale-95 active:bg-accent-pressed" : "bg-elev-3 text-disabled"}`}
-              aria-label={generating ? "Stop response" : "Send message"}
-            >
-              {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={20} strokeWidth={2.4} />}
-            </button>
+              <button
+                type="button"
+                onClick={onOpenModels}
+                className="flex min-h-10 min-w-0 max-w-[112px] items-center gap-1 rounded-full px-2 text-[12px]/4 font-semibold text-primary active:bg-elev-3"
+                aria-label={`Current model: ${modelLabel}. Change model`}
+              >
+                <span className="truncate">{modelLabel}</span>
+                <ChevronDown size={14} className="shrink-0 text-tertiary" />
+              </button>
+
+              <button
+                type="button"
+                onClick={onToggleResearch}
+                className={`composer-action !h-10 !w-10 ${research ? "bg-[var(--selection-bg)] text-accent" : ""}`}
+                aria-label={research ? "Turn off research mode" : "Turn on research mode"}
+                aria-pressed={research}
+              >
+                <Search size={17} />
+              </button>
+
+              <span className="min-w-0 flex-1" />
+
+              {!value.trim() && !attachmentCount && !generating ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={toggleVoice}
+                    disabled={blocked}
+                    className={`composer-action !h-10 !w-10 ${listening ? "bg-accent text-white" : ""}`}
+                    aria-label={listening ? "Stop voice dictation" : "Start voice dictation"}
+                    aria-pressed={listening}
+                  >
+                    <Mic size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onOpenVoice}
+                    disabled={blocked}
+                    className="composer-action !h-10 !w-10"
+                    aria-label="Use voice mode"
+                  >
+                    <AudioLines size={19} />
+                  </button>
+                </>
+              ) : null}
+
+              <button
+                type={generating ? "button" : "submit"}
+                onClick={generating ? onStop : undefined}
+                disabled={!generating && !canSend}
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-white shadow-sm active:scale-95 active:bg-accent-pressed" : "bg-elev-3 text-disabled"}`}
+                aria-label={generating ? "Stop response" : "Send message"}
+              >
+                {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={19} strokeWidth={2.4} />}
+              </button>
+            </div>
           </form>
 
           <div className={`flex min-h-6 items-center justify-center px-3 pt-1 text-center text-[10px]/4 font-semibold ${footerTone}`} role="status" aria-live="polite">

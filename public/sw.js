@@ -1,14 +1,11 @@
-const VERSION = "navi-shell-v8";
+const VERSION = "navi-shell-v10";
 const STATIC_CACHE = `${VERSION}-static`;
-const RUNTIME_CACHE = `${VERSION}-runtime`;
-const OFFLINE_URL = "/offline";
+const OFFLINE_URL = "/offline-shell.html";
 const SHELL = [
-  "/",
   OFFLINE_URL,
   "/manifest.webmanifest",
-  "/icon",
-  "/apple-icon",
-  "/pwa-icon-192",
+  "/pwa-icon-192-v4.png",
+  "/pwa-icon-512",
   "/pwa-icon-maskable"
 ];
 
@@ -24,7 +21,7 @@ self.addEventListener("activate", (event) => {
     caches.keys()
       .then((keys) => Promise.all(
         keys
-          .filter((key) => key.startsWith("navi-") && ![STATIC_CACHE, RUNTIME_CACHE].includes(key))
+          .filter((key) => key.startsWith("navi-") && key !== STATIC_CACHE)
           .map((key) => caches.delete(key))
       ))
       .then(() => self.clients.claim())
@@ -62,17 +59,7 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
-          }
-          return response;
-        })
-        .catch(async () => (
-          (await caches.match(request))
-          || (await caches.match("/"))
-          || (await caches.match(OFFLINE_URL))
-        ))
+        .catch(() => caches.match(OFFLINE_URL))
     );
     return;
   }
@@ -92,16 +79,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Stale-while-revalidate for same-origin static resources.
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((response) => {
-          if (response.ok) caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
-  );
+  // Never cache route data or authenticated responses across accounts.
+  event.respondWith(fetch(request));
 });

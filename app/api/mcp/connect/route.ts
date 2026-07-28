@@ -1,3 +1,4 @@
+import { authorizeApiMutation } from "@/lib/auth/api";
 import { callMcp, publicMcpRegistry } from "@/lib/mcp";
 
 export const runtime = "edge";
@@ -7,6 +8,8 @@ export function GET(): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const authorizationError = await authorizeApiMutation(request);
+  if (authorizationError) return authorizationError;
   try {
     const body = (await request.json()) as { serverId?: string };
     if (!body.serverId) return Response.json({ error: "serverId is required." }, { status: 400 });
@@ -22,6 +25,7 @@ export async function POST(request: Request): Promise<Response> {
     );
     return Response.json({ connected: true, result }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return Response.json({ connected: false, error: error instanceof Error ? error.message : "MCP connection failed." }, { status: 502 });
+    console.error("Navi MCP connection failed:", error);
+    return Response.json({ connected: false, error: "The connector could not be reached. Check its server configuration and try again." }, { status: 502 });
   }
 }

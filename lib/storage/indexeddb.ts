@@ -4,6 +4,9 @@ import { DEFAULT_PREFERENCES, sortChats } from "../chat";
 const DB_NAME = "navi-local-v3";
 const DB_VERSION = 1;
 const STORE = "state";
+const STORAGE_SCOPE_KEY = "navi.storage.scope.v1";
+const LEGACY_OWNER_KEY = "navi.storage.legacy-owner.v1";
+const KNOWN_STATE_KEYS = ["chats", "preferences", "draft", "projects", "activeProjectId"] as const;
 
 type PreferenceInput = Omit<Partial<NaviPreferences>, "preset"> & { preset?: unknown };
 
@@ -27,7 +30,16 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
-export async function getLocalValue<T>(key: string): Promise<T | undefined> {
+function currentScope(): string {
+  if (typeof localStorage === "undefined") return "guest";
+  return localStorage.getItem(STORAGE_SCOPE_KEY)?.trim() || "guest";
+}
+
+function scopedKey(key: string, scope = currentScope()): string {
+  return `${scope}::${key}`;
+}
+
+async function getRawValue<T>(key: string): Promise<T | undefined> {
   if (typeof indexedDB === "undefined") return undefined;
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
@@ -39,7 +51,7 @@ export async function getLocalValue<T>(key: string): Promise<T | undefined> {
   });
 }
 
-export async function setLocalValue<T>(key: string, value: T): Promise<void> {
+async function setRawValue<T>(key: string, value: T): Promise<void> {
   if (typeof indexedDB === "undefined") return;
   const database = await openDatabase();
   await new Promise<void>((resolve, reject) => {
@@ -51,16 +63,69 @@ export async function setLocalValue<T>(key: string, value: T): Promise<void> {
   database.close();
 }
 
-export async function clearLocalState(): Promise<void> {
+async function deleteRawValue(key: string): Promise<void> {
   if (typeof indexedDB === "undefined") return;
   const database = await openDatabase();
   await new Promise<void>((resolve, reject) => {
     const transaction = database.transaction(STORE, "readwrite");
-    transaction.objectStore(STORE).clear();
+    transaction.objectStore(STORE).delete(key);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error(`Could not delete ${key}.`));
+  });
+  database.close();
+}
+
+export async function getLocalValue<T>(key: string): Promise<T | undefined> {
+  return getRawValue<T>(scopedKey(key));
+}
+
+export async function setLocalValue<T>(key: string, value: T): Promise<void> {
+  return setRawValue(scopedKey(key), value);
+}
+
+export async function clearLocalState(): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
+  const scope = currentScope();
+  const prefix = `${scope}::`;
+  const database = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE, "readwrite");
+    const request = transaction.objectStore(STORE).openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      if (typeof cursor.key === "string" && cursor.key.startsWith(prefix)) cursor.delete();
+      cursor.continue();
+    };
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error ?? new Error("Could not clear Navi local data."));
   });
   database.close();
+
+  if (typeof localStorage !== "undefined" && localStorage.getItem(LEGACY_OWNER_KEY) === scope) {
+    localStorage.removeItem("navi.chats.v2");
+    localStorage.removeItem("navi.preferences.v2");
+  }
+}
+
+async function migrateUnscopedIndexedDbState(): Promise<void> {
+  if (typeof localStorage === "undefined" || typeof indexedDB === "undefined") return;
+  const scope = currentScope();
+  if (localStorage.getItem(LEGACY_OWNER_KEY) !== scope) return;
+
+  const marker = `navi.storage.migrated.v1:${scope}`;
+  if (localStorage.getItem(marker) === "1") return;
+
+  for (const key of KNOWN_STATE_KEYS) {
+    const existing = await getRawValue(scopedKey(key, scope));
+    const legacy = await getRawValue(key);
+    if (existing === undefined && legacy !== undefined) {
+      await setRawValue(scopedKey(key, scope), legacy);
+    }
+    if (legacy !== undefined) await deleteRawValue(key);
+  }
+
+  localStorage.setItem(marker, "1");
 }
 
 function normalizePreset(value: unknown): ModelPreset {
@@ -123,6 +188,8 @@ function normalizeProjects(value: unknown): NaviProject[] {
 
 function migrateLegacyState(): Partial<LocalState> {
   try {
+    const scope = currentScope();
+    if (localStorage.getItem(LEGACY_OWNER_KEY) !== scope) return {};
     const rawChats = localStorage.getItem("navi.chats.v2");
     const rawPreferences = localStorage.getItem("navi.preferences.v2");
     const legacyChats = rawChats ? (JSON.parse(rawChats) as Array<Partial<StoredChat>>) : [];
@@ -158,6 +225,7 @@ function migrateLegacyState(): Partial<LocalState> {
 }
 
 export async function loadLocalState(): Promise<LocalState> {
+  await migrateUnscopedIndexedDbState();
   const [storedChats, storedPreferences, storedDraft, storedProjects, storedActiveProjectId] = await Promise.all([
     getLocalValue<StoredChat[]>("chats"),
     getLocalValue<NaviPreferences>("preferences"),
@@ -170,6 +238,10 @@ export async function loadLocalState(): Promise<LocalState> {
     const migrated = migrateLegacyState();
     if (migrated.chats) await setLocalValue("chats", migrated.chats);
     if (migrated.preferences) await setLocalValue("preferences", migrated.preferences);
+    if (migrated.chats || migrated.preferences) {
+      localStorage.removeItem("navi.chats.v2");
+      localStorage.removeItem("navi.preferences.v2");
+    }
     return {
       chats: migrated.chats ?? [],
       preferences: mergePreferences(migrated.preferences),

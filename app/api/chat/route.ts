@@ -11,7 +11,9 @@ import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generati
 import { createProviderModel, getProviderAvailability, selectDirectRoute } from "@/lib/ai/providers";
 import { runComposite } from "@/lib/ai/swarm";
 import type { ConnectorAccessMode, ModelPreset, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
+import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
+import { NAVI_CONSTITUTION } from "@/lib/ai/navi-constitution";
 
 export const runtime = "edge";
 export const maxDuration = 60;
@@ -104,16 +106,6 @@ function projectContextSummary(value: unknown): string {
     knowledge.length ? `Project knowledge:\n${knowledge.map((item) => `- ${item}`).join("\n")}` : "",
     "Treat project instructions and knowledge as durable user-provided context. Do not claim they came from external sources."
   ].filter(Boolean).join("\n\n").slice(0, 6_000);
-}
-
-function isSameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  try {
-    return new URL(origin).host === new URL(request.url).host;
-  } catch {
-    return false;
-  }
 }
 
 function clientIdentifier(request: Request): string {
@@ -241,6 +233,7 @@ function systemPrompt(options: {
   const { style, tools, artifactRequested, threadSummary, mcpContext } = options;
   return [
     "You are Navi.",
+    NAVI_CONSTITUTION,
     "Identify yourself only as Navi. Do not impersonate or claim to literally be an underlying provider model.",
     "Be accurate, practical, and explicit about uncertainty.",
     "Never claim that you browsed, executed code, accessed files, used MCP, or changed external data unless supplied results prove it.",
@@ -259,11 +252,11 @@ function streamError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   console.error("Navi stream error:", error);
   const lower = message.toLowerCase();
-  if (lower.includes("image providers") || lower.includes("image-generation provider")) return message;
+  if (lower.includes("image providers") || lower.includes("image-generation provider")) return "Navi's image service is unavailable right now. Try again shortly.";
   if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "Navi reached a provider limit. Try again shortly or select another Navi mode.";
-  if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401")) return "A server-side Gemini, Groq, or Hugging Face credential is missing or invalid.";
+  if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401")) return "Navi's AI service is not configured correctly. Please try again later.";
   if (lower.includes("timeout") || lower.includes("aborted")) return "The selected Navi mode took too long. Try again or select a direct mode.";
-  return message || "Navi could not complete the response.";
+  return "Navi could not complete the response. Please try again.";
 }
 
 function statusChunk(status: NaviStreamStatus) {
@@ -309,7 +302,8 @@ function resolveAutoPreset(effort: Effort, providerCount: number, hasFiles: bool
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!isSameOrigin(request)) return Response.json({ error: "Cross-origin requests are not allowed." }, { status: 403 });
+  const authorizationError = await authorizeApiMutation(request);
+  if (authorizationError) return authorizationError;
   if (isRateLimited(clientIdentifier(request))) return Response.json({ error: "Too many requests. Try again shortly." }, { status: 429, headers: { "Retry-After": "60" } });
 
   let body: ChatRequestBody;

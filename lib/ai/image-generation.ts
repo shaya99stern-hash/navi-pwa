@@ -64,6 +64,9 @@ function huggingFaceToken(): string | undefined {
   return findEnvironmentSecret(
     [
       process.env.HF_TOKEN,
+      process.env.HUGGING_FACE_FINE_GRAINED_API,
+      process.env.fable_read_Hugging_face,
+      process.env.HUGGING_FACE_API_Write,
       process.env.HF_API_TOKEN,
       process.env.HF_API_KEY,
       process.env.HF_ACCESS_TOKEN,

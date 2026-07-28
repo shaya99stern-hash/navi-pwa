@@ -56,6 +56,7 @@ export function PwaPlatformBanner() {
 
     const captureInstall = (event: Event) => {
       event.preventDefault();
+      if (recentlyDismissed()) return;
       setInstallPrompt(event as InstallPromptEvent);
       setIosHint(false);
     };
@@ -93,7 +94,7 @@ export function PwaPlatformBanner() {
   const mode = useMemo<"update" | "install" | "ios" | null>(() => {
     if (!mounted) return null;
     if (updateStatus?.phase === "available" && !dismissedUpdate) return "update";
-    if (!isStandalone() && installPrompt) return "install";
+    if (!isStandalone() && installPrompt && !recentlyDismissed()) return "install";
     if (!isStandalone() && iosHint) return "ios";
     return null;
   }, [dismissedUpdate, installPrompt, iosHint, mounted, updateStatus?.phase]);

@@ -1,8 +1,11 @@
+import { authorizeApiMutation } from "@/lib/auth/api";
 import { validateArtifactPayload } from "@/lib/security/artifacts";
 
 export const runtime = "edge";
 
 export async function POST(request: Request): Promise<Response> {
+  const authorizationError = await authorizeApiMutation(request);
+  if (authorizationError) return authorizationError;
   let body: unknown;
   try {
     body = await request.json();
