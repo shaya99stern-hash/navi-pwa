@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, ChevronRight, FilePlus2, FolderKanban, Link2, LoaderCircle, RefreshCw, X } from "lucide-react";
+import { Check, ChevronRight, Ellipsis, FilePlus2, FolderKanban, Link2, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, ModelPreset, NaviPreferences, ResponseStyle } from "@/lib/ai/types";
 import type { PublicMcpServer } from "@/lib/mcp";
@@ -174,21 +174,18 @@ export function UnifiedTopMenu({
 
   return (
     <>
-      <button type="button" onClick={onToggle} aria-expanded={open} className="flex h-9 max-w-[210px] items-center gap-1.5 rounded-full px-3.5 text-[17px]/6 font-semibold tracking-[-0.01em] text-primary active:bg-elev-3">
-        <span className="truncate">Navi</span>
-        <ChevronDown size={16} className={`shrink-0 transition-transform duration-[180ms] ${open ? "rotate-180" : ""}`} />
+      <button type="button" onClick={onToggle} aria-expanded={open} aria-label="Chat options" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-primary active:bg-elev-2">
+        <Ellipsis size={21} strokeWidth={1.8} />
       </button>
 
       {open ? (
         <div className="fixed inset-0 z-[90]">
-          <button type="button" aria-label="Close Navi menu" onClick={onClose} className="absolute inset-0 bg-overlay backdrop-blur-[3px]" />
-          <section className="menu-enter safe-top absolute inset-x-0 top-0 mx-auto flex max-h-[calc(100dvh-12px)] w-full max-w-[720px] flex-col overflow-hidden rounded-b-[24px] border-b border-[var(--border-subtle)] bg-elev-1 shadow-menu md:inset-x-auto md:right-4 md:top-[calc(var(--safe-top)+52px)] md:w-[420px] md:rounded-[24px] md:border">
-            <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
-              <div>
-                <div className="text-[17px]/6 font-semibold tracking-[-0.01em] text-primary">Navi controls</div>
-                <div className="text-[11px]/[14px] font-semibold text-tertiary">Modes, projects, tools, connectors and settings</div>
-              </div>
-              <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Close menu"><X size={20} /></button>
+          <button type="button" aria-label="Close options" onClick={onClose} className="absolute inset-0 bg-overlay" />
+          <section className="navi-sheet absolute inset-x-0 bottom-0 mx-auto flex max-h-[86dvh] w-full max-w-[720px] flex-col overflow-hidden md:max-w-[480px]">
+            <div className="navi-sheet-grabber shrink-0" />
+            <header className="flex h-12 shrink-0 items-center justify-between px-4">
+              <div className="text-[17px]/6 font-semibold tracking-[-0.01em] text-primary">Options</div>
+              <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-elev-2 text-secondary active:bg-elev-3" aria-label="Close menu"><X size={18} /></button>
             </header>
 
             <nav className="scroll-area flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--border-subtle)] px-3 py-2" aria-label="Navi menu sections">
