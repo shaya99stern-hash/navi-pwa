@@ -649,6 +649,7 @@ export function AppShell({
                   streaming={message.role === "assistant" && index === messages.length - 1 && status === "streaming"}
                   theme={theme}
                   haptics={preferences.haptics}
+                  onRetry={message.role === "assistant" && index === messages.length - 1 && !generating && online ? retry : undefined}
                 />
               ))}
             </div>

@@ -32,7 +32,27 @@ function ArtifactList({ chats }: { chats: StoredChat[] }) { const results = arti
 
 function Connectors({ preferences, save }: { preferences: NaviPreferences; save: (p: NaviPreferences) => void }) { const [servers, setServers] = useState<Server[]>([]); const [note, setNote] = useState(""); useEffect(() => { void fetch("/api/mcp/connect").then((r) => r.ok ? r.json() : { servers: [] }).then((data: { servers?: Server[] }) => setServers(data.servers || [])).catch(() => setServers([])); }, []); const toggle = async (server: Server) => { const connected = preferences.connectedMcpServers.includes(server.id); if (connected) { save({ ...preferences, connectedMcpServers: preferences.connectedMcpServers.filter((id) => id !== server.id) }); return; } setNote(`Checking ${server.name}…`); try { const response = await fetch("/api/mcp/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ serverId: server.id }) }); const data = await response.json() as { connected?: boolean; error?: string }; if (!response.ok || !data.connected) throw new Error(data.error || "Could not connect."); save({ ...preferences, connectedMcpServers: [...preferences.connectedMcpServers, server.id] }); setNote(`${server.name} connected.`); } catch (error) { setNote(error instanceof Error ? error.message : "Could not connect."); } }; return <><p className="workspace-note">{note || "Configured servers are verified before they are added. Catalog entries below are availability placeholders."}</p><div className="workspace-list">{servers.map((s) => { const on = preferences.connectedMcpServers.includes(s.id); return <div className="workspace-row workspace-card" key={s.id}><span className="workspace-row-icon"><Cable size={18} /></span><span className="workspace-row-copy"><strong>{s.name}</strong><small>{s.url}</small></span><button className={on ? "workspace-toggle on" : "workspace-toggle"} onClick={() => void toggle(s)} aria-pressed={on} aria-label={`${on ? "Disconnect" : "Connect"} ${s.name}`}>{on ? "Disconnect" : "Connect"}</button></div>; })}{!servers.length ? <div className="workspace-empty compact"><Cable size={22} /><h2>No configured connectors</h2><p>Add server configuration to make a connector available here.</p></div> : null}{official.map((name) => <div className="workspace-row workspace-card" key={name}><span className="workspace-row-icon"><Cable size={18} /></span><span className="workspace-row-copy"><strong>{name}</strong><small>Official connector catalog · not configured</small></span><span className="workspace-status">Available soon</span></div>)}</div></>; }
 
-function PreferenceControls({ view, preferences, save, clear }: { view: WorkspaceView; preferences: NaviPreferences; save: (p: NaviPreferences) => void; clear: () => void }) {
+const VOICE_LANGUAGES = [
+  ["auto", "Match device"],
+  ["en-US", "English (US)"],
+  ["en-GB", "English (UK)"],
+  ["he-IL", "Hebrew"],
+  ["es-ES", "Spanish"],
+  ["fr-FR", "French"],
+  ["de-DE", "German"],
+  ["pt-BR", "Portuguese (BR)"],
+  ["ja-JP", "Japanese"]
+] as const;
+
+function PreferenceControls({ view, preferences, save, clear, onExport }: { view: WorkspaceView; preferences: NaviPreferences; save: (p: NaviPreferences) => void; clear: () => void; onExport: () => void }) {
+  const [voiceLanguage, setVoiceLanguage] = useState(() => (typeof window === "undefined" ? "auto" : localStorage.getItem("navi.voice.language.v1") || "auto"));
+
+  const updateVoiceLanguage = (value: string) => {
+    setVoiceLanguage(value);
+    if (value === "auto") localStorage.removeItem("navi.voice.language.v1");
+    else localStorage.setItem("navi.voice.language.v1", value);
+  };
+
   if (view === "customize") {
     return (
       <div className="workspace-list">
@@ -90,6 +110,19 @@ function PreferenceControls({ view, preferences, save, clear }: { view: Workspac
         <span><strong>Haptics</strong><small>Feedback for supported interactions</small></span>
         <input type="checkbox" checked={preferences.haptics} onChange={() => save({ ...preferences, haptics: !preferences.haptics })} />
       </label>
+      <label className="workspace-control">
+        Voice language
+        <select value={voiceLanguage} onChange={(event) => updateVoiceLanguage(event.target.value)}>
+          {VOICE_LANGUAGES.map(([id, label]) => <option value={id} key={id}>{label}</option>)}
+        </select>
+      </label>
+      <div className="workspace-switch">
+        <span><strong>Export your data</strong><small>Download chats, projects, and preferences as JSON</small></span>
+        <button className="workspace-toggle" onClick={onExport}>Export</button>
+      </div>
+      <div className="workspace-switch">
+        <span><strong>About</strong><small>Navi 3.1 · local-first private workspace · all data stays on this device</small></span>
+      </div>
       <button className="workspace-danger" onClick={clear}>Clear this account&apos;s local workspace data</button>
     </div>
   );
@@ -142,6 +175,16 @@ export function WorkspaceLibrary({ view }: { view: WorkspaceView }) {
     return () => media.removeEventListener("change", apply);
   }, [preferences.motion, preferences.theme]);
 
+  const exportData = () => {
+    const payload = JSON.stringify({ exportedAt: new Date().toISOString(), chats, projects, preferences }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `navi-export-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   const [eyebrow, title, description] = copy[view];
   const content = !loaded
     ? <div className="workspace-loading">Loading your workspace…</div>
@@ -153,7 +196,7 @@ export function WorkspaceLibrary({ view }: { view: WorkspaceView }) {
           ? <ArtifactList chats={chats} />
           : view === "connectors"
             ? <Connectors preferences={preferences} save={persistPreferences} />
-            : <PreferenceControls view={view} preferences={preferences} save={persistPreferences} clear={clear} />;
+            : <PreferenceControls view={view} preferences={preferences} save={persistPreferences} clear={clear} onExport={exportData} />;
 
   return (
     <main className="workspace-page">
