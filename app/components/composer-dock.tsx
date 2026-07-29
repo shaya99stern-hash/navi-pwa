@@ -165,34 +165,54 @@ export function ComposerDock({
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/models", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data: ProviderStatus) => {
-        if (cancelled) return;
-        const providers = data.providers;
-        setProviderReady(Boolean(providers?.gemini || providers?.groq || providers?.huggingface));
-      })
-      .catch(() => {
-        if (!cancelled) setProviderReady(null);
-      });
+
+    const probeProviders = () => {
+      void fetch("/api/models", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: ProviderStatus | null) => {
+          if (cancelled) return;
+          // A failed or unauthorized probe must not latch the UI into an error
+          // state; treat it as unknown and let sending report the real result.
+          if (!data) {
+            setProviderReady(null);
+            return;
+          }
+          const providers = data.providers;
+          setProviderReady(Boolean(providers?.gemini || providers?.groq || providers?.huggingface));
+        })
+        .catch(() => {
+          if (!cancelled) setProviderReady(null);
+        });
+    };
+
+    probeProviders();
+
+    // Re-probe on return so newly added provider keys are picked up without a
+    // reinstall or hard reload.
+    const recheck = () => {
+      if (document.visibilityState === "visible") probeProviders();
+    };
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("online", recheck);
+
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", recheck);
+      window.removeEventListener("online", recheck);
       recognitionRef.current?.abort?.();
     };
   }, []);
 
   const available = providerReady !== false;
-  const canSend = online && available && !generating && Boolean(value.trim() || attachmentCount);
-  const blocked = !online || !available;
+  /* Typing, attaching, and dictating stay available even with no provider
+     configured or no network. Disabling the textarea prevents focus entirely,
+     which stops the on-screen keyboard from ever opening and makes the app
+     look dead; only sending is gated, and the reason is shown below. */
+  const canSend = online && !generating && Boolean(value.trim() || attachmentCount);
+  const blocked = false;
   const hiddenAttachmentCount = Math.max(0, attachmentCount - selectedFiles.length);
 
-  const placeholder = !online
-    ? "Navi is offline"
-    : !available
-      ? "AI provider setup required"
-      : attachmentCount
-        ? "Add instructions for these files"
-        : "Chat with Navi";
+  const placeholder = attachmentCount ? "Add instructions for these files" : "Chat with Navi";
 
   const footer = voiceMessage
     ?? attachmentMessage
@@ -204,7 +224,7 @@ export function ComposerDock({
           ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready · ${statusText}`
           : statusText);
 
-  const footerTone = blocked || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
+  const footerTone = !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
 
   const totalSelectedBytes = useMemo(
     () => selectedFiles.reduce((total, file) => total + file.size, 0),
@@ -212,7 +232,9 @@ export function ComposerDock({
   );
 
   function send() {
-    if ((!value.trim() && attachmentCount === 0) || generating || !online || !available) return;
+    // Deliberately not gated on the provider probe: if it is wrong or stale the
+    // request should still go out and surface a real server error.
+    if ((!value.trim() && attachmentCount === 0) || generating || !online) return;
     setSending(true);
     setSourceMenuOpen(false);
     haptic("impact-light", haptics);

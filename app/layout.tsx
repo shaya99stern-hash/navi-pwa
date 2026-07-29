@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Source_Serif_4 } from "next/font/google";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { ReactNode } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
 
@@ -90,7 +90,13 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const sessionToken = clerkConfigured
     ? (await cookies()).get(CLERK_SESSION_COOKIE_NAME)?.value
     : undefined;
-  const userId = clerkConfigured ? await verifyClerkSessionToken(sessionToken) : null;
+  // Verify against the origin actually serving this request so custom domains
+  // resolve the same user the middleware did.
+  const requestHeaders = clerkConfigured ? await headers() : undefined;
+  const forwardedHost = requestHeaders?.get("x-forwarded-host") ?? requestHeaders?.get("host") ?? undefined;
+  const forwardedProto = requestHeaders?.get("x-forwarded-proto") ?? "https";
+  const requestOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : undefined;
+  const userId = clerkConfigured ? await verifyClerkSessionToken(sessionToken, requestOrigin) : null;
   const storageScope = userId ? `clerk:${userId}` : clerkConfigured ? "signed-out" : "guest";
   const mayMigrateLegacyState = !clerkConfigured
     || Boolean(userId && hasClerkUserAllowlist() && isClerkUserAllowed(userId));

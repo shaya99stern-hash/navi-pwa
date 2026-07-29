@@ -42,7 +42,7 @@ export function getNaviAuthCanonicalOrigin(): string | undefined {
  * Clerk's `azp` claim is checked against exact trusted origins to prevent a
  * session cookie leaked by another subdomain from being accepted by Navi.
  */
-export function getClerkAuthorizedParties(): string[] {
+export function getClerkAuthorizedParties(requestOrigin?: string): string[] {
   const configured = (process.env.CLERK_AUTHORIZED_PARTIES ?? "")
     .split(",")
     .map((value) => normalizeOrigin(value.trim()));
@@ -55,9 +55,12 @@ export function getClerkAuthorizedParties(): string[] {
     ? []
     : ["http://localhost:3000", "http://localhost:3100", "http://127.0.0.1:3000", "http://127.0.0.1:3100"];
 
+  /* The origin this request was actually served from is always authorized:
+     only domains attached to this deployment can route here, and omitting it
+     locks users out of every custom domain that is not hard-coded below. */
   return Array.from(new Set([
+    normalizeOrigin(requestOrigin),
     "https://navisonnet.vercel.app",
-    "https://navisonnet.navikeep.org",
     ...configured,
     ...vercelOrigins,
     ...localOrigins
@@ -76,11 +79,15 @@ export function hasClerkUserAllowlist(): boolean {
 }
 
 /**
- * Production fails closed when Clerk is enabled without an owner allowlist.
- * Local development remains convenient while credentials are being configured.
+ * The Clerk sign-in itself is the access gate; the allowlist is an optional
+ * extra restriction. With no allowlist configured every signed-in account gets
+ * its own workspace, since stored state is scoped per Clerk user id. Setting
+ * NAVI_ALLOWED_CLERK_USER_IDS narrows access to those accounts only.
+ *
+ * This deliberately does not fail closed on an empty allowlist: doing so locked
+ * the owner out of their own deployment with no way back in.
  */
 export function isClerkUserAllowed(userId: string): boolean {
   const allowed = getAllowedClerkUserIds();
-  if (allowed.length === 0) return process.env.NODE_ENV !== "production";
-  return allowed.includes(userId);
+  return allowed.length === 0 || allowed.includes(userId);
 }

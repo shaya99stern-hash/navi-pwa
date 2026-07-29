@@ -23,14 +23,17 @@ function readCookie(cookieHeader: string | null, name: string): string | undefin
   return undefined;
 }
 
-export async function verifyClerkSessionToken(token: string | undefined): Promise<string | null> {
+export async function verifyClerkSessionToken(
+  token: string | undefined,
+  requestOrigin?: string
+): Promise<string | null> {
   const jwtKey = getClerkJwtKey();
   if (!token || !jwtKey) return null;
 
   try {
     const payload = await verifyToken(token, {
       jwtKey,
-      authorizedParties: getClerkAuthorizedParties()
+      authorizedParties: getClerkAuthorizedParties(requestOrigin)
     });
     return typeof payload.sub === "string" && payload.sub.startsWith("user_")
       ? payload.sub
@@ -45,5 +48,11 @@ export function getRequestClerkSessionToken(request: Request): string | undefine
 }
 
 export async function getRequestClerkUserId(request: Request): Promise<string | null> {
-  return verifyClerkSessionToken(getRequestClerkSessionToken(request));
+  let origin: string | undefined;
+  try {
+    origin = new URL(request.url).origin;
+  } catch {
+    origin = undefined;
+  }
+  return verifyClerkSessionToken(getRequestClerkSessionToken(request), origin);
 }
