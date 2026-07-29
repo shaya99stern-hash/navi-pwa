@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
-import { FolderKanban, Link2, Menu, Plus, Search, WifiOff } from "lucide-react";
+import { FolderKanban, Link2, PanelLeft, Search, SquarePen, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -562,26 +562,35 @@ export function AppShell({
         onDelete={deleteChat}
       />
 
-      <header className="navi-header relative z-50 flex shrink-0 items-center gap-1" data-scrolled={String(scrolled)}>
+      <header className="navi-header relative z-50 flex shrink-0 items-center gap-0.5" data-scrolled={String(scrolled)}>
         <button
           type="button"
-          onClick={() => setHistoryOpen(true)}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3"
-          aria-label="Open conversation history"
+          onClick={() => {
+            haptic("impact-light", preferences.haptics);
+            setHistoryOpen(true);
+          }}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-primary active:bg-elev-2"
+          aria-label="Open sidebar"
         >
-          <Menu size={21} />
+          <PanelLeft size={21} strokeWidth={1.8} />
         </button>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[16px]/5 font-semibold tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>
-          <div className="truncate text-[11px]/[14px] font-semibold text-tertiary">{activeProject ? activeProject.name : activePreset.label}</div>
+        <div className="min-w-0 flex-1 text-center">
+          {messages.length === 0 && !activeChat ? (
+            <div className="font-display truncate text-[19px]/6 tracking-[-0.01em] text-primary">Navi</div>
+          ) : (
+            <>
+              <div className="truncate px-1 text-[16px]/5 font-semibold tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>
+              <div className="truncate text-[11px]/[14px] font-medium text-tertiary">{activeProject ? activeProject.name : activePreset.label}</div>
+            </>
+          )}
         </div>
         <button
           type="button"
           onClick={newChat}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3"
-          aria-label="New conversation"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-primary active:bg-elev-2"
+          aria-label="New chat"
         >
-          <Plus size={20} />
+          <SquarePen size={20} strokeWidth={1.8} />
         </button>
         <UnifiedTopMenu
           open={menuOpen}
@@ -629,16 +638,7 @@ export function AppShell({
         onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 3)}
       >
         {messages.length === 0 ? (
-          <LaunchSurface
-            online={online}
-            haptics={preferences.haptics}
-            activeModel={activeProject ? `${activeProject.name} · ${activePreset.label}` : activePreset.label}
-            onPrompt={setDraft}
-            onOpenModels={() => {
-              updatePreferences({ ...preferences, lastMenuSection: "models" });
-              setMenuOpen(true);
-            }}
-          />
+          <LaunchSurface online={online} haptics={preferences.haptics} />
         ) : (
           <div className="mx-auto w-full max-w-app px-gutter py-5">
             <div className="message-stack flex flex-col">

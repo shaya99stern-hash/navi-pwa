@@ -3,11 +3,12 @@ import Image from "next/image";
 export function NaviMark({ className = "", label = "Navi" }: { className?: string; label?: string }) {
   return (
     <Image
-      src="/pwa-icon-192-v4.png"
+      src="/brand-spark.png"
       alt={label}
-      width={192}
-      height={192}
+      width={564}
+      height={564}
       className={className}
+      priority
     />
   );
 }

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Source_Serif_4 } from "next/font/google";
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
@@ -18,6 +19,14 @@ import { ViewportMetrics } from "./components/viewport-metrics";
 import PWARegister from "./pwa-register";
 import WebVitals from "./web-vitals";
 
+const displaySerif = Source_Serif_4({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+  display: "swap",
+  variable: "--font-display"
+});
+
 const siteUrl = getNaviAuthCanonicalOrigin() ?? "https://navisonnet.vercel.app";
 
 export const metadata: Metadata = {
@@ -31,8 +40,8 @@ export const metadata: Metadata = {
   formatDetection: { telephone: false, address: false, email: false },
   appleWebApp: { capable: true, title: "Navi", statusBarStyle: "black-translucent" },
   icons: {
-    icon: [{ url: "/pwa-icon-192-v4.png", type: "image/png", sizes: "192x192" }],
-    apple: [{ url: "/apple-touch-icon-v4.png", type: "image/png", sizes: "192x192" }]
+    icon: [{ url: "/pwa-icon-192-v5.png", type: "image/png", sizes: "192x192" }],
+    apple: [{ url: "/apple-touch-icon-v5.png", type: "image/png", sizes: "1024x1024" }]
   },
   openGraph: {
     type: "website",
@@ -63,8 +72,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   colorScheme: "dark light",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#191614" },
-    { media: "(prefers-color-scheme: light)", color: "#F4EEE6" }
+    { media: "(prefers-color-scheme: dark)", color: "#262624" },
+    { media: "(prefers-color-scheme: light)", color: "#FAF9F5" }
   ]
 };
 
@@ -110,9 +119,9 @@ try {
   ) : children;
 
   return (
-    <html lang="en-US" data-theme="dark" className="dark" suppressHydrationWarning>
+    <html lang="en-US" data-theme="dark" className={`dark ${displaySerif.variable}`} suppressHydrationWarning>
       <head>
-        <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-v4.png" />
+        <link rel="apple-touch-icon" sizes="1024x1024" href="/apple-touch-icon-v5.png" />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         <script dangerouslySetInnerHTML={{ __html: storageBootScript }} />
       </head>

@@ -185,7 +185,7 @@ export function ComposerDock({
       ? "AI provider setup required"
       : attachmentCount
         ? "Add instructions for these files"
-        : "Message Navi";
+        : "Chat with Navi";
 
   const footer = voiceMessage
     ?? attachmentMessage
@@ -449,40 +449,40 @@ export function ComposerDock({
               spellCheck
               disabled={blocked}
               placeholder={placeholder}
-              aria-label="Message Navi"
-              className="max-h-[168px] min-h-12 w-full overflow-y-auto bg-transparent px-2.5 pb-1 pt-2 text-[16px]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
+              aria-label="Chat with Navi"
+              className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[16px]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
-            <div className="mt-1 flex min-h-11 items-center gap-1">
+            <div className="mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
               <button
                 type="button"
                 onClick={openSourceMenu}
                 disabled={blocked || generating}
-                className="composer-action !h-10 !w-10"
-                aria-label="Add files, photos, camera, and connectors"
+                className="composer-action"
+                aria-label="Add photos, camera, and files"
                 aria-expanded={sourceMenuOpen}
               >
-                <Plus size={21} />
-              </button>
-
-              <button
-                type="button"
-                onClick={onOpenModels}
-                className="flex min-h-10 min-w-0 max-w-[112px] items-center gap-1 rounded-full px-2 text-[12px]/4 font-semibold text-primary active:bg-elev-3"
-                aria-label={`Current model: ${modelLabel}. Change model`}
-              >
-                <span className="truncate">{modelLabel}</span>
-                <ChevronDown size={14} className="shrink-0 text-tertiary" />
+                <Plus size={22} strokeWidth={1.8} />
               </button>
 
               <button
                 type="button"
                 onClick={onToggleResearch}
-                className={`composer-action !h-10 !w-10 ${research ? "bg-[var(--selection-bg)] text-accent" : ""}`}
+                className={`composer-action ${research ? "!bg-[var(--selection-bg)] !text-accent" : ""}`}
                 aria-label={research ? "Turn off research mode" : "Turn on research mode"}
                 aria-pressed={research}
               >
-                <Search size={17} />
+                <Search size={18} strokeWidth={1.8} />
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenModels}
+                className="flex min-h-9 min-w-0 max-w-[130px] items-center gap-1 rounded-full px-2 text-[13px]/4 font-medium text-secondary active:bg-elev-2"
+                aria-label={`Current model: ${modelLabel}. Change model`}
+              >
+                <span className="truncate">{modelLabel}</span>
+                <ChevronDown size={13} className="shrink-0 text-tertiary" />
               </button>
 
               <span className="min-w-0 flex-1" />
@@ -493,33 +493,33 @@ export function ComposerDock({
                     type="button"
                     onClick={toggleVoice}
                     disabled={blocked}
-                    className={`composer-action !h-10 !w-10 ${listening ? "bg-accent text-white" : ""}`}
-                    aria-label={listening ? "Stop voice dictation" : "Start voice dictation"}
+                    className={`composer-action ${listening ? "!bg-accent !text-[var(--accent-on-primary)]" : ""}`}
+                    aria-label={listening ? "Stop dictation" : "Dictate"}
                     aria-pressed={listening}
                   >
-                    <Mic size={18} />
+                    <Mic size={19} strokeWidth={1.8} />
                   </button>
                   <button
                     type="button"
                     onClick={onOpenVoice}
                     disabled={blocked}
-                    className="composer-action !h-10 !w-10"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-[var(--accent-on-primary)] shadow-sm transition-transform duration-[120ms] active:scale-95 active:bg-accent-pressed"
                     aria-label="Use voice mode"
                   >
-                    <AudioLines size={19} />
+                    <AudioLines size={18} strokeWidth={2} />
                   </button>
                 </>
-              ) : null}
-
-              <button
-                type={generating ? "button" : "submit"}
-                onClick={generating ? onStop : undefined}
-                disabled={!generating && !canSend}
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-white shadow-sm active:scale-95 active:bg-accent-pressed" : "bg-elev-3 text-disabled"}`}
-                aria-label={generating ? "Stop response" : "Send message"}
-              >
-                {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={19} strokeWidth={2.4} />}
-              </button>
+              ) : (
+                <button
+                  type={generating ? "button" : "submit"}
+                  onClick={generating ? onStop : undefined}
+                  disabled={!generating && !canSend}
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-[var(--accent-on-primary)] shadow-sm active:scale-95 active:bg-accent-pressed" : "bg-elev-3 text-disabled"}`}
+                  aria-label={generating ? "Stop response" : "Send message"}
+                >
+                  {generating ? <Square size={13} fill="currentColor" /> : <ArrowUp size={18} strokeWidth={2.4} />}
+                </button>
+              )}
             </div>
           </form>
 
@@ -541,9 +541,9 @@ export function ComposerDock({
             role="dialog"
             aria-modal="true"
             aria-label="Add to message"
-            className="context-enter absolute inset-x-0 bottom-0 mx-auto w-full max-w-app rounded-t-sheet border border-b-0 border-[var(--border-subtle)] bg-elev-1 px-gutter pb-[calc(18px+var(--safe-bottom))] pt-3 shadow-sheet"
+            className="navi-sheet absolute inset-x-0 bottom-0 mx-auto w-full max-w-app px-gutter pb-[calc(18px+var(--safe-bottom))] pt-1"
           >
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-elev-3" />
+            <div className="navi-sheet-grabber mb-2" />
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <div className="text-[17px]/6 font-semibold text-primary">Add to message</div>
