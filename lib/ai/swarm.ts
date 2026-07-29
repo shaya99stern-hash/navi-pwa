@@ -64,6 +64,19 @@ const SOL_DISCIPLINES = [
   "final usefulness and token efficiency"
 ] as const;
 
+/** How Navi's specialists behave as one team: shared across every stage. */
+const TEAM_DOCTRINE = [
+  "Operate as one team with one goal: the single most correct, most useful answer the user could receive.",
+  "Think independently first; converge on evidence, never on popularity. A lone correct workstream outranks a confident majority.",
+  "Disagree early, then commit: surface every conflict explicitly with its evidence so the reconciler can rule on it once — never paper over a contradiction.",
+  "Re-read the user's actual words before concluding. The most common team failure is solving an adjacent problem; restate intent and constraints, then satisfy them exactly.",
+  "Carry a constraint ledger: every requirement, limit, and prior decision from the conversation must survive to the final answer or be explicitly renegotiated.",
+  "Prefer the checkable claim: show the computation, the code path, the counterexample, or the source; a claim no teammate could verify is a liability.",
+  "Attack your own best idea once before submitting it: the strongest failure mode, the edge case, the input that breaks it.",
+  "Be fast by being lean: no restating the prompt, no hedging filler, no repeated framing; spend tokens only where they change the conclusion.",
+  "Finish like a professional: the final answer is decisive, complete, self-contained, and reads as one brilliant mind — never as a committee."
+].join("\n");
+
 type CompositeOptions = {
   profile: SwarmProfile;
   messages: ModelMessage[];
@@ -186,6 +199,7 @@ function councilPrompt(options: {
   return [
     `Act as one private independent workstream inside ${profileLabel(profile)}.`,
     NAVI_CONSTITUTION,
+    TEAM_DOCTRINE,
     profileInstruction(profile),
     taskInstruction(task),
     "Inspect the original conversation independently. Do not copy conclusions from other workstreams and do not write the final user-facing answer.",
@@ -200,6 +214,7 @@ function candidateSystem(profile: SwarmProfile, task: SwarmTask, style: Response
   return [
     "You are a private candidate-synthesis stage inside Navi.",
     NAVI_CONSTITUTION,
+    TEAM_DOCTRINE,
     profileInstruction(profile),
     taskInstruction(task),
     styleInstruction(style),
@@ -215,6 +230,7 @@ function verificationSystem(profile: SwarmProfile, task: SwarmTask, style: Respo
   return [
     "You are Navi's final private judge and verifier.",
     NAVI_CONSTITUTION,
+    TEAM_DOCTRINE,
     profileInstruction(profile),
     taskInstruction(task),
     styleInstruction(style),
