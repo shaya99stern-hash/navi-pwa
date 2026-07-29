@@ -1,12 +1,12 @@
-const VERSION = "navi-shell-v10";
+const VERSION = "navi-shell-v11";
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_URL = "/offline-shell.html";
 const SHELL = [
   OFFLINE_URL,
   "/manifest.webmanifest",
-  "/pwa-icon-192-v4.png",
-  "/pwa-icon-512",
-  "/pwa-icon-maskable"
+  "/pwa-icon-192-v5.png",
+  "/pwa-icon-512-v5.png",
+  "/pwa-icon-maskable-v5.png"
 ];
 
 self.addEventListener("install", (event) => {

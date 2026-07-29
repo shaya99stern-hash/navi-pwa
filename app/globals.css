@@ -232,11 +232,11 @@ textarea {
 
 .hero-title,
 .font-display {
-  font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  font-family: var(--font-display), ui-serif, Georgia, Cambria, "Times New Roman", serif;
 }
 
 .greeting-title {
-  font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  font-family: var(--font-display), ui-serif, Georgia, Cambria, "Times New Roman", serif;
   font-weight: 400;
   letter-spacing: -0.02em;
 }

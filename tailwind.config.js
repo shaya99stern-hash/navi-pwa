@@ -16,7 +16,7 @@ module.exports = {
           "Segoe UI",
           "sans-serif"
         ],
-        display: ["ui-serif", "Georgia", "Cambria", "Times New Roman", "serif"]
+        display: ["var(--font-display)", "ui-serif", "Georgia", "Cambria", "Times New Roman", "serif"]
       },
       colors: {
         app: "var(--bg-app)",

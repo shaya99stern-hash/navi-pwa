@@ -46,7 +46,8 @@ export function ConversationStatePanel({ research, generating, status }: Props) 
 
   return (
     <div className="mt-3 flex items-center gap-2 px-1" role="status" aria-live="polite">
-      <span aria-hidden="true" className="thinking-spark text-[15px]">✳</span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/brand-spark.png" alt="" aria-hidden="true" className="thinking-spark h-[18px] w-[18px]" />
       <span className="text-[14px]/5 font-medium text-tertiary">{label}…</span>
     </div>
   );

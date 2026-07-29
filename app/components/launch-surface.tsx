@@ -27,7 +27,8 @@ export function LaunchSurface({
     <div className="navi-launch launch-surface flex min-h-full flex-col px-gutter pb-28 pt-6">
       <div className="mx-auto flex w-full max-w-app flex-1 flex-col items-center justify-center text-center">
         <h1 className="greeting-title flex items-center gap-3 text-[32px]/[38px] text-primary">
-          <span aria-hidden="true" className="text-[26px] text-accent">✳</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand-spark.png" alt="" aria-hidden="true" className="h-9 w-9 shrink-0" />
           {greeting}
         </h1>
 

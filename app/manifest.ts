@@ -11,15 +11,15 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
     orientation: "portrait",
-    background_color: "#100F0D",
-    theme_color: "#100F0D",
+    background_color: "#262624",
+    theme_color: "#262624",
     lang: "en-US",
     dir: "ltr",
     categories: ["productivity", "utilities"],
     icons: [
-      { src: "/pwa-icon-192-v4.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/pwa-icon-512", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/pwa-icon-maskable", sizes: "512x512", type: "image/png", purpose: "maskable" }
+      { src: "/pwa-icon-192-v5.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/pwa-icon-512-v5.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/pwa-icon-maskable-v5.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
     ],
     shortcuts: [
       {
@@ -27,21 +27,21 @@ export default function manifest(): MetadataRoute.Manifest {
         short_name: "New chat",
         description: "Start a new conversation with Navi",
         url: "/new",
-        icons: [{ src: "/pwa-icon-192-v4.png", sizes: "192x192", type: "image/png" }]
+        icons: [{ src: "/pwa-icon-192-v5.png", sizes: "192x192", type: "image/png" }]
       },
       {
         name: "Voice mode",
         short_name: "Voice",
         description: "Start a voice conversation with Navi",
         url: "/voice",
-        icons: [{ src: "/pwa-icon-192-v4.png", sizes: "192x192", type: "image/png" }]
+        icons: [{ src: "/pwa-icon-192-v5.png", sizes: "192x192", type: "image/png" }]
       },
       {
         name: "Projects",
         short_name: "Projects",
         description: "Open your Navi projects",
         url: "/projects",
-        icons: [{ src: "/pwa-icon-192-v4.png", sizes: "192x192", type: "image/png" }]
+        icons: [{ src: "/pwa-icon-192-v5.png", sizes: "192x192", type: "image/png" }]
       }
     ],
     share_target: {
