@@ -37,13 +37,13 @@ export function AuthShell({
     <main className="grid min-h-dvh place-items-center bg-[#191614] px-4 py-8 text-[#f7f0e8]">
       <section className="w-full max-w-[430px]">
         <header className="mb-8 text-center">
-          <NaviMark className="mx-auto mb-5 h-12 w-12 text-[#d67249]" label="Navi" />
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#d67249]">Navi</p>
+          <NaviMark className="mx-auto mb-5 h-12 w-12 text-[#d67249]" label="NaviOS Hub" />
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#d67249]">NaviOS Hub</p>
           <h1 className="text-3xl font-semibold tracking-[-0.035em]">{title}</h1>
           <p className="mx-auto mt-3 max-w-[340px] text-sm leading-6 text-[#bdb2a7]">{description}</p>
         </header>
         <div className="rounded-[24px] border border-white/10 bg-white/[0.035] p-5 sm:p-6">{children}</div>
-        <p className="mt-5 text-center text-xs leading-5 text-[#938a81]">Navi is a private, local-first workspace.</p>
+        <p className="mt-5 text-center text-xs leading-5 text-[#938a81]">NaviOS Hub is a private, local-first workspace.</p>
       </section>
     </main>
   );

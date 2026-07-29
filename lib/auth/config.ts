@@ -3,7 +3,7 @@ import "server-only";
 /**
  * Authentication is intentionally opt-in: local previews and deployments
  * without a publishable key plus Clerk's public JWT verification key continue
- * to run without an account wall.
+ * to run without an account wall during local development.
  */
 export function getClerkPublishableKey() {
   const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
@@ -61,6 +61,8 @@ export function getClerkAuthorizedParties(requestOrigin?: string): string[] {
   return Array.from(new Set([
     normalizeOrigin(requestOrigin),
     "https://navisonnet.vercel.app",
+    "https://navikeep.org",
+    "https://www.navikeep.org",
     ...configured,
     ...vercelOrigins,
     ...localOrigins
@@ -79,10 +81,8 @@ export function hasClerkUserAllowlist(): boolean {
 }
 
 /**
- * The Clerk sign-in itself is the access gate; the allowlist is an optional
- * extra restriction. With no allowlist configured every signed-in account gets
- * its own workspace, since stored state is scoped per Clerk user id. Setting
- * NAVI_ALLOWED_CLERK_USER_IDS narrows access to those accounts only.
+ * When an allowlist is supplied, access is restricted to those Clerk users.
+ * Otherwise any user authenticated by the configured Clerk instance may enter.
  *
  * This deliberately does not fail closed on an empty allowlist: doing so locked
  * the owner out of their own deployment with no way back in.

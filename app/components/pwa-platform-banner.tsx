@@ -154,14 +154,14 @@ export function PwaPlatformBanner({ inline = false }: { inline?: boolean } = {})
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[14px]/5 font-semibold text-primary">
-            {mode === "update" ? "Navi update ready" : mode === "ios" ? "Install Navi on iPhone" : "Install Navi"}
+            {mode === "update" ? "NaviOS Hub update ready" : mode === "ios" ? "Install NaviOS Hub on iPhone" : "Install NaviOS Hub"}
           </span>
           <span className="mt-0.5 block text-[11px]/4 font-medium text-tertiary">
             {mode === "update"
               ? updateStatus?.message
               : mode === "ios"
-                ? "In Safari, tap Share, then Add to Home Screen. Navi opens full-screen and keeps chats, projects, and drafts on this device."
-                : "Add Navi to your device for a full-screen workspace and faster return access."}
+                ? "In Safari, tap Share, then Add to Home Screen. NaviOS Hub opens full-screen and keeps chats, projects, and drafts on this device."
+                : "Add NaviOS Hub to your device for a full-screen workspace and faster return access."}
           </span>
         </span>
         <button

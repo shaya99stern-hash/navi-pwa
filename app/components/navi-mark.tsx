@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-export function NaviMark({ className = "", label = "Navi" }: { className?: string; label?: string }) {
+export function NaviMark({ className = "", label = "NaviOS Hub" }: { className?: string; label?: string }) {
   return (
     <Image
       src="/brand-spark.png"

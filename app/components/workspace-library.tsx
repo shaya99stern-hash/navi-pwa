@@ -14,7 +14,7 @@ type Server = { id: string; name: string; url: string; configured: true };
 type Artifact = { id: string; title: string; kind: string; chat: StoredChat };
 const official = ["Google Drive", "Gmail", "Google Calendar", "Slack"];
 const copy: Record<WorkspaceView, [string, string, string]> = {
-  recents: ["Your conversations", "Recents", "Pick up where you left off, or begin a fresh thread."], projects: ["Focused work", "Projects", "Keep instructions and knowledge close to related conversations."], artifacts: ["Made with Navi", "Artifacts", "Reusable tools and documents made in your chats."], connectors: ["Your context", "Connectors", "Connect only the configured sources you want Navi to use."], customize: ["Make it yours", "Customize", "Tune the model, response style, and tools Navi reaches for."], settings: ["Navi on this device", "Settings", "Review local preferences and your stored workspace data."]
+  recents: ["Your conversations", "Recents", "Pick up where you left off, or begin a fresh thread."], projects: ["Focused work", "Projects", "Keep instructions and knowledge close to related conversations."], artifacts: ["Made with Navi", "Artifacts", "Reusable tools and documents made in your chats."], connectors: ["Your context", "Connectors", "Connect only the configured sources you want Navi to use."], customize: ["Make it yours", "Customize", "Tune the model, response style, and tools Navi reaches for."], settings: ["NaviOS Hub on this device", "Settings", "Review local preferences and your stored workspace data."]
 };
 function ago(t: number) { const m = Math.max(1, Math.round((Date.now() - t) / 60000)); return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`; }
 function resolvedTheme(preference: NaviPreferences["theme"]): "dark" | "light" {
@@ -121,7 +121,7 @@ function PreferenceControls({ view, preferences, save, clear, onExport }: { view
         <button className="workspace-toggle" onClick={onExport}>Export</button>
       </div>
       <div className="workspace-switch">
-        <span><strong>About</strong><small>Navi 3.1 · local-first private workspace · all data stays on this device</small></span>
+        <span><strong>About</strong><small>NaviOS Hub 3.1 · local-first private workspace · all data stays on this device</small></span>
       </div>
       <button className="workspace-danger" onClick={clear}>Clear this account&apos;s local workspace data</button>
     </div>

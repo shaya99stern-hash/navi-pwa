@@ -7,7 +7,7 @@ export function GET() {
     <div style={{ width: "100%", height: "100%", display: "flex", background: "#C9785B", padding: 54, fontFamily: "Arial" }}>
       <div style={{ flex: 1, display: "flex", overflow: "hidden", borderRadius: 42, background: "#F4EEE6", boxShadow: "0 30px 90px rgba(52,31,21,.28)" }}>
         <div style={{ width: 360, display: "flex", flexDirection: "column", padding: 40, background: "#211914", color: "#FAF6EF" }}>
-          <div style={{ fontSize: 38, fontWeight: 700 }}>Navi</div>
+          <div style={{ fontSize: 38, fontWeight: 700 }}>NaviOS Hub</div>
           <div style={{ marginTop: 18, fontSize: 18, lineHeight: 1.45, color: "#D9D0C5" }}>Private AI workspace</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 52 }}>
             {["New conversation", "Files and images", "Interactive tools", "Connections", "Settings"].map((item, index) => (

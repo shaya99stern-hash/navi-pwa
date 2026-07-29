@@ -1,6 +1,6 @@
-# Navi
+# NaviOS Hub
 
-Navi is a self-contained Next.js App Router PWA with a premium mobile shell, local-first IndexedDB history, secure artifact rendering, a unified control sheet, remote MCP support, and private multi-provider AI swarms.
+NaviOS Hub is a self-contained Next.js App Router PWA with a premium mobile shell, local-first IndexedDB history, secure artifact rendering, a unified control sheet, remote MCP support, and private multi-provider AI swarms.
 
 ## Navi modes
 

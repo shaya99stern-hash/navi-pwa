@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   const value = {
     id: "/",
-    name: "Navi — Private AI Workspace",
-    short_name: "Navi",
+    name: "NaviOS Hub — Private AI Workspace",
+    short_name: "NaviOS Hub",
     description: "A private, local-first AI workspace for conversations, files, images, interactive tools, and long-running projects.",
     start_url: "/new?source=pwa",
     scope: "/",
@@ -25,21 +25,21 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         name: "New chat",
         short_name: "New chat",
-        description: "Start a new conversation with Navi",
+        description: "Start a new conversation in NaviOS Hub",
         url: "/new",
         icons: [{ src: "/pwa-icon-192-v5.png", sizes: "192x192", type: "image/png" }]
       },
       {
         name: "Voice mode",
         short_name: "Voice",
-        description: "Start a voice conversation with Navi",
+        description: "Start a voice conversation in NaviOS Hub",
         url: "/voice",
         icons: [{ src: "/pwa-icon-192-v5.png", sizes: "192x192", type: "image/png" }]
       },
       {
         name: "Projects",
         short_name: "Projects",
-        description: "Open your Navi projects",
+        description: "Open your NaviOS Hub projects",
         url: "/projects",
         icons: [{ src: "/pwa-icon-192-v5.png", sizes: "192x192", type: "image/png" }]
       }
@@ -56,14 +56,14 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "1179x2556",
         type: "image/png",
         form_factor: "narrow",
-        label: "Navi mobile conversation launch and composer"
+        label: "NaviOS Hub mobile conversation launch and composer"
       },
       {
         src: "/manifest-tools",
         sizes: "1600x900",
         type: "image/png",
         form_factor: "wide",
-        label: "Navi models, files, tools, and connections"
+        label: "NaviOS Hub models, files, tools, and connections"
       }
     ]
   };

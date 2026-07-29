@@ -49,7 +49,7 @@ export async function proxy(request: NextRequest) {
 
   if (isApiRoute) {
     return NextResponse.json(
-      { error: "This account does not have access to Navi." },
+        { error: "This account does not have access to NaviOS Hub." },
       { status: 403, headers: { "Cache-Control": "no-store" } }
     );
   }

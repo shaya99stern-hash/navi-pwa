@@ -476,7 +476,11 @@ export function ComposerDock({
               }}
               onBlur={() => setFocused(false)}
               rows={1}
-              enterKeyHint={touchKeyboard ? "enter" : "send"}
+              /* Always request the plain Return key: rendering this after
+                 hydration left the server's value in place, so iOS kept
+                 showing the send/checkmark key. Hardware keyboards still send
+                 on Enter via the keydown handler, where the hint is unused. */
+              enterKeyHint="enter"
               inputMode="text"
               autoCapitalize="sentences"
               autoCorrect="on"

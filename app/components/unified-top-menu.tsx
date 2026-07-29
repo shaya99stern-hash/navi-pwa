@@ -188,7 +188,7 @@ export function UnifiedTopMenu({
               <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-elev-2 text-secondary active:bg-elev-3" aria-label="Close menu"><X size={18} /></button>
             </header>
 
-            <nav className="scroll-area flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--border-subtle)] px-3 py-2" aria-label="Navi menu sections">
+            <nav className="scroll-area flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--border-subtle)] px-3 py-2" aria-label="NaviOS Hub menu sections">
               {SECTIONS.map((item) => (
                 <button key={item.id} type="button" onClick={() => selectSection(item.id)} className={`min-h-9 shrink-0 rounded-full px-3 text-[12px]/4 font-semibold ${section === item.id ? "bg-[var(--selection-bg)] text-primary" : "text-tertiary active:bg-elev-3"}`}>
                   {item.label}
@@ -293,7 +293,7 @@ export function UnifiedTopMenu({
                 <div className="divide-y divide-[var(--border-subtle)]">
                   <button type="button" onClick={refreshAndUpdate} disabled={updateBusy} className="flex min-h-[70px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-elev-2 disabled:opacity-70">
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[15px]/[22px] font-medium text-primary">Refresh & Update Navi</span>
+                      <span className="block text-[15px]/[22px] font-medium text-primary">Refresh & Update NaviOS Hub</span>
                       <span className={`block text-[12px]/4 font-medium ${updateStatus.phase === "error" ? "text-danger" : "text-tertiary"}`}>{updateStatus.message}</span>
                     </span>
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-elev-2 text-secondary">
@@ -304,7 +304,7 @@ export function UnifiedTopMenu({
                   <button type="button" onClick={() => { onOpenHistory(); onClose(); }} className="flex min-h-[58px] w-full items-center justify-between px-4 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Conversation history<ChevronRight size={18} /></button>
                   <button type="button" onClick={() => { onClearThread(); onClose(); }} className="min-h-[58px] w-full px-4 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Clear current thread</button>
                   <button type="button" onClick={() => { if (window.confirm("Clear all Navi history, projects, and settings from this device?")) { onClearData(); onClose(); } }} className="min-h-[58px] w-full px-4 text-left text-[15px]/[22px] font-medium text-danger active:bg-elev-2">Clear all local data</button>
-                  <div className="px-4 py-5 text-[12px]/4 font-medium text-tertiary">Navi 4.1 · Projects · Connector approvals · Automatic app updates.</div>
+                  <div className="px-4 py-5 text-[12px]/4 font-medium text-tertiary">NaviOS Hub 4.1 · Projects · Connector approvals · Automatic app updates.</div>
                 </div>
               ) : null}
             </div>
