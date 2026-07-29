@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { InstallButton } from "./install-button";
 
 function greetingForHour(hour: number): string {
   if (hour < 5) return "Up late?";
@@ -10,13 +9,7 @@ function greetingForHour(hour: number): string {
   return "Good evening";
 }
 
-export function LaunchSurface({
-  online,
-  haptics
-}: {
-  online: boolean;
-  haptics: boolean;
-}) {
+export function LaunchSurface({ online }: { online: boolean }) {
   const [greeting, setGreeting] = useState("Good evening");
 
   useEffect(() => {
@@ -37,10 +30,6 @@ export function LaunchSurface({
             You&apos;re offline. Saved chats stay available on this device.
           </p>
         ) : null}
-
-        <div className="absolute bottom-[132px] left-0 right-0 flex justify-center">
-          <InstallButton haptics={haptics} />
-        </div>
       </div>
     </div>
   );

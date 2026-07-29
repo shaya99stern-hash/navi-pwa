@@ -40,6 +40,9 @@ export default function PWARegister() {
     let reloading = false;
     let applyingUpdate = false;
     let lastAutomaticCheck = 0;
+    // A controller change with no prior controller is the first install,
+    // not an update, and must not surface an update banner.
+    const hadController = Boolean(navigator.serviceWorker.controller);
 
     const showAvailable = (message = "A new Navi version is ready. Update when you are ready.") => {
       if (!cancelled) emitPwaUpdateStatus({ phase: "available", message });
@@ -123,7 +126,7 @@ export default function PWARegister() {
     };
     const controllerChanged = () => {
       if (applyingUpdate) void restartWithFreshShell();
-      else showAvailable("A newer Navi version is active. Restart when you are ready.");
+      else if (hadController) showAvailable("A newer Navi version is active. Restart when you are ready.");
     };
 
     window.addEventListener(PWA_UPDATE_REQUEST_EVENT, manualCheck);

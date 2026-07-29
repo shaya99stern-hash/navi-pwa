@@ -125,6 +125,7 @@ export function ComposerDock({
   onToggleResearch,
   onOpenTools
 }: Props) {
+  const dockRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -139,6 +140,12 @@ export function ComposerDock({
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [providerReady, setProviderReady] = useState<boolean | null>(null);
+  const [touchKeyboard, setTouchKeyboard] = useState(false);
+
+  useEffect(() => {
+    setTouchKeyboard(window.matchMedia("(pointer: coarse)").matches);
+  }, []);
+
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -219,6 +226,10 @@ export function ComposerDock({
   }
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    // On touch keyboards Return inserts a newline, exactly like a native
+    // messaging app; sending is the arrow button's job. Hardware keyboards
+    // keep Enter-to-send with Shift+Enter for newlines.
+    if (touchKeyboard) return;
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       send();
@@ -353,6 +364,7 @@ export function ComposerDock({
   return (
     <>
       <div
+        ref={dockRef}
         className={`navi-composer-dock relative z-40 shrink-0 border-t transition-colors duration-150 ${dragActive ? "border-accent bg-[var(--selection-bg)]" : "border-[var(--border-subtle)]"}`}
         onDragEnter={dragOver}
         onDragOver={dragOver}
@@ -442,7 +454,7 @@ export function ComposerDock({
               }}
               onBlur={() => setFocused(false)}
               rows={1}
-              enterKeyHint="send"
+              enterKeyHint={touchKeyboard ? "enter" : "send"}
               inputMode="text"
               autoCapitalize="sentences"
               autoCorrect="on"

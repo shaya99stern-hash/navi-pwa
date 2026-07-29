@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, RefreshCw, Share, Smartphone, X } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   PWA_UPDATE_STATUS_EVENT,
@@ -36,7 +37,19 @@ function recentlyDismissed(): boolean {
   return Number.isFinite(value) && Date.now() - value < INSTALL_DISMISS_MS;
 }
 
-export function PwaPlatformBanner() {
+/* Routes that render AppShell, which owns its own in-flow banner. The shell
+   is transformed for keyboard handling, so it forms a stacking context that a
+   body-level fixed banner would paint over — hence the inline variant there. */
+const APP_SHELL_ROUTES = /^\/(?:$|new|chat\/|voice)/;
+
+/** Body-level mount: renders only on routes without an AppShell. */
+export function GlobalPwaPlatformBanner() {
+  const pathname = usePathname();
+  if (pathname === "/" || APP_SHELL_ROUTES.test(pathname ?? "")) return null;
+  return <PwaPlatformBanner />;
+}
+
+export function PwaPlatformBanner({ inline = false }: { inline?: boolean } = {}) {
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [iosHint, setIosHint] = useState(false);
@@ -126,7 +139,15 @@ export function PwaPlatformBanner() {
   }
 
   return (
-    <aside className="fixed inset-x-3 bottom-[calc(var(--safe-bottom)+88px)] z-[135] mx-auto max-w-[560px] rounded-[22px] border border-[var(--border-strong)] bg-elev-1 p-3 shadow-sheet" role="status" aria-live="polite">
+    <aside
+      className={
+        inline
+          ? "mx-auto mb-2 w-full max-w-app shrink-0 rounded-[22px] border border-[var(--border-strong)] bg-elev-1 p-3"
+          : "fixed inset-x-3 bottom-[calc(var(--safe-bottom)+84px)] z-[70] mx-auto max-w-[560px] rounded-[22px] border border-[var(--border-strong)] bg-elev-1 p-3 shadow-sheet"
+      }
+      role="status"
+      aria-live="polite"
+    >
       <div className="flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--selection-bg)] text-accent">
           {mode === "update" ? <RefreshCw size={20} /> : mode === "ios" ? <Share size={20} /> : <Smartphone size={20} />}

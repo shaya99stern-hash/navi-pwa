@@ -23,6 +23,7 @@ import { HistoryDrawer } from "./history-drawer";
 import { LaunchSurface } from "./launch-surface";
 import { MessageRow } from "./message-row";
 import { ProjectsSheet } from "./projects-sheet";
+import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { UnifiedTopMenu } from "./unified-top-menu";
 import { VoiceModeSheet } from "./voice-mode-sheet";
 
@@ -638,7 +639,7 @@ export function AppShell({
         onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 3)}
       >
         {messages.length === 0 ? (
-          <LaunchSurface online={online} haptics={preferences.haptics} />
+          <LaunchSurface online={online} />
         ) : (
           <div className="mx-auto w-full max-w-app px-gutter py-5">
             <div className="message-stack flex flex-col">
@@ -674,6 +675,9 @@ export function AppShell({
       {attachmentError ? (
         <div className="mx-4 mb-1 rounded-2xl border border-[var(--accent-warning)] bg-elev-2 px-3 py-2 text-center text-[12px]/4 font-medium text-warning" role="alert">{attachmentError}</div>
       ) : null}
+      <div className="shrink-0 px-gutter">
+        <PwaPlatformBanner inline />
+      </div>
       <ComposerDock
         value={draft}
         generating={generating}
