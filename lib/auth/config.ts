@@ -42,7 +42,7 @@ export function getNaviAuthCanonicalOrigin(): string | undefined {
  * Clerk's `azp` claim is checked against exact trusted origins to prevent a
  * session cookie leaked by another subdomain from being accepted by Navi.
  */
-export function getClerkAuthorizedParties(): string[] {
+export function getClerkAuthorizedParties(requestOrigin?: string): string[] {
   const configured = (process.env.CLERK_AUTHORIZED_PARTIES ?? "")
     .split(",")
     .map((value) => normalizeOrigin(value.trim()));
@@ -55,7 +55,11 @@ export function getClerkAuthorizedParties(): string[] {
     ? []
     : ["http://localhost:3000", "http://localhost:3100", "http://127.0.0.1:3000", "http://127.0.0.1:3100"];
 
+  /* The origin this request was actually served from is always authorized:
+     only domains attached to this deployment can route here, and omitting it
+     locks users out of every custom domain that is not hard-coded below. */
   return Array.from(new Set([
+    normalizeOrigin(requestOrigin),
     "https://navisonnet.vercel.app",
     "https://navikeep.org",
     "https://www.navikeep.org",
@@ -79,9 +83,11 @@ export function hasClerkUserAllowlist(): boolean {
 /**
  * When an allowlist is supplied, access is restricted to those Clerk users.
  * Otherwise any user authenticated by the configured Clerk instance may enter.
+ *
+ * This deliberately does not fail closed on an empty allowlist: doing so locked
+ * the owner out of their own deployment with no way back in.
  */
 export function isClerkUserAllowed(userId: string): boolean {
   const allowed = getAllowedClerkUserIds();
-  if (allowed.length === 0) return true;
-  return allowed.includes(userId);
+  return allowed.length === 0 || allowed.includes(userId);
 }
