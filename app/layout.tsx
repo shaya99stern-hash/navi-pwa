@@ -14,7 +14,7 @@ import {
 import { CLERK_SESSION_COOKIE_NAME, verifyClerkSessionToken } from "@/lib/auth/session";
 import "./globals.css";
 import "./shell.css";
-import { PwaPlatformBanner } from "./components/pwa-platform-banner";
+import { GlobalPwaPlatformBanner } from "./components/pwa-platform-banner";
 import { ViewportMetrics } from "./components/viewport-metrics";
 import PWARegister from "./pwa-register";
 import WebVitals from "./web-vitals";
@@ -127,7 +127,7 @@ try {
       </head>
       <body>
         <PWARegister />
-        <PwaPlatformBanner />
+        <GlobalPwaPlatformBanner />
         <ViewportMetrics />
         <WebVitals />
         {app}
