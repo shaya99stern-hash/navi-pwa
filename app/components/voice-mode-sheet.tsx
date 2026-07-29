@@ -176,7 +176,7 @@ export function VoiceModeSheet({
   function focusKeyboardDictation() {
     cancel();
     window.setTimeout(() => {
-      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message Navi"]')?.focus();
+      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Chat with Navi"]')?.focus();
     }, 80);
   }
 

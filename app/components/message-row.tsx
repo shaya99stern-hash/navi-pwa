@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { Check, Copy, FileText, Share } from "lucide-react";
+import { Check, Copy, FileText, RotateCcw, Share } from "lucide-react";
 import { useState } from "react";
 import { messageText } from "@/lib/chat";
 import { haptic } from "@/lib/ui/haptics";
@@ -11,7 +11,7 @@ function messageFiles(message: UIMessage): Array<{ filename?: string; mediaType?
   return message.parts.filter((part) => part.type === "file").map((part) => part as unknown as { filename?: string; mediaType?: string });
 }
 
-export function MessageRow({ message, streaming, theme, haptics }: { message: UIMessage; streaming: boolean; theme: "dark" | "light"; haptics: boolean }) {
+export function MessageRow({ message, streaming, theme, haptics, onRetry }: { message: UIMessage; streaming: boolean; theme: "dark" | "light"; haptics: boolean; onRetry?: () => void }) {
   const text = messageText(message);
   const files = messageFiles(message);
   const user = message.role === "user";
@@ -58,6 +58,11 @@ export function MessageRow({ message, streaming, theme, haptics }: { message: UI
               <button type="button" onClick={() => void share()} className="flex h-9 w-9 items-center justify-center rounded-full text-tertiary active:bg-elev-2" aria-label="Share response">
                 <Share size={16} />
               </button>
+              {onRetry ? (
+                <button type="button" onClick={() => { haptic("selection", haptics); onRetry(); }} className="flex h-9 w-9 items-center justify-center rounded-full text-tertiary active:bg-elev-2" aria-label="Retry response">
+                  <RotateCcw size={16} />
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>
