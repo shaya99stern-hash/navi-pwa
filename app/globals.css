@@ -56,16 +56,18 @@
   --navi-section-gap: 24px;
   --navi-tap-target: 44px;
   --navi-motion-fast: 150ms;
-  --navi-motion-sheet: 340ms;
+  --navi-motion-sheet: 400ms;
   --navi-ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --navi-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --navi-ease-sheet: cubic-bezier(0.25, 1, 0.5, 1);
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --navi-viewport-height: 100dvh;
+  --navi-viewport-width: 100vw;
   --navi-viewport-offset-top: 0px;
+  --navi-viewport-offset-left: 0px;
   --navi-keyboard-inset: 0px;
 }
 
@@ -150,6 +152,15 @@ select {
   font: inherit;
 }
 
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  touch-action: auto;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 button,
 a,
 label {
@@ -179,13 +190,17 @@ textarea {
 }
 
 [data-app-shell="true"] {
-  width: 100%;
+  position: fixed;
+  top: var(--navi-viewport-offset-top, 0px);
+  left: var(--navi-viewport-offset-left, 0px);
+  width: var(--navi-viewport-width, 100vw);
   height: var(--navi-viewport-height, 100dvh);
-  min-height: 100svh;
+  min-height: 0;
   max-height: var(--navi-viewport-height, 100dvh);
   overflow: hidden;
   background: var(--bg-app);
-  transform: translateY(var(--navi-viewport-offset-top, 0px));
+  transform: translateZ(0);
+  will-change: top, left, width, height;
   transition: background-color 180ms ease;
 }
 
@@ -215,6 +230,15 @@ textarea {
 
 :root[data-keyboard-open="true"] [data-scroll-region="true"] {
   scroll-padding-bottom: calc(var(--navi-composer-min-height) + 24px);
+  scroll-behavior: auto;
+}
+
+:root[data-keyboard-open="true"] {
+  --safe-bottom: 0px;
+}
+
+:root[data-keyboard-open="true"] .navi-composer-dock {
+  padding-bottom: 4px;
 }
 
 .navi-header {

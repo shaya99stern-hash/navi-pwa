@@ -31,14 +31,14 @@ const siteUrl = getNaviAuthCanonicalOrigin() ?? "https://navisonnet.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  applicationName: "Navi",
-  title: { default: "Navi — Private AI Workspace", template: "%s · Navi" },
+  applicationName: "NaviOS Hub",
+  title: { default: "NaviOS Hub — Private AI Workspace", template: "%s · NaviOS Hub" },
   description: "A private, local-first AI workspace for conversations, files, images, interactive tools, and long-running projects.",
   manifest: "/manifest.webmanifest",
   alternates: { canonical: "/" },
-  keywords: ["Navi", "NaviOS", "AI workspace", "AI assistant", "private AI", "PWA"],
+  keywords: ["NaviOS Hub", "Navi", "NaviOS", "AI workspace", "AI assistant", "private AI", "PWA"],
   formatDetection: { telephone: false, address: false, email: false },
-  appleWebApp: { capable: true, title: "Navi", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "NaviOS Hub", statusBarStyle: "black-translucent" },
   icons: {
     icon: [{ url: "/pwa-icon-192-v5.png", type: "image/png", sizes: "192x192" }],
     apple: [{ url: "/apple-touch-icon-v5.png", type: "image/png", sizes: "1024x1024" }]
@@ -46,14 +46,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: siteUrl,
-    siteName: "Navi",
-    title: "Navi — Private AI Workspace",
+    siteName: "NaviOS Hub",
+    title: "NaviOS Hub — Private AI Workspace",
     description: "Conversations, files, images, tools, and multi-provider AI in one installable workspace.",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Navi private AI workspace" }]
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "NaviOS Hub private AI workspace" }]
   },
   twitter: {
     card: "summary_large_image",
-    title: "Navi — Private AI Workspace",
+    title: "NaviOS Hub — Private AI Workspace",
     description: "Conversations, files, images, tools, and multi-provider AI in one installable workspace.",
     images: ["/opengraph-image"]
   },

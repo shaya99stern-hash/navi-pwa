@@ -71,7 +71,7 @@ export default function PWARegister() {
 
     const checkForUpdate = async (manual: boolean) => {
       if (cancelled || !navigator.onLine) {
-        if (manual) emitPwaUpdateStatus({ phase: "error", message: "Navi is offline. Reconnect and try again." });
+        if (manual) emitPwaUpdateStatus({ phase: "error", message: "NaviOS Hub is offline. Reconnect and try again." });
         return;
       }
 

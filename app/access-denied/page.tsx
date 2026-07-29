@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default function AccessDeniedPage() {
   return (
     <AuthShell
-      title="This Navi is private"
+      title="This NaviOS Hub is private"
       description="You signed in successfully, but this Google account is not on the workspace owner list."
     >
       {isClerkConfigured() ? (
@@ -30,7 +30,7 @@ export default function AccessDeniedPage() {
           href="/"
           className="flex h-[52px] w-full items-center justify-center rounded-2xl bg-[#c76740] text-sm font-semibold text-white hover:bg-[#b65734]"
         >
-          Return to Navi
+          Return to NaviOS Hub
         </Link>
       )}
     </AuthShell>

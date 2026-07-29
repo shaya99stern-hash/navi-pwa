@@ -576,7 +576,7 @@ export function AppShell({
         </button>
         <div className="min-w-0 flex-1 text-center">
           {messages.length === 0 && !activeChat ? (
-            <div className="font-display truncate text-[19px]/6 tracking-[-0.01em] text-primary">Navi</div>
+            <div className="font-display truncate text-[19px]/6 tracking-[-0.01em] text-primary">NaviOS Hub</div>
           ) : (
             <>
               <div className="truncate px-1 text-[16px]/5 font-semibold tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>

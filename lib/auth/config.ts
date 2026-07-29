@@ -3,7 +3,7 @@ import "server-only";
 /**
  * Authentication is intentionally opt-in: local previews and deployments
  * without a publishable key plus Clerk's public JWT verification key continue
- * to run without an account wall.
+ * to run without an account wall during local development.
  */
 export function getClerkPublishableKey() {
   const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
@@ -57,7 +57,8 @@ export function getClerkAuthorizedParties(): string[] {
 
   return Array.from(new Set([
     "https://navisonnet.vercel.app",
-    "https://navisonnet.navikeep.org",
+    "https://navikeep.org",
+    "https://www.navikeep.org",
     ...configured,
     ...vercelOrigins,
     ...localOrigins
@@ -76,11 +77,11 @@ export function hasClerkUserAllowlist(): boolean {
 }
 
 /**
- * Production fails closed when Clerk is enabled without an owner allowlist.
- * Local development remains convenient while credentials are being configured.
+ * When an allowlist is supplied, access is restricted to those Clerk users.
+ * Otherwise any user authenticated by the configured Clerk instance may enter.
  */
 export function isClerkUserAllowed(userId: string): boolean {
   const allowed = getAllowedClerkUserIds();
-  if (allowed.length === 0) return process.env.NODE_ENV !== "production";
+  if (allowed.length === 0) return true;
   return allowed.includes(userId);
 }

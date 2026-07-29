@@ -21,7 +21,7 @@ export async function authorizeApiMutation(request: Request): Promise<Response |
     return Response.json({ error: "Sign in to continue." }, { status: 401 });
   }
   if (!isClerkUserAllowed(userId)) {
-    return Response.json({ error: "This account does not have access to Navi." }, { status: 403 });
+    return Response.json({ error: "This account does not have access to NaviOS Hub." }, { status: 403 });
   }
   return null;
 }

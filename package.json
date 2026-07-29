@@ -2,7 +2,7 @@
   "name": "navi-pwa",
   "version": "3.0.0",
   "private": true,
-  "description": "Navi — a premium, local-first AI orchestration PWA.",
+  "description": "NaviOS Hub — a premium, local-first AI orchestration PWA.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

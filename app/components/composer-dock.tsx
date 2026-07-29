@@ -180,7 +180,7 @@ export function ComposerDock({
   const hiddenAttachmentCount = Math.max(0, attachmentCount - selectedFiles.length);
 
   const placeholder = !online
-    ? "Navi is offline"
+    ? "NaviOS Hub is offline"
     : !available
       ? "AI provider setup required"
       : attachmentCount
