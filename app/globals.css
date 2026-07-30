@@ -390,9 +390,16 @@ textarea {
 .navi-markdown > :first-child { margin-top: 0; }
 .navi-markdown > :last-child { margin-bottom: 0; }
 .navi-markdown p { margin: 0 0 0.8rem; line-height: 1.6; }
+/* Tailwind's preflight removes list markers, which left bullets and numbers
+   missing from every rendered reply. */
 .navi-markdown ul,
-.navi-markdown ol { margin: 0.65rem 0 0.95rem; padding-left: 1.3rem; }
+.navi-markdown ol { margin: 0.65rem 0 0.95rem; padding-left: 1.35rem; }
+.navi-markdown ul { list-style: disc outside; }
+.navi-markdown ol { list-style: decimal outside; }
+.navi-markdown ul ul { list-style: circle outside; }
 .navi-markdown li { margin: 0.25rem 0; }
+.navi-markdown li::marker { color: var(--text-tertiary); }
+.navi-markdown li > p { margin: 0; }
 .navi-markdown h1,
 .navi-markdown h2,
 .navi-markdown h3 { margin: 1.25rem 0 0.55rem; font-weight: 600; line-height: 1.28; }
