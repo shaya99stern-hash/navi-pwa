@@ -29,7 +29,9 @@ const displaySerif = Source_Serif_4({
 
 const siteUrl = getNaviAuthCanonicalOrigin() ?? "https://navisonnet.vercel.app";
 
-export const metadata: Metadata = {
+async function buildMetadata(): Promise<Metadata> {
+  const theme = await readThemeCookie();
+  return {
   metadataBase: new URL(siteUrl),
   applicationName: "NaviOS Hub",
   title: { default: "NaviOS Hub — Private AI Workspace", template: "%s · NaviOS Hub" },
@@ -38,10 +40,17 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   keywords: ["NaviOS Hub", "Navi", "NaviOS", "AI workspace", "AI assistant", "private AI", "PWA"],
   formatDetection: { telephone: false, address: false, email: false },
-  appleWebApp: { capable: true, title: "NaviOS Hub", statusBarStyle: "black-translucent" },
+  /* iOS reads this once at launch and ignores later mutation, so it has to be
+     rendered per request. black-translucent draws white glyphs, which vanish
+     against the ivory light theme; default keeps them dark. */
+  appleWebApp: {
+    capable: true,
+    title: "NaviOS Hub",
+    statusBarStyle: theme === "light" ? "default" : "black-translucent"
+  },
   icons: {
     icon: [{ url: "/pwa-icon-192-v5.png", type: "image/png", sizes: "192x192" }],
-    apple: [{ url: "/apple-touch-icon-v5.png", type: "image/png", sizes: "1024x1024" }]
+    apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" }]
   },
   openGraph: {
     type: "website",
@@ -58,17 +67,20 @@ export const metadata: Metadata = {
     images: ["/opengraph-image"]
   },
   robots: {
-    index: true,
-    follow: true,
-    googleBot: { index: true, follow: true, "max-image-preview": "large" }
-  }
-};
+      index: true,
+      follow: true,
+      googleBot: { index: true, follow: true, "max-image-preview": "large" }
+    }
+  };
+}
+
+export function generateMetadata(): Promise<Metadata> {
+  return buildMetadata();
+}
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
   colorScheme: "dark light",
   themeColor: [
@@ -77,11 +89,24 @@ export const viewport: Viewport = {
   ]
 };
 
+export const THEME_COOKIE_NAME = "navi.theme";
+
+/** The status bar style is baked in at launch, so the server needs the theme. */
+async function readThemeCookie(): Promise<"dark" | "light"> {
+  const value = (await cookies()).get(THEME_COOKIE_NAME)?.value;
+  return value === "light" ? "light" : "dark";
+}
+
+/* The cookie is authoritative because the server rendered against it; mirror it
+   back into localStorage so existing readers stay in sync. */
 const themeBootScript = `
 try {
-  const theme = localStorage.getItem('navi.theme.v3') || 'dark';
+  var cookie = document.cookie.match(/(?:^|; )navi\\.theme=([^;]*)/);
+  var theme = cookie ? decodeURIComponent(cookie[1]) : (localStorage.getItem('navi.theme.v3') || 'dark');
+  if (theme !== 'light' && theme !== 'dark') theme = 'dark';
   document.documentElement.dataset.theme = theme;
   document.documentElement.classList.toggle('dark', theme === 'dark');
+  localStorage.setItem('navi.theme.v3', theme);
 } catch {}
 `;
 
@@ -127,7 +152,7 @@ try {
   return (
     <html lang="en-US" data-theme="dark" className={`dark ${displaySerif.variable}`} suppressHydrationWarning>
       <head>
-        <link rel="apple-touch-icon" sizes="1024x1024" href="/apple-touch-icon-v5.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         <script dangerouslySetInnerHTML={{ __html: storageBootScript }} />
       </head>

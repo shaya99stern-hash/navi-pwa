@@ -6,6 +6,7 @@ import { ArrowRight, BookOpen, Boxes, Cable, FileText, FolderKanban, MessageSqua
 import type { NaviPreferences, NaviProject, StoredChat } from "@/lib/ai/types";
 import { DEFAULT_PREFERENCES, MODEL_PRESETS, RESPONSE_STYLES, chatPreview, createId, messageText, sortChats } from "@/lib/chat";
 import { clearLocalState, loadLocalState, setLocalValue } from "@/lib/storage/indexeddb";
+import { persistThemeCookie } from "@/lib/ui/theme-cookie";
 import { NaviMark } from "./navi-mark";
 import "./workspace-library.css";
 
@@ -168,6 +169,7 @@ export function WorkspaceLibrary({ view }: { view: WorkspaceView }) {
       document.documentElement.dataset.motion = preferences.motion;
       document.documentElement.classList.toggle("dark", next === "dark");
       localStorage.setItem("navi.theme.v3", next);
+      persistThemeCookie(next);
     };
     apply();
     const media = window.matchMedia("(prefers-color-scheme: light)");
