@@ -309,6 +309,21 @@ export function AppShell({
     return () => cancelAnimationFrame(frame);
   }, [autoFollow, generating, messages, status, streamStatus]);
 
+  /* The keyboard shrinks the shell, which would otherwise slide the newest
+     message behind the composer. Re-anchor to the bottom as it opens so the
+     conversation keeps its place, the way a native thread does. */
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      if (root.dataset.keyboardOpen !== "true" || !autoFollow) return;
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      requestAnimationFrame(() => scroller.scrollTo({ top: scroller.scrollHeight, behavior: "auto" }));
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ["data-keyboard-open"] });
+    return () => observer.disconnect();
+  }, [autoFollow]);
+
   /* A light tick when the first token lands, so the reply announces itself
      without needing to be looked at. */
   useEffect(() => {

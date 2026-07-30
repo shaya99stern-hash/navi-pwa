@@ -13,6 +13,7 @@ import { runComposite } from "@/lib/ai/swarm";
 import type { ConnectorAccessMode, ModelPreset, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
+import { APP_KNOWLEDGE } from "@/lib/ai/app-knowledge";
 import { NAVI_CONSTITUTION } from "@/lib/ai/navi-constitution";
 
 export const runtime = "edge";
@@ -234,6 +235,7 @@ function systemPrompt(options: {
   return [
     "You are Navi.",
     NAVI_CONSTITUTION,
+    APP_KNOWLEDGE,
     "Identify yourself only as Navi. Do not impersonate or claim to literally be an underlying provider model.",
     "Be accurate, practical, and explicit about uncertainty.",
     "Never claim that you browsed, executed code, accessed files, used MCP, or changed external data unless supplied results prove it.",
