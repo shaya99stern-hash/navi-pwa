@@ -21,6 +21,8 @@ import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 type Props = {
   open: boolean;
+  /** 0-1 while an edge swipe is in progress, null when idle. */
+  dragProgress?: number | null;
   chats: StoredChat[];
   activeId: string;
   haptics: boolean;
@@ -32,7 +34,7 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, chats, activeId, haptics, onClose, onNew, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, haptics, onClose, onNew, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<StoredChat | null>(null);
   const holdTimer = useRef<number | null>(null);
@@ -40,18 +42,19 @@ export function HistoryDrawer({ open, chats, activeId, haptics, onClose, onNew, 
   const startX = useRef<number | null>(null);
 
   useEffect(() => {
-    if (open) haptic("impact-light", haptics);
+    if (open && dragProgress === null) haptic("impact-light", haptics);
     if (!open) {
       setSelected(null);
       setQuery("");
     }
-  }, [haptics, open]);
+  }, [dragProgress, haptics, open]);
 
   useEffect(() => () => {
     if (holdTimer.current) window.clearTimeout(holdTimer.current);
   }, []);
 
-  if (!open) return null;
+  const dragging = dragProgress !== null;
+  if (!open && !dragging) return null;
   const normalized = query.trim().toLowerCase();
   const visible = normalized
     ? chats.filter((chat) => `${chat.title} ${chat.preview}`.toLowerCase().includes(normalized))
@@ -110,8 +113,17 @@ export function HistoryDrawer({ open, chats, activeId, haptics, onClose, onNew, 
 
   return (
     <div className="fixed inset-0 z-[100]">
-      <button type="button" className="navi-drawer-scrim absolute inset-0 bg-overlay" aria-label="Close sidebar" onClick={onClose} />
-      <aside className="drawer-enter safe-top safe-bottom absolute inset-y-0 left-0 flex w-[85vw] max-w-[340px] flex-col bg-[var(--bg-sidebar)] shadow-menu">
+      <button
+        type="button"
+        className={`absolute inset-0 bg-overlay ${dragging ? "" : "navi-drawer-scrim"}`}
+        style={dragging ? { opacity: dragProgress ?? 0 } : undefined}
+        aria-label="Close sidebar"
+        onClick={onClose}
+      />
+      <aside
+        className={`safe-top safe-bottom absolute inset-y-0 left-0 flex w-[85vw] max-w-[340px] flex-col bg-[var(--bg-sidebar)] shadow-menu ${dragging ? "" : "drawer-enter"}`}
+        style={dragging ? { transform: `translateX(${((dragProgress ?? 0) - 1) * 100}%)`, transition: "none" } : undefined}
+      >
         <div className="flex shrink-0 items-center gap-2 px-4 pb-1 pt-3">
           <label className="flex min-h-10 flex-1 items-center gap-2 rounded-full bg-elev-2 px-3.5">
             <Search size={16} className="shrink-0 text-tertiary" />

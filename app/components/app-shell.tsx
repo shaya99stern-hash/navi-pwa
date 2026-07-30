@@ -29,6 +29,7 @@ import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { UnifiedTopMenu } from "./unified-top-menu";
 import { VoiceModeSheet } from "./voice-mode-sheet";
 
+const EDGE_SWIPE_WIDTH = 300;
 const MAX_CHATS = 40;
 const MAX_MESSAGES = 60;
 const ALLOWED_TYPES = new Set([
@@ -109,6 +110,7 @@ export function AppShell({
   const [contextText, setContextText] = useState<string | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const [atBottom, setAtBottom] = useState(true);
+  const [edgeProgress, setEdgeProgress] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const anchoredUserId = useRef<string | null>(null);
   const anchorTop = useRef(0);
@@ -565,13 +567,39 @@ export function AppShell({
     setActiveId(createId());
   }
 
+  /* The sidebar follows the thumb from the left edge rather than snapping open
+     at a threshold. A mostly-vertical drag is a scroll, so it cancels. */
   function pointerDown(event: ReactPointerEvent) {
-    if (event.clientX <= 26) edgeStart.current = { x: event.clientX, y: event.clientY };
+    if (historyOpen || event.clientX > 26) return;
+    edgeStart.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function pointerMove(event: ReactPointerEvent) {
+    const start = edgeStart.current;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    const dy = Math.abs(event.clientY - start.y);
+    if (dy > Math.abs(dx) && dy > 12) {
+      edgeStart.current = null;
+      setEdgeProgress(null);
+      return;
+    }
+    if (dx <= 0) return;
+    setEdgeProgress(Math.min(1, dx / EDGE_SWIPE_WIDTH));
   }
 
   function pointerUp(event: ReactPointerEvent) {
     const start = edgeStart.current;
     edgeStart.current = null;
+    if (edgeProgress !== null) {
+      const opened = edgeProgress > 0.35;
+      setEdgeProgress(null);
+      if (opened) {
+        haptic("impact-light", preferences.haptics);
+        setHistoryOpen(true);
+      }
+      return;
+    }
     if (!start) return;
     if (event.clientX - start.x > 62 && Math.abs(event.clientY - start.y) < 70) {
       setHistoryOpen(true);
@@ -594,10 +622,13 @@ export function AppShell({
       data-viewport="chat"
       className={`${preferences.density === "compact" ? "density-compact" : "density-comfortable"} relative flex flex-col bg-app text-primary`}
       onPointerDown={pointerDown}
+      onPointerMove={pointerMove}
       onPointerUp={pointerUp}
+      onPointerCancel={pointerUp}
     >
       <HistoryDrawer
         open={historyOpen}
+        dragProgress={edgeProgress}
         chats={chats}
         activeId={activeId}
         haptics={preferences.haptics}
