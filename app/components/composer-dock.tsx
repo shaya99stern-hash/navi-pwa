@@ -27,6 +27,7 @@ import {
   useState
 } from "react";
 import { haptic } from "@/lib/ui/haptics";
+import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 const MAX_ATTACHMENTS = 6;
 const MAX_FILE_BYTES = 6_000_000;
@@ -141,6 +142,7 @@ export function ComposerDock({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [providerReady, setProviderReady] = useState<boolean | null>(null);
   const [touchKeyboard, setTouchKeyboard] = useState(false);
+  const sourceSheet = useSheetDrag({ onDismiss: () => setSourceMenuOpen(false), haptics });
 
   useEffect(() => {
     setTouchKeyboard(window.matchMedia("(pointer: coarse)").matches);
@@ -585,9 +587,10 @@ export function ComposerDock({
             role="dialog"
             aria-modal="true"
             aria-label="Add to message"
+            {...sourceSheet.sheetProps}
             className="navi-sheet absolute inset-x-0 bottom-0 mx-auto w-full max-w-app px-gutter pb-[calc(18px+var(--safe-bottom))] pt-1"
           >
-            <div className="navi-sheet-grabber mb-2" />
+            <div {...sourceSheet.handleProps} className="navi-sheet-grab mb-1 pt-1"><div className="navi-sheet-grabber" /></div>
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <div className="text-[17px]/6 font-semibold text-primary">Add to message</div>
