@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, RotateCcw, Share, TextCursorInput } from "lucide-react";
+import { Check, Copy, PencilLine, RotateCcw, Share, TextCursorInput } from "lucide-react";
 import { useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
@@ -8,13 +8,15 @@ import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 type Props = {
   text: string;
   canRetry: boolean;
+  canEdit: boolean;
   haptics: boolean;
   onClose: () => void;
   onRetry: () => void;
+  onEdit: () => void;
 };
 
 /** Long-press actions for a single message, presented as a native-style sheet. */
-export function MessageActionSheet({ text, canRetry, haptics, onClose, onRetry }: Props) {
+export function MessageActionSheet({ text, canRetry, canEdit, haptics, onClose, onRetry, onEdit }: Props) {
   const [copied, setCopied] = useState(false);
   const sheet = useSheetDrag({ onDismiss: onClose, haptics });
 
@@ -66,6 +68,13 @@ export function MessageActionSheet({ text, canRetry, haptics, onClose, onRetry }
           <Share size={19} strokeWidth={1.8} />
           Share
         </button>
+
+        {canEdit ? (
+          <button type="button" onClick={() => { haptic("selection", haptics); onClose(); onEdit(); }} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[16px]/6 font-normal text-primary active:bg-elev-2">
+            <PencilLine size={19} strokeWidth={1.8} />
+            Edit and resend
+          </button>
+        ) : null}
 
         {canRetry ? (
           <button type="button" onClick={() => { haptic("selection", haptics); onClose(); onRetry(); }} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[16px]/6 font-normal text-primary active:bg-elev-2">

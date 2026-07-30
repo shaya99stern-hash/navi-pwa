@@ -107,7 +107,7 @@ export function AppShell({
   const [scrolled, setScrolled] = useState(false);
   const [streamStatus, setStreamStatus] = useState<NaviStreamStatus | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [contextText, setContextText] = useState<string | null>(null);
+  const [contextMessage, setContextMessage] = useState<{ id: string; text: string; role: string } | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const [atBottom, setAtBottom] = useState(true);
   const [edgeProgress, setEdgeProgress] = useState<number | null>(null);
@@ -525,6 +525,23 @@ export function AppShell({
     }
   }
 
+  /* Editing a question drops it and everything after it, then returns the text
+     to the composer so the thread can be re-run from that point. */
+  function editMessage(id: string, text: string) {
+    if (generating) stop();
+    const index = messages.findIndex((message) => message.id === id);
+    if (index < 0) return;
+    setMessages(messages.slice(0, index));
+    setDraft(text);
+    setStreamStatus(null);
+    clearError();
+    anchoredUserId.current = null;
+    setAutoFollow(true);
+    window.setTimeout(() => {
+      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Chat with Navi"]')?.focus();
+    }, 60);
+  }
+
   function retry() {
     clearError();
     setStreamStatus({
@@ -761,7 +778,7 @@ export function AppShell({
                   theme={theme}
                   haptics={preferences.haptics}
                   onRetry={message.role === "assistant" && index === messages.length - 1 && !generating && online ? retry : undefined}
-                  onLongPress={setContextText}
+                  onLongPress={setContextMessage}
                 />
               ))}
             </div>
@@ -838,13 +855,15 @@ export function AppShell({
         }}
       />
 
-      {contextText ? (
+      {contextMessage ? (
         <MessageActionSheet
-          text={contextText}
+          text={contextMessage.text}
           canRetry={!generating && online}
+          canEdit={contextMessage.role === "user" && !generating}
           haptics={preferences.haptics}
-          onClose={() => setContextText(null)}
+          onClose={() => setContextMessage(null)}
           onRetry={retry}
+          onEdit={() => editMessage(contextMessage.id, contextMessage.text)}
         />
       ) : null}
 

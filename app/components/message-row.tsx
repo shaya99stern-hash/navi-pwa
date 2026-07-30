@@ -11,7 +11,7 @@ function messageFiles(message: UIMessage): Array<{ filename?: string; mediaType?
   return message.parts.filter((part) => part.type === "file").map((part) => part as unknown as { filename?: string; mediaType?: string });
 }
 
-export function MessageRow({ message, streaming, theme, haptics, onRetry, onLongPress }: { message: UIMessage; streaming: boolean; theme: "dark" | "light"; haptics: boolean; onRetry?: () => void; onLongPress?: (text: string) => void }) {
+export function MessageRow({ message, streaming, theme, haptics, onRetry, onLongPress }: { message: UIMessage; streaming: boolean; theme: "dark" | "light"; haptics: boolean; onRetry?: () => void; onLongPress?: (message: { id: string; text: string; role: string }) => void }) {
   const text = messageText(message);
   const files = messageFiles(message);
   const user = message.role === "user";
@@ -30,7 +30,7 @@ export function MessageRow({ message, streaming, theme, haptics, onRetry, onLong
       // A drag is a selection gesture, not a press.
       if (window.getSelection()?.toString()) return;
       haptic("impact-medium", haptics);
-      onLongPress(text);
+      onLongPress({ id: message.id, text, role: message.role });
     }, 520);
   };
 
