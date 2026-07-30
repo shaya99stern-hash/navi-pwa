@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
-import { FolderKanban, Link2, PanelLeft, Search, SquarePen, WifiOff } from "lucide-react";
+import { ChevronDown, FolderKanban, Link2, PanelLeft, Search, SquarePen, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -105,7 +105,11 @@ export function AppShell({
   const [scrolled, setScrolled] = useState(false);
   const [streamStatus, setStreamStatus] = useState<NaviStreamStatus | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [autoFollow, setAutoFollow] = useState(true);
+  const [atBottom, setAtBottom] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const anchoredUserId = useRef<string | null>(null);
+  const anchorTop = useRef(0);
   const edgeStart = useRef<{ x: number; y: number } | null>(null);
   const priorAssistantId = useRef<string | null>(null);
 
@@ -272,20 +276,44 @@ export function AppShell({
     return () => window.clearTimeout(timer);
   }, [activeId, activeProjectId, hydrated, messages, preferences.connectorAccessMode, preferences.saveHistory]);
 
+  /* Sending pins the new user message near the top so the reply has room to
+     stream in beneath it, matching the native app. Scrolling up during a
+     response stops the follow until the reader returns to the bottom. */
   useEffect(() => {
     const scroller = scrollRef.current;
     if (!scroller) return;
+    const lastUser = [...messages].reverse().find((message) => message.role === "user");
+    if (!lastUser || lastUser.id === anchoredUserId.current) return;
+    anchoredUserId.current = lastUser.id;
+    setAutoFollow(true);
     const frame = requestAnimationFrame(() => {
-      const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 180;
-      if (nearBottom || generating) {
-        scroller.scrollTo({
-          top: scroller.scrollHeight,
-          behavior: status === "streaming" ? "auto" : "smooth"
-        });
-      }
+      const node = scroller.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(lastUser.id)}"]`);
+      if (!node) return;
+      const top = Math.max(0, node.offsetTop - 12);
+      anchorTop.current = top;
+      scroller.scrollTo({ top, behavior: "smooth" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [generating, messages, status, streamStatus]);
+  }, [messages]);
+
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || !autoFollow) return;
+    const frame = requestAnimationFrame(() => {
+      const bottom = scroller.scrollHeight - scroller.clientHeight;
+      // While the reply still fits under the anchored message, following the
+      // bottom would scroll the question back off the top of the screen.
+      if (bottom < anchorTop.current) return;
+      scroller.scrollTo({ top: bottom, behavior: status === "streaming" ? "auto" : "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoFollow, generating, messages, status, streamStatus]);
+
+  /* A light tick when the first token lands, so the reply announces itself
+     without needing to be looked at. */
+  useEffect(() => {
+    if (status === "streaming") haptic("selection", preferences.haptics);
+  }, [preferences.haptics, status]);
 
   useEffect(() => {
     if (!speakNextReply || generating || !("speechSynthesis" in window)) return;
@@ -642,7 +670,15 @@ export function AppShell({
         ref={scrollRef}
         data-scroll-region="true"
         className="min-h-0 flex-1"
-        onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 3)}
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          setScrolled(el.scrollTop > 3);
+          const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+          const bottom = distanceFromBottom < 90;
+          setAtBottom(bottom);
+          // Reading back through a response takes precedence over following it.
+          setAutoFollow(bottom);
+        }}
       >
         {messages.length === 0 ? (
           <LaunchSurface online={online}>
@@ -679,6 +715,23 @@ export function AppShell({
           </div>
         )}
       </main>
+
+      {messages.length > 0 && !atBottom ? (
+        <button
+          type="button"
+          onClick={() => {
+            const scroller = scrollRef.current;
+            if (!scroller) return;
+            haptic("selection", preferences.haptics);
+            setAutoFollow(true);
+            scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+          }}
+          className="scroll-to-bottom absolute left-1/2 z-30 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-elev-2 text-secondary shadow-sheet active:scale-95"
+          aria-label="Scroll to latest"
+        >
+          <ChevronDown size={18} />
+        </button>
+      ) : null}
 
       {attachmentError ? (
         <div className="mx-4 mb-1 rounded-2xl border border-[var(--accent-warning)] bg-elev-2 px-3 py-2 text-center text-[12px]/4 font-medium text-warning" role="alert">{attachmentError}</div>
