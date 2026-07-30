@@ -21,6 +21,7 @@ import { ConnectorsSheet } from "./connectors-sheet";
 import { ConversationStatePanel } from "./conversation-state-panel";
 import { HistoryDrawer } from "./history-drawer";
 import { LaunchSurface } from "./launch-surface";
+import { ProviderSetupNotice } from "./provider-setup-notice";
 import { MessageRow } from "./message-row";
 import { ProjectsSheet } from "./projects-sheet";
 import { PwaPlatformBanner } from "./pwa-platform-banner";
@@ -639,7 +640,9 @@ export function AppShell({
         onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 3)}
       >
         {messages.length === 0 ? (
-          <LaunchSurface online={online} />
+          <LaunchSurface online={online}>
+            <ProviderSetupNotice haptics={preferences.haptics} />
+          </LaunchSurface>
         ) : (
           <div className="mx-auto w-full max-w-app px-gutter py-5">
             <div className="message-stack flex flex-col">

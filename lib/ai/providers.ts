@@ -203,7 +203,17 @@ export const ROUTES = {
   hfGlm: hf("zai-org/GLM-5.2", "HF GLM 5.2", "long-context"),
   hfQwen: hf("Qwen/Qwen3.6-35B-A3B", "HF Qwen 3.6", "multimodal"),
   hfKimi: hf("moonshotai/Kimi-K2.6", "HF Kimi K2.6", "coding"),
-  hfMiniMax: hf("MiniMaxAI/MiniMax-M2.7", "HF MiniMax M2.7", "balanced")
+  hfMiniMax: hf("MiniMaxAI/MiniMax-M2.7", "HF MiniMax M2.7", "balanced"),
+
+  /* Long-established weights kept as the tail of the pool. Leading-edge model
+     ids are renamed or retired often; a council whose whole pool 404s produces
+     nothing, so these broaden capability coverage and act as the fallback. */
+  hfDeepSeekR1: hf("deepseek-ai/DeepSeek-R1", "HF DeepSeek R1", "reasoning"),
+  hfLlama70b: hf("meta-llama/Llama-3.3-70B-Instruct", "HF Llama 3.3 70B", "balanced"),
+  hfQwenCoder: hf("Qwen/Qwen2.5-Coder-32B-Instruct", "HF Qwen2.5 Coder 32B", "coding"),
+  hfQwen72b: hf("Qwen/Qwen2.5-72B-Instruct", "HF Qwen2.5 72B", "long-context"),
+  hfMistralSmall: hf("mistralai/Mistral-Small-24B-Instruct-2501", "HF Mistral Small 24B", "fast"),
+  hfGptOssFast: hf("openai/gpt-oss-20b", "HF GPT-OSS 20B", "fast")
 } satisfies Record<string, ProviderRoute>;
 
 function configuredHfRoutes(): ProviderRoute[] {
@@ -211,11 +221,27 @@ function configuredHfRoutes(): ProviderRoute[] {
     ?.split(",")
     .map((value) => value.trim())
     .filter(Boolean)
-    .slice(0, 12)
+    .slice(0, 24)
     .map((model, index) => hf(model, `HF specialist ${index + 1}`, "balanced"));
-  return custom?.length
-    ? custom
-    : [ROUTES.hfGptOss, ROUTES.hfDeepSeek, ROUTES.hfGlm, ROUTES.hfQwen, ROUTES.hfKimi, ROUTES.hfMiniMax];
+  if (custom?.length) return custom;
+
+  /* Capability-ordered so a council of any size still spans reasoning,
+     coding, long context, multimodal, and fast routes rather than stacking
+     several models with the same strengths. */
+  return [
+    ROUTES.hfGptOss,
+    ROUTES.hfDeepSeek,
+    ROUTES.hfGlm,
+    ROUTES.hfKimi,
+    ROUTES.hfQwen,
+    ROUTES.hfMiniMax,
+    ROUTES.hfDeepSeekR1,
+    ROUTES.hfQwenCoder,
+    ROUTES.hfQwen72b,
+    ROUTES.hfLlama70b,
+    ROUTES.hfMistralSmall,
+    ROUTES.hfGptOssFast
+  ];
 }
 
 export function availableSwarmRoutes(availability: ProviderAvailability, tools: ToolPolicy): ProviderRoute[] {

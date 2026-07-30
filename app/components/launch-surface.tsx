@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 function greetingForHour(hour: number): string {
   if (hour < 5) return "Up late?";
@@ -9,7 +9,7 @@ function greetingForHour(hour: number): string {
   return "Good evening";
 }
 
-export function LaunchSurface({ online }: { online: boolean }) {
+export function LaunchSurface({ online, children }: { online: boolean; children?: ReactNode }) {
   const [greeting, setGreeting] = useState("Good evening");
 
   useEffect(() => {
@@ -30,6 +30,10 @@ export function LaunchSurface({ online }: { online: boolean }) {
             You&apos;re offline. Saved chats stay available on this device.
           </p>
         ) : null}
+
+        {/* Setup guidance belongs with the greeting so it is on screen, not
+            pushed below the fold by the centred layout. */}
+        {children}
       </div>
     </div>
   );
