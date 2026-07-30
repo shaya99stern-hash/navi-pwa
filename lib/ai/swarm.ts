@@ -8,6 +8,7 @@ import {
 } from "./swarm-router";
 import type { NaviStreamStatus, ResponseStyle, ToolPolicy } from "./types";
 import { validateArtifactPayload } from "../security/artifacts";
+import { APP_KNOWLEDGE } from "./app-knowledge";
 import { NAVI_CONSTITUTION } from "./navi-constitution";
 
 const MAX_COUNCIL_TOKENS = 950;
@@ -214,6 +215,7 @@ function candidateSystem(profile: SwarmProfile, task: SwarmTask, style: Response
   return [
     "You are a private candidate-synthesis stage inside Navi.",
     NAVI_CONSTITUTION,
+    APP_KNOWLEDGE,
     TEAM_DOCTRINE,
     profileInstruction(profile),
     taskInstruction(task),
@@ -230,6 +232,7 @@ function verificationSystem(profile: SwarmProfile, task: SwarmTask, style: Respo
   return [
     "You are Navi's final private judge and verifier.",
     NAVI_CONSTITUTION,
+    APP_KNOWLEDGE,
     TEAM_DOCTRINE,
     profileInstruction(profile),
     taskInstruction(task),
