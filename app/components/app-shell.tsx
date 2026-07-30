@@ -16,6 +16,7 @@ import type { AttachmentMeta, NaviPreferences, NaviProject, NaviStreamStatus, St
 import { DEFAULT_PREFERENCES, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
 import { clearLocalState, loadLocalState, setLocalValue } from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
+import { persistThemeCookie } from "@/lib/ui/theme-cookie";
 import { ComposerDock } from "./composer-dock";
 import { ConnectorsSheet } from "./connectors-sheet";
 import { ConversationStatePanel } from "./conversation-state-panel";
@@ -212,6 +213,7 @@ export function AppShell({
       document.documentElement.dataset.theme = next;
       document.documentElement.classList.toggle("dark", next === "dark");
       localStorage.setItem("navi.theme.v3", next);
+      persistThemeCookie(next);
     };
     apply();
     const media = window.matchMedia("(prefers-color-scheme: light)");
