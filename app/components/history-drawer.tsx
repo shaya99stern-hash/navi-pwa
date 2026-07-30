@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { StoredChat } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
+import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 type Props = {
   open: boolean;
@@ -35,6 +36,7 @@ export function HistoryDrawer({ open, chats, activeId, haptics, onClose, onNew, 
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<StoredChat | null>(null);
   const holdTimer = useRef<number | null>(null);
+  const actionSheet = useSheetDrag({ onDismiss: () => setSelected(null), haptics });
   const startX = useRef<number | null>(null);
 
   useEffect(() => {
@@ -177,8 +179,8 @@ export function HistoryDrawer({ open, chats, activeId, haptics, onClose, onNew, 
 
       {selected ? (
         <div className="fixed inset-0 z-[110] flex items-end justify-center bg-overlay" onClick={() => setSelected(null)}>
-          <div className="navi-sheet w-full max-w-md overflow-hidden pb-[var(--safe-bottom)]" onClick={(event) => event.stopPropagation()}>
-            <div className="navi-sheet-grabber" />
+          <div {...actionSheet.sheetProps} className="navi-sheet w-full max-w-md overflow-hidden pb-[var(--safe-bottom)]" onClick={(event) => event.stopPropagation()}>
+            <div {...actionSheet.handleProps} className="navi-sheet-grab pt-1"><div className="navi-sheet-grabber" /></div>
             <div className="border-b border-[var(--border-subtle)] px-5 py-3">
               <div className="truncate text-[15px]/[22px] font-medium text-primary">{selected.title}</div>
               <div className="truncate text-[12px]/4 font-medium text-tertiary">{selected.preview}</div>

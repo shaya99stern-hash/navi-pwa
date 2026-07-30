@@ -351,6 +351,15 @@ textarea {
   animation: sheet-in var(--navi-motion-sheet) var(--navi-ease-sheet) both;
 }
 
+.navi-sheet-grab {
+  /* Generous grab target so the sheet can be dragged without hunting for the
+     3px bar, matching how a native sheet handle behaves. */
+  display: block;
+  width: 100%;
+  padding-bottom: 6px;
+  touch-action: none;
+}
+
 .navi-sheet-grabber {
   width: 36px;
   height: 5px;

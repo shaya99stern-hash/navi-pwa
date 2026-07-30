@@ -11,6 +11,7 @@ import {
   type PwaUpdateStatus
 } from "@/lib/pwa-update";
 import { haptic } from "@/lib/ui/haptics";
+import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 type ProviderAvailability = { gemini: boolean; groq: boolean; huggingface: boolean };
 
@@ -86,6 +87,7 @@ export function UnifiedTopMenu({
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProviderAvailability>(EMPTY_PROVIDERS);
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus>(DEFAULT_UPDATE_STATUS);
+  const sheet = useSheetDrag({ onDismiss: onClose, haptics: preferences.haptics });
 
   useEffect(() => {
     const receiveUpdateStatus = (event: Event) => {
@@ -181,8 +183,8 @@ export function UnifiedTopMenu({
       {open ? (
         <div className="fixed inset-0 z-[90]">
           <button type="button" aria-label="Close options" onClick={onClose} className="absolute inset-0 bg-overlay" />
-          <section className="navi-sheet absolute inset-x-0 bottom-0 mx-auto flex max-h-[86dvh] w-full max-w-[720px] flex-col overflow-hidden md:max-w-[480px]">
-            <div className="navi-sheet-grabber shrink-0" />
+          <section {...sheet.sheetProps} className="navi-sheet absolute inset-x-0 bottom-0 mx-auto flex max-h-[86dvh] w-full max-w-[720px] flex-col overflow-hidden md:max-w-[480px]">
+            <div {...sheet.handleProps} className="navi-sheet-grab shrink-0 pt-1"><div className="navi-sheet-grabber" /></div>
             <header className="flex h-12 shrink-0 items-center justify-between px-4">
               <div className="text-[17px]/6 font-semibold tracking-[-0.01em] text-primary">Options</div>
               <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-elev-2 text-secondary active:bg-elev-3" aria-label="Close menu"><X size={18} /></button>
