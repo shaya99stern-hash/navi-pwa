@@ -22,6 +22,7 @@ import { ConversationStatePanel } from "./conversation-state-panel";
 import { HistoryDrawer } from "./history-drawer";
 import { LaunchSurface } from "./launch-surface";
 import { ProviderSetupNotice } from "./provider-setup-notice";
+import { MessageActionSheet } from "./message-action-sheet";
 import { MessageRow } from "./message-row";
 import { ProjectsSheet } from "./projects-sheet";
 import { PwaPlatformBanner } from "./pwa-platform-banner";
@@ -105,6 +106,7 @@ export function AppShell({
   const [scrolled, setScrolled] = useState(false);
   const [streamStatus, setStreamStatus] = useState<NaviStreamStatus | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [contextText, setContextText] = useState<string | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const [atBottom, setAtBottom] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -695,7 +697,25 @@ export function AppShell({
           setAutoFollow(bottom);
         }}
       >
-        {messages.length === 0 ? (
+        {messages.length === 0 && !hydrated && initialChatId ? (
+          /* Restoring a saved chat: without this the greeting flashes for a
+             frame before the stored messages arrive from IndexedDB. */
+          <div className="mx-auto w-full max-w-app px-gutter py-5" aria-hidden="true">
+            <div className="message-stack flex flex-col">
+              <div className="flex justify-end"><div className="skeleton-line h-11 w-[62%] rounded-[18px]" /></div>
+              <div className="w-full space-y-2">
+                <div className="skeleton-line h-4 w-[94%] rounded-md" />
+                <div className="skeleton-line h-4 w-[88%] rounded-md" />
+                <div className="skeleton-line h-4 w-[70%] rounded-md" />
+              </div>
+              <div className="flex justify-end"><div className="skeleton-line h-11 w-[45%] rounded-[18px]" /></div>
+              <div className="w-full space-y-2">
+                <div className="skeleton-line h-4 w-[90%] rounded-md" />
+                <div className="skeleton-line h-4 w-[64%] rounded-md" />
+              </div>
+            </div>
+          </div>
+        ) : messages.length === 0 ? (
           <LaunchSurface online={online}>
             <ProviderSetupNotice haptics={preferences.haptics} />
           </LaunchSurface>
@@ -710,6 +730,7 @@ export function AppShell({
                   theme={theme}
                   haptics={preferences.haptics}
                   onRetry={message.role === "assistant" && index === messages.length - 1 && !generating && online ? retry : undefined}
+                  onLongPress={setContextText}
                 />
               ))}
             </div>
@@ -785,6 +806,16 @@ export function AppShell({
           setStreamStatus({ stage: "interrupted", detail: "You stopped this response." });
         }}
       />
+
+      {contextText ? (
+        <MessageActionSheet
+          text={contextText}
+          canRetry={!generating && online}
+          haptics={preferences.haptics}
+          onClose={() => setContextText(null)}
+          onRetry={retry}
+        />
+      ) : null}
 
       <VoiceModeSheet
         open={voiceOpen}
