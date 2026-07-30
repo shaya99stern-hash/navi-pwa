@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, RefreshCw, Share, Smartphone, X } from "lucide-react";
+import { RefreshCw, Share, Smartphone, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -142,49 +142,43 @@ export function PwaPlatformBanner({ inline = false }: { inline?: boolean } = {})
     <aside
       className={
         inline
-          ? "mx-auto mb-2 w-full max-w-app shrink-0 rounded-[22px] border border-[var(--border-strong)] bg-elev-1 p-3"
-          : "fixed inset-x-3 bottom-[calc(var(--safe-bottom)+84px)] z-[70] mx-auto max-w-[560px] rounded-[22px] border border-[var(--border-strong)] bg-elev-1 p-3 shadow-sheet"
+          ? "mx-auto mb-2 w-full max-w-app shrink-0 rounded-[18px] border border-[var(--border-subtle)] bg-elev-2 p-2.5"
+          : "fixed inset-x-3 bottom-[calc(var(--safe-bottom)+84px)] z-[70] mx-auto max-w-[560px] rounded-[18px] border border-[var(--border-subtle)] bg-elev-2 p-2.5 shadow-sheet"
       }
       role="status"
       aria-live="polite"
     >
-      <div className="flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--selection-bg)] text-accent">
-          {mode === "update" ? <RefreshCw size={20} /> : mode === "ios" ? <Share size={20} /> : <Smartphone size={20} />}
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--selection-bg)] text-accent">
+          {mode === "update" ? <RefreshCw size={16} /> : mode === "ios" ? <Share size={16} /> : <Smartphone size={16} />}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[14px]/5 font-semibold text-primary">
-            {mode === "update" ? "NaviOS Hub update ready" : mode === "ios" ? "Install NaviOS Hub on iPhone" : "Install NaviOS Hub"}
+          <span className="block truncate text-[13px]/[18px] font-semibold text-primary">
+            {mode === "update" ? "Update ready" : mode === "ios" ? "Add to Home Screen" : "Install NaviOS Hub"}
           </span>
-          <span className="mt-0.5 block text-[11px]/4 font-medium text-tertiary">
+          <span className="block truncate text-[11px]/4 font-medium text-tertiary">
             {mode === "update"
-              ? updateStatus?.message
+              ? "Restart to apply the newest version."
               : mode === "ios"
-                ? "In Safari, tap Share, then Add to Home Screen. NaviOS Hub opens full-screen and keeps chats, projects, and drafts on this device."
-                : "Add NaviOS Hub to your device for a full-screen workspace and faster return access."}
+                ? "Tap Share, then Add to Home Screen."
+                : "Full-screen workspace and faster access."}
           </span>
         </span>
+
+        {mode === "update" ? (
+          <button type="button" onClick={requestPwaUpdate} className="min-h-9 shrink-0 rounded-full bg-accent px-3.5 text-[12px]/4 font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed">Restart</button>
+        ) : mode === "install" ? (
+          <button type="button" onClick={() => void install()} disabled={installing} className="min-h-9 shrink-0 rounded-full bg-accent px-3.5 text-[12px]/4 font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed disabled:opacity-60">{installing ? "Opening…" : "Install"}</button>
+        ) : null}
+
         <button
           type="button"
           onClick={mode === "update" ? () => setDismissedUpdate(true) : dismissInstall}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3"
-          aria-label={mode === "update" ? "Update later" : "Dismiss install guidance"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-tertiary active:bg-elev-3"
+          aria-label={mode === "update" ? "Update later" : "Dismiss"}
         >
-          <X size={18} />
+          <X size={16} />
         </button>
-      </div>
-
-      <div className="mt-3 flex gap-2 pl-[56px]">
-        {mode === "update" ? (
-          <>
-            <button type="button" onClick={requestPwaUpdate} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-accent px-4 text-[13px]/5 font-semibold text-white active:bg-accent-pressed"><RefreshCw size={16} />Update now</button>
-            <button type="button" onClick={() => setDismissedUpdate(true)} className="min-h-11 rounded-2xl bg-elev-2 px-4 text-[13px]/5 font-semibold text-secondary active:bg-elev-3">Later</button>
-          </>
-        ) : mode === "install" ? (
-          <button type="button" onClick={() => void install()} disabled={installing} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-accent px-4 text-[13px]/5 font-semibold text-white active:bg-accent-pressed disabled:opacity-60"><Download size={16} />{installing ? "Opening installer…" : "Install app"}</button>
-        ) : (
-          <button type="button" onClick={dismissInstall} className="min-h-11 flex-1 rounded-2xl bg-elev-2 px-4 text-[13px]/5 font-semibold text-secondary active:bg-elev-3">Got it</button>
-        )}
       </div>
     </aside>
   );

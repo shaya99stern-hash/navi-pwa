@@ -214,15 +214,17 @@ export function ComposerDock({
 
   const placeholder = attachmentCount ? "Add instructions for these files" : "Chat with Navi";
 
+  /* Idle status is deliberately empty: the thinking indicator in the thread
+     already reports progress while generating. */
   const footer = voiceMessage
     ?? attachmentMessage
     ?? (!online
       ? "Offline · your draft is saved locally"
       : !available
-        ? "Add a Gemini, Groq, or Hugging Face key in Vercel to enable Navi"
+        ? "Add a Gemini, Groq, or Hugging Face key in Vercel to enable replies"
         : attachmentCount
-          ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready · ${statusText}`
-          : statusText);
+          ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready`
+          : null);
 
   const footerTone = !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
 
@@ -561,8 +563,12 @@ export function ComposerDock({
             </div>
           </form>
 
-          <div className={`flex min-h-6 items-center justify-center px-3 pt-1 text-center text-[10px]/4 font-semibold ${footerTone}`} role="status" aria-live="polite">
-            {footer}
+          {/* Only surface a line here when it is actionable. A permanent status
+              caption under the composer is noise the native app never shows. */}
+          <div className="flex items-center justify-center px-3 text-center" role="status" aria-live="polite">
+            {footer ? (
+              <span className={`block pt-1 text-[11px]/4 font-medium ${footerTone}`}>{footer}</span>
+            ) : null}
           </div>
         </div>
       </div>

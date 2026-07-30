@@ -581,8 +581,13 @@ export function AppShell({
             <div className="font-display truncate text-[19px]/6 tracking-[-0.01em] text-primary">NaviOS Hub</div>
           ) : (
             <>
-              <div className="truncate px-1 text-[16px]/5 font-semibold tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>
-              <div className="truncate text-[11px]/[14px] font-medium text-tertiary">{activeProject ? activeProject.name : activePreset.label}</div>
+              <div className="truncate px-1 text-[16px]/5 font-medium tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>
+              {/* Only a project earns a subtitle; the model is already shown on
+                  the composer chip, and repeating it here is not what the
+                  native app does. */}
+              {activeProject ? (
+                <div className="truncate text-[11px]/[14px] font-medium text-tertiary">{activeProject.name}</div>
+              ) : null}
             </>
           )}
         </div>
