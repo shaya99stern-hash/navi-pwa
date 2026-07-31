@@ -42,17 +42,45 @@ type SheetDrag = {
  * out of frame — returning it to the open position first would read as the
  * sheet snapping back and then vanishing.
  */
-export function useSheetDrag({ onDismiss, haptics = true }: { onDismiss: () => void; haptics?: boolean }): SheetDrag {
+export function useSheetDrag({
+  open = true,
+  onDismiss,
+  haptics = true
+}: {
+  /**
+   * Whether the sheet is currently presented. Sheets stay mounted while
+   * rendering nothing, so without this the hook keeps the state from the last
+   * dismissal and reopens the sheet already thrown off-screen and inert.
+   */
+  open?: boolean;
+  onDismiss: () => void;
+  haptics?: boolean;
+}): SheetDrag {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [exit, setExit] = useState<{ distance: number; duration: number } | null>(null);
   // The entry keyframes animate `transform` with fill-mode both, which would
   // keep overriding the inline transform once they finish.
   const [entered, setEntered] = useState(false);
+  const [presented, setPresented] = useState(open);
   const start = useRef<{ y: number; t: number } | null>(null);
   const latest = useRef<{ y: number; t: number } | null>(null);
   const sheet = useRef<HTMLElement | null>(null);
   const exitTimer = useRef<number | null>(null);
+
+  // Re-presenting has to start from a clean slate, and it has to happen during
+  // render: an effect would leave one painted frame of the previous exit.
+  if (open !== presented) {
+    setPresented(open);
+    if (open) {
+      if (exitTimer.current) window.clearTimeout(exitTimer.current);
+      exitTimer.current = null;
+      setOffset(0);
+      setDragging(false);
+      setExit(null);
+      setEntered(false);
+    }
+  }
 
   useEffect(() => () => {
     if (exitTimer.current) window.clearTimeout(exitTimer.current);

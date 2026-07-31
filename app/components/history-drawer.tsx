@@ -41,7 +41,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
   const [selected, setSelected] = useState<StoredChat | null>(null);
   const holdTimer = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const actionSheet = useSheetDrag({ onDismiss: () => setSelected(null), haptics });
+  const actionSheet = useSheetDrag({ open: selected !== null, onDismiss: () => setSelected(null), haptics });
   const startX = useRef<number | null>(null);
 
   useEffect(() => {

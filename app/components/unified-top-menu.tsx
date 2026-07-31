@@ -17,6 +17,8 @@ type ProviderAvailability = { gemini: boolean; groq: boolean; huggingface: boole
 
 type Props = {
   open: boolean;
+  /** Deep links land on a fixed section rather than the last one used. */
+  initialSection?: MenuSection;
   preferences: NaviPreferences;
   pendingFiles: File[];
   onToggle: () => void;
@@ -80,6 +82,7 @@ function SettingRow({ title, detail, action }: { title: string; detail?: string;
 
 export function UnifiedTopMenu({
   open,
+  initialSection,
   preferences,
   pendingFiles,
   onToggle,
@@ -95,13 +98,13 @@ export function UnifiedTopMenu({
   onExport
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [section, setSection] = useState<MenuSection>(preferences.lastMenuSection);
+  const [section, setSection] = useState<MenuSection>(initialSection ?? preferences.lastMenuSection);
   const [servers, setServers] = useState<PublicMcpServer[]>([]);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProviderAvailability>(EMPTY_PROVIDERS);
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus>(DEFAULT_UPDATE_STATUS);
-  const sheet = useSheetDrag({ onDismiss: onClose, haptics: preferences.haptics });
+  const sheet = useSheetDrag({ open, onDismiss: onClose, haptics: preferences.haptics });
   const [voiceLanguage, setVoiceLanguage] = useState("auto");
 
   useEffect(() => {
@@ -126,7 +129,7 @@ export function UnifiedTopMenu({
 
   useEffect(() => {
     if (!open) return;
-    setSection(preferences.lastMenuSection);
+    setSection(initialSection ?? preferences.lastMenuSection);
     void Promise.all([
       fetch("/api/mcp/connect", { cache: "no-store" })
         .then((response) => response.json())
@@ -137,7 +140,7 @@ export function UnifiedTopMenu({
         .then((data: { providers?: ProviderAvailability }) => setProviders(data.providers ?? EMPTY_PROVIDERS))
         .catch(() => setProviders(EMPTY_PROVIDERS))
     ]);
-  }, [open, preferences.lastMenuSection]);
+  }, [initialSection, open, preferences.lastMenuSection]);
 
   function update(patch: Partial<NaviPreferences>) {
     onPreferences({ ...preferences, ...patch });

@@ -12,7 +12,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent
 } from "react";
-import type { AttachmentMeta, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
+import type { AttachmentMeta, MenuSection, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
 import { DEFAULT_PREFERENCES, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
 import { clearLocalState, loadLocalState, setLocalValue } from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
@@ -104,6 +104,12 @@ export function AppShell({
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [menuOpen, setMenuOpen] = useState(initialSheet === "settings" || initialSheet === "customize");
+  // /settings and /customize used to be distinct screens. Pin them to the
+  // section that carries what each one showed, rather than dropping the user on
+  // whichever tab they happened to open last.
+  const [menuSection, setMenuSection] = useState<MenuSection | undefined>(
+    initialSheet === "settings" ? "system" : initialSheet === "customize" ? "models" : undefined
+  );
   const [historyOpen, setHistoryOpen] = useState(initialSheet === "history");
   const [projectsOpen, setProjectsOpen] = useState(initialSheet === "projects");
   const [connectorsOpen, setConnectorsOpen] = useState(initialSheet === "connectors");
@@ -728,10 +734,11 @@ export function AppShell({
         </button>
         <UnifiedTopMenu
           open={menuOpen}
+          initialSection={menuSection}
           preferences={preferences}
           pendingFiles={pendingFiles}
           onToggle={() => setMenuOpen((value) => !value)}
-          onClose={() => setMenuOpen(false)}
+          onClose={() => { setMenuOpen(false); setMenuSection(undefined); }}
           onPreferences={updatePreferences}
           onOpenHistory={() => setHistoryOpen(true)}
           onOpenProjects={() => { setMenuOpen(false); setProjectsOpen(true); }}

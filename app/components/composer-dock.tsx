@@ -146,7 +146,7 @@ export function ComposerDock({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [providerReady, setProviderReady] = useState<boolean | null>(null);
   const [touchKeyboard, setTouchKeyboard] = useState(false);
-  const sourceSheet = useSheetDrag({ onDismiss: () => setSourceMenuOpen(false), haptics });
+  const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
 
   useEffect(() => {
     setTouchKeyboard(window.matchMedia("(pointer: coarse)").matches);

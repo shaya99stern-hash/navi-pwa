@@ -43,7 +43,7 @@ export function ArtifactsSheet({
   onClose: () => void;
   onOpenChat: (chat: StoredChat) => void;
 }) {
-  const sheet = useSheetDrag({ onDismiss: onClose, haptics });
+  const sheet = useSheetDrag({ open, onDismiss: onClose, haptics });
   if (!open) return null;
   const artifacts = collectArtifacts(chats);
 
