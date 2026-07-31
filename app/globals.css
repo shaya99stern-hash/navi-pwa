@@ -118,6 +118,31 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* iOS raises its own selection/save callout at roughly the same threshold as
+   the in-app long-press, so a single press on a message would fire both. Chrome
+   suppresses it; prose keeps it, because selecting reply text is wanted. */
+button,
+a,
+label,
+img,
+svg,
+[role="button"],
+[data-app-shell] header,
+.navi-sheet,
+.navi-sheet-grab,
+.navi-composer,
+aside {
+  -webkit-touch-callout: none;
+}
+
+.navi-markdown,
+.navi-markdown *,
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-touch-callout: default;
+}
+
 html,
 body {
   width: 100%;
@@ -200,7 +225,6 @@ textarea {
   overflow: hidden;
   background: var(--bg-app);
   transform: translateZ(0);
-  will-change: top, left, width, height;
   transition: background-color 180ms ease;
 }
 
@@ -226,6 +250,10 @@ textarea {
 
 [data-scroll-region="true"]::-webkit-scrollbar {
   display: none;
+}
+
+:root[data-streaming="true"] [data-scroll-region="true"] {
+  scroll-behavior: auto;
 }
 
 :root[data-keyboard-open="true"] [data-scroll-region="true"] {
@@ -349,6 +377,12 @@ textarea {
   border-radius: var(--navi-radius-sheet) var(--navi-radius-sheet) 0 0;
   box-shadow: var(--navi-shadow-sheet);
   animation: sheet-in var(--navi-motion-sheet) var(--navi-ease-sheet) both;
+}
+
+.navi-sheet .scroll-area,
+.navi-sheet [data-sheet-scroll],
+aside .scroll-area {
+  overscroll-behavior: contain;
 }
 
 .navi-sheet-grab {
