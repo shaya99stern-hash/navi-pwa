@@ -31,6 +31,16 @@ async function clearNaviShellCaches(): Promise<void> {
   await Promise.all(keys.filter((key) => key.startsWith("navi-")).map((key) => window.caches.delete(key)));
 }
 
+/**
+ * Registration can fail because the browser refuses service workers entirely
+ * (iOS Safari private browsing, hardened profiles). Workbox then trips over its
+ * own undefined registration, so match on the shape of that failure too.
+ */
+function isServiceWorkerUnavailable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /SecurityError|not supported|unsupported|denied|reading 'waiting'|undefined \(reading/i.test(message);
+}
+
 export default function PWARegister() {
   useEffect(() => {
     if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
@@ -148,6 +158,9 @@ export default function PWARegister() {
         window.setTimeout(automaticCheck, 1_200);
       })
       .catch((error) => {
+        // Private browsing and locked-down profiles refuse registration outright.
+        // Offline caching is simply unavailable there — it is not an error worth surfacing.
+        if (isServiceWorkerUnavailable(error)) return;
         console.error("Navi service-worker registration failed:", error);
         emitPwaUpdateStatus({ phase: "error", message: "Automatic app updates are temporarily unavailable." });
       });

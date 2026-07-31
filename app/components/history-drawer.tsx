@@ -13,7 +13,6 @@ import {
   UserRound,
   X
 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { StoredChat } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
@@ -28,16 +27,20 @@ type Props = {
   haptics: boolean;
   onClose: () => void;
   onNew: () => void;
+  onProjects: () => void;
+  onArtifacts: () => void;
+  onSettings: () => void;
   onOpen: (chat: StoredChat) => void;
   onRename: (id: string, title: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, haptics, onClose, onNew, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<StoredChat | null>(null);
   const holdTimer = useRef<number | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const actionSheet = useSheetDrag({ onDismiss: () => setSelected(null), haptics });
   const startX = useRef<number | null>(null);
 
@@ -79,6 +82,19 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
       haptic("impact-light", haptics);
     }
     startX.current = null;
+  }
+
+  /** Sidebar destinations are sheets, not routes — close the drawer, then present. */
+  function openSheet(present: () => void) {
+    haptic("selection", haptics);
+    onClose();
+    present();
+  }
+
+  function showAllChats() {
+    haptic("selection", haptics);
+    setQuery("");
+    listRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function rename(chat: StoredChat) {
@@ -141,21 +157,21 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
             <SquarePen size={19} strokeWidth={1.8} className="text-secondary" />
             New chat
           </button>
-          <Link href="/recents" onClick={onClose} className="flex min-h-11 items-center gap-3 rounded-[10px] px-3 text-[15px]/5 font-medium text-primary active:bg-elev-2">
+          <button type="button" onClick={showAllChats} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[15px]/5 font-medium text-primary active:bg-elev-2">
             <MessageCircle size={19} strokeWidth={1.8} className="text-secondary" />
             Chats
-          </Link>
-          <Link href="/projects" onClick={onClose} className="flex min-h-11 items-center gap-3 rounded-[10px] px-3 text-[15px]/5 font-medium text-primary active:bg-elev-2">
+          </button>
+          <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[15px]/5 font-medium text-primary active:bg-elev-2">
             <FolderKanban size={19} strokeWidth={1.8} className="text-secondary" />
             Projects
-          </Link>
-          <Link href="/artifacts" onClick={onClose} className="flex min-h-11 items-center gap-3 rounded-[10px] px-3 text-[15px]/5 font-medium text-primary active:bg-elev-2">
+          </button>
+          <button type="button" onClick={() => openSheet(onArtifacts)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[15px]/5 font-medium text-primary active:bg-elev-2">
             <Shapes size={19} strokeWidth={1.8} className="text-secondary" />
             Artifacts
-          </Link>
+          </button>
         </nav>
 
-        <div className="scroll-area min-h-0 flex-1 overflow-y-auto px-2 pb-5 pt-3">
+        <div ref={listRef} className="scroll-area min-h-0 flex-1 overflow-y-auto px-2 pb-5 pt-3">
           {pinned.length ? (
             <>
               <div className="px-3 pb-1 text-[12px]/4 font-semibold text-tertiary">Pinned</div>
@@ -176,7 +192,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
         </div>
 
         <footer className="shrink-0 border-t border-[var(--border-subtle)] px-2 py-2">
-          <Link href="/settings" onClick={onClose} className="flex min-h-12 items-center gap-3 rounded-[10px] px-2 text-left active:bg-elev-2">
+          <button type="button" onClick={() => openSheet(onSettings)} className="flex min-h-12 w-full items-center gap-3 rounded-[10px] px-2 text-left active:bg-elev-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-[13px] font-semibold text-[var(--accent-on-primary)]">
               <UserRound size={16} />
             </span>
@@ -185,7 +201,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
               <span className="block text-[11px]/4 font-medium text-tertiary">Private · on this device</span>
             </span>
             <Settings size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-          </Link>
+          </button>
         </footer>
       </aside>
 

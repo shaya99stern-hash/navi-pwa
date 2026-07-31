@@ -1,2 +1,5 @@
-import { WorkspaceLibrary } from "../components/workspace-library";
-export default function CustomizePage() { return <WorkspaceLibrary view="customize" />; }
+import { AppShell } from "../components/app-shell";
+
+export default function CustomizePage() {
+  return <AppShell initialSheet="customize" />;
+}

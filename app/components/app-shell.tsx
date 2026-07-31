@@ -25,6 +25,7 @@ import { LaunchSurface } from "./launch-surface";
 import { ProviderSetupNotice } from "./provider-setup-notice";
 import { MessageActionSheet } from "./message-action-sheet";
 import { MessageRow } from "./message-row";
+import { ArtifactsSheet } from "./artifacts-sheet";
 import { ProjectsSheet } from "./projects-sheet";
 import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { UnifiedTopMenu } from "./unified-top-menu";
@@ -78,14 +79,19 @@ function stopSpeaking() {
   if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
+/** Which layer a deep link should open over the chat, rather than navigating. */
+export type InitialSheet = "history" | "projects" | "artifacts" | "connectors" | "settings" | "customize";
+
 export function AppShell({
   initialChatId,
   initialDraft,
-  initialView = "chat"
+  initialView = "chat",
+  initialSheet
 }: {
   initialChatId?: string;
   initialDraft?: string;
   initialView?: "chat" | "voice";
+  initialSheet?: InitialSheet;
 } = {}) {
   const router = useRouter();
   const initialChatRef = useRef(initialChatId ?? createId());
@@ -97,10 +103,11 @@ export function AppShell({
   const [draft, setDraft] = useState(initialDraft ?? "");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [projectsOpen, setProjectsOpen] = useState(false);
-  const [connectorsOpen, setConnectorsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(initialSheet === "settings" || initialSheet === "customize");
+  const [historyOpen, setHistoryOpen] = useState(initialSheet === "history");
+  const [projectsOpen, setProjectsOpen] = useState(initialSheet === "projects");
+  const [connectorsOpen, setConnectorsOpen] = useState(initialSheet === "connectors");
+  const [artifactsOpen, setArtifactsOpen] = useState(initialSheet === "artifacts");
   const [voiceOpen, setVoiceOpen] = useState(initialView === "voice");
   const [speakNextReply, setSpeakNextReply] = useState(false);
   const [online, setOnline] = useState(true);
@@ -576,6 +583,17 @@ export function AppShell({
     setActiveId(createId());
   }
 
+  function exportData() {
+    const payload = JSON.stringify({ exportedAt: new Date().toISOString(), chats, projects, preferences }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `navi-export-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    haptic("success", preferences.haptics);
+  }
+
   async function clearData() {
     if (generating) stop();
     stopSpeaking();
@@ -662,6 +680,9 @@ export function AppShell({
         haptics={preferences.haptics}
         onClose={() => setHistoryOpen(false)}
         onNew={newChat}
+        onProjects={() => setProjectsOpen(true)}
+        onArtifacts={() => setArtifactsOpen(true)}
+        onSettings={() => setMenuOpen(true)}
         onOpen={openChat}
         onRename={renameChat}
         onPin={pinChat}
@@ -717,6 +738,7 @@ export function AppShell({
           onClearFiles={() => setPendingFiles([])}
           onClearThread={clearThread}
           onClearData={() => void clearData()}
+          onExport={exportData}
         />
       </header>
 
@@ -886,6 +908,14 @@ export function AppShell({
         onClose={() => setVoiceOpen(false)}
         onUseTranscript={(text) => setDraft((current) => `${current}${current.trim() ? " " : ""}${text}`)}
         onSendTranscript={(text, speakReply) => void submitVoiceTranscript(text, speakReply)}
+      />
+
+      <ArtifactsSheet
+        open={artifactsOpen}
+        chats={chats}
+        haptics={preferences.haptics}
+        onClose={() => setArtifactsOpen(false)}
+        onOpenChat={openChat}
       />
 
       <ProjectsSheet
