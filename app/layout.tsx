@@ -12,6 +12,7 @@ import {
   isClerkUserAllowed
 } from "@/lib/auth/config";
 import { CLERK_SESSION_COOKIE_NAME, verifyClerkSessionToken } from "@/lib/auth/session";
+import { SPLASH_SCREENS } from "@/lib/ui/splash-screens";
 import "./globals.css";
 import "./shell.css";
 import { GlobalPwaPlatformBanner } from "./components/pwa-platform-banner";
@@ -153,6 +154,12 @@ try {
     <html lang="en-US" data-theme="dark" className={`dark ${displaySerif.variable}`} suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        {/* Without these an installed PWA boots to a blank white screen. Each
+            image is the app background with the brand mark centred, so the
+            handoff to the launch surface shows no colour change. */}
+        {SPLASH_SCREENS.map((screen) => (
+          <link key={screen.href} rel="apple-touch-startup-image" href={screen.href} media={screen.media} />
+        ))}
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         <script dangerouslySetInnerHTML={{ __html: storageBootScript }} />
       </head>
