@@ -330,6 +330,15 @@ export function AppShell({
     return () => observer.disconnect();
   }, [autoFollow]);
 
+  /* CSS smooth scrolling wins over scrollTo({ behavior: "auto" }), so every
+     streamed token would animate and the thread would float behind the text. */
+  useEffect(() => {
+    document.documentElement.dataset.streaming = generating ? "true" : "false";
+    return () => {
+      delete document.documentElement.dataset.streaming;
+    };
+  }, [generating]);
+
   /* A light tick when the first token lands, so the reply announces itself
      without needing to be looked at. */
   useEffect(() => {
