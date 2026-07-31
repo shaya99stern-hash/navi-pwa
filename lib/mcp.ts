@@ -87,6 +87,20 @@ export async function callMcp(serverId: string, method: string, params: unknown,
   return payload?.result ?? payload;
 }
 
+/**
+ * Per-server predicate for "this tool needs the user to confirm it", so a
+ * caller can filter a whole tool list without re-reading the registry once per
+ * tool. Servers absent from the map are not configured at all.
+ */
+export function getMcpToolPolicy(): Map<string, (toolName: string) => boolean> {
+  return new Map(
+    getMcpRegistry().map((server) => [
+      server.id,
+      (toolName: string) => (server.readOnly ? false : server.writeTools?.includes(toolName) ?? true)
+    ])
+  );
+}
+
 export function requiresMcpConfirmation(serverId: string, toolName: string): boolean {
   const server = getMcpRegistry().find((candidate) => candidate.id === serverId);
   if (!server) return true;
