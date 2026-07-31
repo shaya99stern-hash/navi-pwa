@@ -30,6 +30,34 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
+export type StorageDurability = "persisted" | "best-effort" | "unavailable";
+
+/**
+ * Every chat, project, and draft lives only in IndexedDB on this device. Under
+ * the default best-effort policy the browser may evict all of it — WebKit
+ * clears script-writable storage after seven days without a visit — so ask for
+ * durable storage. Installed PWAs are usually granted it without a prompt.
+ */
+export async function requestPersistentStorage(): Promise<StorageDurability> {
+  if (typeof navigator === "undefined" || !navigator.storage?.persist) return "unavailable";
+  try {
+    if (await navigator.storage.persisted?.()) return "persisted";
+    return (await navigator.storage.persist()) ? "persisted" : "best-effort";
+  } catch {
+    return "unavailable";
+  }
+}
+
+export async function storageEstimate(): Promise<{ usage: number; quota: number } | null> {
+  if (typeof navigator === "undefined" || !navigator.storage?.estimate) return null;
+  try {
+    const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+    return { usage, quota };
+  } catch {
+    return null;
+  }
+}
+
 function currentScope(): string {
   if (typeof localStorage === "undefined") return "guest";
   return localStorage.getItem(STORAGE_SCOPE_KEY)?.trim() || "guest";

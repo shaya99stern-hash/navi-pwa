@@ -129,6 +129,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const storageBootScript = `
 try {
   const scope = ${JSON.stringify(storageScope)};
+  // Signing out or switching accounts must not leave the previous account's
+  // responses in a cache the next one reads from.
+  if (localStorage.getItem('navi.storage.scope.v1') !== scope && 'caches' in window) {
+    caches.keys().then((keys) => keys.filter((k) => k.startsWith('navi-')).forEach((k) => caches.delete(k)));
+  }
   localStorage.setItem('navi.storage.scope.v1', scope);
   ${mayMigrateLegacyState
     ? "localStorage.setItem('navi.storage.legacy-owner.v1', scope);"

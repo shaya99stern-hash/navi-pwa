@@ -21,7 +21,13 @@ import {
   prepareAttachments
 } from "@/lib/ui/attachments";
 import { DEFAULT_PREFERENCES, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
-import { clearLocalState, loadLocalState, setLocalValue } from "@/lib/storage/indexeddb";
+import {
+  clearLocalState,
+  loadLocalState,
+  requestPersistentStorage,
+  setLocalValue,
+  type StorageDurability
+} from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
 import { ComposerDock } from "./composer-dock";
@@ -110,6 +116,7 @@ export function AppShell({
   const [draft, setDraft] = useState(initialDraft ?? "");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [durability, setDurability] = useState<StorageDurability>("unavailable");
   const [menuOpen, setMenuOpen] = useState(initialSheet === "settings" || initialSheet === "customize");
   // /settings and /customize used to be distinct screens. Pin them to the
   // section that carries what each one showed, rather than dropping the user on
@@ -198,6 +205,9 @@ export function AppShell({
 
   useEffect(() => {
     let cancelled = false;
+    void requestPersistentStorage().then((result) => {
+      if (!cancelled) setDurability(result);
+    });
     void loadLocalState()
       .then((state) => {
         if (cancelled) return;
@@ -742,6 +752,7 @@ export function AppShell({
         <UnifiedTopMenu
           open={menuOpen}
           initialSection={menuSection}
+          durability={durability}
           preferences={preferences}
           pendingFiles={pendingFiles}
           onToggle={() => setMenuOpen((value) => !value)}

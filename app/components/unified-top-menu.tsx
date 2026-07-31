@@ -10,6 +10,7 @@ import {
   requestPwaUpdate,
   type PwaUpdateStatus
 } from "@/lib/pwa-update";
+import type { StorageDurability } from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
@@ -19,6 +20,7 @@ type Props = {
   open: boolean;
   /** Deep links land on a fixed section rather than the last one used. */
   initialSection?: MenuSection;
+  durability: StorageDurability;
   preferences: NaviPreferences;
   pendingFiles: File[];
   onToggle: () => void;
@@ -50,6 +52,15 @@ const VOICE_LANGUAGES: Array<[string, string]> = [
   ["pt-BR", "Portuguese (BR)"],
   ["ja-JP", "Japanese"]
 ];
+
+/* Everything lives only on this device, so whether the browser granted durable
+   storage is the difference between chats surviving and being evicted. Say
+   which it is rather than implying the data is safe either way. */
+const DURABILITY_DETAIL: Record<StorageDurability, string> = {
+  persisted: "Stored on this device and protected from automatic cleanup",
+  "best-effort": "Stored on this device · the browser may clear it if space runs low or you stay away for a week",
+  unavailable: "Stored on this device · export regularly, this browser cannot protect it from cleanup"
+};
 
 const SECTIONS: Array<{ id: MenuSection; label: string }> = [
   { id: "current", label: "Current mode" },
@@ -83,6 +94,7 @@ function SettingRow({ title, detail, action }: { title: string; detail?: string;
 export function UnifiedTopMenu({
   open,
   initialSection,
+  durability,
   preferences,
   pendingFiles,
   onToggle,
@@ -345,7 +357,7 @@ export function UnifiedTopMenu({
                       <RefreshCw size={18} className={updateBusy ? "animate-spin" : ""} />
                     </span>
                   </button>
-                  <SettingRow title="Local history" detail="Threads, projects, and drafts stay in IndexedDB on this device" action={<Toggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />} />
+                  <SettingRow title="Local history" detail={DURABILITY_DETAIL[durability]} action={<Toggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />} />
                   <button type="button" onClick={() => { haptic("selection", preferences.haptics); onExport(); }} className="flex min-h-[58px] w-full items-center gap-3 px-4 text-left active:bg-elev-2">
                     <span className="min-w-0 flex-1">
                       <span className="block text-[15px]/[22px] font-medium text-primary">Export your data</span>
