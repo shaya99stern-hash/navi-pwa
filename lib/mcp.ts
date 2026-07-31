@@ -11,7 +11,8 @@ export type PublicMcpServer = Omit<McpRegistryEntry, "authorization" | "writeToo
   configured: true;
 };
 
-function isPrivateHostname(hostname: string): boolean {
+/** Shared with the web tools: any outbound URL a model can influence needs this. */
+export function isPrivateHostname(hostname: string): boolean {
   const lower = hostname.toLowerCase();
   if (lower === "localhost" || lower === "::1" || lower.endsWith(".local")) return true;
   if (/^127\./.test(lower) || /^10\./.test(lower) || /^192\.168\./.test(lower) || /^169\.254\./.test(lower)) return true;
@@ -85,6 +86,20 @@ export async function callMcp(serverId: string, method: string, params: unknown,
   const payload = parseMcpResponse(await response.text()) as { error?: { message?: string }; result?: unknown } | null;
   if (payload?.error) throw new Error(payload.error.message || "MCP request failed.");
   return payload?.result ?? payload;
+}
+
+/**
+ * Per-server predicate for "this tool needs the user to confirm it", so a
+ * caller can filter a whole tool list without re-reading the registry once per
+ * tool. Servers absent from the map are not configured at all.
+ */
+export function getMcpToolPolicy(): Map<string, (toolName: string) => boolean> {
+  return new Map(
+    getMcpRegistry().map((server) => [
+      server.id,
+      (toolName: string) => (server.readOnly ? false : server.writeTools?.includes(toolName) ?? true)
+    ])
+  );
 }
 
 export function requiresMcpConfirmation(serverId: string, toolName: string): boolean {

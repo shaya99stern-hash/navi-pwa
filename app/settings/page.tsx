@@ -1,2 +1,5 @@
-import { WorkspaceLibrary } from "../components/workspace-library";
-export default function SettingsPage() { return <WorkspaceLibrary view="settings" />; }
+import { AppShell } from "../components/app-shell";
+
+export default function SettingsPage() {
+  return <AppShell initialSheet="settings" />;
+}

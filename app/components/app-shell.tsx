@@ -9,13 +9,26 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent
+  useState
 } from "react";
-import type { AttachmentMeta, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
+import type { AttachmentMeta, MenuSection, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
+import {
+  ATTACHMENT_BUDGET,
+  MAX_ATTACHMENTS,
+  MAX_IMAGE_INPUT_BYTES,
+  isResizableImage,
+  prepareAttachments
+} from "@/lib/ui/attachments";
 import { DEFAULT_PREFERENCES, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
-import { clearLocalState, loadLocalState, setLocalValue } from "@/lib/storage/indexeddb";
+import {
+  clearLocalState,
+  loadLocalState,
+  requestPersistentStorage,
+  setLocalValue,
+  type StorageDurability
+} from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
+import { useEdgeSwipe } from "@/lib/ui/use-edge-swipe";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
 import { ComposerDock } from "./composer-dock";
 import { ConnectorsSheet } from "./connectors-sheet";
@@ -25,13 +38,16 @@ import { LaunchSurface } from "./launch-surface";
 import { ProviderSetupNotice } from "./provider-setup-notice";
 import { MessageActionSheet } from "./message-action-sheet";
 import { MessageRow } from "./message-row";
+import { ArtifactsSheet } from "./artifacts-sheet";
 import { ProjectsSheet } from "./projects-sheet";
 import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { UnifiedTopMenu } from "./unified-top-menu";
 import { VoiceModeSheet } from "./voice-mode-sheet";
 
-const EDGE_SWIPE_WIDTH = 300;
 const MAX_CHATS = 40;
+/** Quiet period before a save, and the longest a save may ever be put off. */
+const PERSIST_DEBOUNCE = 360;
+const MAX_PERSIST_DEFER = 1_500;
 const MAX_MESSAGES = 60;
 const ALLOWED_TYPES = new Set([
   "image/jpeg",
@@ -78,14 +94,19 @@ function stopSpeaking() {
   if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
+/** Which layer a deep link should open over the chat, rather than navigating. */
+export type InitialSheet = "history" | "projects" | "artifacts" | "connectors" | "settings" | "customize";
+
 export function AppShell({
   initialChatId,
   initialDraft,
-  initialView = "chat"
+  initialView = "chat",
+  initialSheet
 }: {
   initialChatId?: string;
   initialDraft?: string;
   initialView?: "chat" | "voice";
+  initialSheet?: InitialSheet;
 } = {}) {
   const router = useRouter();
   const initialChatRef = useRef(initialChatId ?? createId());
@@ -97,10 +118,18 @@ export function AppShell({
   const [draft, setDraft] = useState(initialDraft ?? "");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [projectsOpen, setProjectsOpen] = useState(false);
-  const [connectorsOpen, setConnectorsOpen] = useState(false);
+  const [durability, setDurability] = useState<StorageDurability>("unavailable");
+  const [menuOpen, setMenuOpen] = useState(initialSheet === "settings" || initialSheet === "customize");
+  // /settings and /customize used to be distinct screens. Pin them to the
+  // section that carries what each one showed, rather than dropping the user on
+  // whichever tab they happened to open last.
+  const [menuSection, setMenuSection] = useState<MenuSection | undefined>(
+    initialSheet === "settings" ? "system" : initialSheet === "customize" ? "models" : undefined
+  );
+  const [historyOpen, setHistoryOpen] = useState(initialSheet === "history");
+  const [projectsOpen, setProjectsOpen] = useState(initialSheet === "projects");
+  const [connectorsOpen, setConnectorsOpen] = useState(initialSheet === "connectors");
+  const [artifactsOpen, setArtifactsOpen] = useState(initialSheet === "artifacts");
   const [voiceOpen, setVoiceOpen] = useState(initialView === "voice");
   const [speakNextReply, setSpeakNextReply] = useState(false);
   const [online, setOnline] = useState(true);
@@ -111,12 +140,15 @@ export function AppShell({
   const [contextMessage, setContextMessage] = useState<{ id: string; text: string; role: string } | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const [atBottom, setAtBottom] = useState(true);
-  const [edgeProgress, setEdgeProgress] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastPersistAt = useRef(0);
   const anchoredUserId = useRef<string | null>(null);
   const anchorTop = useRef(0);
-  const edgeStart = useRef<{ x: number; y: number } | null>(null);
   const priorAssistantId = useRef<string | null>(null);
+
+  const openHistory = useCallback(() => setHistoryOpen(true), []);
+  const edgeSwipe = useEdgeSwipe({ disabled: historyOpen, haptics: preferences.haptics, onOpen: openHistory });
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
   const {
@@ -177,6 +209,9 @@ export function AppShell({
 
   useEffect(() => {
     let cancelled = false;
+    void requestPersistentStorage().then((result) => {
+      if (!cancelled) setDurability(result);
+    });
     void loadLocalState()
       .then((state) => {
         if (cancelled) return;
@@ -259,7 +294,14 @@ export function AppShell({
 
   useEffect(() => {
     if (!hydrated || !preferences.saveHistory || messages.length === 0) return;
+    // A stream rewrites `messages` every throttle tick, so a plain debounce was
+    // pushed out for the whole response and never fired: backgrounding the app
+    // mid-reply lost the answer *and* the question that produced it. Cap how
+    // long a write can be deferred so progress always reaches the device.
+    const waited = Date.now() - lastPersistAt.current;
+    const delay = waited >= MAX_PERSIST_DEFER ? 0 : Math.min(PERSIST_DEBOUNCE, MAX_PERSIST_DEFER - waited);
     const timer = window.setTimeout(() => {
+      lastPersistAt.current = Date.now();
       setChats((current) => {
         const prior = current.find((chat) => chat.id === activeId);
         const nextChat: StoredChat = {
@@ -278,7 +320,7 @@ export function AppShell({
         void setLocalValue("chats", next);
         return next;
       });
-    }, 360);
+    }, delay);
     return () => window.clearTimeout(timer);
   }, [activeId, activeProjectId, hydrated, messages, preferences.connectorAccessMode, preferences.saveHistory]);
 
@@ -445,25 +487,21 @@ export function AppShell({
   function addFiles(list: FileList | null) {
     if (!list) return;
     const incoming = Array.from(list);
-    const combined = [...pendingFiles, ...incoming].slice(0, 6);
-    let total = 0;
+    const combined = [...pendingFiles, ...incoming].slice(0, MAX_ATTACHMENTS);
     for (const file of combined) {
       if (!ALLOWED_TYPES.has(file.type)) {
         setAttachmentError(`${file.name} has an unsupported file type.`);
         haptic("warning", preferences.haptics);
         return;
       }
-      if (file.size > 6_000_000) {
-        setAttachmentError(`${file.name} exceeds the 6 MB attachment limit.`);
+      // Images are resized on send, so only their decode cost is bounded here;
+      // everything else has to fit the request budget as-is.
+      const limit = isResizableImage(file) ? MAX_IMAGE_INPUT_BYTES : ATTACHMENT_BUDGET;
+      if (file.size > limit) {
+        setAttachmentError(`${file.name} is too large to send.`);
         haptic("warning", preferences.haptics);
         return;
       }
-      total += file.size;
-    }
-    if (total > 10_000_000) {
-      setAttachmentError("Combined attachments exceed the 10 MB request limit.");
-      haptic("warning", preferences.haptics);
-      return;
     }
     setPendingFiles(combined);
     setAttachmentError(incoming.length + pendingFiles.length > 6 ? "Only the first six attachments were kept." : null);
@@ -483,9 +521,13 @@ export function AppShell({
           : "Preparing your request."
     });
     try {
-      const files = pendingFiles.length ? await Promise.all(pendingFiles.map(fileToPart)) : undefined;
+      // Resize before encoding: the Edge runtime rejects the whole request if
+      // the base64 payload overruns its body cap, with no usable error.
+      const { files: outgoing, notice } = await prepareAttachments(pendingFiles);
+      if (notice) setAttachmentError(notice);
+      const files = outgoing.length ? await Promise.all(outgoing.map(fileToPart)) : undefined;
       const text = draft.trim() || "Please review the attached file or image.";
-      const attachmentMeta: AttachmentMeta[] = pendingFiles.map((file) => ({
+      const attachmentMeta: AttachmentMeta[] = outgoing.map((file) => ({
         name: file.name,
         type: file.type,
         size: file.size
@@ -548,9 +590,10 @@ export function AppShell({
     clearError();
     anchoredUserId.current = null;
     setAutoFollow(true);
-    window.setTimeout(() => {
-      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Chat with Navi"]')?.focus();
-    }, 60);
+    // Must run inside the tap that triggered the edit: iOS only opens the
+    // keyboard for a focus() call that still carries the user-gesture token,
+    // which a timeout or a post-render effect would have already lost.
+    composerRef.current?.focus({ preventScroll: true });
   }
 
   function retry() {
@@ -576,6 +619,17 @@ export function AppShell({
     setActiveId(createId());
   }
 
+  function exportData() {
+    const payload = JSON.stringify({ exportedAt: new Date().toISOString(), chats, projects, preferences }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `navi-export-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    haptic("success", preferences.haptics);
+  }
+
   async function clearData() {
     if (generating) stop();
     stopSpeaking();
@@ -595,45 +649,6 @@ export function AppShell({
     setActiveId(createId());
   }
 
-  /* The sidebar follows the thumb from the left edge rather than snapping open
-     at a threshold. A mostly-vertical drag is a scroll, so it cancels. */
-  function pointerDown(event: ReactPointerEvent) {
-    if (historyOpen || event.clientX > 26) return;
-    edgeStart.current = { x: event.clientX, y: event.clientY };
-  }
-
-  function pointerMove(event: ReactPointerEvent) {
-    const start = edgeStart.current;
-    if (!start) return;
-    const dx = event.clientX - start.x;
-    const dy = Math.abs(event.clientY - start.y);
-    if (dy > Math.abs(dx) && dy > 12) {
-      edgeStart.current = null;
-      setEdgeProgress(null);
-      return;
-    }
-    if (dx <= 0) return;
-    setEdgeProgress(Math.min(1, dx / EDGE_SWIPE_WIDTH));
-  }
-
-  function pointerUp(event: ReactPointerEvent) {
-    const start = edgeStart.current;
-    edgeStart.current = null;
-    if (edgeProgress !== null) {
-      const opened = edgeProgress > 0.35;
-      setEdgeProgress(null);
-      if (opened) {
-        haptic("impact-light", preferences.haptics);
-        setHistoryOpen(true);
-      }
-      return;
-    }
-    if (!start) return;
-    if (event.clientX - start.x > 62 && Math.abs(event.clientY - start.y) < 70) {
-      setHistoryOpen(true);
-    }
-  }
-
   function toggleResearch() {
     const enabled = !preferences.tools.web;
     updatePreferences({
@@ -649,19 +664,20 @@ export function AppShell({
       data-app-shell="true"
       data-viewport="chat"
       className={`${preferences.density === "compact" ? "density-compact" : "density-comfortable"} relative flex flex-col bg-app text-primary`}
-      onPointerDown={pointerDown}
-      onPointerMove={pointerMove}
-      onPointerUp={pointerUp}
-      onPointerCancel={pointerUp}
+      {...edgeSwipe.handlers}
+      onPointerCancel={edgeSwipe.handlers.onPointerUp}
     >
       <HistoryDrawer
         open={historyOpen}
-        dragProgress={edgeProgress}
+        dragProgress={edgeSwipe.progress}
         chats={chats}
         activeId={activeId}
         haptics={preferences.haptics}
         onClose={() => setHistoryOpen(false)}
         onNew={newChat}
+        onProjects={() => setProjectsOpen(true)}
+        onArtifacts={() => setArtifactsOpen(true)}
+        onSettings={() => setMenuOpen(true)}
         onOpen={openChat}
         onRename={renameChat}
         onPin={pinChat}
@@ -705,10 +721,12 @@ export function AppShell({
         </button>
         <UnifiedTopMenu
           open={menuOpen}
+          initialSection={menuSection}
+          durability={durability}
           preferences={preferences}
           pendingFiles={pendingFiles}
           onToggle={() => setMenuOpen((value) => !value)}
-          onClose={() => setMenuOpen(false)}
+          onClose={() => { setMenuOpen(false); setMenuSection(undefined); }}
           onPreferences={updatePreferences}
           onOpenHistory={() => setHistoryOpen(true)}
           onOpenProjects={() => { setMenuOpen(false); setProjectsOpen(true); }}
@@ -717,6 +735,7 @@ export function AppShell({
           onClearFiles={() => setPendingFiles([])}
           onClearThread={clearThread}
           onClearData={() => void clearData()}
+          onExport={exportData}
         />
       </header>
 
@@ -835,6 +854,7 @@ export function AppShell({
         <PwaPlatformBanner inline />
       </div>
       <ComposerDock
+        inputRef={composerRef}
         value={draft}
         generating={generating}
         online={online}
@@ -886,6 +906,14 @@ export function AppShell({
         onClose={() => setVoiceOpen(false)}
         onUseTranscript={(text) => setDraft((current) => `${current}${current.trim() ? " " : ""}${text}`)}
         onSendTranscript={(text, speakReply) => void submitVoiceTranscript(text, speakReply)}
+      />
+
+      <ArtifactsSheet
+        open={artifactsOpen}
+        chats={chats}
+        haptics={preferences.haptics}
+        onClose={() => setArtifactsOpen(false)}
+        onOpenChat={openChat}
       />
 
       <ProjectsSheet

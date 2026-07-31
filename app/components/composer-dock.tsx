@@ -20,18 +20,21 @@ import {
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
+  type RefObject,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState
 } from "react";
 import { haptic } from "@/lib/ui/haptics";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
+import {
+  ATTACHMENT_BUDGET,
+  MAX_ATTACHMENTS,
+  MAX_IMAGE_INPUT_BYTES,
+  isResizableImage
+} from "@/lib/ui/attachments";
 
-const MAX_ATTACHMENTS = 6;
-const MAX_FILE_BYTES = 6_000_000;
-const MAX_REQUEST_BYTES = 10_000_000;
 
 const DOCUMENT_ACCEPT = [
   "text/plain",
@@ -52,6 +55,8 @@ type Props = {
   modelLabel: string;
   research: boolean;
   haptics: boolean;
+  /** Lets the shell focus the composer synchronously from a tap handler. */
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
@@ -117,6 +122,7 @@ export function ComposerDock({
   modelLabel,
   research,
   haptics,
+  inputRef,
   onChange,
   onSend,
   onStop,
@@ -127,7 +133,7 @@ export function ComposerDock({
   onOpenTools
 }: Props) {
   const dockRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -142,7 +148,7 @@ export function ComposerDock({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [providerReady, setProviderReady] = useState<boolean | null>(null);
   const [touchKeyboard, setTouchKeyboard] = useState(false);
-  const sourceSheet = useSheetDrag({ onDismiss: () => setSourceMenuOpen(false), haptics });
+  const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
 
   useEffect(() => {
     setTouchKeyboard(window.matchMedia("(pointer: coarse)").matches);
@@ -230,11 +236,6 @@ export function ComposerDock({
 
   const footerTone = !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
 
-  const totalSelectedBytes = useMemo(
-    () => selectedFiles.reduce((total, file) => total + file.size, 0),
-    [selectedFiles]
-  );
-
   function send() {
     // Deliberately not gated on the provider probe: if it is wrong or stale the
     // request should still go out and surface a real server error.
@@ -275,10 +276,13 @@ export function ComposerDock({
     }
 
     const nextCount = attachmentCount + incoming.length;
-    const invalid = incoming.find((file) => file.size > MAX_FILE_BYTES);
+    // Images get resized before sending, so only documents face the hard cap.
+    const invalid = incoming.find(
+      (file) => file.size > (isResizableImage(file) ? MAX_IMAGE_INPUT_BYTES : ATTACHMENT_BUDGET)
+    );
 
     if (invalid) {
-      setAttachmentMessage(`${invalid.name} is larger than 6 MB.`);
+      setAttachmentMessage(`${invalid.name} is too large to send.`);
       haptic("warning", haptics);
       return;
     }
@@ -289,9 +293,13 @@ export function ComposerDock({
       return;
     }
 
-    const incomingBytes = incoming.reduce((total, file) => total + file.size, 0);
-    if (totalSelectedBytes + incomingBytes > MAX_REQUEST_BYTES) {
-      setAttachmentMessage("Attachments exceed the 10 MB request limit.");
+    // Only what cannot be resized is checked against the budget here; the
+    // send path resizes images and reports if the result still does not fit.
+    const fixedBytes = [...selectedFiles, ...incoming]
+      .filter((file) => !isResizableImage(file))
+      .reduce((total, file) => total + file.size, 0);
+    if (fixedBytes > ATTACHMENT_BUDGET) {
+      setAttachmentMessage("Those documents exceed the request limit.");
       haptic("warning", haptics);
       return;
     }
@@ -469,7 +477,10 @@ export function ComposerDock({
             className={`navi-composer flex flex-col p-2 ${sending ? "scale-[0.985]" : "scale-100"}`}
           >
             <textarea
-              ref={textareaRef}
+              ref={(node) => {
+                textareaRef.current = node;
+                if (inputRef) inputRef.current = node;
+              }}
               value={value}
               onChange={(event) => onChange(event.target.value)}
               onKeyDown={keyDown}
@@ -505,16 +516,6 @@ export function ComposerDock({
                 aria-expanded={sourceMenuOpen}
               >
                 <Plus size={22} strokeWidth={1.8} />
-              </button>
-
-              <button
-                type="button"
-                onClick={onToggleResearch}
-                className={`composer-action ${research ? "!bg-[var(--selection-bg)] !text-accent" : ""}`}
-                aria-label={research ? "Turn off research mode" : "Turn on research mode"}
-                aria-pressed={research}
-              >
-                <Search size={18} strokeWidth={1.8} />
               </button>
 
               <button
@@ -581,6 +582,7 @@ export function ComposerDock({
             type="button"
             aria-label="Close attachment menu"
             onClick={() => setSourceMenuOpen(false)}
+            {...sourceSheet.scrimProps}
             className="absolute inset-0 bg-overlay backdrop-blur-[3px]"
           />
           <section
@@ -594,7 +596,7 @@ export function ComposerDock({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <div className="text-[17px]/6 font-semibold text-primary">Add to message</div>
-                <div className="text-[12px]/4 font-medium text-tertiary">Up to six items, 10 MB total</div>
+                <div className="text-[12px]/4 font-medium text-tertiary">Up to six items · photos are resized to fit</div>
               </div>
               <button
                 type="button"
@@ -632,6 +634,23 @@ export function ComposerDock({
                 Files
               </button>
             </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={research}
+              onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
+              className="mt-3 flex min-h-[56px] w-full items-center gap-3 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-3 text-left active:bg-elev-3"
+            >
+              <Search size={20} className={research ? "text-accent" : "text-secondary"} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px]/[22px] font-semibold text-primary">Search the web</span>
+                <span className="block text-[12px]/4 font-medium text-tertiary">Used only when the active route supports it</span>
+              </span>
+              <span className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-[100ms] ${research ? "bg-accent" : "bg-elev-3"}`} aria-hidden="true">
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-[140ms] ${research ? "translate-x-6" : "translate-x-1"}`} />
+              </span>
+            </button>
 
             <div className="mt-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-3 py-2 text-center text-[11px]/4 font-medium text-tertiary">
               You can also paste screenshots or drag files directly onto the composer.

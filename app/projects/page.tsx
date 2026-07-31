@@ -1,2 +1,5 @@
-import { WorkspaceLibrary } from "../components/workspace-library";
-export default function ProjectsPage() { return <WorkspaceLibrary view="projects" />; }
+import { AppShell } from "../components/app-shell";
+
+export default function ProjectsPage() {
+  return <AppShell initialSheet="projects" />;
+}

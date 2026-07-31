@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -10,7 +11,15 @@ import { ArtifactFrame } from "./artifact-frame";
 import { CodeBlock } from "./code-block";
 import { GeneratedImageCard } from "./generated-image-card";
 
-export function MarkdownRenderer({ text, theme, haptics }: { text: string; theme: "dark" | "light"; haptics: boolean }) {
+/**
+ * Memoised because it is the most expensive thing the thread renders. Every
+ * throttled frame of a stream re-renders the whole message list, and without
+ * this the markdown parser re-tokenises every prior message each time — the
+ * cost grows with history length until a long chat blocks the main thread for
+ * the entire response. Props are primitives, so the default comparison is
+ * exactly right: only the message whose text actually changed re-parses.
+ */
+export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, haptics }: { text: string; theme: "dark" | "light"; haptics: boolean }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -57,4 +66,4 @@ export function MarkdownRenderer({ text, theme, haptics }: { text: string; theme
       {text}
     </ReactMarkdown>
   );
-}
+});

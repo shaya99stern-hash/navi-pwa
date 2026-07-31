@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Ellipsis, FilePlus2, FolderKanban, Link2, LoaderCircle, RefreshCw, X } from "lucide-react";
+import { Check, ChevronRight, Download, Ellipsis, FilePlus2, FolderKanban, Link2, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, ModelPreset, NaviPreferences, ResponseStyle } from "@/lib/ai/types";
 import type { PublicMcpServer } from "@/lib/mcp";
@@ -10,6 +10,7 @@ import {
   requestPwaUpdate,
   type PwaUpdateStatus
 } from "@/lib/pwa-update";
+import type { StorageDurability } from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
@@ -17,6 +18,9 @@ type ProviderAvailability = { gemini: boolean; groq: boolean; huggingface: boole
 
 type Props = {
   open: boolean;
+  /** Deep links land on a fixed section rather than the last one used. */
+  initialSection?: MenuSection;
+  durability: StorageDurability;
   preferences: NaviPreferences;
   pendingFiles: File[];
   onToggle: () => void;
@@ -29,6 +33,7 @@ type Props = {
   onClearFiles: () => void;
   onClearThread: () => void;
   onClearData: () => void;
+  onExport: () => void;
 };
 
 const EMPTY_PROVIDERS: ProviderAvailability = { gemini: false, groq: false, huggingface: false };
@@ -36,6 +41,27 @@ const DEFAULT_UPDATE_STATUS: PwaUpdateStatus = {
   phase: "idle",
   message: "Checks for the latest version, refreshes the app shell, and reopens Navi. Chats stay saved."
 };
+const VOICE_LANGUAGES: Array<[string, string]> = [
+  ["auto", "Match device"],
+  ["en-US", "English (US)"],
+  ["en-GB", "English (UK)"],
+  ["he-IL", "Hebrew"],
+  ["es-ES", "Spanish"],
+  ["fr-FR", "French"],
+  ["de-DE", "German"],
+  ["pt-BR", "Portuguese (BR)"],
+  ["ja-JP", "Japanese"]
+];
+
+/* Everything lives only on this device, so whether the browser granted durable
+   storage is the difference between chats surviving and being evicted. Say
+   which it is rather than implying the data is safe either way. */
+const DURABILITY_DETAIL: Record<StorageDurability, string> = {
+  persisted: "Stored on this device and protected from automatic cleanup",
+  "best-effort": "Stored on this device · the browser may clear it if space runs low or you stay away for a week",
+  unavailable: "Stored on this device · export regularly, this browser cannot protect it from cleanup"
+};
+
 const SECTIONS: Array<{ id: MenuSection; label: string }> = [
   { id: "current", label: "Current mode" },
   { id: "models", label: "Models" },
@@ -67,6 +93,8 @@ function SettingRow({ title, detail, action }: { title: string; detail?: string;
 
 export function UnifiedTopMenu({
   open,
+  initialSection,
+  durability,
   preferences,
   pendingFiles,
   onToggle,
@@ -78,16 +106,29 @@ export function UnifiedTopMenu({
   onFiles,
   onClearFiles,
   onClearThread,
-  onClearData
+  onClearData,
+  onExport
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [section, setSection] = useState<MenuSection>(preferences.lastMenuSection);
+  const [section, setSection] = useState<MenuSection>(initialSection ?? preferences.lastMenuSection);
   const [servers, setServers] = useState<PublicMcpServer[]>([]);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProviderAvailability>(EMPTY_PROVIDERS);
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus>(DEFAULT_UPDATE_STATUS);
-  const sheet = useSheetDrag({ onDismiss: onClose, haptics: preferences.haptics });
+  const sheet = useSheetDrag({ open, onDismiss: onClose, haptics: preferences.haptics });
+  const [voiceLanguage, setVoiceLanguage] = useState("auto");
+
+  useEffect(() => {
+    setVoiceLanguage(localStorage.getItem("navi.voice.language.v1") || "auto");
+  }, []);
+
+  function updateVoiceLanguage(value: string) {
+    setVoiceLanguage(value);
+    if (value === "auto") localStorage.removeItem("navi.voice.language.v1");
+    else localStorage.setItem("navi.voice.language.v1", value);
+    haptic("selection", preferences.haptics);
+  }
 
   useEffect(() => {
     const receiveUpdateStatus = (event: Event) => {
@@ -100,7 +141,7 @@ export function UnifiedTopMenu({
 
   useEffect(() => {
     if (!open) return;
-    setSection(preferences.lastMenuSection);
+    setSection(initialSection ?? preferences.lastMenuSection);
     void Promise.all([
       fetch("/api/mcp/connect", { cache: "no-store" })
         .then((response) => response.json())
@@ -111,7 +152,7 @@ export function UnifiedTopMenu({
         .then((data: { providers?: ProviderAvailability }) => setProviders(data.providers ?? EMPTY_PROVIDERS))
         .catch(() => setProviders(EMPTY_PROVIDERS))
     ]);
-  }, [open, preferences.lastMenuSection]);
+  }, [initialSection, open, preferences.lastMenuSection]);
 
   function update(patch: Partial<NaviPreferences>) {
     onPreferences({ ...preferences, ...patch });
@@ -182,7 +223,7 @@ export function UnifiedTopMenu({
 
       {open ? (
         <div className="fixed inset-0 z-[90]">
-          <button type="button" aria-label="Close options" onClick={onClose} className="absolute inset-0 bg-overlay" />
+          <button type="button" aria-label="Close options" onClick={onClose} {...sheet.scrimProps} className="absolute inset-0 bg-overlay" />
           <section {...sheet.sheetProps} className="navi-sheet absolute inset-x-0 bottom-0 mx-auto flex max-h-[86dvh] w-full max-w-[720px] flex-col overflow-hidden md:max-w-[480px]">
             <div {...sheet.handleProps} className="navi-sheet-grab shrink-0 pt-1"><div className="navi-sheet-grabber" /></div>
             <header className="flex h-12 shrink-0 items-center justify-between px-4">
@@ -211,7 +252,7 @@ export function UnifiedTopMenu({
                   </div>
                   <button type="button" onClick={() => selectSection("models")} className="mt-3 flex min-h-12 w-full items-center justify-between rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Change Navi mode<ChevronRight size={18} /></button>
                   <button type="button" onClick={() => { onOpenProjects(); onClose(); }} className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2"><FolderKanban size={18} className="text-accent" /><span className="min-w-0 flex-1">Projects</span><ChevronRight size={18} /></button>
-                  <button type="button" onClick={() => { onOpenConnectors(); onClose(); }} className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2"><Link2 size={18} className="text-accent" /><span className="min-w-0 flex-1">Connectors</span><ChevronRight size={18} /></button>
+                  <button type="button" onClick={() => selectSection("connections")} className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2"><Link2 size={18} className="text-accent" /><span className="min-w-0 flex-1">Connectors</span><ChevronRight size={18} /></button>
                   <button type="button" onClick={() => { onOpenHistory(); onClose(); }} className="flex min-h-12 w-full items-center justify-between rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Open conversation history<ChevronRight size={18} /></button>
                 </div>
               ) : null}
@@ -288,6 +329,20 @@ export function UnifiedTopMenu({
                   <SettingRow title="Compact density" detail="Reduce vertical spacing without shrinking touch targets" action={<Toggle label="Compact density" value={preferences.density === "compact"} onChange={() => update({ density: preferences.density === "compact" ? "comfortable" : "compact" })} />} />
                   <SettingRow title="Reduced motion" detail="Honor system preference and minimize movement" action={<Toggle label="Reduced motion" value={preferences.motion === "reduced"} onChange={() => update({ motion: preferences.motion === "reduced" ? "full" : "reduced" })} />} />
                   <SettingRow title="Semantic haptics" detail="Android vibration fallback; visual feedback on iOS" action={<Toggle label="Semantic haptics" value={preferences.haptics} onChange={() => update({ haptics: !preferences.haptics })} />} />
+                  <SettingRow
+                    title="Voice language"
+                    detail="Used for dictation and spoken replies"
+                    action={(
+                      <select
+                        value={voiceLanguage}
+                        onChange={(event) => updateVoiceLanguage(event.target.value)}
+                        aria-label="Voice language"
+                        className="min-h-10 rounded-xl border border-[var(--border-subtle)] bg-elev-2 px-2 text-[13px]/5 font-medium text-primary"
+                      >
+                        {VOICE_LANGUAGES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                      </select>
+                    )}
+                  />
                 </div>
               ) : null}
 
@@ -302,7 +357,14 @@ export function UnifiedTopMenu({
                       <RefreshCw size={18} className={updateBusy ? "animate-spin" : ""} />
                     </span>
                   </button>
-                  <SettingRow title="Local history" detail="Threads, projects, and drafts stay in IndexedDB on this device" action={<Toggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />} />
+                  <SettingRow title="Local history" detail={DURABILITY_DETAIL[durability]} action={<Toggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />} />
+                  <button type="button" onClick={() => { haptic("selection", preferences.haptics); onExport(); }} className="flex min-h-[58px] w-full items-center gap-3 px-4 text-left active:bg-elev-2">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px]/[22px] font-medium text-primary">Export your data</span>
+                      <span className="block text-[12px]/4 font-medium text-tertiary">Download chats, projects, and preferences as JSON</span>
+                    </span>
+                    <Download size={18} className="shrink-0 text-secondary" />
+                  </button>
                   <button type="button" onClick={() => { onOpenHistory(); onClose(); }} className="flex min-h-[58px] w-full items-center justify-between px-4 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Conversation history<ChevronRight size={18} /></button>
                   <button type="button" onClick={() => { onClearThread(); onClose(); }} className="min-h-[58px] w-full px-4 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Clear current thread</button>
                   <button type="button" onClick={() => { if (window.confirm("Clear all Navi history, projects, and settings from this device?")) { onClearData(); onClose(); } }} className="min-h-[58px] w-full px-4 text-left text-[15px]/[22px] font-medium text-danger active:bg-elev-2">Clear all local data</button>

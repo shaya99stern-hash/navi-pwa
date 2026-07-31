@@ -34,13 +34,22 @@ function isIos(): boolean {
 function ensureIosTrigger(): HTMLLabelElement | null {
   if (typeof document === "undefined") return null;
   if (iosTrigger?.isConnected) return iosTrigger;
+  // WebKit only plays the tick for a switch it actually paints, so the trigger
+  // has to stay in the render tree: `display:none`, `visibility:hidden`,
+  // `opacity:0`, and clipping all silence it. A 1px, almost-transparent control
+  // in the corner is imperceptible but still painted.
   const label = document.createElement("label");
   label.setAttribute("aria-hidden", "true");
-  label.style.cssText = "position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);pointer-events:none;opacity:0;";
+  // `line-height:0` plus a block input keeps the control inside the label's own
+  // 1px box; left to inline layout it lands below the viewport, where it is no
+  // longer painted and the tick is lost again.
+  label.style.cssText =
+    "position:fixed;left:0;bottom:24px;width:1px;height:1px;line-height:0;opacity:0.01;pointer-events:none;";
   const input = document.createElement("input");
   input.type = "checkbox";
   input.setAttribute("switch", "");
   input.tabIndex = -1;
+  input.style.cssText = "display:block;width:1px;height:1px;margin:0;";
   label.appendChild(input);
   document.body.appendChild(label);
   iosTrigger = label;

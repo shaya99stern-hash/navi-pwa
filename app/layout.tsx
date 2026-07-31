@@ -12,6 +12,7 @@ import {
   isClerkUserAllowed
 } from "@/lib/auth/config";
 import { CLERK_SESSION_COOKIE_NAME, verifyClerkSessionToken } from "@/lib/auth/session";
+import { SPLASH_SCREENS } from "@/lib/ui/splash-screens";
 import "./globals.css";
 import "./shell.css";
 import { GlobalPwaPlatformBanner } from "./components/pwa-platform-banner";
@@ -128,6 +129,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const storageBootScript = `
 try {
   const scope = ${JSON.stringify(storageScope)};
+  // Signing out or switching accounts must not leave the previous account's
+  // responses in a cache the next one reads from.
+  if (localStorage.getItem('navi.storage.scope.v1') !== scope && 'caches' in window) {
+    caches.keys().then((keys) => keys.filter((k) => k.startsWith('navi-')).forEach((k) => caches.delete(k)));
+  }
   localStorage.setItem('navi.storage.scope.v1', scope);
   ${mayMigrateLegacyState
     ? "localStorage.setItem('navi.storage.legacy-owner.v1', scope);"
@@ -153,6 +159,12 @@ try {
     <html lang="en-US" data-theme="dark" className={`dark ${displaySerif.variable}`} suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        {/* Without these an installed PWA boots to a blank white screen. Each
+            image is the app background with the brand mark centred, so the
+            handoff to the launch surface shows no colour change. */}
+        {SPLASH_SCREENS.map((screen) => (
+          <link key={screen.href} rel="apple-touch-startup-image" href={screen.href} media={screen.media} />
+        ))}
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         <script dangerouslySetInnerHTML={{ __html: storageBootScript }} />
       </head>
