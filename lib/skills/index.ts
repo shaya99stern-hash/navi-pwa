@@ -47,9 +47,13 @@ export function formatSkillResult(result: SkillResult): string {
   if (!result.ok) return `**Could not run that.** ${result.error ?? "Unknown error."}`;
   const { output, mime } = result;
   if (typeof output === "string") {
+    // A blank reply reads as the app having failed silently, so name the
+    // empty result instead of rendering an empty bubble.
+    if (!output.length) return "_That produced an empty result._";
     // Multi-line or code-ish output reads better fenced.
     return output.includes("\n") ? `\`\`\`\n${output}\n\`\`\`` : output;
   }
+  if (output === undefined || output === null) return "_That produced no result._";
   const json = JSON.stringify(output, null, 2);
   return `\`\`\`${mime === "application/json" ? "json" : ""}\n${json}\n\`\`\``;
 }

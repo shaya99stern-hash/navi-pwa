@@ -26,6 +26,7 @@ import {
   useRef,
   useState
 } from "react";
+import { suggest, type Skill } from "@/lib/skills";
 import { haptic } from "@/lib/ui/haptics";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 import {
@@ -152,6 +153,18 @@ export function ComposerDock({
   const [providerReady, setProviderReady] = useState<boolean | null>(null);
   const [touchKeyboard, setTouchKeyboard] = useState(false);
   const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
+
+  /* 82 on-device commands are useless if nobody can find them, so typing a
+     slash lists what it could still become. Ranking is a synchronous map
+     lookup, cheap enough to run per keystroke. */
+  const commands: Skill[] = value.startsWith("/") && !value.includes("\n") ? suggest(value, 6) : [];
+  const showCommands = commands.length > 0 && focused;
+
+  function completeCommand(skill: Skill) {
+    haptic("selection", haptics);
+    onChange(`${skill.triggers.slash} `);
+    textareaRef.current?.focus();
+  }
 
   useEffect(() => {
     setTouchKeyboard(window.matchMedia("(pointer: coarse)").matches);
@@ -475,6 +488,34 @@ export function ComposerDock({
               >
                 Manage
               </button>
+            </div>
+          ) : null}
+
+          {showCommands ? (
+            <div
+              role="listbox"
+              aria-label="Commands"
+              className="mb-1.5 overflow-hidden rounded-card border border-[var(--border-subtle)] bg-elev-1 shadow-menu"
+            >
+              {commands.map((skill) => (
+                <button
+                  key={skill.id}
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  // Pointer-down beats blur, which would close the list first.
+                  onPointerDown={(event) => { event.preventDefault(); completeCommand(skill); }}
+                  className="flex min-h-[52px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-3 text-left last:border-b-0 active:bg-elev-2"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px]/5 font-semibold text-primary">{skill.triggers.slash}</span>
+                    <span className="block truncate text-[12px]/4 font-medium text-tertiary">{skill.description}</span>
+                  </span>
+                  <span className="shrink-0 rounded-full bg-elev-2 px-2 py-0.5 text-[10px]/4 font-semibold uppercase tracking-wide text-tertiary">
+                    on device
+                  </span>
+                </button>
+              ))}
             </div>
           ) : null}
 
