@@ -237,7 +237,7 @@ export function UnifiedTopMenu({
                   </div>
                   <button type="button" onClick={() => selectSection("models")} className="mt-3 flex min-h-12 w-full items-center justify-between rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Change Navi mode<ChevronRight size={18} /></button>
                   <button type="button" onClick={() => { onOpenProjects(); onClose(); }} className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2"><FolderKanban size={18} className="text-accent" /><span className="min-w-0 flex-1">Projects</span><ChevronRight size={18} /></button>
-                  <button type="button" onClick={() => { onOpenConnectors(); onClose(); }} className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2"><Link2 size={18} className="text-accent" /><span className="min-w-0 flex-1">Connectors</span><ChevronRight size={18} /></button>
+                  <button type="button" onClick={() => selectSection("connections")} className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2"><Link2 size={18} className="text-accent" /><span className="min-w-0 flex-1">Connectors</span><ChevronRight size={18} /></button>
                   <button type="button" onClick={() => { onOpenHistory(); onClose(); }} className="flex min-h-12 w-full items-center justify-between rounded-2xl px-3 text-left text-[15px]/[22px] font-medium text-primary active:bg-elev-2">Open conversation history<ChevronRight size={18} /></button>
                 </div>
               ) : null}

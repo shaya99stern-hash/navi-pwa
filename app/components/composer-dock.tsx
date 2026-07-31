@@ -509,16 +509,6 @@ export function ComposerDock({
 
               <button
                 type="button"
-                onClick={onToggleResearch}
-                className={`composer-action ${research ? "!bg-[var(--selection-bg)] !text-accent" : ""}`}
-                aria-label={research ? "Turn off research mode" : "Turn on research mode"}
-                aria-pressed={research}
-              >
-                <Search size={18} strokeWidth={1.8} />
-              </button>
-
-              <button
-                type="button"
                 onClick={onOpenModels}
                 className="flex min-h-9 min-w-0 max-w-[130px] items-center gap-1 rounded-full px-2 text-[13px]/4 font-medium text-secondary active:bg-elev-2"
                 aria-label={`Current model: ${modelLabel}. Change model`}
@@ -632,6 +622,23 @@ export function ComposerDock({
                 Files
               </button>
             </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={research}
+              onClick={onToggleResearch}
+              className="mt-3 flex min-h-[56px] w-full items-center gap-3 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-3 text-left active:bg-elev-3"
+            >
+              <Search size={20} className={research ? "text-accent" : "text-secondary"} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px]/[22px] font-semibold text-primary">Search the web</span>
+                <span className="block text-[12px]/4 font-medium text-tertiary">Used only when the active route supports it</span>
+              </span>
+              <span className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-[100ms] ${research ? "bg-accent" : "bg-elev-3"}`} aria-hidden="true">
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-[140ms] ${research ? "translate-x-6" : "translate-x-1"}`} />
+              </span>
+            </button>
 
             <div className="mt-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-3 py-2 text-center text-[11px]/4 font-medium text-tertiary">
               You can also paste screenshots or drag files directly onto the composer.
