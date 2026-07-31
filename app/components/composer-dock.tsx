@@ -54,6 +54,8 @@ type Props = {
   statusText: string;
   modelLabel: string;
   research: boolean;
+  /** The draft is a slash command, which runs on-device and needs no network. */
+  offlineCommand: boolean;
   haptics: boolean;
   /** Lets the shell focus the composer synchronously from a tap handler. */
   inputRef?: RefObject<HTMLTextAreaElement | null>;
@@ -121,6 +123,7 @@ export function ComposerDock({
   statusText,
   modelLabel,
   research,
+  offlineCommand,
   haptics,
   inputRef,
   onChange,
@@ -216,7 +219,9 @@ export function ComposerDock({
      configured or no network. Disabling the textarea prevents focus entirely,
      which stops the on-screen keyboard from ever opening and makes the app
      look dead; only sending is gated, and the reason is shown below. */
-  const canSend = online && !generating && Boolean(value.trim() || attachmentCount);
+  // A slash command is answered on this device, so being offline is no reason
+  // to grey out the send button for one.
+  const canSend = (online || offlineCommand) && !generating && Boolean(value.trim() || attachmentCount);
   const blocked = false;
   const hiddenAttachmentCount = Math.max(0, attachmentCount - selectedFiles.length);
 
@@ -226,7 +231,7 @@ export function ComposerDock({
      already reports progress while generating. */
   const footer = voiceMessage
     ?? attachmentMessage
-    ?? (!online
+    ?? (!online && !offlineCommand
       ? "Offline · your draft is saved locally"
       : !available
         ? "Add a Gemini, Groq, or Hugging Face key in Vercel to enable replies"
@@ -239,7 +244,9 @@ export function ComposerDock({
   function send() {
     // Deliberately not gated on the provider probe: if it is wrong or stale the
     // request should still go out and surface a real server error.
-    if ((!value.trim() && attachmentCount === 0) || generating || !online) return;
+    if ((!value.trim() && attachmentCount === 0) || generating) return;
+    // Slash commands are computed on this device, so they send while offline.
+    if (!online && !offlineCommand) return;
     setSending(true);
     setSourceMenuOpen(false);
     haptic("impact-light", haptics);

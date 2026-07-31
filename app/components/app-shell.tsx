@@ -27,6 +27,7 @@ import {
   setLocalValue,
   type StorageDurability
 } from "@/lib/storage/indexeddb";
+import { parseSlashCommand, runSlash } from "@/lib/skills";
 import { haptic } from "@/lib/ui/haptics";
 import { useEdgeSwipe } from "@/lib/ui/use-edge-swipe";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
@@ -508,8 +509,40 @@ export function AppShell({
     haptic("selection", preferences.haptics);
   }
 
+  /**
+   * Slash commands are answered on the device: no request, no model, no
+   * network, and the same answer every time. Offline is therefore not a
+   * reason to refuse one, which is why this runs before the online check.
+   */
+  async function runSkillCommand(): Promise<boolean> {
+    const invocation = parseSlashCommand(draft);
+    if (!invocation) return false;
+    clearError();
+    setAttachmentError(null);
+    setDraft("");
+    const question: UIMessage = {
+      id: createId(),
+      role: "user",
+      parts: [{ type: "text", text: draft.trim() }]
+    };
+    const answer: UIMessage = {
+      id: createId(),
+      role: "assistant",
+      parts: [{ type: "text", text: await runSlash(invocation) }]
+    };
+    setMessages([...messages, question, answer]);
+    setStreamStatus(null);
+    haptic("success", preferences.haptics);
+    if (window.location.pathname === "/" || window.location.pathname === "/new") {
+      window.history.replaceState(window.history.state, "", `/chat/${encodeURIComponent(activeId)}`);
+    }
+    return true;
+  }
+
   async function submit() {
-    if ((!draft.trim() && pendingFiles.length === 0) || generating || !online) return;
+    if (generating) return;
+    if (await runSkillCommand()) return;
+    if ((!draft.trim() && pendingFiles.length === 0) || !online) return;
     clearError();
     setAttachmentError(null);
     setStreamStatus({
@@ -855,6 +888,7 @@ export function AppShell({
       </div>
       <ComposerDock
         inputRef={composerRef}
+        offlineCommand={parseSlashCommand(draft) !== null}
         value={draft}
         generating={generating}
         online={online}
