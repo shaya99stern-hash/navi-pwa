@@ -9,8 +9,7 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent
+  useState
 } from "react";
 import type { AttachmentMeta, MenuSection, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
 import {
@@ -29,6 +28,7 @@ import {
   type StorageDurability
 } from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
+import { useEdgeSwipe } from "@/lib/ui/use-edge-swipe";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
 import { ComposerDock } from "./composer-dock";
 import { ConnectorsSheet } from "./connectors-sheet";
@@ -44,7 +44,6 @@ import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { UnifiedTopMenu } from "./unified-top-menu";
 import { VoiceModeSheet } from "./voice-mode-sheet";
 
-const EDGE_SWIPE_WIDTH = 300;
 const MAX_CHATS = 40;
 /** Quiet period before a save, and the longest a save may ever be put off. */
 const PERSIST_DEBOUNCE = 360;
@@ -141,14 +140,15 @@ export function AppShell({
   const [contextMessage, setContextMessage] = useState<{ id: string; text: string; role: string } | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const [atBottom, setAtBottom] = useState(true);
-  const [edgeProgress, setEdgeProgress] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastPersistAt = useRef(0);
   const anchoredUserId = useRef<string | null>(null);
   const anchorTop = useRef(0);
-  const edgeStart = useRef<{ x: number; y: number } | null>(null);
   const priorAssistantId = useRef<string | null>(null);
+
+  const openHistory = useCallback(() => setHistoryOpen(true), []);
+  const edgeSwipe = useEdgeSwipe({ disabled: historyOpen, haptics: preferences.haptics, onOpen: openHistory });
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
   const {
@@ -649,45 +649,6 @@ export function AppShell({
     setActiveId(createId());
   }
 
-  /* The sidebar follows the thumb from the left edge rather than snapping open
-     at a threshold. A mostly-vertical drag is a scroll, so it cancels. */
-  function pointerDown(event: ReactPointerEvent) {
-    if (historyOpen || event.clientX > 26) return;
-    edgeStart.current = { x: event.clientX, y: event.clientY };
-  }
-
-  function pointerMove(event: ReactPointerEvent) {
-    const start = edgeStart.current;
-    if (!start) return;
-    const dx = event.clientX - start.x;
-    const dy = Math.abs(event.clientY - start.y);
-    if (dy > Math.abs(dx) && dy > 12) {
-      edgeStart.current = null;
-      setEdgeProgress(null);
-      return;
-    }
-    if (dx <= 0) return;
-    setEdgeProgress(Math.min(1, dx / EDGE_SWIPE_WIDTH));
-  }
-
-  function pointerUp(event: ReactPointerEvent) {
-    const start = edgeStart.current;
-    edgeStart.current = null;
-    if (edgeProgress !== null) {
-      const opened = edgeProgress > 0.35;
-      setEdgeProgress(null);
-      if (opened) {
-        haptic("impact-light", preferences.haptics);
-        setHistoryOpen(true);
-      }
-      return;
-    }
-    if (!start) return;
-    if (event.clientX - start.x > 62 && Math.abs(event.clientY - start.y) < 70) {
-      setHistoryOpen(true);
-    }
-  }
-
   function toggleResearch() {
     const enabled = !preferences.tools.web;
     updatePreferences({
@@ -703,14 +664,12 @@ export function AppShell({
       data-app-shell="true"
       data-viewport="chat"
       className={`${preferences.density === "compact" ? "density-compact" : "density-comfortable"} relative flex flex-col bg-app text-primary`}
-      onPointerDown={pointerDown}
-      onPointerMove={pointerMove}
-      onPointerUp={pointerUp}
-      onPointerCancel={pointerUp}
+      {...edgeSwipe.handlers}
+      onPointerCancel={edgeSwipe.handlers.onPointerUp}
     >
       <HistoryDrawer
         open={historyOpen}
-        dragProgress={edgeProgress}
+        dragProgress={edgeSwipe.progress}
         chats={chats}
         activeId={activeId}
         haptics={preferences.haptics}
