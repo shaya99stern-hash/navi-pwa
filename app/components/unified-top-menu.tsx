@@ -13,6 +13,7 @@ import {
 import type { StorageDurability } from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
+import { versionLabel } from "@/lib/version";
 
 type ProviderAvailability = { gemini: boolean; groq: boolean; huggingface: boolean };
 
@@ -348,10 +349,14 @@ export function UnifiedTopMenu({
 
               {section === "system" ? (
                 <div className="divide-y divide-[var(--border-subtle)]">
+                  {/* An installed PWA gives no other way to see which build is
+                      running or to pull a newer one, so the version sits on
+                      the update control rather than in fine print. */}
                   <button type="button" onClick={refreshAndUpdate} disabled={updateBusy} className="flex min-h-[70px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-elev-2 disabled:opacity-70">
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[0.9375rem]/[1.375rem] font-medium text-primary">Refresh & Update NaviOS Hub</span>
-                      <span className={`block text-[0.75rem]/4 font-medium ${updateStatus.phase === "error" ? "text-danger" : "text-tertiary"}`}>{updateStatus.message}</span>
+                      <span className="block text-[0.9375rem]/[1.375rem] font-medium text-primary">Update NaviOS Hub</span>
+                      <span className="block text-[0.75rem]/4 font-medium text-secondary">{versionLabel()}</span>
+                      <span className={`mt-0.5 block text-[0.75rem]/4 font-medium ${updateStatus.phase === "error" ? "text-danger" : "text-tertiary"}`}>{updateStatus.message}</span>
                     </span>
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-elev-2 text-secondary">
                       <RefreshCw size={18} className={updateBusy ? "animate-spin" : ""} />
@@ -368,7 +373,7 @@ export function UnifiedTopMenu({
                   <button type="button" onClick={() => { onOpenHistory(); onClose(); }} className="flex min-h-[58px] w-full items-center justify-between px-4 text-left text-[0.9375rem]/[1.375rem] font-medium text-primary active:bg-elev-2">Conversation history<ChevronRight size={18} /></button>
                   <button type="button" onClick={() => { onClearThread(); onClose(); }} className="min-h-[58px] w-full px-4 text-left text-[0.9375rem]/[1.375rem] font-medium text-primary active:bg-elev-2">Clear current thread</button>
                   <button type="button" onClick={() => { if (window.confirm("Clear all Navi history, projects, and settings from this device?")) { onClearData(); onClose(); } }} className="min-h-[58px] w-full px-4 text-left text-[0.9375rem]/[1.375rem] font-medium text-danger active:bg-elev-2">Clear all local data</button>
-                  <div className="px-4 py-5 text-[0.75rem]/4 font-medium text-tertiary">NaviOS Hub 4.1 · Projects · Connector approvals · Automatic app updates.</div>
+                  <div className="px-4 py-5 text-[0.75rem]/4 font-medium text-tertiary">NaviOS Hub · {versionLabel()}</div>
                 </div>
               ) : null}
             </div>

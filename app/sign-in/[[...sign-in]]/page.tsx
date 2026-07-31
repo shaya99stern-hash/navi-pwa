@@ -21,8 +21,11 @@ export default function SignInPage() {
   return (
     <AuthShell
       title="Welcome back"
+      /* Which providers are on offer is a property of the Clerk instance, not
+         of this page. Naming Google here made a dashboard that has no Google
+         connection read as a missing button. */
       description={configured
-        ? "Continue with Google or use a secure email sign-in."
+        ? "Sign in to your private workspace."
         : "Sign-in is unavailable on this deployment."}
     >
       {configured ? (

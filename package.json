@@ -1,6 +1,6 @@
 {
   "name": "navi-pwa",
-  "version": "3.0.0",
+  "version": "4.2.0",
   "private": true,
   "description": "NaviOS Hub \u2014 a premium, local-first AI orchestration PWA.",
   "scripts": {

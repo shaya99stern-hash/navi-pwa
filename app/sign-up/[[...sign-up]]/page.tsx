@@ -20,7 +20,7 @@ export default function SignUpPage() {
     <AuthShell
       title="Create your account"
       description={configured
-        ? "Start with Google or a secure email sign-up."
+        ? "Create your private workspace."
         : "Sign-up is unavailable on this deployment."}
     >
       {configured ? (
