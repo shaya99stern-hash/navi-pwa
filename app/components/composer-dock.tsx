@@ -109,8 +109,8 @@ function AttachmentPreview({ file }: { file: File }) {
         )}
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[12px]/4 font-semibold text-primary">{file.name}</span>
-        <span className="block text-[10px]/4 font-medium text-tertiary">{formatBytes(file.size)}</span>
+        <span className="block truncate text-[0.75rem]/4 font-semibold text-primary">{file.name}</span>
+        <span className="block text-[0.625rem]/4 font-medium text-tertiary">{formatBytes(file.size)}</span>
       </span>
     </div>
   );
@@ -461,7 +461,7 @@ export function ComposerDock({
           />
 
           {dragActive ? (
-            <div className="mb-2 flex min-h-12 items-center justify-center rounded-2xl border border-dashed border-accent bg-elev-2 px-3 text-[12px]/4 font-semibold text-primary">
+            <div className="mb-2 flex min-h-12 items-center justify-center rounded-2xl border border-dashed border-accent bg-elev-2 px-3 text-[0.75rem]/4 font-semibold text-primary">
               Drop files here to attach them
             </div>
           ) : null}
@@ -475,7 +475,7 @@ export function ComposerDock({
                 <button
                   type="button"
                   onClick={openTools}
-                  className="flex min-h-[56px] min-w-[132px] items-center justify-center rounded-[16px] border border-[var(--border-subtle)] bg-elev-2 px-3 text-[12px]/4 font-semibold text-secondary active:bg-elev-3"
+                  className="flex min-h-[56px] min-w-[132px] items-center justify-center rounded-[16px] border border-[var(--border-subtle)] bg-elev-2 px-3 text-[0.75rem]/4 font-semibold text-secondary active:bg-elev-3"
                 >
                   +{hiddenAttachmentCount} more
                 </button>
@@ -483,7 +483,7 @@ export function ComposerDock({
               <button
                 type="button"
                 onClick={openTools}
-                className="min-h-[56px] shrink-0 rounded-[16px] px-3 text-[12px]/4 font-semibold text-secondary active:bg-elev-2"
+                className="min-h-[56px] shrink-0 rounded-[16px] px-3 text-[0.75rem]/4 font-semibold text-secondary active:bg-elev-2"
                 aria-label="Manage or clear attachments"
               >
                 Manage
@@ -508,10 +508,10 @@ export function ComposerDock({
                   className="flex min-h-[52px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-3 text-left last:border-b-0 active:bg-elev-2"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px]/5 font-semibold text-primary">{skill.triggers.slash}</span>
-                    <span className="block truncate text-[12px]/4 font-medium text-tertiary">{skill.description}</span>
+                    <span className="block truncate text-[0.875rem]/5 font-semibold text-primary">{skill.triggers.slash}</span>
+                    <span className="block truncate text-[0.75rem]/4 font-medium text-tertiary">{skill.description}</span>
                   </span>
-                  <span className="shrink-0 rounded-full bg-elev-2 px-2 py-0.5 text-[10px]/4 font-semibold uppercase tracking-wide text-tertiary">
+                  <span className="shrink-0 rounded-full bg-elev-2 px-2 py-0.5 text-[0.625rem]/4 font-semibold uppercase tracking-wide text-tertiary">
                     on device
                   </span>
                 </button>
@@ -551,7 +551,7 @@ export function ComposerDock({
               disabled={blocked}
               placeholder={placeholder}
               aria-label="Chat with Navi"
-              className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[16px]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
+              className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[1rem]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
             <div className="mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
@@ -569,7 +569,7 @@ export function ComposerDock({
               <button
                 type="button"
                 onClick={onOpenModels}
-                className="flex min-h-9 min-w-0 max-w-[130px] items-center gap-1 rounded-full px-2 text-[13px]/4 font-medium text-secondary active:bg-elev-2"
+                className="flex min-h-9 min-w-0 max-w-[130px] items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 font-medium text-secondary active:bg-elev-2"
                 aria-label={`Current model: ${modelLabel}. Change model`}
               >
                 <span className="truncate">{modelLabel}</span>
@@ -618,7 +618,7 @@ export function ComposerDock({
               caption under the composer is noise the native app never shows. */}
           <div className="flex items-center justify-center px-3 text-center" role="status" aria-live="polite">
             {footer ? (
-              <span className={`block pt-1 text-[11px]/4 font-medium ${footerTone}`}>{footer}</span>
+              <span className={`block pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
             ) : null}
           </div>
         </div>
@@ -643,8 +643,8 @@ export function ComposerDock({
             <div {...sourceSheet.handleProps} className="navi-sheet-grab mb-1 pt-1"><div className="navi-sheet-grabber" /></div>
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <div className="text-[17px]/6 font-semibold text-primary">Add to message</div>
-                <div className="text-[12px]/4 font-medium text-tertiary">Up to six items · photos are resized to fit</div>
+                <div className="text-[1.0625rem]/6 font-semibold text-primary">Add to message</div>
+                <div className="text-[0.75rem]/4 font-medium text-tertiary">Up to six items · photos are resized to fit</div>
               </div>
               <button
                 type="button"
@@ -660,7 +660,7 @@ export function ComposerDock({
               <button
                 type="button"
                 onClick={() => imageInputRef.current?.click()}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[12px]/4 font-semibold text-primary active:bg-elev-3"
+                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[0.75rem]/4 font-semibold text-primary active:bg-elev-3"
               >
                 <ImageIcon size={22} className="text-accent" />
                 Photos
@@ -668,7 +668,7 @@ export function ComposerDock({
               <button
                 type="button"
                 onClick={() => cameraInputRef.current?.click()}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[12px]/4 font-semibold text-primary active:bg-elev-3"
+                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[0.75rem]/4 font-semibold text-primary active:bg-elev-3"
               >
                 <Camera size={22} className="text-accent" />
                 Camera
@@ -676,7 +676,7 @@ export function ComposerDock({
               <button
                 type="button"
                 onClick={() => documentInputRef.current?.click()}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[12px]/4 font-semibold text-primary active:bg-elev-3"
+                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[0.75rem]/4 font-semibold text-primary active:bg-elev-3"
               >
                 <Paperclip size={22} className="text-accent" />
                 Files
@@ -692,22 +692,22 @@ export function ComposerDock({
             >
               <Search size={20} className={research ? "text-accent" : "text-secondary"} />
               <span className="min-w-0 flex-1">
-                <span className="block text-[15px]/[22px] font-semibold text-primary">Search the web</span>
-                <span className="block text-[12px]/4 font-medium text-tertiary">Used only when the active route supports it</span>
+                <span className="block text-[0.9375rem]/[1.375rem] font-semibold text-primary">Search the web</span>
+                <span className="block text-[0.75rem]/4 font-medium text-tertiary">Used only when the active route supports it</span>
               </span>
               <span className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-[100ms] ${research ? "bg-accent" : "bg-elev-3"}`} aria-hidden="true">
                 <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-[140ms] ${research ? "translate-x-6" : "translate-x-1"}`} />
               </span>
             </button>
 
-            <div className="mt-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-3 py-2 text-center text-[11px]/4 font-medium text-tertiary">
+            <div className="mt-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-3 py-2 text-center text-[0.6875rem]/4 font-medium text-tertiary">
               You can also paste screenshots or drag files directly onto the composer.
             </div>
 
             <button
               type="button"
               onClick={openTools}
-              className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-[13px]/5 font-semibold text-secondary active:bg-elev-2"
+              className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-[0.8125rem]/5 font-semibold text-secondary active:bg-elev-2"
             >
               <SlidersHorizontal size={17} />
               Configure web, code, artifacts, or clear attachments

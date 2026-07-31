@@ -195,8 +195,8 @@ export function VoiceModeSheet({
             <Volume2 size={19} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[17px]/6 font-semibold text-primary">Voice mode</span>
-            <span className="block text-[11px]/4 font-medium text-tertiary">Speak one turn, review it, then send or cancel</span>
+            <span className="block text-[1.0625rem]/6 font-semibold text-primary">Voice mode</span>
+            <span className="block text-[0.6875rem]/4 font-medium text-tertiary">Speak one turn, review it, then send or cancel</span>
           </span>
           <button type="button" onClick={cancel} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Close voice mode">
             <X size={20} />
@@ -204,12 +204,12 @@ export function VoiceModeSheet({
         </header>
 
         <div className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-5">
-          <label className="block text-[12px]/4 font-semibold text-secondary" htmlFor="voice-language">Dictation language</label>
+          <label className="block text-[0.75rem]/4 font-semibold text-secondary" htmlFor="voice-language">Dictation language</label>
           <select
             id="voice-language"
             value={language}
             onChange={(event) => persistLanguage(event.target.value)}
-            className="mt-2 min-h-12 w-full rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-3 text-[15px]/5 font-medium text-primary outline-none focus:border-accent"
+            className="mt-2 min-h-12 w-full rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-3 text-[0.9375rem]/5 font-medium text-primary outline-none focus:border-accent"
           >
             {LANGUAGES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
@@ -217,13 +217,13 @@ export function VoiceModeSheet({
           <div className="mt-5 rounded-[24px] border border-[var(--border-subtle)] bg-elev-2 p-4">
             <div className="flex min-h-[132px] items-center justify-center">
               {combined ? (
-                <p className="w-full whitespace-pre-wrap text-[18px]/7 font-medium tracking-[-0.01em] text-primary">{combined}</p>
+                <p className="w-full whitespace-pre-wrap text-[1.125rem]/7 font-medium tracking-[-0.01em] text-primary">{combined}</p>
               ) : (
                 <div className="text-center">
                   <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-elev-3 text-secondary">
                     <Mic size={27} />
                   </div>
-                  <p className="mt-3 text-[14px]/5 font-medium text-tertiary">Tap Start and speak naturally.</p>
+                  <p className="mt-3 text-[0.875rem]/5 font-medium text-tertiary">Tap Start and speak naturally.</p>
                 </div>
               )}
             </div>
@@ -241,8 +241,8 @@ export function VoiceModeSheet({
             ) : null}
           </div>
 
-          {error ? <div className="mt-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[12px]/4 font-medium text-danger" role="alert">{error}</div> : null}
-          {!online ? <div className="mt-3 rounded-2xl border border-[var(--accent-warning)] bg-elev-2 p-3 text-[12px]/4 font-medium text-warning">Voice turns require a connection. Keyboard dictation can still fill the saved local draft.</div> : null}
+          {error ? <div className="mt-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.75rem]/4 font-medium text-danger" role="alert">{error}</div> : null}
+          {!online ? <div className="mt-3 rounded-2xl border border-[var(--accent-warning)] bg-elev-2 p-3 text-[0.75rem]/4 font-medium text-warning">Voice turns require a connection. Keyboard dictation can still fill the saved local draft.</div> : null}
 
           <button
             type="button"
@@ -258,13 +258,13 @@ export function VoiceModeSheet({
               {speakReply ? <Check size={17} /> : <Volume2 size={17} />}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[14px]/5 font-semibold text-primary">Read Navi’s reply aloud</span>
-              <span className="block text-[11px]/4 font-medium text-tertiary">Uses the browser’s on-device speech voice when available</span>
+              <span className="block text-[0.875rem]/5 font-semibold text-primary">Read Navi’s reply aloud</span>
+              <span className="block text-[0.6875rem]/4 font-medium text-tertiary">Uses the browser’s on-device speech voice when available</span>
             </span>
           </button>
 
           {supported === false ? (
-            <button type="button" onClick={focusKeyboardDictation} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-elev-2 px-4 text-[13px]/5 font-semibold text-primary active:bg-elev-3">
+            <button type="button" onClick={focusKeyboardDictation} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-elev-2 px-4 text-[0.8125rem]/5 font-semibold text-primary active:bg-elev-3">
               <Keyboard size={18} />Use iPhone keyboard dictation
             </button>
           ) : null}
@@ -276,19 +276,19 @@ export function VoiceModeSheet({
               type="button"
               onClick={listening ? stop : start}
               disabled={!online || busy || supported === false}
-              className={`flex min-h-12 items-center justify-center gap-2 rounded-2xl text-[14px]/5 font-semibold disabled:opacity-45 ${listening ? "bg-elev-3 text-primary" : "bg-accent text-white active:bg-accent-pressed"}`}
+              className={`flex min-h-12 items-center justify-center gap-2 rounded-2xl text-[0.875rem]/5 font-semibold disabled:opacity-45 ${listening ? "bg-elev-3 text-primary" : "bg-accent text-white active:bg-accent-pressed"}`}
             >
               {listening ? <Square size={14} fill="currentColor" /> : <Mic size={18} />}
               {listening ? "Stop" : "Start"}
             </button>
-            <button type="button" onClick={useTranscript} disabled={!combined || busy} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-elev-2 text-[14px]/5 font-semibold text-primary active:bg-elev-3 disabled:opacity-45">
+            <button type="button" onClick={useTranscript} disabled={!combined || busy} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-elev-2 text-[0.875rem]/5 font-semibold text-primary active:bg-elev-3 disabled:opacity-45">
               <Check size={17} />Add to message
             </button>
           </div>
-          <button type="button" onClick={sendTranscript} disabled={!combined || busy || !online} className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-[14px]/5 font-semibold text-app active:opacity-85 disabled:opacity-40">
+          <button type="button" onClick={sendTranscript} disabled={!combined || busy || !online} className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-[0.875rem]/5 font-semibold text-app active:opacity-85 disabled:opacity-40">
             <Send size={17} />Send spoken turn to Navi
           </button>
-          <p className="mt-2 text-center text-[10px]/4 font-medium text-tertiary">Composer microphone = quick dictation · Voice mode = reviewed spoken turn</p>
+          <p className="mt-2 text-center text-[0.625rem]/4 font-medium text-tertiary">Composer microphone = quick dictation · Voice mode = reviewed spoken turn</p>
         </footer>
       </section>
     </div>

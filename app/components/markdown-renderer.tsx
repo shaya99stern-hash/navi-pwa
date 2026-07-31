@@ -37,9 +37,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, ha
             try {
               const validation = validateGeneratedImagePayload(JSON.parse(value.trim()));
               if (validation.ok) return <GeneratedImageCard payload={validation.payload} haptics={haptics} />;
-              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[13px]/[18px] text-primary">Invalid generated image: {validation.error}</div>;
+              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Invalid generated image: {validation.error}</div>;
             } catch {
-              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[13px]/[18px] text-primary">Malformed generated image payload.</div>;
+              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Malformed generated image payload.</div>;
             }
           }
 
@@ -47,9 +47,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, ha
             try {
               const validation = validateArtifactPayload(JSON.parse(value.trim()));
               if (validation.ok) return <ArtifactFrame payload={validation.payload} theme={theme} haptics={haptics} />;
-              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[13px]/[18px] text-primary">Invalid artifact: {validation.error}</div>;
+              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Invalid artifact: {validation.error}</div>;
             } catch {
-              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[13px]/[18px] text-primary">Malformed artifact payload.</div>;
+              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Malformed artifact payload.</div>;
             }
           }
 

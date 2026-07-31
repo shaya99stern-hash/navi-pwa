@@ -27,8 +27,9 @@ import {
   setLocalValue,
   type StorageDurability
 } from "@/lib/storage/indexeddb";
-import { parseSlashCommand, runSlash } from "@/lib/skills";
+import { instantAnswer, parseSlashCommand, runSlash } from "@/lib/skills";
 import { haptic } from "@/lib/ui/haptics";
+import { speak, whenVoicesReady } from "@/lib/ui/speech";
 import { useEdgeSwipe } from "@/lib/ui/use-edge-swipe";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
 import { ComposerDock } from "./composer-dock";
@@ -62,14 +63,37 @@ const ALLOWED_TYPES = new Set([
   "application/pdf"
 ]);
 
+/** Total characters of older conversation carried alongside the live messages. */
+const SUMMARY_BUDGET = 8_000;
+/** Turns kept verbatim from the start of the thread. */
+const OPENING_TURNS = 6;
+/** Share of the budget reserved for those opening turns. */
+const OPENING_SHARE = 0.35;
+
+/**
+ * Condense the messages that fall outside the live window.
+ *
+ * Keeping only the most recent characters — which is what a plain trailing
+ * slice does — drops the beginning of the conversation first. That is where
+ * the task, the constraints, and any "always do X" instruction were stated, so
+ * a long thread would lose its own premise while remembering small talk. Keep
+ * both ends and drop the middle instead.
+ */
 function compactSummary(messages: UIMessage[]): string {
   if (messages.length <= 14) return "";
-  return messages
+  const lines = messages
     .slice(0, -12)
     .map((message) => `${message.role === "user" ? "User" : "Navi"}: ${messageText(message).slice(0, 700)}`)
-    .filter((line) => !line.endsWith(": "))
-    .join("\n")
-    .slice(-8_000);
+    .filter((line) => !line.endsWith(": "));
+  if (!lines.length) return "";
+
+  const whole = lines.join("\n");
+  if (whole.length <= SUMMARY_BUDGET) return whole;
+
+  const openingBudget = Math.floor(SUMMARY_BUDGET * OPENING_SHARE);
+  const opening = lines.slice(0, OPENING_TURNS).join("\n").slice(0, openingBudget);
+  const recent = lines.slice(OPENING_TURNS).join("\n").slice(-(SUMMARY_BUDGET - openingBudget));
+  return `${opening}\n\n[…earlier middle of this conversation omitted…]\n\n${recent}`;
 }
 
 function fileToPart(file: File): Promise<FileUIPart> {
@@ -395,10 +419,10 @@ export function AppShell({
     const text = messageText(latest).replace(/```[\s\S]*?```/g, " Code or generated content is available on screen. ").slice(0, 4_000);
     if (!text) return;
     stopSpeaking();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = localStorage.getItem("navi.voice.language.v1") || navigator.language || "en-US";
-    utterance.rate = 1;
-    window.speechSynthesis.speak(utterance);
+    const language = localStorage.getItem("navi.voice.language.v1") || navigator.language || "en-US";
+    // The voice list loads asynchronously and is usually empty on first use,
+    // which is how apps end up always speaking in the default compact voice.
+    whenVoicesReady(() => speak(text, language));
     priorAssistantId.current = latest.id;
     setSpeakNextReply(false);
   }, [generating, messages, speakNextReply]);
@@ -516,7 +540,11 @@ export function AppShell({
    */
   async function runSkillCommand(): Promise<boolean> {
     const invocation = parseSlashCommand(draft);
-    if (!invocation) return false;
+    // A question with exactly one right answer that a local function already
+    // knows does not need a round trip, a network, or a model that might get
+    // it wrong. Anything not recognised falls through untouched.
+    const instant = invocation ? null : await instantAnswer(draft);
+    if (!invocation && !instant) return false;
     clearError();
     setAttachmentError(null);
     setDraft("");
@@ -528,7 +556,7 @@ export function AppShell({
     const answer: UIMessage = {
       id: createId(),
       role: "assistant",
-      parts: [{ type: "text", text: await runSlash(invocation) }]
+      parts: [{ type: "text", text: invocation ? await runSlash(invocation) : instant!.text }]
     };
     setMessages([...messages, question, answer]);
     setStreamStatus(null);
@@ -731,15 +759,15 @@ export function AppShell({
         </button>
         <div className="min-w-0 flex-1 text-center">
           {messages.length === 0 && !activeChat ? (
-            <div className="font-display truncate text-[19px]/6 tracking-[-0.01em] text-primary">NaviOS Hub</div>
+            <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">NaviOS Hub</div>
           ) : (
             <>
-              <div className="truncate px-1 text-[16px]/5 font-medium tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>
+              <div className="truncate px-1 text-[1rem]/5 font-medium tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>
               {/* Only a project earns a subtitle; the model is already shown on
                   the composer chip, and repeating it here is not what the
                   native app does. */}
               {activeProject ? (
-                <div className="truncate text-[11px]/[14px] font-medium text-tertiary">{activeProject.name}</div>
+                <div className="truncate text-[0.6875rem]/[0.875rem] font-medium text-tertiary">{activeProject.name}</div>
               ) : null}
             </>
           )}
@@ -773,22 +801,22 @@ export function AppShell({
       </header>
 
       {!online ? (
-        <div className="offline-banner flex min-h-10 items-center justify-center gap-2 border-y border-[var(--accent-warning)] bg-elev-2 px-4 text-center text-[12px]/4 font-semibold text-warning" role="status">
+        <div className="offline-banner flex min-h-10 items-center justify-center gap-2 border-y border-[var(--accent-warning)] bg-elev-2 px-4 text-center text-[0.75rem]/4 font-semibold text-warning" role="status">
           <WifiOff size={15} />
           Offline · chats, projects, and drafts remain available locally
         </div>
       ) : activeProject ? (
-        <button type="button" onClick={() => setProjectsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[11px]/4 font-semibold text-accent active:bg-elev-2">
+        <button type="button" onClick={() => setProjectsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[0.6875rem]/4 font-semibold text-accent active:bg-elev-2">
           <FolderKanban size={14} />
           Project: {activeProject.name} · {activeProject.knowledge.length} knowledge item{activeProject.knowledge.length === 1 ? "" : "s"}
         </button>
       ) : preferences.tools.web ? (
-        <div className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[11px]/4 font-semibold text-accent" role="status">
+        <div className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[0.6875rem]/4 font-semibold text-accent" role="status">
           <Search size={14} />
           Research mode on · Navi will use available web or connected sources
         </div>
       ) : preferences.connectedMcpServers.length ? (
-        <button type="button" onClick={() => setConnectorsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-[var(--border-subtle)] bg-elev-2 px-4 text-center text-[11px]/4 font-semibold text-secondary active:bg-elev-3">
+        <button type="button" onClick={() => setConnectorsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-[var(--border-subtle)] bg-elev-2 px-4 text-center text-[0.6875rem]/4 font-semibold text-secondary active:bg-elev-3">
           <Link2 size={14} />
           {preferences.connectedMcpServers.length} connector{preferences.connectedMcpServers.length === 1 ? "" : "s"} · {connectorMode}
         </button>
@@ -852,10 +880,10 @@ export function AppShell({
             />
             {error ? (
               <div className="mt-4 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
-                <p className="text-[13px]/[18px] font-medium text-primary">{error.message || "Navi could not complete that response."}</p>
+                <p className="text-[0.8125rem]/[1.125rem] font-medium text-primary">{error.message || "Navi could not complete that response."}</p>
                 <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={retry} className="min-h-11 rounded-xl bg-accent px-4 text-[13px]/[18px] font-semibold text-white active:bg-accent-pressed">Try again</button>
-                  <button type="button" onClick={clearError} className="min-h-11 rounded-xl px-4 text-[13px]/[18px] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
+                  <button type="button" onClick={retry} className="min-h-11 rounded-xl bg-accent px-4 text-[0.8125rem]/[1.125rem] font-semibold text-white active:bg-accent-pressed">Try again</button>
+                  <button type="button" onClick={clearError} className="min-h-11 rounded-xl px-4 text-[0.8125rem]/[1.125rem] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
                 </div>
               </div>
             ) : null}
@@ -881,7 +909,7 @@ export function AppShell({
       ) : null}
 
       {attachmentError ? (
-        <div className="mx-4 mb-1 rounded-2xl border border-[var(--accent-warning)] bg-elev-2 px-3 py-2 text-center text-[12px]/4 font-medium text-warning" role="alert">{attachmentError}</div>
+        <div className="mx-4 mb-1 rounded-2xl border border-[var(--accent-warning)] bg-elev-2 px-3 py-2 text-center text-[0.75rem]/4 font-medium text-warning" role="alert">{attachmentError}</div>
       ) : null}
       <div className="shrink-0 px-gutter">
         <PwaPlatformBanner inline />

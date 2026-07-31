@@ -38,7 +38,7 @@ export function AuthShell({
       <section className="w-full max-w-[430px]">
         <header className="mb-8 text-center">
           <NaviMark className="mx-auto mb-5 h-12 w-12 text-[#d67249]" label="NaviOS Hub" />
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#d67249]">NaviOS Hub</p>
+          <p className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-[#d67249]">NaviOS Hub</p>
           <h1 className="text-3xl font-semibold tracking-[-0.035em]">{title}</h1>
           <p className="mx-auto mt-3 max-w-[340px] text-sm leading-6 text-[#bdb2a7]">{description}</p>
         </header>

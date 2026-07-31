@@ -21,7 +21,10 @@ function render(result: SkillResult): string {
   return typeof output === "string" ? output : JSON.stringify(output, null, 2);
 }
 
-export function buildSkillTools(): ToolSet {
+/** Announces work as it starts, so a pause in the stream has a visible reason. */
+export type ToolActivity = (label: string) => void;
+
+export function buildSkillTools(onActivity: ToolActivity = () => {}): ToolSet {
   return {
     calculate: tool({
       description:
@@ -29,7 +32,10 @@ export function buildSkillTools(): ToolSet {
       inputSchema: z.object({
         expression: z.string().describe('The expression, for example "1240 * 0.17" or "sqrt(2) * 100".')
       }),
-      execute: async ({ expression }) => render(await math.expressionEvaluate({ text: expression }))
+      execute: async ({ expression }) => {
+        onActivity(`Calculating ${expression}`);
+        return render(await math.expressionEvaluate({ text: expression }));
+      }
     }),
 
     convert_units: tool({
@@ -40,7 +46,10 @@ export function buildSkillTools(): ToolSet {
         from: z.string().describe("Source unit, e.g. mi, kg, gb, c, tbsp."),
         to: z.string().describe("Target unit, e.g. km, lb, mib, f, ml.")
       }),
-      execute: async ({ value, from, to }) => render(await math.unitConvert({ value, from, to }))
+      execute: async ({ value, from, to }) => {
+        onActivity(`Converting ${value} ${from} to ${to}`);
+        return render(await math.unitConvert({ value, from, to }));
+      }
     }),
 
     date_calculate: tool({
@@ -57,6 +66,7 @@ export function buildSkillTools(): ToolSet {
         hours: z.number().optional()
       }),
       execute: async ({ mode, from, to, years, months, days, hours }) => {
+        onActivity("Working out dates");
         if (mode === "difference") return render(await datetime.dateDifference({ from, to }));
         if (mode === "business_days") return render(await datetime.businessDays({ from, to }));
         if (mode === "age") return render(await datetime.ageCalculate({ birthday: from, on: to }));
@@ -73,6 +83,7 @@ export function buildSkillTools(): ToolSet {
         measure: z.enum(["counts", "reading_time", "readability", "keywords"]).describe("Which measurement to return.")
       }),
       execute: async ({ text, measure }) => {
+        onActivity(`Measuring text (${measure.replace("_", " ")})`);
         if (measure === "reading_time") return render(await analysis.readingTime({ text }));
         if (measure === "readability") return render(await analysis.readabilityScore({ text }));
         if (measure === "keywords") return render(await analysis.keywordFrequency({ text }));
@@ -90,6 +101,7 @@ export function buildSkillTools(): ToolSet {
           .describe("What to do with it.")
       }),
       execute: async ({ input, operation }) => {
+        onActivity(`Running ${operation.replace(/_/g, " ")}`);
         if (operation === "validate_json") return render(await data.jsonValidate({ text: input }));
         if (operation === "format_json") return render(await data.jsonFormat({ text: input }));
         if (operation === "flatten_json") return render(await data.jsonFlatten({ text: input }));

@@ -62,7 +62,7 @@ export function ArtifactsSheet({
         </div>
 
         <header className="flex h-12 shrink-0 items-center justify-between px-4">
-          <div className="text-[17px]/6 font-semibold tracking-[-0.01em] text-primary">Artifacts</div>
+          <div className="text-[1.0625rem]/6 font-semibold tracking-[-0.01em] text-primary">Artifacts</div>
           <button type="button" onClick={onClose} aria-label="Close" className="flex h-10 w-10 items-center justify-center rounded-full bg-elev-2 text-secondary active:bg-elev-3">
             <X size={18} />
           </button>
@@ -80,15 +80,15 @@ export function ArtifactsSheet({
                 <FileText size={17} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px]/[22px] font-medium text-primary">{artifact.title}</span>
-                <span className="block truncate text-[12px]/4 font-medium text-tertiary">{artifact.kind} · {artifact.chat.title}</span>
+                <span className="block truncate text-[0.9375rem]/[1.375rem] font-medium text-primary">{artifact.title}</span>
+                <span className="block truncate text-[0.75rem]/4 font-medium text-tertiary">{artifact.kind} · {artifact.chat.title}</span>
               </span>
             </button>
           )) : (
             <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
               <Shapes size={24} className="text-tertiary" />
-              <div className="text-[15px]/[22px] font-medium text-primary">No artifacts yet</div>
-              <p className="max-w-[300px] text-[13px]/[19px] font-medium text-tertiary">
+              <div className="text-[0.9375rem]/[1.375rem] font-medium text-primary">No artifacts yet</div>
+              <p className="max-w-[300px] text-[0.8125rem]/[1.1875rem] font-medium text-tertiary">
                 Interactive tools and documents made in a chat collect here.
               </p>
             </div>

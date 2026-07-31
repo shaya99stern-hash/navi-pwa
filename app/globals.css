@@ -157,7 +157,21 @@ body {
 }
 
 html {
+  /* The whole type scale is in rem, so this single value decides how large the
+     app renders. 100% honours the browser's own text-size preference; the boot
+     script raises it to match iOS Dynamic Type where that is available. */
+  font-size: 100%;
   min-height: 100%;
+}
+
+/* Probe for the user's Dynamic Type body size. iOS resolves this shorthand to
+   the size chosen in Settings; nothing else in CSS exposes it. */
+.navi-type-probe {
+  font: -apple-system-body;
+  position: fixed;
+  visibility: hidden;
+  pointer-events: none;
+  top: -100px;
 }
 
 body {
@@ -584,4 +598,20 @@ aside .scroll-area {
 
 .context-enter {
   animation: sheet-in var(--navi-motion-sheet) var(--navi-ease-sheet) both;
+}
+
+/* The lifted copy in a long-press menu. iOS scales the item up out of the page
+   as the menu appears, which is most of why the gesture feels physical. */
+.navi-context-preview {
+  animation: navi-context-lift 220ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  transform-origin: bottom center;
+}
+
+@keyframes navi-context-lift {
+  from { opacity: 0; transform: scale(0.94) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navi-context-preview { animation-duration: 1ms; }
 }

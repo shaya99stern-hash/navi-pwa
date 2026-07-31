@@ -4,6 +4,7 @@ import "./executors";
 import { match, resolveSlash, run, type Skill, type SkillResult } from "./registry";
 
 export { match, resolveSlash, run, SKILLS, available, categories, getSkill, isImplemented } from "./registry";
+export { instantAnswer, type InstantAnswer } from "./instant";
 export type { Skill, SkillResult } from "./registry";
 
 /**

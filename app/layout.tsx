@@ -100,6 +100,28 @@ async function readThemeCookie(): Promise<"dark" | "light"> {
 
 /* The cookie is authoritative because the server rendered against it; mirror it
    back into localStorage so existing readers stay in sync. */
+/**
+ * Matches the app's root size to iOS Dynamic Type.
+ *
+ * Only the -apple-system-body shorthand resolves to the size the user chose in
+ * Settings, and CSS cannot clamp a font shorthand, so the value is measured and
+ * bounded here. The cap is deliberate: controls, sheets and the composer have
+ * fixed heights, so unbounded growth would clip text rather than reflow it.
+ * Runs before paint, so there is no jump from one size to another.
+ */
+const dynamicTypeBootScript = `
+try {
+  var probe = document.createElement('div');
+  probe.className = 'navi-type-probe';
+  document.documentElement.appendChild(probe);
+  var body = parseFloat(getComputedStyle(probe).fontSize);
+  probe.remove();
+  if (body && body > 16) {
+    document.documentElement.style.fontSize = Math.min(body, 20) + 'px';
+  }
+} catch {}
+`;
+
 const themeBootScript = `
 try {
   var cookie = document.cookie.match(/(?:^|; )navi\\.theme=([^;]*)/);
@@ -166,6 +188,7 @@ try {
           <link key={screen.href} rel="apple-touch-startup-image" href={screen.href} media={screen.media} />
         ))}
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        <script dangerouslySetInnerHTML={{ __html: dynamicTypeBootScript }} />
         <script dangerouslySetInnerHTML={{ __html: storageBootScript }} />
       </head>
       <body>

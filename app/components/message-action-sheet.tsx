@@ -42,8 +42,16 @@ export function MessageActionSheet({ text, canRetry, canEdit, haptics, onClose, 
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center" onClick={onClose}>
-      <div aria-hidden="true" {...sheet.scrimProps} className="absolute inset-0 bg-overlay" />
+    <div className="fixed inset-0 z-[120] flex flex-col justify-end" onClick={onClose}>
+      {/* iOS lifts the item out of the page and blurs everything behind it, so
+          the menu reads as attached to that message rather than to the screen.
+          The preview is the lifted copy; the sheet below carries the actions. */}
+      <div aria-hidden="true" {...sheet.scrimProps} className="absolute inset-0 bg-overlay backdrop-blur-[6px]" />
+      <div className="navi-context-preview relative mx-auto w-full max-w-md px-4 pb-3">
+        <p className="line-clamp-4 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-4 py-3 text-[0.9375rem]/[1.375rem] font-normal text-primary shadow-menu">
+          {text.slice(0, 240)}{text.length > 240 ? "…" : ""}
+        </p>
+      </div>
       <section
         {...sheet.sheetProps}
         role="dialog"
@@ -56,35 +64,31 @@ export function MessageActionSheet({ text, canRetry, canEdit, haptics, onClose, 
           <div className="navi-sheet-grabber" />
         </div>
 
-        <p className="line-clamp-2 border-b border-[var(--border-subtle)] px-5 pb-3 text-[13px]/[18px] font-medium text-tertiary">
-          {text.slice(0, 160)}
-        </p>
-
-        <button type="button" onClick={() => void copy()} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[16px]/6 font-normal text-primary active:bg-elev-2">
+        <button type="button" onClick={() => void copy()} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[1rem]/6 font-normal text-primary active:bg-elev-2">
           {copied ? <Check size={19} strokeWidth={1.8} className="text-success" /> : <Copy size={19} strokeWidth={1.8} />}
           {copied ? "Copied" : "Copy"}
         </button>
 
-        <button type="button" onClick={() => void share()} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[16px]/6 font-normal text-primary active:bg-elev-2">
+        <button type="button" onClick={() => void share()} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[1rem]/6 font-normal text-primary active:bg-elev-2">
           <Share size={19} strokeWidth={1.8} />
           Share
         </button>
 
         {canEdit ? (
-          <button type="button" onClick={() => { haptic("selection", haptics); onClose(); onEdit(); }} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[16px]/6 font-normal text-primary active:bg-elev-2">
+          <button type="button" onClick={() => { haptic("selection", haptics); onClose(); onEdit(); }} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[1rem]/6 font-normal text-primary active:bg-elev-2">
             <PencilLine size={19} strokeWidth={1.8} />
             Edit and resend
           </button>
         ) : null}
 
         {canRetry ? (
-          <button type="button" onClick={() => { haptic("selection", haptics); onClose(); onRetry(); }} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[16px]/6 font-normal text-primary active:bg-elev-2">
+          <button type="button" onClick={() => { haptic("selection", haptics); onClose(); onRetry(); }} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[1rem]/6 font-normal text-primary active:bg-elev-2">
             <RotateCcw size={19} strokeWidth={1.8} />
             Try again
           </button>
         ) : null}
 
-        <div className="flex min-h-[46px] items-center gap-3 px-5 text-[12px]/4 font-medium text-tertiary">
+        <div className="flex min-h-[46px] items-center gap-3 px-5 text-[0.75rem]/4 font-medium text-tertiary">
           <TextCursorInput size={16} strokeWidth={1.8} />
           Tap and hold the text itself to select part of it
         </div>
