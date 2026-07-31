@@ -49,7 +49,7 @@ export function ArtifactsSheet({
 
   return (
     <div className="fixed inset-0 z-[95]">
-      <button type="button" aria-label="Close artifacts" onClick={onClose} className="absolute inset-0 bg-overlay" />
+      <button type="button" aria-label="Close artifacts" onClick={onClose} {...sheet.scrimProps} className="absolute inset-0 bg-overlay" />
       <section
         {...sheet.sheetProps}
         role="dialog"

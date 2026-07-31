@@ -206,8 +206,9 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
       </aside>
 
       {selected ? (
-        <div className="fixed inset-0 z-[110] flex items-end justify-center bg-overlay" onClick={() => setSelected(null)}>
-          <div {...actionSheet.sheetProps} className="navi-sheet w-full max-w-md overflow-hidden pb-[var(--safe-bottom)]" onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-[110] flex items-end justify-center" onClick={() => setSelected(null)}>
+          <div aria-hidden="true" {...actionSheet.scrimProps} className="absolute inset-0 bg-overlay" />
+          <div {...actionSheet.sheetProps} className="navi-sheet relative w-full max-w-md overflow-hidden pb-[var(--safe-bottom)]" onClick={(event) => event.stopPropagation()}>
             <div {...actionSheet.handleProps} className="navi-sheet-grab pt-1"><div className="navi-sheet-grabber" /></div>
             <div className="border-b border-[var(--border-subtle)] px-5 py-3">
               <div className="truncate text-[15px]/[22px] font-medium text-primary">{selected.title}</div>

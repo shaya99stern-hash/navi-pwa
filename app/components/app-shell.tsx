@@ -120,6 +120,7 @@ export function AppShell({
   const [atBottom, setAtBottom] = useState(true);
   const [edgeProgress, setEdgeProgress] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const anchoredUserId = useRef<string | null>(null);
   const anchorTop = useRef(0);
   const edgeStart = useRef<{ x: number; y: number } | null>(null);
@@ -555,9 +556,10 @@ export function AppShell({
     clearError();
     anchoredUserId.current = null;
     setAutoFollow(true);
-    window.setTimeout(() => {
-      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Chat with Navi"]')?.focus();
-    }, 60);
+    // Must run inside the tap that triggered the edit: iOS only opens the
+    // keyboard for a focus() call that still carries the user-gesture token,
+    // which a timeout or a post-render effect would have already lost.
+    composerRef.current?.focus({ preventScroll: true });
   }
 
   function retry() {
@@ -857,6 +859,7 @@ export function AppShell({
         <PwaPlatformBanner inline />
       </div>
       <ComposerDock
+        inputRef={composerRef}
         value={draft}
         generating={generating}
         online={online}

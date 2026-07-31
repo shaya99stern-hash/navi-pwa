@@ -42,13 +42,14 @@ export function MessageActionSheet({ text, canRetry, canEdit, haptics, onClose, 
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-overlay" onClick={onClose}>
+    <div className="fixed inset-0 z-[120] flex items-end justify-center" onClick={onClose}>
+      <div aria-hidden="true" {...sheet.scrimProps} className="absolute inset-0 bg-overlay" />
       <section
         {...sheet.sheetProps}
         role="dialog"
         aria-modal="true"
         aria-label="Message actions"
-        className="navi-sheet w-full max-w-md overflow-hidden pb-[calc(10px+var(--safe-bottom))]"
+        className="navi-sheet relative w-full max-w-md overflow-hidden pb-[calc(10px+var(--safe-bottom))]"
         onClick={(event) => event.stopPropagation()}
       >
         <div {...sheet.handleProps} className="navi-sheet-grab pt-1">

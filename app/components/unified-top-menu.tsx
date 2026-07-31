@@ -208,7 +208,7 @@ export function UnifiedTopMenu({
 
       {open ? (
         <div className="fixed inset-0 z-[90]">
-          <button type="button" aria-label="Close options" onClick={onClose} className="absolute inset-0 bg-overlay" />
+          <button type="button" aria-label="Close options" onClick={onClose} {...sheet.scrimProps} className="absolute inset-0 bg-overlay" />
           <section {...sheet.sheetProps} className="navi-sheet absolute inset-x-0 bottom-0 mx-auto flex max-h-[86dvh] w-full max-w-[720px] flex-col overflow-hidden md:max-w-[480px]">
             <div {...sheet.handleProps} className="navi-sheet-grab shrink-0 pt-1"><div className="navi-sheet-grabber" /></div>
             <header className="flex h-12 shrink-0 items-center justify-between px-4">

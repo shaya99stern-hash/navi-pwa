@@ -20,6 +20,7 @@ import {
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
+  type RefObject,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -52,6 +53,8 @@ type Props = {
   modelLabel: string;
   research: boolean;
   haptics: boolean;
+  /** Lets the shell focus the composer synchronously from a tap handler. */
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
@@ -117,6 +120,7 @@ export function ComposerDock({
   modelLabel,
   research,
   haptics,
+  inputRef,
   onChange,
   onSend,
   onStop,
@@ -127,7 +131,7 @@ export function ComposerDock({
   onOpenTools
 }: Props) {
   const dockRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -469,7 +473,10 @@ export function ComposerDock({
             className={`navi-composer flex flex-col p-2 ${sending ? "scale-[0.985]" : "scale-100"}`}
           >
             <textarea
-              ref={textareaRef}
+              ref={(node) => {
+                textareaRef.current = node;
+                if (inputRef) inputRef.current = node;
+              }}
               value={value}
               onChange={(event) => onChange(event.target.value)}
               onKeyDown={keyDown}
@@ -571,6 +578,7 @@ export function ComposerDock({
             type="button"
             aria-label="Close attachment menu"
             onClick={() => setSourceMenuOpen(false)}
+            {...sourceSheet.scrimProps}
             className="absolute inset-0 bg-overlay backdrop-blur-[3px]"
           />
           <section
@@ -627,7 +635,7 @@ export function ComposerDock({
               type="button"
               role="switch"
               aria-checked={research}
-              onClick={onToggleResearch}
+              onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
               className="mt-3 flex min-h-[56px] w-full items-center gap-3 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-3 text-left active:bg-elev-3"
             >
               <Search size={20} className={research ? "text-accent" : "text-secondary"} />
