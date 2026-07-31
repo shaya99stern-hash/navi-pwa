@@ -13,6 +13,13 @@ import {
   type PointerEvent as ReactPointerEvent
 } from "react";
 import type { AttachmentMeta, MenuSection, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
+import {
+  ATTACHMENT_BUDGET,
+  MAX_ATTACHMENTS,
+  MAX_IMAGE_INPUT_BYTES,
+  isResizableImage,
+  prepareAttachments
+} from "@/lib/ui/attachments";
 import { DEFAULT_PREFERENCES, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
 import { clearLocalState, loadLocalState, setLocalValue } from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
@@ -459,25 +466,21 @@ export function AppShell({
   function addFiles(list: FileList | null) {
     if (!list) return;
     const incoming = Array.from(list);
-    const combined = [...pendingFiles, ...incoming].slice(0, 6);
-    let total = 0;
+    const combined = [...pendingFiles, ...incoming].slice(0, MAX_ATTACHMENTS);
     for (const file of combined) {
       if (!ALLOWED_TYPES.has(file.type)) {
         setAttachmentError(`${file.name} has an unsupported file type.`);
         haptic("warning", preferences.haptics);
         return;
       }
-      if (file.size > 6_000_000) {
-        setAttachmentError(`${file.name} exceeds the 6 MB attachment limit.`);
+      // Images are resized on send, so only their decode cost is bounded here;
+      // everything else has to fit the request budget as-is.
+      const limit = isResizableImage(file) ? MAX_IMAGE_INPUT_BYTES : ATTACHMENT_BUDGET;
+      if (file.size > limit) {
+        setAttachmentError(`${file.name} is too large to send.`);
         haptic("warning", preferences.haptics);
         return;
       }
-      total += file.size;
-    }
-    if (total > 10_000_000) {
-      setAttachmentError("Combined attachments exceed the 10 MB request limit.");
-      haptic("warning", preferences.haptics);
-      return;
     }
     setPendingFiles(combined);
     setAttachmentError(incoming.length + pendingFiles.length > 6 ? "Only the first six attachments were kept." : null);
@@ -497,9 +500,13 @@ export function AppShell({
           : "Preparing your request."
     });
     try {
-      const files = pendingFiles.length ? await Promise.all(pendingFiles.map(fileToPart)) : undefined;
+      // Resize before encoding: the Edge runtime rejects the whole request if
+      // the base64 payload overruns its body cap, with no usable error.
+      const { files: outgoing, notice } = await prepareAttachments(pendingFiles);
+      if (notice) setAttachmentError(notice);
+      const files = outgoing.length ? await Promise.all(outgoing.map(fileToPart)) : undefined;
       const text = draft.trim() || "Please review the attached file or image.";
-      const attachmentMeta: AttachmentMeta[] = pendingFiles.map((file) => ({
+      const attachmentMeta: AttachmentMeta[] = outgoing.map((file) => ({
         name: file.name,
         type: file.type,
         size: file.size

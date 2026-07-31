@@ -23,16 +23,18 @@ import {
   type RefObject,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState
 } from "react";
 import { haptic } from "@/lib/ui/haptics";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
+import {
+  ATTACHMENT_BUDGET,
+  MAX_ATTACHMENTS,
+  MAX_IMAGE_INPUT_BYTES,
+  isResizableImage
+} from "@/lib/ui/attachments";
 
-const MAX_ATTACHMENTS = 6;
-const MAX_FILE_BYTES = 6_000_000;
-const MAX_REQUEST_BYTES = 10_000_000;
 
 const DOCUMENT_ACCEPT = [
   "text/plain",
@@ -234,11 +236,6 @@ export function ComposerDock({
 
   const footerTone = !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
 
-  const totalSelectedBytes = useMemo(
-    () => selectedFiles.reduce((total, file) => total + file.size, 0),
-    [selectedFiles]
-  );
-
   function send() {
     // Deliberately not gated on the provider probe: if it is wrong or stale the
     // request should still go out and surface a real server error.
@@ -279,10 +276,13 @@ export function ComposerDock({
     }
 
     const nextCount = attachmentCount + incoming.length;
-    const invalid = incoming.find((file) => file.size > MAX_FILE_BYTES);
+    // Images get resized before sending, so only documents face the hard cap.
+    const invalid = incoming.find(
+      (file) => file.size > (isResizableImage(file) ? MAX_IMAGE_INPUT_BYTES : ATTACHMENT_BUDGET)
+    );
 
     if (invalid) {
-      setAttachmentMessage(`${invalid.name} is larger than 6 MB.`);
+      setAttachmentMessage(`${invalid.name} is too large to send.`);
       haptic("warning", haptics);
       return;
     }
@@ -293,9 +293,13 @@ export function ComposerDock({
       return;
     }
 
-    const incomingBytes = incoming.reduce((total, file) => total + file.size, 0);
-    if (totalSelectedBytes + incomingBytes > MAX_REQUEST_BYTES) {
-      setAttachmentMessage("Attachments exceed the 10 MB request limit.");
+    // Only what cannot be resized is checked against the budget here; the
+    // send path resizes images and reports if the result still does not fit.
+    const fixedBytes = [...selectedFiles, ...incoming]
+      .filter((file) => !isResizableImage(file))
+      .reduce((total, file) => total + file.size, 0);
+    if (fixedBytes > ATTACHMENT_BUDGET) {
+      setAttachmentMessage("Those documents exceed the request limit.");
       haptic("warning", haptics);
       return;
     }
@@ -592,7 +596,7 @@ export function ComposerDock({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <div className="text-[17px]/6 font-semibold text-primary">Add to message</div>
-                <div className="text-[12px]/4 font-medium text-tertiary">Up to six items, 10 MB total</div>
+                <div className="text-[12px]/4 font-medium text-tertiary">Up to six items · photos are resized to fit</div>
               </div>
               <button
                 type="button"
