@@ -11,7 +11,8 @@ export type PublicMcpServer = Omit<McpRegistryEntry, "authorization" | "writeToo
   configured: true;
 };
 
-function isPrivateHostname(hostname: string): boolean {
+/** Shared with the web tools: any outbound URL a model can influence needs this. */
+export function isPrivateHostname(hostname: string): boolean {
   const lower = hostname.toLowerCase();
   if (lower === "localhost" || lower === "::1" || lower.endsWith(".local")) return true;
   if (/^127\./.test(lower) || /^10\./.test(lower) || /^192\.168\./.test(lower) || /^169\.254\./.test(lower)) return true;

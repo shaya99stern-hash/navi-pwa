@@ -11,6 +11,7 @@ import {
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { createProviderModel, getProviderAvailability, selectDirectRoute } from "@/lib/ai/providers";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
+import { buildWebTools } from "@/lib/ai/web-tools";
 import { runComposite } from "@/lib/ai/swarm";
 import type { ConnectorAccessMode, ModelPreset, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { authorizeApiMutation } from "@/lib/auth/api";
@@ -248,9 +249,13 @@ function systemPrompt(options: {
     "Never substitute an SVG stick figure or an HTML artifact for a requested raster image. Real image requests are handled by Navi's image pipeline.",
     styleInstruction(style),
     toolNames.length
-      ? `You can call connector tools, and their results are real. Call one whenever it would answer the question better than recalling: ${toolNames.join(", ")}. Prefer a tool over a guess for anything current, personal, or specific to the user's own data. Only read-only tools are available; if a task needs to send, write, or change something, say so and stop rather than looking for a way around it.`
+      ? `You can call these tools and their results are real: ${toolNames.join(", ")}. Call one whenever it would answer better than recalling — anything current, factual, personal, or specific to the user's own data. Prefer searching and reading a source over answering from memory, and cite the URLs you actually read. Every tool here is read-only; if a task needs to send, write, or change something, say so and stop rather than looking for a way around it.`
       : "You have no callable tools in this request. Answer from your own knowledge, and say plainly when something needs live data you cannot reach.",
-    tools.web ? "Web capability is enabled only when the selected route actually supplies it." : "Web capability is disabled.",
+    toolNames.includes("web_search")
+      ? ""
+      : tools.web
+        ? "Web search is switched on but unavailable on this route, so you cannot browse. Say so rather than implying you looked something up."
+        : "You cannot browse the web in this request.",
     tools.code ? "Code-execution capability is enabled only when the selected route actually supplies it." : "Code execution is disabled.",
     tools.artifacts ? artifactInstruction(artifactRequested) : "Interactive artifact output is disabled.",
     threadSummary ? `Compact summary and active project context:\n${threadSummary.slice(0, 8_000)}` : "",
@@ -393,6 +398,9 @@ export async function POST(request: Request): Promise<Response> {
           buildMcpTools(connectorIds, request.signal)
         ])
         : ["", {} as Awaited<ReturnType<typeof buildMcpTools>>];
+      // Clock and page reading need no configuration, so they are always on;
+      // search joins them only when a provider key is present.
+      const availableTools = { ...buildWebTools({ search: tools.web, signal: request.signal }), ...mcpTools };
       const modelMessages = await convertToModelMessages(redactGeneratedImages(messages));
 
       if (resolvedPreset === "navi-fable" || resolvedPreset === "navi-sol") {
@@ -437,15 +445,19 @@ export async function POST(request: Request): Promise<Response> {
         complex: effort !== "normal"
       });
       writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : "Preparing the response." }));
-      const toolNames = Object.keys(mcpTools);
+      // Gemini and Groq handle tool calling reliably. The Hugging Face router
+      // fronts many open models, plenty of which reject a tools parameter
+      // outright, so sending one there would break routes that work today.
+      const supportsTools = route.provider === "gemini" || route.provider === "groq";
+      const toolNames = supportsTools ? Object.keys(availableTools) : [];
       if (toolNames.length) {
-        writer.write(statusChunk({ stage: "gather", detail: `${toolNames.length} connector tool${toolNames.length === 1 ? "" : "s"} available.` }));
+        writer.write(statusChunk({ stage: "gather", detail: `${toolNames.length} tool${toolNames.length === 1 ? "" : "s"} available.` }));
       }
       const result = streamText({
         model: createProviderModel(route, origin),
         system: systemPrompt({ style, tools, artifactRequested, threadSummary, mcpContext, toolNames }),
         messages: modelMessages,
-        ...(toolNames.length ? { tools: mcpTools, stopWhen: stepCountIs(MAX_TOOL_STEPS) } : {}),
+        ...(toolNames.length ? { tools: availableTools, stopWhen: stepCountIs(MAX_TOOL_STEPS) } : {}),
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         maxRetries: 1,
         timeout: { totalMs: 50_000, chunkMs: 14_000 },
