@@ -179,8 +179,8 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
     <>
       <div ref={wrapperRef} className="my-4 overflow-hidden rounded-[20px] border border-[var(--border-subtle)] bg-elev-2">
         <div className="flex min-h-12 items-center gap-2 border-b border-[var(--border-subtle)] px-3">
-          <span className="min-w-0 flex-1 truncate text-[13px]/[18px] font-semibold text-primary">{payload.title}</span>
-          <span className="hidden text-[10px]/[14px] font-semibold uppercase tracking-[0.08em] text-tertiary sm:inline">Artifact</span>
+          <span className="min-w-0 flex-1 truncate text-[0.8125rem]/[1.125rem] font-semibold text-primary">{payload.title}</span>
+          <span className="hidden text-[0.625rem]/[0.875rem] font-semibold uppercase tracking-[0.08em] text-tertiary sm:inline">Artifact</span>
           <button type="button" onClick={openFullScreen} className="flex h-10 w-10 items-center justify-center rounded-xl text-secondary active:bg-[var(--bg-elev-3)]" aria-label="Open artifact full screen"><Maximize2 size={17} /></button>
           <button type="button" onClick={toggle} className="flex h-10 w-10 items-center justify-center rounded-xl text-secondary active:bg-[var(--bg-elev-3)]" aria-label={expanded ? "Collapse artifact" : "Expand artifact"}>{expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</button>
         </div>
@@ -188,13 +188,13 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
           {visible && expanded && !fullScreen ? artifactIframe("block w-full border-0 bg-transparent", { height }) : null}
         </div>
         <div className="flex min-h-11 items-center gap-1 overflow-x-auto border-t border-[var(--border-subtle)] px-2 scrollbar-none">
-          <button type="button" onClick={editWithNavi} className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl px-2 text-[11px]/4 font-semibold text-secondary active:bg-elev-3"><Pencil size={14} />Edit</button>
-          <button type="button" onClick={() => void copySource()} className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl px-2 text-[11px]/4 font-semibold text-secondary active:bg-elev-3"><Clipboard size={14} />Copy</button>
-          <button type="button" onClick={downloadArtifact} className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl px-2 text-[11px]/4 font-semibold text-secondary active:bg-elev-3"><Download size={14} />Download</button>
-          <button type="button" onClick={() => void shareArtifact()} className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl px-2 text-[11px]/4 font-semibold text-secondary active:bg-elev-3"><Share2 size={14} />Share</button>
-          <span className="ml-auto hidden shrink-0 items-center gap-1.5 px-2 text-[10px]/4 font-semibold text-tertiary sm:flex"><MousePointerClick size={13} />Saved in this conversation</span>
+          <button type="button" onClick={editWithNavi} className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl px-2 text-[0.6875rem]/4 font-semibold text-secondary active:bg-elev-3"><Pencil size={14} />Edit</button>
+          <button type="button" onClick={() => void copySource()} className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl px-2 text-[0.6875rem]/4 font-semibold text-secondary active:bg-elev-3"><Clipboard size={14} />Copy</button>
+          <button type="button" onClick={downloadArtifact} className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl px-2 text-[0.6875rem]/4 font-semibold text-secondary active:bg-elev-3"><Download size={14} />Download</button>
+          <button type="button" onClick={() => void shareArtifact()} className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl px-2 text-[0.6875rem]/4 font-semibold text-secondary active:bg-elev-3"><Share2 size={14} />Share</button>
+          <span className="ml-auto hidden shrink-0 items-center gap-1.5 px-2 text-[0.625rem]/4 font-semibold text-tertiary sm:flex"><MousePointerClick size={13} />Saved in this conversation</span>
         </div>
-        {notice ? <div className="border-t border-[var(--border-subtle)] px-3 py-2 text-center text-[10px]/4 font-semibold text-accent" role="status" aria-live="polite">{notice}</div> : null}
+        {notice ? <div className="border-t border-[var(--border-subtle)] px-3 py-2 text-center text-[0.625rem]/4 font-semibold text-accent" role="status" aria-live="polite">{notice}</div> : null}
       </div>
 
       {fullScreen ? (
@@ -202,8 +202,8 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
           <header className="safe-top flex min-h-[64px] shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] bg-elev-1 px-3">
             <button type="button" onClick={() => setFullScreen(false)} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Close full-screen artifact"><X size={21} /></button>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[16px]/5 font-semibold text-primary">{payload.title}</span>
-              <span className="block text-[10px]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">Interactive artifact</span>
+              <span className="block truncate text-[1rem]/5 font-semibold text-primary">{payload.title}</span>
+              <span className="block text-[0.625rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">Interactive artifact</span>
             </span>
             <button type="button" onClick={editWithNavi} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Edit artifact with Navi"><Pencil size={18} /></button>
             <button type="button" onClick={downloadArtifact} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Download artifact"><Download size={18} /></button>
@@ -212,7 +212,7 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
           <main className="min-h-0 flex-1 bg-elev-2">
             {artifactIframe("block h-full w-full border-0 bg-transparent", { height: "100%" })}
           </main>
-          <footer className="flex min-h-[52px] shrink-0 items-center justify-center gap-2 border-t border-[var(--border-subtle)] bg-elev-1 px-4 pb-[var(--safe-bottom)] text-[10px]/4 font-semibold text-tertiary">
+          <footer className="flex min-h-[52px] shrink-0 items-center justify-center gap-2 border-t border-[var(--border-subtle)] bg-elev-1 px-4 pb-[var(--safe-bottom)] text-[0.625rem]/4 font-semibold text-tertiary">
             <Minimize2 size={14} />Secure sandbox · no network, navigation, or parent access
           </footer>
         </div>

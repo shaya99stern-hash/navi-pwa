@@ -19,14 +19,14 @@ export function LaunchSurface({ online, children }: { online: boolean; children?
   return (
     <div className="navi-launch launch-surface flex min-h-full flex-col px-gutter pb-28 pt-6">
       <div className="mx-auto flex w-full max-w-app flex-1 flex-col items-center justify-center text-center">
-        <h1 className="greeting-title flex items-center gap-3 text-[32px]/[38px] text-primary">
+        <h1 className="greeting-title flex items-center gap-3 text-[2rem]/[2.375rem] text-primary">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand-spark.png" alt="" aria-hidden="true" className="h-9 w-9 shrink-0" />
           {greeting}
         </h1>
 
         {!online ? (
-          <p className="mt-4 max-w-[320px] text-[14px]/[21px] font-medium text-tertiary">
+          <p className="mt-4 max-w-[320px] text-[0.875rem]/[1.3125rem] font-medium text-tertiary">
             You&apos;re offline. Saved chats stay available on this device.
           </p>
         ) : null}

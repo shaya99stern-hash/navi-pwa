@@ -76,13 +76,13 @@ export function MessageRow({ message, streaming, theme, haptics, onRetry, onLong
       className={`navi-message-enter flex ${user ? "justify-end" : "justify-start"}`}
     >
       {user ? (
-        <div className="max-w-[85%] rounded-[18px] bg-[var(--bg-bubble-user)] px-4 py-2.5 text-[16px]/[24px] font-normal text-primary">
-          {files.length ? <div className="mb-2 flex flex-wrap gap-1.5">{files.map((file, index) => <span key={`${file.filename}-${index}`} className="inline-flex min-h-7 items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-elev-3 px-2 text-[11px]/[14px] font-semibold text-secondary"><FileText size={13} />{file.filename ?? file.mediaType ?? "Attachment"}</span>)}</div> : null}
+        <div className="max-w-[85%] rounded-[18px] bg-[var(--bg-bubble-user)] px-4 py-2.5 text-[1rem]/[1.5rem] font-normal text-primary">
+          {files.length ? <div className="mb-2 flex flex-wrap gap-1.5">{files.map((file, index) => <span key={`${file.filename}-${index}`} className="inline-flex min-h-7 items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-elev-3 px-2 text-[0.6875rem]/[0.875rem] font-semibold text-secondary"><FileText size={13} />{file.filename ?? file.mediaType ?? "Attachment"}</span>)}</div> : null}
           <div className="whitespace-pre-wrap">{text}</div>
         </div>
       ) : (
         <div className="group w-full">
-          <div className={`navi-markdown text-[16px]/[26px] font-normal ${streaming ? "streaming-cursor" : ""}`}>
+          <div className={`navi-markdown text-[1rem]/[1.625rem] font-normal ${streaming ? "streaming-cursor" : ""}`}>
             {text ? <MarkdownRenderer text={text} theme={theme} haptics={haptics} /> : null}
           </div>
           {!streaming && text ? (

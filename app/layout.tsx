@@ -11,7 +11,11 @@ import {
   isClerkConfigured,
   isClerkUserAllowed
 } from "@/lib/auth/config";
-import { CLERK_SESSION_COOKIE_NAME, verifyClerkSessionToken } from "@/lib/auth/session";
+import {
+  CLERK_CLIENT_UAT_COOKIE_NAME,
+  CLERK_SESSION_COOKIE_NAME,
+  resolveClerkSession
+} from "@/lib/auth/session";
 import { SPLASH_SCREENS } from "@/lib/ui/splash-screens";
 import "./globals.css";
 import "./shell.css";
@@ -100,6 +104,31 @@ async function readThemeCookie(): Promise<"dark" | "light"> {
 
 /* The cookie is authoritative because the server rendered against it; mirror it
    back into localStorage so existing readers stay in sync. */
+/**
+ * Matches the app's root size to iOS Dynamic Type.
+ *
+ * Only the -apple-system-body shorthand resolves to the size the user chose in
+ * Settings, and CSS cannot clamp a font shorthand, so the value is measured and
+ * bounded here. The cap is deliberate: controls, sheets and the composer have
+ * fixed heights, so unbounded growth would clip text rather than reflow it.
+ * Runs before paint, so there is no jump from one size to another.
+ */
+const dynamicTypeBootScript = `
+try {
+  // The auth pages are Clerk's layout, not ours, and it measures its own boxes
+  // against a 16px root. Scaling underneath it clips its field labels.
+  if (/^\\/(sign-in|sign-up)(\\/|$)/.test(location.pathname)) throw 0;
+  var probe = document.createElement('div');
+  probe.className = 'navi-type-probe';
+  document.documentElement.appendChild(probe);
+  var body = parseFloat(getComputedStyle(probe).fontSize);
+  probe.remove();
+  if (body && body > 16) {
+    document.documentElement.style.fontSize = Math.min(body, 20) + 'px';
+  }
+} catch {}
+`;
+
 const themeBootScript = `
 try {
   var cookie = document.cookie.match(/(?:^|; )navi\\.theme=([^;]*)/);
@@ -113,16 +142,21 @@ try {
 
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const clerkConfigured = isClerkConfigured();
-  const sessionToken = clerkConfigured
-    ? (await cookies()).get(CLERK_SESSION_COOKIE_NAME)?.value
-    : undefined;
+  const cookieStore = clerkConfigured ? await cookies() : undefined;
+  const sessionToken = cookieStore?.get(CLERK_SESSION_COOKIE_NAME)?.value;
+  const clientUat = cookieStore?.get(CLERK_CLIENT_UAT_COOKIE_NAME)?.value;
   // Verify against the origin actually serving this request so custom domains
   // resolve the same user the middleware did.
   const requestHeaders = clerkConfigured ? await headers() : undefined;
   const forwardedHost = requestHeaders?.get("x-forwarded-host") ?? requestHeaders?.get("host") ?? undefined;
   const forwardedProto = requestHeaders?.get("x-forwarded-proto") ?? "https";
   const requestOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : undefined;
-  const userId = clerkConfigured ? await verifyClerkSessionToken(sessionToken, requestOrigin) : null;
+  /* Must resolve exactly the way the middleware did: a cold PWA launch carries
+     an expired session token, and disagreeing here would put this render's
+     chats under the signed-out storage scope and clear the caches. */
+  const { userId } = clerkConfigured
+    ? await resolveClerkSession(sessionToken, clientUat, requestOrigin)
+    : { userId: null };
   const storageScope = userId ? `clerk:${userId}` : clerkConfigured ? "signed-out" : "guest";
   const mayMigrateLegacyState = !clerkConfigured
     || Boolean(userId && hasClerkUserAllowlist() && isClerkUserAllowed(userId));
@@ -166,6 +200,7 @@ try {
           <link key={screen.href} rel="apple-touch-startup-image" href={screen.href} media={screen.media} />
         ))}
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        <script dangerouslySetInnerHTML={{ __html: dynamicTypeBootScript }} />
         <script dangerouslySetInnerHTML={{ __html: storageBootScript }} />
       </head>
       <body>

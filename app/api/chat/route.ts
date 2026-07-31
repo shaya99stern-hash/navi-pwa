@@ -11,6 +11,7 @@ import {
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { createProviderModel, getProviderAvailability, selectDirectRoute } from "@/lib/ai/providers";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
+import { buildSkillTools } from "@/lib/ai/skill-tools";
 import { buildWebTools } from "@/lib/ai/web-tools";
 import { runComposite } from "@/lib/ai/swarm";
 import type { ConnectorAccessMode, ModelPreset, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
@@ -249,7 +250,7 @@ function systemPrompt(options: {
     "Never substitute an SVG stick figure or an HTML artifact for a requested raster image. Real image requests are handled by Navi's image pipeline.",
     styleInstruction(style),
     toolNames.length
-      ? `You can call these tools and their results are real: ${toolNames.join(", ")}. Call one whenever it would answer better than recalling — anything current, factual, personal, or specific to the user's own data. Prefer searching and reading a source over answering from memory, and cite the URLs you actually read. Every tool here is read-only; if a task needs to send, write, or change something, say so and stop rather than looking for a way around it.`
+      ? `You can call these tools and their results are real: ${toolNames.join(", ")}. Call one whenever it would answer better than recalling — anything current, factual, personal, or specific to the user's own data. Never do arithmetic, unit conversion, date maths, or counting in your head when a tool will do it exactly; approximating those is the most common way you are wrong. Prefer searching and reading a source over answering from memory, and cite the URLs you actually read. Every tool here is read-only; if a task needs to send, write, or change something, say so and stop rather than looking for a way around it.`
       : "You have no callable tools in this request. Answer from your own knowledge, and say plainly when something needs live data you cannot reach.",
     toolNames.includes("web_search")
       ? ""
@@ -392,15 +393,22 @@ export async function POST(request: Request): Promise<Response> {
       const connectorIds = Array.isArray(allowedConnectorIds) ? allowedConnectorIds : [];
       // Metadata tells the model what exists; the tool set lets it actually act.
       // Listing resources without callable tools was the whole gap here.
+      // A tool call stalls the stream with nothing on screen unless the work
+      // names itself, which reads as the app having hung.
+      const announce = (label: string) => writer.write(statusChunk({ stage: "gather", detail: `${label}…` }));
       const [mcpContext, mcpTools] = connectorIds.length
         ? await Promise.all([
           gatherMcpMetadata(connectorIds, request.signal),
-          buildMcpTools(connectorIds, request.signal)
+          buildMcpTools(connectorIds, request.signal, announce)
         ])
         : ["", {} as Awaited<ReturnType<typeof buildMcpTools>>];
       // Clock and page reading need no configuration, so they are always on;
       // search joins them only when a provider key is present.
-      const availableTools = { ...buildWebTools({ search: tools.web, signal: request.signal }), ...mcpTools };
+      const availableTools = {
+        ...buildSkillTools(announce),
+        ...buildWebTools({ search: tools.web, signal: request.signal, onActivity: announce }),
+        ...mcpTools
+      };
       const modelMessages = await convertToModelMessages(redactGeneratedImages(messages));
 
       if (resolvedPreset === "navi-fable" || resolvedPreset === "navi-sol") {

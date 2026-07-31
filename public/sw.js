@@ -1,4 +1,4 @@
-const VERSION = "navi-shell-v12";
+const VERSION = "navi-shell-v13";
 const STATIC_CACHE = `${VERSION}-static`;
 /* Last successful render of each route, so a cold launch with no network boots
    the real app instead of the offline placeholder. This HTML is server-rendered
@@ -115,7 +115,11 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
+          /* `redirected` means this landed on /sign-in rather than the app.
+             Storing it would serve a login page as the shell, and a redirected
+             response replayed for a navigation is rejected outright by the
+             browser — a blank screen rather than a wrong one. */
+          if (response.ok && !response.redirected) {
             const copy = response.clone();
             caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
           }

@@ -153,10 +153,10 @@ export function PwaPlatformBanner({ inline = false }: { inline?: boolean } = {})
           {mode === "update" ? <RefreshCw size={16} /> : mode === "ios" ? <Share size={16} /> : <Smartphone size={16} />}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px]/[18px] font-semibold text-primary">
+          <span className="block truncate text-[0.8125rem]/[1.125rem] font-semibold text-primary">
             {mode === "update" ? "Update ready" : mode === "ios" ? "Add to Home Screen" : "Install NaviOS Hub"}
           </span>
-          <span className="block truncate text-[11px]/4 font-medium text-tertiary">
+          <span className="block truncate text-[0.6875rem]/4 font-medium text-tertiary">
             {mode === "update"
               ? "Restart to apply the newest version."
               : mode === "ios"
@@ -166,9 +166,9 @@ export function PwaPlatformBanner({ inline = false }: { inline?: boolean } = {})
         </span>
 
         {mode === "update" ? (
-          <button type="button" onClick={requestPwaUpdate} className="min-h-9 shrink-0 rounded-full bg-accent px-3.5 text-[12px]/4 font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed">Restart</button>
+          <button type="button" onClick={requestPwaUpdate} className="min-h-9 shrink-0 rounded-full bg-accent px-3.5 text-[0.75rem]/4 font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed">Restart</button>
         ) : mode === "install" ? (
-          <button type="button" onClick={() => void install()} disabled={installing} className="min-h-9 shrink-0 rounded-full bg-accent px-3.5 text-[12px]/4 font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed disabled:opacity-60">{installing ? "Opening…" : "Install"}</button>
+          <button type="button" onClick={() => void install()} disabled={installing} className="min-h-9 shrink-0 rounded-full bg-accent px-3.5 text-[0.75rem]/4 font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed disabled:opacity-60">{installing ? "Opening…" : "Install"}</button>
         ) : null}
 
         <button

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "arith-percent",
+    "prompt": "What is 17% of 4200? Give just the number.",
+    "expect": { "type": "contains", "value": "714" },
+    "why": "Models routinely mis-multiply. The calculate tool cannot."
+  },
+  {
+    "id": "arith-compound",
+    "prompt": "A 1240 item order gets a 12% discount then 8% tax. What is the final total?",
+    "expect": { "type": "contains", "value": "1178" },
+    "why": "Two-step arithmetic, the classic silent-wrong-answer."
+  },
+  {
+    "id": "arith-big",
+    "prompt": "Multiply 8473 by 2916. Give just the number.",
+    "expect": { "type": "contains", "value": "24707268" },
+    "why": "Large multiplication is where mental arithmetic reliably fails."
+  },
+  {
+    "id": "units-marathon",
+    "prompt": "How many kilometres is 26.2 miles? Two decimal places.",
+    "expect": { "type": "regex", "value": "42\\.16" },
+    "why": "Conversion factors get recalled approximately."
+  },
+  {
+    "id": "units-temp",
+    "prompt": "Convert 37 degrees Celsius to Fahrenheit.",
+    "expect": { "type": "contains", "value": "98.6" },
+    "why": "Easy to state, easy to get subtly wrong."
+  },
+  {
+    "id": "date-business-days",
+    "prompt": "How many working days are there from 5 January 2026 to 16 January 2026 inclusive, counting Monday to Friday only?",
+    "expect": { "type": "contains", "value": "10" },
+    "why": "Requires a real calendar, not a guess about which days are weekends."
+  },
+  {
+    "id": "date-leap",
+    "prompt": "What is the date one day after 28 February 2028?",
+    "expect": { "type": "regex", "value": "29 February|February 29|2028-02-29" },
+    "why": "Leap years are a standard failure."
+  },
+  {
+    "id": "date-age",
+    "prompt": "Someone born on 20 March 1990 — how old are they in whole years on 10 January 2026?",
+    "expect": { "type": "contains", "value": "35" },
+    "why": "Birthday-not-yet-reached trips up naive subtraction."
+  },
+  {
+    "id": "text-count",
+    "prompt": "Count the words in exactly this sentence and reply with only the number: The quick brown fox jumps over the lazy dog",
+    "expect": { "type": "contains", "value": "9" },
+    "why": "Counting by eye is unreliable; a tool is exact."
+  },
+  {
+    "id": "json-invalid",
+    "prompt": "Is this valid JSON? {\"a\": 1,} — answer yes or no and say why.",
+    "expect": { "type": "regex", "value": "no|invalid|trailing comma" },
+    "why": "Checking syntax by reading is error-prone."
+  },
+  {
+    "id": "csv-convert",
+    "prompt": "Convert this CSV to JSON: name,age\\nAda,36",
+    "expect": { "type": "regex", "value": "\"name\"\\s*:\\s*\"Ada\"" },
+    "why": "Transcription mistakes are common when done by hand."
+  },
+  {
+    "id": "honesty-no-clock",
+    "prompt": "What is today's date?",
+    "expect": { "type": "regex", "value": "20\\d\\d" },
+    "why": "Without the clock tool the honest answer is 'I cannot know'; with it, a real date."
+  }
+]

@@ -33,7 +33,11 @@ function flattenResult(result: unknown): string {
  * confirmation gate on /api/mcp/tools is for. Bridging writes without that
  * would let a model send mail or change a calendar on its own initiative.
  */
-export async function buildMcpTools(serverIds: string[], signal?: AbortSignal): Promise<ToolSet> {
+export async function buildMcpTools(
+  serverIds: string[],
+  signal?: AbortSignal,
+  onActivity: (label: string) => void = () => {}
+): Promise<ToolSet> {
   const policy = getMcpToolPolicy();
   const selected = serverIds.filter((id) => policy.has(id)).slice(0, MAX_SERVERS);
   if (!selected.length) return {};
@@ -67,6 +71,7 @@ export async function buildMcpTools(serverIds: string[], signal?: AbortSignal): 
             ?? { type: "object", properties: {}, additionalProperties: true }
         ),
         execute: async (input) => {
+          onActivity(`Asking ${serverId} for ${name.replace(/_/g, " ")}`);
           try {
             const result = await callMcp(serverId, "tools/call", { name, arguments: input ?? {} }, signal);
             return flattenResult(result);

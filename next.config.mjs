@@ -1,7 +1,15 @@
+import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
+
+/* Stamped in at build time so Settings can say which build is installed. An
+   installed PWA updates silently, so without this there is no way to tell a
+   stale shell from a current one short of reinstalling the app. */
+const { version: appVersion } = createRequire(import.meta.url)("./package.json");
+const buildRef = (process.env.VERCEL_GIT_COMMIT_SHA ?? "").slice(0, 7);
+const builtAt = new Date().toISOString().slice(0, 10);
 const developmentEval = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
 
 const contentSecurityPolicy = [
@@ -25,6 +33,11 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   turbopack: { root: projectRoot },
+  env: {
+    NEXT_PUBLIC_NAVI_VERSION: appVersion,
+    NEXT_PUBLIC_NAVI_BUILD: buildRef,
+    NEXT_PUBLIC_NAVI_BUILT_AT: builtAt
+  },
   async headers() {
     return [
       {

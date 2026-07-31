@@ -65,21 +65,21 @@ export function ProviderSetupNotice({ haptics }: { haptics: boolean }) {
           <KeyRound size={19} />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-[15px]/[22px] font-semibold text-primary">Finish setup to start chatting</h2>
-          <p className="mt-1 text-[13px]/[19px] font-medium text-secondary">
+          <h2 className="text-[0.9375rem]/[1.375rem] font-semibold text-primary">Finish setup to start chatting</h2>
+          <p className="mt-1 text-[0.8125rem]/[1.1875rem] font-medium text-secondary">
             No model credential is configured, so replies cannot be generated yet. Add at least one of these as an
             environment variable in your Vercel project, then redeploy.
           </p>
           <ul className="mt-3 space-y-1">
             {missing.map((provider) => (
-              <li key={provider} className="flex items-center gap-2 text-[12px]/4">
+              <li key={provider} className="flex items-center gap-2 text-[0.75rem]/4">
                 <code className="rounded-md border border-[var(--border-subtle)] bg-elev-1 px-1.5 py-0.5 font-semibold text-primary">
                   {KEY_NAMES[provider]}
                 </code>
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-[11px]/4 font-medium text-tertiary">
+          <p className="mt-3 text-[0.6875rem]/4 font-medium text-tertiary">
             Vercel → Project Settings → Environment Variables → Production. Everything else in the app works now;
             drafts, chats, and projects stay on this device.
           </p>
@@ -90,7 +90,7 @@ export function ProviderSetupNotice({ haptics }: { haptics: boolean }) {
               void probe(true);
             }}
             disabled={checking}
-            className="mt-3 flex min-h-10 items-center gap-2 rounded-full bg-accent px-4 text-[13px]/5 font-semibold text-[var(--accent-on-primary)] transition-transform duration-[120ms] active:scale-95 active:bg-accent-pressed disabled:opacity-70"
+            className="mt-3 flex min-h-10 items-center gap-2 rounded-full bg-accent px-4 text-[0.8125rem]/5 font-semibold text-[var(--accent-on-primary)] transition-transform duration-[120ms] active:scale-95 active:bg-accent-pressed disabled:opacity-70"
           >
             {checking ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
             {checking ? "Checking…" : "Check again"}

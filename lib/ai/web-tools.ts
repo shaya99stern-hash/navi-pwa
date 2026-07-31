@@ -133,7 +133,12 @@ export function assertFetchableUrl(raw: string): URL {
  * configured; the rest need neither, so they work on every deployment
  * including a fully keyless one.
  */
-export function buildWebTools({ search, signal }: { search: boolean; signal?: AbortSignal }): ToolSet {
+export function buildWebTools({ search, signal, onActivity = () => {} }: {
+  search: boolean;
+  signal?: AbortSignal;
+  /** Announces work as it starts, so a pause in the stream has a visible reason. */
+  onActivity?: (label: string) => void;
+}): ToolSet {
   const tools: ToolSet = {
     current_datetime: tool({
       description: "The current date and time. Call this for anything involving today, now, deadlines, ages, or elapsed time — you have no clock of your own and your training data is stale.",
@@ -141,6 +146,7 @@ export function buildWebTools({ search, signal }: { search: boolean; signal?: Ab
         timeZone: z.string().optional().describe("IANA zone such as America/New_York. Defaults to UTC.")
       }),
       execute: async ({ timeZone }) => {
+        onActivity("Checking the time");
         const now = new Date();
         try {
           const zone = timeZone || "UTC";
@@ -162,6 +168,7 @@ export function buildWebTools({ search, signal }: { search: boolean; signal?: Ab
       execute: async ({ url }) => {
         try {
           const target = assertFetchableUrl(url);
+          onActivity(`Reading ${target.hostname}`);
           return await withTimeout(async (inner) => {
             const response = await fetch(target, {
               headers: { Accept: "text/html,text/plain,application/json;q=0.9", "User-Agent": "NaviOSHub/1.0" },
@@ -191,6 +198,7 @@ export function buildWebTools({ search, signal }: { search: boolean; signal?: Ab
       inputSchema: z.object({ query: z.string().describe("What to search for.") }),
       execute: async ({ query }) => {
         try {
+          onActivity(`Searching for “${query}”`);
           const hits = await runSearch(query, signal);
           if (!hits.length) return `No results for "${query}".`;
           return hits

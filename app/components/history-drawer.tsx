@@ -121,7 +121,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
         className={`flex min-h-[44px] items-center rounded-[10px] ${activeId === chat.id ? "bg-elev-2" : "active:bg-elev-2"}`}
       >
         <button type="button" onClick={() => onOpen(chat)} className="min-w-0 flex-1 px-3 py-2.5 text-left">
-          <span className="block truncate text-[15px]/5 font-normal text-primary">{chat.title}</span>
+          <span className="block truncate text-[0.9375rem]/5 font-normal text-primary">{chat.title}</span>
         </button>
       </div>
     );
@@ -143,7 +143,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
         <div className="flex shrink-0 items-center gap-2 px-4 pb-1 pt-3">
           <label className="flex min-h-10 flex-1 items-center gap-2 rounded-full bg-elev-2 px-3.5">
             <Search size={16} className="shrink-0 text-tertiary" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="min-w-0 flex-1 bg-transparent text-[15px]/5 text-primary outline-none placeholder:text-tertiary" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="min-w-0 flex-1 bg-transparent text-[0.9375rem]/5 text-primary outline-none placeholder:text-tertiary" />
             {query ? (
               <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="flex h-6 w-6 items-center justify-center rounded-full bg-elev-3 text-secondary">
                 <X size={13} />
@@ -153,19 +153,19 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
         </div>
 
         <nav className="shrink-0 px-2 pt-2" aria-label="Navigation">
-          <button type="button" onClick={onNew} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[15px]/5 font-medium text-primary active:bg-elev-2">
+          <button type="button" onClick={onNew} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <SquarePen size={19} strokeWidth={1.8} className="text-secondary" />
             New chat
           </button>
-          <button type="button" onClick={showAllChats} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[15px]/5 font-medium text-primary active:bg-elev-2">
+          <button type="button" onClick={showAllChats} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <MessageCircle size={19} strokeWidth={1.8} className="text-secondary" />
             Chats
           </button>
-          <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[15px]/5 font-medium text-primary active:bg-elev-2">
+          <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <FolderKanban size={19} strokeWidth={1.8} className="text-secondary" />
             Projects
           </button>
-          <button type="button" onClick={() => openSheet(onArtifacts)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[15px]/5 font-medium text-primary active:bg-elev-2">
+          <button type="button" onClick={() => openSheet(onArtifacts)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <Shapes size={19} strokeWidth={1.8} className="text-secondary" />
             Artifacts
           </button>
@@ -174,18 +174,18 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
         <div ref={listRef} className="scroll-area min-h-0 flex-1 overflow-y-auto px-2 pb-5 pt-3">
           {pinned.length ? (
             <>
-              <div className="px-3 pb-1 text-[12px]/4 font-semibold text-tertiary">Pinned</div>
+              <div className="px-3 pb-1 text-[0.75rem]/4 font-semibold text-tertiary">Pinned</div>
               {pinned.map(chatRow)}
             </>
           ) : null}
           {recents.length ? (
             <>
-              <div className={`px-3 pb-1 text-[12px]/4 font-semibold text-tertiary ${pinned.length ? "pt-4" : ""}`}>Recents</div>
+              <div className={`px-3 pb-1 text-[0.75rem]/4 font-semibold text-tertiary ${pinned.length ? "pt-4" : ""}`}>Recents</div>
               {recents.map(chatRow)}
             </>
           ) : null}
           {!visible.length ? (
-            <div className="px-5 py-10 text-center text-[13px]/[18px] font-medium text-tertiary">
+            <div className="px-5 py-10 text-center text-[0.8125rem]/[1.125rem] font-medium text-tertiary">
               {query ? "No matching chats." : "Your chats will appear here."}
             </div>
           ) : null}
@@ -193,12 +193,12 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
 
         <footer className="shrink-0 border-t border-[var(--border-subtle)] px-2 py-2">
           <button type="button" onClick={() => openSheet(onSettings)} className="flex min-h-12 w-full items-center gap-3 rounded-[10px] px-2 text-left active:bg-elev-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-[13px] font-semibold text-[var(--accent-on-primary)]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-[0.8125rem] font-semibold text-[var(--accent-on-primary)]">
               <UserRound size={16} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px]/5 font-medium text-primary">My workspace</span>
-              <span className="block text-[11px]/4 font-medium text-tertiary">Private · on this device</span>
+              <span className="block truncate text-[0.875rem]/5 font-medium text-primary">My workspace</span>
+              <span className="block text-[0.6875rem]/4 font-medium text-tertiary">Private · on this device</span>
             </span>
             <Settings size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
           </button>
@@ -211,18 +211,18 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
           <div {...actionSheet.sheetProps} className="navi-sheet relative w-full max-w-md overflow-hidden pb-[var(--safe-bottom)]" onClick={(event) => event.stopPropagation()}>
             <div {...actionSheet.handleProps} className="navi-sheet-grab pt-1"><div className="navi-sheet-grabber" /></div>
             <div className="border-b border-[var(--border-subtle)] px-5 py-3">
-              <div className="truncate text-[15px]/[22px] font-medium text-primary">{selected.title}</div>
-              <div className="truncate text-[12px]/4 font-medium text-tertiary">{selected.preview}</div>
+              <div className="truncate text-[0.9375rem]/[1.375rem] font-medium text-primary">{selected.title}</div>
+              <div className="truncate text-[0.75rem]/4 font-medium text-tertiary">{selected.preview}</div>
             </div>
-            <button type="button" onClick={() => { onPin(selected.id, !selected.pinned); setSelected(null); haptic("selection", haptics); }} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[16px]/6 font-normal text-primary active:bg-elev-2">
+            <button type="button" onClick={() => { onPin(selected.id, !selected.pinned); setSelected(null); haptic("selection", haptics); }} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[1rem]/6 font-normal text-primary active:bg-elev-2">
               {selected.pinned ? <PinOff size={19} strokeWidth={1.8} /> : <Pin size={19} strokeWidth={1.8} />}
               {selected.pinned ? "Unpin" : "Pin"}
             </button>
-            <button type="button" onClick={() => rename(selected)} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[16px]/6 font-normal text-primary active:bg-elev-2">
+            <button type="button" onClick={() => rename(selected)} className="flex min-h-[54px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-5 text-left text-[1rem]/6 font-normal text-primary active:bg-elev-2">
               <SquarePen size={19} strokeWidth={1.8} />
               Rename
             </button>
-            <button type="button" onClick={() => remove(selected)} className="flex min-h-[54px] w-full items-center gap-3 px-5 text-left text-[16px]/6 font-normal text-danger active:bg-elev-2">
+            <button type="button" onClick={() => remove(selected)} className="flex min-h-[54px] w-full items-center gap-3 px-5 text-left text-[1rem]/6 font-normal text-danger active:bg-elev-2">
               <Trash2 size={19} strokeWidth={1.8} />
               Delete
             </button>

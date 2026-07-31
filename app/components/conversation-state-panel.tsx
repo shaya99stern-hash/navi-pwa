@@ -33,22 +33,24 @@ export function ConversationStatePanel({ research, generating, status }: Props) 
     return (
       <div className="mt-3 flex items-center gap-2 px-1" role="status" aria-live="polite">
         <Icon size={15} className={failed ? "text-danger" : "text-tertiary"} />
-        <span className={`text-[13px]/[18px] font-medium ${failed ? "text-danger" : "text-tertiary"}`}>
+        <span className={`text-[0.8125rem]/[1.125rem] font-medium ${failed ? "text-danger" : "text-tertiary"}`}>
           {status?.detail || LABELS[stage]}
         </span>
       </div>
     );
   }
 
-  const label = research && (stage === "gather" || stage === "plan")
-    ? "Researching"
-    : LABELS[stage] || "Thinking";
+  /* A tool announces its own work ("Searching for …", "Calculating …"), which
+     is more use than a generic stage name, so prefer it when one arrives. */
+  const announced = status?.detail?.endsWith("…") ? status.detail : null;
+  const label = announced
+    ?? `${research && (stage === "gather" || stage === "plan") ? "Researching" : LABELS[stage] || "Thinking"}…`;
 
   return (
     <div className="mt-3 flex items-center gap-2 px-1" role="status" aria-live="polite">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/brand-spark.png" alt="" aria-hidden="true" className="thinking-spark h-[18px] w-[18px]" />
-      <span className="text-[14px]/5 font-medium text-tertiary">{label}…</span>
+      <span className="truncate text-[0.875rem]/5 font-medium text-tertiary">{label}</span>
     </div>
   );
 }

@@ -28,8 +28,8 @@ export function GeneratedImageCard({ payload, haptics }: { payload: GeneratedIma
     <figure className="my-4 overflow-hidden rounded-[22px] border border-[var(--border-subtle)] bg-elev-2 shadow-sm">
       <div className="flex min-h-12 items-center gap-3 border-b border-[var(--border-subtle)] px-4">
         <ImageIcon size={17} className="shrink-0 text-accent" />
-        <figcaption className="min-w-0 flex-1 truncate text-[14px]/5 font-semibold text-primary">{payload.title}</figcaption>
-        <span className="text-[10px]/3 font-semibold uppercase tracking-[0.1em] text-tertiary">Image</span>
+        <figcaption className="min-w-0 flex-1 truncate text-[0.875rem]/5 font-semibold text-primary">{payload.title}</figcaption>
+        <span className="text-[0.625rem]/3 font-semibold uppercase tracking-[0.1em] text-tertiary">Image</span>
       </div>
 
       <div className="bg-black/20 p-2">
@@ -50,7 +50,7 @@ export function GeneratedImageCard({ payload, haptics }: { payload: GeneratedIma
           target="_blank"
           rel="noreferrer noopener"
           onClick={() => haptic("selection", haptics)}
-          className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[14px] bg-elev-3 px-3 text-[13px]/5 font-semibold text-primary active:opacity-70"
+          className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[14px] bg-elev-3 px-3 text-[0.8125rem]/5 font-semibold text-primary active:opacity-70"
         >
           <ExternalLink size={16} /> Open full size
         </a>
@@ -58,7 +58,7 @@ export function GeneratedImageCard({ payload, haptics }: { payload: GeneratedIma
           href={dataUrl}
           download={fileName}
           onClick={() => haptic("success", haptics)}
-          className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[14px] bg-accent px-3 text-[13px]/5 font-semibold text-white active:bg-accent-pressed"
+          className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[14px] bg-accent px-3 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed"
         >
           <Download size={16} /> Save image
         </a>
