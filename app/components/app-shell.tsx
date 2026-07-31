@@ -46,6 +46,9 @@ import { VoiceModeSheet } from "./voice-mode-sheet";
 
 const EDGE_SWIPE_WIDTH = 300;
 const MAX_CHATS = 40;
+/** Quiet period before a save, and the longest a save may ever be put off. */
+const PERSIST_DEBOUNCE = 360;
+const MAX_PERSIST_DEFER = 1_500;
 const MAX_MESSAGES = 60;
 const ALLOWED_TYPES = new Set([
   "image/jpeg",
@@ -141,6 +144,7 @@ export function AppShell({
   const [edgeProgress, setEdgeProgress] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastPersistAt = useRef(0);
   const anchoredUserId = useRef<string | null>(null);
   const anchorTop = useRef(0);
   const edgeStart = useRef<{ x: number; y: number } | null>(null);
@@ -290,7 +294,14 @@ export function AppShell({
 
   useEffect(() => {
     if (!hydrated || !preferences.saveHistory || messages.length === 0) return;
+    // A stream rewrites `messages` every throttle tick, so a plain debounce was
+    // pushed out for the whole response and never fired: backgrounding the app
+    // mid-reply lost the answer *and* the question that produced it. Cap how
+    // long a write can be deferred so progress always reaches the device.
+    const waited = Date.now() - lastPersistAt.current;
+    const delay = waited >= MAX_PERSIST_DEFER ? 0 : Math.min(PERSIST_DEBOUNCE, MAX_PERSIST_DEFER - waited);
     const timer = window.setTimeout(() => {
+      lastPersistAt.current = Date.now();
       setChats((current) => {
         const prior = current.find((chat) => chat.id === activeId);
         const nextChat: StoredChat = {
@@ -309,7 +320,7 @@ export function AppShell({
         void setLocalValue("chats", next);
         return next;
       });
-    }, 360);
+    }, delay);
     return () => window.clearTimeout(timer);
   }, [activeId, activeProjectId, hydrated, messages, preferences.connectorAccessMode, preferences.saveHistory]);
 
