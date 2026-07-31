@@ -19,6 +19,22 @@ export function isClerkConfigured() {
   return Boolean(getClerkPublishableKey() && getClerkJwtKey());
 }
 
+/**
+ * Which credentials are missing, for the server log. A deployment with only one
+ * of the two silently falls back to no sign-in at all, which looks like the app
+ * losing its Google button rather than like a configuration problem — so say
+ * which half is absent instead of leaving it to be guessed.
+ */
+export function describeClerkConfigGap(): string | null {
+  const missing = [
+    getClerkPublishableKey() ? null : "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY (must start with pk_)",
+    getClerkJwtKey() ? null : "CLERK_JWT_KEY (the PEM public key from Clerk's JWKS settings)"
+  ].filter(Boolean);
+  if (!missing.length) return null;
+  if (missing.length === 2) return "Clerk is not configured; sign-in is disabled. Missing: " + missing.join(" and ") + ".";
+  return "Clerk is only half configured, so sign-in is disabled entirely. Missing: " + missing.join("") + ".";
+}
+
 function normalizeOrigin(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const candidate = value.includes("://") ? value : `https://${value}`;
