@@ -239,6 +239,12 @@ textarea {
   overflow: hidden;
   background: var(--bg-app);
   transform: translateZ(0);
+  /* The transform makes this a stacking context, so overlays inside the shell
+     cannot out-stack root-level elements by z-index alone. The shell itself
+     must sit above the global install banner (z-70), which otherwise paints
+     over Settings and every sheet. In-app, the inline banner carries the
+     install hint instead. */
+  z-index: 80;
   transition: background-color 180ms ease;
 }
 
@@ -307,6 +313,12 @@ textarea {
   letter-spacing: -0.02em;
 }
 
+/* Assistant prose in the display serif; code and tables stay in their own
+   faces. Applied per message so the Chat font setting flips it live. */
+.navi-chat-serif :is(p, li, blockquote, h1, h2, h3, h4) {
+  font-family: var(--font-display), ui-serif, Georgia, Cambria, "Times New Roman", serif;
+}
+
 .brand-orb {
   background:
     radial-gradient(circle at 50% 42%, var(--brand-glow), transparent 64%),
@@ -371,6 +383,13 @@ textarea {
 
 .navi-composer:focus-within {
   border-color: var(--border-strong);
+}
+
+/* Focusing the message box is the default state of the whole app; an accent
+   ring there reads as an outline glitch, not as an affordance. Keyboard-nav
+   focus outlines stay on for every other control. */
+.navi-composer textarea:focus-visible {
+  outline: none;
 }
 
 .navi-composer[data-sending="true"] {
@@ -569,6 +588,14 @@ aside .scroll-area {
     border-right: 1px solid var(--border-subtle);
     border-left: 1px solid var(--border-subtle);
     box-shadow: 0 22px 70px rgba(31, 24, 17, 0.22);
+  }
+}
+
+/* A phone-locked column on a big screen reads as an emulator, not an app.
+   Give desktop a fluid centred column; messages stay at a readable measure. */
+@media (min-width: 1024px) {
+  :root {
+    --navi-content-max-width: 720px;
   }
 
   .navi-menu-sheet {

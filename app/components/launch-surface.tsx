@@ -2,18 +2,52 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
-function greetingForHour(hour: number): string {
-  if (hour < 5) return "Up late?";
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
+/**
+ * The greeting is a rotating copy line, not a clock label. Each time bucket
+ * carries a handful of original lines and one is picked per launch, so the
+ * launch screen never reads the same twice in a row. All copy is Navi's own.
+ */
+const GREETINGS: Record<"late" | "morning" | "afternoon" | "evening", string[]> = {
+  late: [
+    "Up late?",
+    "The quiet hours are good for thinking.",
+    "Night shift, reporting in.",
+    "Still going strong."
+  ],
+  morning: [
+    "Good morning",
+    "Ready when you are.",
+    "Fresh start, fresh thinking.",
+    "Where should we begin today?"
+  ],
+  afternoon: [
+    "Good afternoon",
+    "Right in the thick of it.",
+    "What's next on the list?",
+    "Midday momentum."
+  ],
+  evening: [
+    "Good evening",
+    "Winding down or winding up?",
+    "The evening is yours.",
+    "One more thing before the day ends?"
+  ]
+};
+
+function greetingForNow(now: Date): string {
+  const hour = now.getHours();
+  const bucket = hour < 5 ? "late" : hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+  const lines = GREETINGS[bucket];
+  // Seeded by launch time so it rotates between visits without flickering
+  // within one.
+  return lines[Math.floor(now.getTime() / 60_000) % lines.length];
 }
 
 export function LaunchSurface({ online, children }: { online: boolean; children?: ReactNode }) {
   const [greeting, setGreeting] = useState("Good evening");
 
   useEffect(() => {
-    setGreeting(greetingForHour(new Date().getHours()));
+    setGreeting(greetingForNow(new Date()));
   }, []);
 
   return (

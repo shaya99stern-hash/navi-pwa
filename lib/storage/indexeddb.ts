@@ -1,5 +1,5 @@
 import type { ConnectorAccessMode, ModelPreset, NaviPreferences, NaviProject, StoredChat } from "../ai/types";
-import { DEFAULT_PREFERENCES, sortChats } from "../chat";
+import { DEFAULT_PREFERENCES, effortFromLegacyStyle, sortChats } from "../chat";
 
 const DB_NAME = "navi-local-v3";
 const DB_VERSION = 1;
@@ -181,15 +181,48 @@ function normalizeConnectorMode(value: unknown): ConnectorAccessMode {
   return value === "auto" || value === "always" ? value : "ask";
 }
 
+const MENU_SECTIONS = ["general", "account", "privacy", "capabilities", "connectors", "skills"] as const;
+const EFFORTS = ["low", "medium", "high", "extra", "max"] as const;
+
 function mergePreferences(value?: PreferenceInput): NaviPreferences {
+  const stored = value as Partial<NaviPreferences> | undefined;
+  const profile = stored?.profile;
   return {
     ...DEFAULT_PREFERENCES,
     ...value,
     preset: normalizePreset(value?.preset),
+    // Pre-effort clients stored a three-way response style; carry it forward.
+    effort: EFFORTS.includes(stored?.effort as (typeof EFFORTS)[number])
+      ? (stored?.effort as NaviPreferences["effort"])
+      : effortFromLegacyStyle(stored?.style),
+    chatFont: stored?.chatFont === "sans" ? "sans" : "serif",
+    notifyOnComplete: stored?.notifyOnComplete === true,
+    voiceLanguage: typeof stored?.voiceLanguage === "string" && stored.voiceLanguage
+      ? stored.voiceLanguage
+      : readLegacyVoiceLanguage(),
+    profile: {
+      fullName: typeof profile?.fullName === "string" ? profile.fullName : "",
+      displayName: typeof profile?.displayName === "string" ? profile.displayName : "",
+      work: typeof profile?.work === "string" ? profile.work : "",
+      instructions: typeof profile?.instructions === "string" ? profile.instructions.slice(0, 4_000) : ""
+    },
     tools: { ...DEFAULT_PREFERENCES.tools, ...(value?.tools ?? {}) },
     connectedMcpServers: Array.isArray(value?.connectedMcpServers) ? value.connectedMcpServers : [],
-    connectorAccessMode: normalizeConnectorMode(value?.connectorAccessMode)
+    connectorAccessMode: normalizeConnectorMode(value?.connectorAccessMode),
+    // Old section names ("models", "system", …) no longer exist.
+    lastMenuSection: MENU_SECTIONS.includes(stored?.lastMenuSection as (typeof MENU_SECTIONS)[number])
+      ? (stored?.lastMenuSection as NaviPreferences["lastMenuSection"])
+      : "general"
   };
+}
+
+/** The voice language predates preferences and lived in its own localStorage key. */
+function readLegacyVoiceLanguage(): string {
+  try {
+    return localStorage.getItem("navi.voice.language.v1") || "auto";
+  } catch {
+    return "auto";
+  }
 }
 
 function normalizeProjects(value: unknown): NaviProject[] {

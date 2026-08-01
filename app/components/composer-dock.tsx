@@ -54,6 +54,10 @@ type Props = {
   attachmentCount: number;
   statusText: string;
   modelLabel: string;
+  /** Current effort level label, shown gray beside the model name in the pill. */
+  effortLabel: string;
+  /** Placeholder and disclaimer differ between a fresh chat and one under way. */
+  hasMessages: boolean;
   research: boolean;
   /** The draft is a slash command, which runs on-device and needs no network. */
   offlineCommand: boolean;
@@ -123,6 +127,8 @@ export function ComposerDock({
   attachmentCount,
   statusText,
   modelLabel,
+  effortLabel,
+  hasMessages,
   research,
   offlineCommand,
   haptics,
@@ -238,7 +244,9 @@ export function ComposerDock({
   const blocked = false;
   const hiddenAttachmentCount = Math.max(0, attachmentCount - selectedFiles.length);
 
-  const placeholder = attachmentCount ? "Add instructions for these files" : "Chat with Navi";
+  const placeholder = attachmentCount
+    ? "Add instructions for these files"
+    : hasMessages ? "Write a message…" : "How can I help you today?";
 
   /* Idle status is deliberately empty: the thinking indicator in the thread
      already reports progress while generating. */
@@ -569,38 +577,39 @@ export function ComposerDock({
               <button
                 type="button"
                 onClick={onOpenModels}
-                className="flex min-h-9 min-w-0 max-w-[130px] items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 font-medium text-secondary active:bg-elev-2"
-                aria-label={`Current model: ${modelLabel}. Change model`}
+                className="flex min-h-9 min-w-0 max-w-[180px] items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2"
+                aria-label={`Model: ${modelLabel} ${effortLabel}. Change model or effort`}
               >
-                <span className="truncate">{modelLabel}</span>
+                <span className="truncate font-semibold text-primary">{modelLabel}</span>
+                <span className="shrink-0 font-medium text-tertiary">{effortLabel}</span>
                 <ChevronDown size={13} className="shrink-0 text-tertiary" />
               </button>
 
               <span className="min-w-0 flex-1" />
 
-              {!value.trim() && !attachmentCount && !generating ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={toggleVoice}
-                    disabled={blocked}
-                    className={`composer-action ${listening ? "!bg-accent !text-[var(--accent-on-primary)]" : ""}`}
-                    aria-label={listening ? "Stop dictation" : "Dictate"}
-                    aria-pressed={listening}
-                  >
-                    <Mic size={19} strokeWidth={1.8} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onOpenVoice}
-                    disabled={blocked}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-[var(--accent-on-primary)] shadow-sm transition-transform duration-[120ms] active:scale-95 active:bg-accent-pressed"
-                    aria-label="Use voice mode"
-                  >
-                    <AudioLines size={18} strokeWidth={2} />
-                  </button>
-                </>
-              ) : (
+              {/* Mic and voice mode stay put while typing — the send button
+                  joins them instead of replacing them, so nothing under a
+                  finger disappears mid-thought. Both are icon-weight peers. */}
+              <button
+                type="button"
+                onClick={toggleVoice}
+                disabled={blocked || generating}
+                className={`composer-action ${listening ? "!bg-accent !text-[var(--accent-on-primary)]" : ""}`}
+                aria-label={listening ? "Stop dictation" : "Dictate"}
+                aria-pressed={listening}
+              >
+                <Mic size={19} strokeWidth={1.8} />
+              </button>
+              <button
+                type="button"
+                onClick={onOpenVoice}
+                disabled={blocked || generating}
+                className="composer-action"
+                aria-label="Use voice mode"
+              >
+                <AudioLines size={19} strokeWidth={1.8} />
+              </button>
+              {value.trim() || attachmentCount || generating ? (
                 <button
                   type={generating ? "button" : "submit"}
                   onClick={generating ? onStop : undefined}
@@ -610,17 +619,49 @@ export function ComposerDock({
                 >
                   {generating ? <Square size={13} fill="currentColor" /> : <ArrowUp size={18} strokeWidth={2.4} />}
                 </button>
-              )}
+              ) : null}
             </div>
           </form>
 
-          {/* Only surface a line here when it is actionable. A permanent status
-              caption under the composer is noise the native app never shows. */}
+          {/* Actionable warnings first; otherwise, once a conversation is under
+              way, the standing accuracy disclaimer takes this line. */}
           <div className="flex items-center justify-center px-3 text-center" role="status" aria-live="polite">
             {footer ? (
               <span className={`block pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
+            ) : hasMessages ? (
+              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">Navi is AI and can make mistakes. Double-check important answers.</span>
             ) : null}
           </div>
+
+          {/* Starter chips on a fresh chat only; they seed the draft and hand
+              focus back so the keyboard stays up. */}
+          {!hasMessages && !value.trim() && !attachmentCount && !generating ? (
+            <div className="scrollbar-none -mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+              {/* "Visualize" seeds a phrasing the server's image-intent matcher
+                  already recognises, so the chip lands in the real image
+                  pipeline rather than a text description of a picture. */}
+              {[
+                ["Write", "Write a "],
+                ["Learn", "Explain how "],
+                ["Visualize", "Visualize "],
+                ["Plan", "Help me plan "],
+                ["Code", "Write code that "]
+              ].map(([label, starter]) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => {
+                    haptic("selection", haptics);
+                    onChange(starter);
+                    textareaRef.current?.focus();
+                  }}
+                  className="h-9 shrink-0 rounded-full border border-[var(--border-subtle)] bg-elev-1 px-4 text-[0.8125rem]/5 font-medium text-secondary active:bg-elev-2"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
 

@@ -106,11 +106,13 @@ export function PwaPlatformBanner({ inline = false }: { inline?: boolean } = {})
 
   const mode = useMemo<"update" | "install" | "ios" | null>(() => {
     if (!mounted) return null;
-    if (updateStatus?.phase === "available" && !dismissedUpdate) return "update";
+    /* A ready update never earns a banner over the composer — it blocks the
+       primary input to announce something that is not urgent. It applies on
+       the next launch anyway, and Settings → Account has the button. */
     if (!isStandalone() && installPrompt && !recentlyDismissed()) return "install";
     if (!isStandalone() && iosHint) return "ios";
     return null;
-  }, [dismissedUpdate, installPrompt, iosHint, mounted, updateStatus?.phase]);
+  }, [installPrompt, iosHint, mounted]);
 
   if (!mode) return null;
 

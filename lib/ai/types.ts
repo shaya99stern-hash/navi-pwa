@@ -10,6 +10,13 @@ export type ModelPreset =
   | "huggingface-direct";
 
 export type ResponseStyle = "balanced" | "concise" | "detailed";
+/**
+ * How much work a response should do. Five levels, matching the grammar of a
+ * native effort control; the middle is the default. Stored values from the
+ * old three-way "response style" map onto low/medium/high at load time.
+ */
+export type EffortLevel = "low" | "medium" | "high" | "extra" | "max";
+export type ChatFontPreference = "serif" | "sans";
 export type ThemePreference = "dark" | "light" | "system";
 export type DensityPreference = "comfortable" | "compact";
 export type MotionPreference = "full" | "reduced";
@@ -47,17 +54,32 @@ export type StoredChat = {
   attachments?: AttachmentMeta[];
   projectId?: string;
   connectorAccessMode?: ConnectorAccessMode;
+  /** Thumbs feedback keyed by assistant message id. Local only. */
+  ratings?: Record<string, "up" | "down">;
   messages: UIMessage[];
+};
+
+/** User-level identity and standing instructions, injected into every chat. */
+export type NaviProfile = {
+  fullName: string;
+  displayName: string;
+  work: string;
+  instructions: string;
 };
 
 export type NaviPreferences = {
   preset: ModelPreset;
   style: ResponseStyle;
+  effort: EffortLevel;
   theme: ThemePreference;
+  chatFont: ChatFontPreference;
   density: DensityPreference;
   motion: MotionPreference;
   haptics: boolean;
   saveHistory: boolean;
+  notifyOnComplete: boolean;
+  voiceLanguage: string;
+  profile: NaviProfile;
   tools: ToolPolicy;
   connectedMcpServers: string[];
   connectorAccessMode: ConnectorAccessMode;
@@ -65,12 +87,12 @@ export type NaviPreferences = {
 };
 
 export type MenuSection =
-  | "current"
-  | "models"
-  | "tools"
-  | "connections"
-  | "personalization"
-  | "system";
+  | "general"
+  | "account"
+  | "privacy"
+  | "capabilities"
+  | "connectors"
+  | "skills";
 
 export type ProviderName = "gemini" | "groq" | "huggingface";
 

@@ -1,21 +1,38 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { Check, Copy, FileText, RotateCcw, Share } from "lucide-react";
+import { Check, Copy, FileText, RotateCcw, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { messageText } from "@/lib/chat";
 import { haptic } from "@/lib/ui/haptics";
+import { speak, whenVoicesReady } from "@/lib/ui/speech";
 import { MarkdownRenderer } from "./markdown-renderer";
 
 function messageFiles(message: UIMessage): Array<{ filename?: string; mediaType?: string }> {
   return message.parts.filter((part) => part.type === "file").map((part) => part as unknown as { filename?: string; mediaType?: string });
 }
 
-export function MessageRow({ message, streaming, theme, haptics, onRetry, onLongPress }: { message: UIMessage; streaming: boolean; theme: "dark" | "light"; haptics: boolean; onRetry?: () => void; onLongPress?: (message: { id: string; text: string; role: string }) => void }) {
+type Props = {
+  message: UIMessage;
+  streaming: boolean;
+  /** Only the final response carries the brand mark under its action bar. */
+  last: boolean;
+  theme: "dark" | "light";
+  chatFont: "serif" | "sans";
+  haptics: boolean;
+  voiceLanguage: string;
+  rating?: "up" | "down";
+  onRate?: (value: "up" | "down") => void;
+  onRetry?: () => void;
+  onLongPress?: (message: { id: string; text: string; role: string }) => void;
+};
+
+export function MessageRow({ message, streaming, last, theme, chatFont, haptics, voiceLanguage, rating, onRate, onRetry, onLongPress }: Props) {
   const text = messageText(message);
   const files = messageFiles(message);
   const user = message.role === "user";
   const [copied, setCopied] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const holdTimer = useRef<number | null>(null);
   const holdStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -52,18 +69,32 @@ export function MessageRow({ message, streaming, theme, haptics, onRetry, onLong
     window.setTimeout(() => setCopied(false), 1_300);
   }
 
-  async function share() {
-    haptic("selection", haptics);
-    if (navigator.share) {
-      try {
-        await navigator.share({ text });
-      } catch {
-        // Cancelled by the user.
-      }
+  function readAloud() {
+    if (!("speechSynthesis" in window)) return;
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
       return;
     }
-    await copy();
+    haptic("selection", haptics);
+    setSpeaking(true);
+    const language = voiceLanguage === "auto" ? navigator.language || "en-US" : voiceLanguage;
+    whenVoicesReady(() => speak(text, language));
+    // speechSynthesis has no reliable end event across engines; poll it.
+    const poll = window.setInterval(() => {
+      if (!window.speechSynthesis.speaking) {
+        window.clearInterval(poll);
+        setSpeaking(false);
+      }
+    }, 400);
   }
+
+  function rate(value: "up" | "down") {
+    haptic(value === "up" ? "success" : "selection", haptics);
+    onRate?.(value);
+  }
+
+  const action = "flex h-9 w-9 items-center justify-center rounded-full text-tertiary active:bg-elev-2";
 
   return (
     <article
@@ -82,23 +113,38 @@ export function MessageRow({ message, streaming, theme, haptics, onRetry, onLong
         </div>
       ) : (
         <div className="group w-full">
-          <div className={`navi-markdown text-[1rem]/[1.625rem] font-normal ${streaming ? "streaming-cursor" : ""}`}>
+          {/* Answers read in the display serif by default — the strongest
+              single typographic signal of the target design — switchable to
+              the system face in Settings → General → Chat font. */}
+          <div className={`navi-markdown text-[1rem]/[1.625rem] font-normal ${chatFont === "serif" ? "navi-chat-serif" : ""} ${streaming ? "streaming-cursor" : ""}`}>
             {text ? <MarkdownRenderer text={text} theme={theme} haptics={haptics} /> : null}
           </div>
           {!streaming && text ? (
-            <div className="mt-1.5 flex min-h-9 items-center gap-1 opacity-100 transition-opacity duration-[120ms] md:opacity-0 md:group-hover:opacity-100">
-              <button type="button" onClick={() => void copy()} className="flex h-9 w-9 items-center justify-center rounded-full text-tertiary active:bg-elev-2" aria-label={copied ? "Copied" : "Copy response"}>
-                {copied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
-              </button>
-              <button type="button" onClick={() => void share()} className="flex h-9 w-9 items-center justify-center rounded-full text-tertiary active:bg-elev-2" aria-label="Share response">
-                <Share size={16} />
-              </button>
-              {onRetry ? (
-                <button type="button" onClick={() => { haptic("selection", haptics); onRetry(); }} className="flex h-9 w-9 items-center justify-center rounded-full text-tertiary active:bg-elev-2" aria-label="Retry response">
-                  <RotateCcw size={16} />
+            <>
+              <div className="mt-1.5 flex min-h-9 items-center gap-1 opacity-100 transition-opacity duration-[120ms] md:opacity-0 md:group-hover:opacity-100">
+                <button type="button" onClick={() => void copy()} className={action} aria-label={copied ? "Copied" : "Copy response"}>
+                  {copied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
                 </button>
+                <button type="button" onClick={readAloud} className={`${action} ${speaking ? "!text-accent" : ""}`} aria-label={speaking ? "Stop reading aloud" : "Read aloud"} aria-pressed={speaking}>
+                  <Volume2 size={16} />
+                </button>
+                <button type="button" onClick={() => rate("up")} className={`${action} ${rating === "up" ? "!text-accent" : ""}`} aria-label="Good response" aria-pressed={rating === "up"}>
+                  <ThumbsUp size={16} className={rating === "up" ? "fill-current" : ""} />
+                </button>
+                <button type="button" onClick={() => rate("down")} className={`${action} ${rating === "down" ? "!text-accent" : ""}`} aria-label="Bad response" aria-pressed={rating === "down"}>
+                  <ThumbsDown size={16} className={rating === "down" ? "fill-current" : ""} />
+                </button>
+                {onRetry ? (
+                  <button type="button" onClick={() => { haptic("selection", haptics); onRetry(); }} className={action} aria-label="Retry response">
+                    <RotateCcw size={16} />
+                  </button>
+                ) : null}
+              </div>
+              {last ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src="/brand-spark.png" alt="" aria-hidden="true" className="ml-2.5 mt-1 h-[14px] w-[14px] opacity-70" />
               ) : null}
-            </div>
+            </>
           ) : null}
         </div>
       )}
