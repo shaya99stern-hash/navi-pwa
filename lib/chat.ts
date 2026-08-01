@@ -1,13 +1,18 @@
 import type { UIMessage } from "ai";
-import type { ModelPreset, NaviPreferences, ResponseStyle, StoredChat } from "./ai/types";
+import type { EffortLevel, ModelPreset, NaviPreferences, ResponseStyle, StoredChat } from "./ai/types";
 
-export const MODEL_PRESETS: Array<{ id: ModelPreset; label: string; detail: string; composite: boolean }> = [
-  { id: "auto", label: "Navi Auto", detail: "Chooses a direct route, Navi Fable, or Navi Sol", composite: false },
-  { id: "navi-fable", label: "Navi Fable", detail: "72-role long-horizon project, coding, testing, and document swarm", composite: true },
-  { id: "navi-sol", label: "Navi Sol", detail: "96-role parallel reasoning, research, design, and verification swarm", composite: true },
-  { id: "huggingface-direct", label: "Hugging Face Direct", detail: "Best currently available Hugging Face route", composite: false },
-  { id: "gemini-direct", label: "Gemini Direct", detail: "Direct Gemini multimodal route", composite: false },
-  { id: "groq-direct", label: "Groq Direct", detail: "Direct low-latency reasoning route", composite: false }
+/**
+ * The picker shows the first four as primary rows; direct provider routes live
+ * behind "More models". Mirrors how a native picker separates the models most
+ * people use from the long tail.
+ */
+export const MODEL_PRESETS: Array<{ id: ModelPreset; label: string; detail: string; composite: boolean; overflow?: boolean }> = [
+  { id: "auto", label: "Navi Auto", detail: "Picks the best route for each request", composite: false },
+  { id: "navi-fable", label: "Navi Fable", detail: "For your toughest challenges", composite: true },
+  { id: "navi-sol", label: "Navi Sol", detail: "Deep research and verification", composite: true },
+  { id: "huggingface-direct", label: "Hugging Face Direct", detail: "Best currently available Hugging Face route", composite: false, overflow: true },
+  { id: "gemini-direct", label: "Gemini Direct", detail: "Direct Gemini multimodal route", composite: false, overflow: true },
+  { id: "groq-direct", label: "Groq Direct", detail: "Direct low-latency reasoning route", composite: false, overflow: true }
 ];
 
 export const RESPONSE_STYLES: Array<{ id: ResponseStyle; label: string }> = [
@@ -16,18 +21,43 @@ export const RESPONSE_STYLES: Array<{ id: ResponseStyle; label: string }> = [
   { id: "detailed", label: "Detailed" }
 ];
 
+/**
+ * Effort is the one lever a person adjusts per task, so it lives in the model
+ * picker rather than in Settings. Each level is a real, distinct instruction
+ * to the model — not a relabel of the same prompt.
+ */
+export const EFFORT_LEVELS: Array<{ id: EffortLevel; label: string; isDefault?: boolean }> = [
+  { id: "low", label: "Low" },
+  { id: "medium", label: "Medium", isDefault: true },
+  { id: "high", label: "High" },
+  { id: "extra", label: "Extra" },
+  { id: "max", label: "Max" }
+];
+
+export const EFFORT_EXPLAINER = "Higher effort means more thorough responses, but takes longer.";
+
+/** Old three-way response styles map onto the five-level effort scale. */
+export function effortFromLegacyStyle(style: ResponseStyle | undefined): EffortLevel {
+  return style === "concise" ? "low" : style === "detailed" ? "high" : "medium";
+}
+
 export const DEFAULT_PREFERENCES: NaviPreferences = {
   preset: "auto",
   style: "balanced",
+  effort: "medium",
   theme: "dark",
+  chatFont: "serif",
   density: "comfortable",
   motion: "full",
   haptics: true,
   saveHistory: true,
+  notifyOnComplete: false,
+  voiceLanguage: "auto",
+  profile: { fullName: "", displayName: "", work: "", instructions: "" },
   tools: { web: false, code: false, artifacts: true },
   connectedMcpServers: [],
   connectorAccessMode: "ask",
-  lastMenuSection: "current"
+  lastMenuSection: "general"
 };
 
 export function createId(prefix = "chat"): string {
@@ -44,10 +74,28 @@ export function messageText(message: UIMessage): string {
     .trim();
 }
 
+/* "What is the capital of France? Answer in one sentence." should title the
+   chat "Capital of France", not echo the whole prompt into the header. */
+const TITLE_LEAD_IN = new RegExp(
+  "^(?:please\\s+|hey\\s+|hi\\s+|ok\\s+|okay\\s+)*" +
+  "(?:can|could|would|will)?\\s*(?:you|u)?\\s*" +
+  "(?:what|who|when|where|which|how|why)?\\s*" +
+  "(?:is|are|was|were|do|does|did|to)?\\s+" +
+  "(?:the|a|an|my|me|some)?\\s+",
+  "i"
+);
+
 export function chatTitle(messages: UIMessage[]): string {
   const first = messages.find((message) => message.role === "user");
-  const text = first ? messageText(first) : "";
-  return !text ? "New chat" : text.length > 52 ? `${text.slice(0, 52)}…` : text;
+  const raw = first ? messageText(first) : "";
+  if (!raw) return "New chat";
+  // First sentence only, without its lead-in or closing punctuation.
+  const sentence = (raw.split(/(?<=[.?!])\s+/, 1)[0] ?? raw).replace(/\s+/g, " ").trim();
+  const stripped = sentence.replace(TITLE_LEAD_IN, "").replace(/[.?!,;:\s]+$/, "").trim();
+  const body = stripped.length >= 3 ? stripped : sentence.replace(/[.?!,;:\s]+$/, "");
+  const words = body.split(" ").slice(0, 7).join(" ");
+  const title = words.length > 44 ? `${words.slice(0, 44).replace(/\s+\S*$/, "")}…` : words;
+  return title ? title.charAt(0).toUpperCase() + title.slice(1) : "New chat";
 }
 
 export function chatPreview(messages: UIMessage[]): string {

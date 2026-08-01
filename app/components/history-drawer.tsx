@@ -24,6 +24,8 @@ type Props = {
   dragProgress?: number | null;
   chats: StoredChat[];
   activeId: string;
+  /** Display name from the profile; falls back to the workspace label. */
+  profileName?: string;
   haptics: boolean;
   onClose: () => void;
   onNew: () => void;
@@ -36,7 +38,7 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<StoredChat | null>(null);
   const holdTimer = useRef<number | null>(null);
@@ -197,7 +199,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
               <UserRound size={16} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[0.875rem]/5 font-medium text-primary">My workspace</span>
+              <span className="block truncate text-[0.875rem]/5 font-medium text-primary">{profileName || "My workspace"}</span>
               <span className="block text-[0.6875rem]/4 font-medium text-tertiary">Private · on this device</span>
             </span>
             <Settings size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />

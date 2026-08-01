@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
-import { ChevronDown, FolderKanban, Link2, PanelLeft, Search, SquarePen, WifiOff } from "lucide-react";
+import { ChevronDown, Ellipsis, FolderKanban, Link2, PanelLeft, Search, SquarePen, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -19,7 +19,7 @@ import {
   isResizableImage,
   prepareAttachments
 } from "@/lib/ui/attachments";
-import { DEFAULT_PREFERENCES, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
+import { DEFAULT_PREFERENCES, EFFORT_LEVELS, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
 import {
   clearLocalState,
   loadLocalState,
@@ -41,9 +41,11 @@ import { ProviderSetupNotice } from "./provider-setup-notice";
 import { MessageActionSheet } from "./message-action-sheet";
 import { MessageRow } from "./message-row";
 import { ArtifactsSheet } from "./artifacts-sheet";
+import { ChatMenuSheet } from "./chat-menu-sheet";
+import { ModelPickerSheet } from "./model-picker-sheet";
 import { ProjectsSheet } from "./projects-sheet";
 import { PwaPlatformBanner } from "./pwa-platform-banner";
-import { UnifiedTopMenu } from "./unified-top-menu";
+import { SettingsSheet } from "./settings-sheet";
 import { VoiceModeSheet } from "./voice-mode-sheet";
 
 const MAX_CHATS = 40;
@@ -144,13 +146,14 @@ export function AppShell({
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [durability, setDurability] = useState<StorageDurability>("unavailable");
-  const [menuOpen, setMenuOpen] = useState(initialSheet === "settings" || initialSheet === "customize");
-  // /settings and /customize used to be distinct screens. Pin them to the
-  // section that carries what each one showed, rather than dropping the user on
-  // whichever tab they happened to open last.
-  const [menuSection, setMenuSection] = useState<MenuSection | undefined>(
-    initialSheet === "settings" ? "system" : initialSheet === "customize" ? "models" : undefined
+  const [settingsOpen, setSettingsOpen] = useState(initialSheet === "settings" || initialSheet === "customize");
+  // /settings lands on the root list; /customize lands inside the Customize
+  // group, whose first page is Skills.
+  const [settingsSection, setSettingsSection] = useState<MenuSection | undefined>(
+    initialSheet === "customize" ? "skills" : undefined
   );
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [chatMenuOpen, setChatMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(initialSheet === "history");
   const [projectsOpen, setProjectsOpen] = useState(initialSheet === "projects");
   const [connectorsOpen, setConnectorsOpen] = useState(initialSheet === "connectors");
@@ -202,6 +205,19 @@ export function AppShell({
       }
       setStreamStatus({ stage: "complete", detail: "Response complete." });
       haptic("success", preferences.haptics);
+      // Response-completion notification, only when the tab is not being
+      // looked at — with it in view the finished text is its own signal.
+      if (preferences.notifyOnComplete && document.visibilityState === "hidden"
+        && "Notification" in window && Notification.permission === "granted") {
+        void navigator.serviceWorker?.getRegistration("/")
+          .then((registration) => registration?.showNotification("NaviOS Hub", {
+            body: "Navi has finished a response.",
+            icon: "/pwa-icon-192-v5.png",
+            badge: "/pwa-icon-192-v5.png",
+            tag: "navi-response-complete"
+          }))
+          .catch(() => undefined);
+      }
     },
     onError: (chatError) => {
       console.error("Navi chat error:", chatError);
@@ -214,16 +230,26 @@ export function AppShell({
   const activeChat = chats.find((chat) => chat.id === activeId);
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
   const activePreset = MODEL_PRESETS.find((item) => item.id === preferences.preset) ?? MODEL_PRESETS[0];
+  const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
   const statusText = streamStatus?.detail ?? (generating ? "Navi is working" : activePreset.label);
 
   const requestBody = useCallback(() => ({
     preset: preferences.preset,
-    style: preferences.style,
+    effort: preferences.effort,
     tools: preferences.tools,
     threadSummary: activeChat?.summary ?? compactSummary(messages),
     connectedMcpServers: preferences.connectedMcpServers,
     connectorAccessMode: activeChat?.connectorAccessMode ?? preferences.connectorAccessMode,
+    // Standing profile: name, work, and the user's own instructions travel
+    // with every request so each chat starts already knowing them.
+    userContext: preferences.profile.displayName || preferences.profile.fullName || preferences.profile.work || preferences.profile.instructions
+      ? {
+        displayName: preferences.profile.displayName || preferences.profile.fullName,
+        work: preferences.profile.work,
+        instructions: preferences.profile.instructions
+      }
+      : undefined,
     projectContext: activeProject ? {
       id: activeProject.id,
       name: activeProject.name,
@@ -337,6 +363,7 @@ export function AppShell({
           pinned: prior?.pinned ?? false,
           summary: compactSummary(messages),
           attachments: prior?.attachments,
+          ratings: prior?.ratings,
           projectId: activeProjectId ?? undefined,
           connectorAccessMode: prior?.connectorAccessMode ?? preferences.connectorAccessMode,
           messages: messages.slice(-MAX_MESSAGES)
@@ -449,7 +476,6 @@ export function AppShell({
     setStreamStatus(null);
     clearError();
     setHistoryOpen(false);
-    setMenuOpen(false);
     router.push("/new");
   }, [clearError, generating, router, setMessages, stop]);
 
@@ -488,6 +514,42 @@ export function AppShell({
   function deleteChat(id: string) {
     mutateChats((current) => current.filter((chat) => chat.id !== id));
     if (activeId === id) newChat();
+  }
+
+  /** Thumbs feedback is stored on the chat; tapping the same thumb clears it. */
+  function rateMessage(messageId: string, value: "up" | "down") {
+    mutateChats((current) => current.map((chat) => {
+      if (chat.id !== activeId) return chat;
+      const ratings = { ...(chat.ratings ?? {}) };
+      if (ratings[messageId] === value) delete ratings[messageId];
+      else ratings[messageId] = value;
+      return { ...chat, ratings };
+    }));
+  }
+
+  function renameActiveChat() {
+    const current = chats.find((chat) => chat.id === activeId);
+    const title = window.prompt("Rename this chat", current?.title ?? "")?.trim();
+    if (title) renameChat(activeId, title.slice(0, 80));
+  }
+
+  async function shareActiveChat() {
+    const current = chats.find((chat) => chat.id === activeId);
+    const transcript = messages
+      .map((message) => `${message.role === "user" ? "You" : "Navi"}: ${messageText(message)}`)
+      .filter((line) => !line.endsWith(": "))
+      .join("\n\n");
+    if (!transcript) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: current?.title ?? "Navi chat", text: transcript });
+      } catch {
+        // Cancelled by the user.
+      }
+      return;
+    }
+    await navigator.clipboard.writeText(transcript);
+    haptic("success", preferences.haptics);
   }
 
   function addProject(project: NaviProject) {
@@ -733,12 +795,13 @@ export function AppShell({
         dragProgress={edgeSwipe.progress}
         chats={chats}
         activeId={activeId}
+        profileName={preferences.profile.displayName || preferences.profile.fullName}
         haptics={preferences.haptics}
         onClose={() => setHistoryOpen(false)}
         onNew={newChat}
         onProjects={() => setProjectsOpen(true)}
         onArtifacts={() => setArtifactsOpen(true)}
-        onSettings={() => setMenuOpen(true)}
+        onSettings={() => setSettingsOpen(true)}
         onOpen={openChat}
         onRename={renameChat}
         onPin={pinChat}
@@ -761,15 +824,23 @@ export function AppShell({
           {messages.length === 0 && !activeChat ? (
             <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">NaviOS Hub</div>
           ) : (
-            <>
-              <div className="truncate px-1 text-[1rem]/5 font-medium tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</div>
-              {/* Only a project earns a subtitle; the model is already shown on
-                  the composer chip, and repeating it here is not what the
-                  native app does. */}
-              {activeProject ? (
-                <div className="truncate text-[0.6875rem]/[0.875rem] font-medium text-tertiary">{activeProject.name}</div>
-              ) : null}
-            </>
+            /* The title is the chat's own menu: star, rename, share, delete.
+               The chevron is the affordance that says so. */
+            <button
+              type="button"
+              onClick={() => { haptic("selection", preferences.haptics); setChatMenuOpen(true); }}
+              className="mx-auto flex min-w-0 max-w-full items-center justify-center gap-1 rounded-lg px-1 active:bg-elev-2"
+              aria-label="Chat actions"
+              aria-haspopup="menu"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-[1rem]/5 font-medium tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</span>
+                {activeProject ? (
+                  <span className="block truncate text-[0.6875rem]/[0.875rem] font-medium text-tertiary">{activeProject.name}</span>
+                ) : null}
+              </span>
+              <ChevronDown size={14} className="shrink-0 text-tertiary" />
+            </button>
           )}
         </div>
         <button
@@ -780,24 +851,20 @@ export function AppShell({
         >
           <SquarePen size={20} strokeWidth={1.8} />
         </button>
-        <UnifiedTopMenu
-          open={menuOpen}
-          initialSection={menuSection}
-          durability={durability}
-          preferences={preferences}
-          pendingFiles={pendingFiles}
-          onToggle={() => setMenuOpen((value) => !value)}
-          onClose={() => { setMenuOpen(false); setMenuSection(undefined); }}
-          onPreferences={updatePreferences}
-          onOpenHistory={() => setHistoryOpen(true)}
-          onOpenProjects={() => { setMenuOpen(false); setProjectsOpen(true); }}
-          onOpenConnectors={() => { setMenuOpen(false); setConnectorsOpen(true); }}
-          onFiles={addFiles}
-          onClearFiles={() => setPendingFiles([])}
-          onClearThread={clearThread}
-          onClearData={() => void clearData()}
-          onExport={exportData}
-        />
+        {/* In a chat this position is chat context; on the launch screen there
+            is no chat yet, so it opens Settings. */}
+        <button
+          type="button"
+          onClick={() => {
+            haptic("selection", preferences.haptics);
+            if (messages.length > 0 && activeChat) setChatMenuOpen(true);
+            else setSettingsOpen(true);
+          }}
+          aria-label={messages.length > 0 && activeChat ? "Chat actions" : "Settings"}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-primary active:bg-elev-2"
+        >
+          <Ellipsis size={21} strokeWidth={1.8} />
+        </button>
       </header>
 
       {!online ? (
@@ -866,8 +933,13 @@ export function AppShell({
                   key={message.id}
                   message={message}
                   streaming={message.role === "assistant" && index === messages.length - 1 && status === "streaming"}
+                  last={message.role === "assistant" && index === messages.length - 1 && !generating}
                   theme={theme}
+                  chatFont={preferences.chatFont}
                   haptics={preferences.haptics}
+                  voiceLanguage={preferences.voiceLanguage}
+                  rating={activeChat?.ratings?.[message.id]}
+                  onRate={message.role === "assistant" ? (value) => rateMessage(message.id, value) : undefined}
                   onRetry={message.role === "assistant" && index === messages.length - 1 && !generating && online ? retry : undefined}
                   onLongPress={setContextMessage}
                 />
@@ -922,6 +994,8 @@ export function AppShell({
         online={online}
         attachmentCount={pendingFiles.length}
         modelLabel={activePreset.label}
+        effortLabel={activeEffort.label}
+        hasMessages={messages.length > 0}
         research={preferences.tools.web}
         statusText={activeProject ? `${activeProject.name} · ${statusText}` : statusText}
         haptics={preferences.haptics}
@@ -929,23 +1003,56 @@ export function AppShell({
         onSend={() => void submit()}
         onFiles={addFiles}
         onOpenModels={() => {
-          updatePreferences({ ...preferences, lastMenuSection: "models" });
-          setMenuOpen(true);
+          haptic("selection", preferences.haptics);
+          setModelPickerOpen(true);
         }}
         onOpenVoice={() => {
-          setMenuOpen(false);
+          setSettingsOpen(false);
           setVoiceOpen(true);
           haptic("selection", preferences.haptics);
         }}
         onToggleResearch={toggleResearch}
         onOpenTools={() => {
-          updatePreferences({ ...preferences, lastMenuSection: "tools" });
-          setMenuOpen(true);
+          setSettingsSection("capabilities");
+          setSettingsOpen(true);
         }}
         onStop={() => {
           stop();
           setStreamStatus({ stage: "interrupted", detail: "You stopped this response." });
         }}
+      />
+
+      <SettingsSheet
+        open={settingsOpen}
+        initialSection={settingsSection}
+        durability={durability}
+        preferences={preferences}
+        onClose={() => { setSettingsOpen(false); setSettingsSection(undefined); }}
+        onPreferences={updatePreferences}
+        onOpenConnectors={() => setConnectorsOpen(true)}
+        onClearData={() => void clearData()}
+        onExport={exportData}
+      />
+
+      <ModelPickerSheet
+        open={modelPickerOpen}
+        preferences={preferences}
+        onClose={() => setModelPickerOpen(false)}
+        onPreferences={updatePreferences}
+      />
+
+      <ChatMenuSheet
+        open={chatMenuOpen}
+        chat={activeChat ?? null}
+        projects={projects}
+        haptics={preferences.haptics}
+        onClose={() => setChatMenuOpen(false)}
+        onStar={() => pinChat(activeId, !(activeChat?.pinned ?? false))}
+        onRename={renameActiveChat}
+        onShare={() => void shareActiveChat()}
+        onAddToProject={() => setProjectsOpen(true)}
+        onClearThread={clearThread}
+        onDelete={() => deleteChat(activeId)}
       />
 
       {contextMessage ? (
