@@ -249,6 +249,15 @@ function InlineButton({ children, onClick, destructive }: { children: ReactNode;
   );
 }
 
+/** Read-only connection state: connected surfaces are green, absent ones gray. */
+function StatusPill({ on }: { on: boolean }) {
+  return (
+    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[0.75rem]/4 font-medium ${on ? "bg-[var(--selection-bg)] text-accent" : "bg-elev-2 text-tertiary"}`}>
+      {on ? "Connected" : "Not connected"}
+    </span>
+  );
+}
+
 function RootRow({ label, onOpen }: { label: string; onOpen: () => void }) {
   return (
     <button type="button" onClick={onOpen} className="flex min-h-[52px] w-full items-center justify-between px-4 text-left active:bg-elev-2">
@@ -272,6 +281,7 @@ export function SettingsSheet({
   const [page, setPage] = useState<PageId>("root");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus>(DEFAULT_UPDATE_STATUS);
   const [account, setAccount] = useState<{ email: string; canSignOut: boolean }>({ email: "", canSignOut: false });
+  const [devTools, setDevTools] = useState<{ github: boolean; vercel: boolean }>({ github: false, vercel: false });
   const skillGroups = useMemo(
     () => categories()
       .map((group) => ({ ...group, skills: group.skills.filter((skill: Skill) => isImplemented(skill.id)) }))
@@ -282,6 +292,13 @@ export function SettingsSheet({
   useEffect(() => {
     if (!open) return;
     setPage(initialSection ?? "root");
+    fetch("/api/models", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: { devTools?: { github?: boolean; vercel?: boolean } }) => setDevTools({
+        github: data.devTools?.github === true,
+        vercel: data.devTools?.vercel === true
+      }))
+      .catch(() => setDevTools({ github: false, vercel: false }));
   }, [initialSection, open]);
 
   useEffect(() => {
@@ -541,6 +558,11 @@ export function SettingsSheet({
                 description={DURABILITY_DETAIL[durability]}
                 control={<SettingsToggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />}
               />
+              <Row
+                label="Memory"
+                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages Navi actually uses are sent."
+                control={<SettingsToggle label="Memory" value={preferences.memory} onChange={() => update({ memory: !preferences.memory })} />}
+              />
             </Group>
             <SectionHeader>Your data</SectionHeader>
             <Group>
@@ -579,6 +601,24 @@ export function SettingsSheet({
                 control={<SettingsToggle label="Code execution" value={preferences.tools.code} onChange={() => update({ tools: { ...preferences.tools, code: !preferences.tools.code } })} />}
               />
             </Group>
+            <SectionHeader>Developer</SectionHeader>
+            <Group>
+              <Row
+                label="GitHub"
+                description={devTools.github
+                  ? "Connected. Navi Code can read your repositories, pull requests, and CI logs."
+                  : "Not connected. Add a fine-grained personal access token as NAVI_GITHUB_TOKEN in Vercel to let Navi Code read your repositories and CI logs."}
+                control={<StatusPill on={devTools.github} />}
+              />
+              <Row
+                label="Vercel"
+                description={devTools.vercel
+                  ? "Connected. Navi Code can read your deployments and build logs."
+                  : "Not connected. Add a Vercel token as NAVI_VERCEL_TOKEN in Vercel to let Navi Code read deployments and build logs."}
+                control={<StatusPill on={devTools.vercel} />}
+              />
+            </Group>
+
             <SectionHeader>Skills</SectionHeader>
             <Group>
               <RootRow label="Skills have moved to Customize" onOpen={() => openPage("skills")} />

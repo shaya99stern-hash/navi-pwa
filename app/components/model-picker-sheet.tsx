@@ -138,9 +138,12 @@ export function ModelPickerSheet({ open, preferences, onClose, onPreferences }: 
             <>
               <p className="px-5 pb-2 pt-1 text-[0.8125rem]/[1.25rem] text-tertiary">{EFFORT_EXPLAINER}</p>
               {EFFORT_LEVELS.map((level) => (
-                <button key={level.id} type="button" onClick={() => pickEffort(level.id)} className="flex min-h-[46px] w-full items-center gap-3 px-5 text-left active:bg-elev-2">
-                  <span className="flex-1 text-[0.9375rem]/[1.375rem] font-medium text-primary">{level.label}</span>
-                  {level.isDefault ? <span className="text-[0.8125rem]/4 text-tertiary">Default</span> : null}
+                <button key={level.id} type="button" onClick={() => pickEffort(level.id)} className="flex min-h-[54px] w-full items-center gap-3 px-5 py-2 text-left active:bg-elev-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[0.9375rem]/[1.375rem] font-medium text-primary">{level.label}</span>
+                    <span className="block text-[0.8125rem]/[1.125rem] text-tertiary">{level.detail}</span>
+                  </span>
+                  {level.isDefault ? <span className="shrink-0 text-[0.8125rem]/4 text-tertiary">Default</span> : null}
                   {preferences.effort === level.id ? <Check size={18} strokeWidth={2.2} className="shrink-0 text-accent" /> : null}
                 </button>
               ))}

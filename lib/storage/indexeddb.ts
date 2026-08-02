@@ -158,7 +158,10 @@ async function migrateUnscopedIndexedDbState(): Promise<void> {
 
 function normalizePreset(value: unknown): ModelPreset {
   const map: Record<string, ModelPreset> = {
-    auto: "auto",
+    "navi-chat": "navi-chat",
+    "navi-code": "navi-code",
+    // "Auto" was the old headline preset; Chat is its successor.
+    auto: "navi-chat",
     "navi-fable": "navi-fable",
     "navi-sol": "navi-sol",
     "navi-5": "navi-fable",
@@ -174,7 +177,7 @@ function normalizePreset(value: unknown): ModelPreset {
     "gemini-flash": "gemini-direct",
     "openrouter-free": "huggingface-direct"
   };
-  return map[String(value ?? "auto")] ?? "auto";
+  return map[String(value ?? "navi-chat")] ?? "navi-chat";
 }
 
 function normalizeConnectorMode(value: unknown): ConnectorAccessMode {
@@ -182,7 +185,9 @@ function normalizeConnectorMode(value: unknown): ConnectorAccessMode {
 }
 
 const MENU_SECTIONS = ["general", "account", "privacy", "capabilities", "connectors", "skills"] as const;
-const EFFORTS = ["low", "medium", "high", "extra", "max"] as const;
+const EFFORTS = ["low", "medium", "high"] as const;
+/** The scale was briefly five levels; fold the retired top two into High. */
+const RETIRED_EFFORTS: Record<string, NaviPreferences["effort"]> = { extra: "high", max: "high" };
 
 function mergePreferences(value?: PreferenceInput): NaviPreferences {
   const stored = value as Partial<NaviPreferences> | undefined;
@@ -194,8 +199,9 @@ function mergePreferences(value?: PreferenceInput): NaviPreferences {
     // Pre-effort clients stored a three-way response style; carry it forward.
     effort: EFFORTS.includes(stored?.effort as (typeof EFFORTS)[number])
       ? (stored?.effort as NaviPreferences["effort"])
-      : effortFromLegacyStyle(stored?.style),
+      : RETIRED_EFFORTS[String(stored?.effort ?? "")] ?? effortFromLegacyStyle(stored?.style),
     chatFont: stored?.chatFont === "sans" ? "sans" : "serif",
+    memory: stored?.memory !== false,
     notifyOnComplete: stored?.notifyOnComplete === true,
     voiceLanguage: typeof stored?.voiceLanguage === "string" && stored.voiceLanguage
       ? stored.voiceLanguage

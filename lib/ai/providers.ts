@@ -273,6 +273,17 @@ export function selectDirectRoute(options: {
     throw new Error("File and image input requires Gemini or a Hugging Face vision route.");
   }
 
+  /* Code mode prefers models that lead code benchmarks over generalists.
+     Effort (arriving here as `complex`) decides between the strongest coding
+     route and the everyday one; tool use still needs a tool-capable provider. */
+  if (preset === "navi-code") {
+    if ((tools.web || tools.code) && availability.groq) return ROUTES.groqTools;
+    if (availability.huggingface) return complex ? ROUTES.hfDeepSeek : ROUTES.hfKimi;
+    if (availability.groq) return complex ? ROUTES.groqReasoning : ROUTES.groqFast;
+    if (availability.gemini) return ROUTES.geminiSynthesis;
+    throw new Error("No Gemini, Groq, or Hugging Face credential is configured in Vercel.");
+  }
+
   if (preset === "huggingface-direct") {
     if (!availability.huggingface) throw new Error("A Hugging Face API credential is not configured.");
     return complex ? ROUTES.hfGptOss : ROUTES.hfQwen;
