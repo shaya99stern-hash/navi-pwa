@@ -2,14 +2,15 @@ import type { UIMessage } from "ai";
 import type { EffortLevel, ModelPreset, NaviPreferences, ResponseStyle, StoredChat } from "./ai/types";
 
 /**
- * The picker shows the first four as primary rows; direct provider routes live
- * behind "More models". Mirrors how a native picker separates the models most
- * people use from the long tail.
+ * Two headline models — Chat and Code — with everything else behind
+ * "More models". The swarms stay reachable but are an escalation tier, not a
+ * choice most requests should have to make.
  */
 export const MODEL_PRESETS: Array<{ id: ModelPreset; label: string; detail: string; composite: boolean; overflow?: boolean }> = [
-  { id: "auto", label: "Navi Auto", detail: "Picks the best route for each request", composite: false },
-  { id: "navi-fable", label: "Navi Fable", detail: "For your toughest challenges", composite: true },
-  { id: "navi-sol", label: "Navi Sol", detail: "Deep research and verification", composite: true },
+  { id: "navi-chat", label: "Navi Chat", detail: "Everyday answers, writing, and reasoning", composite: false },
+  { id: "navi-code", label: "Navi Code", detail: "Software, debugging, and technical work", composite: false },
+  { id: "navi-fable", label: "Navi Fable", detail: "Long-horizon multi-role project swarm", composite: true, overflow: true },
+  { id: "navi-sol", label: "Navi Sol", detail: "Parallel research and verification swarm", composite: true, overflow: true },
   { id: "huggingface-direct", label: "Hugging Face Direct", detail: "Best currently available Hugging Face route", composite: false, overflow: true },
   { id: "gemini-direct", label: "Gemini Direct", detail: "Direct Gemini multimodal route", composite: false, overflow: true },
   { id: "groq-direct", label: "Groq Direct", detail: "Direct low-latency reasoning route", composite: false, overflow: true }
@@ -26,23 +27,21 @@ export const RESPONSE_STYLES: Array<{ id: ResponseStyle; label: string }> = [
  * picker rather than in Settings. Each level is a real, distinct instruction
  * to the model — not a relabel of the same prompt.
  */
-export const EFFORT_LEVELS: Array<{ id: EffortLevel; label: string; isDefault?: boolean }> = [
-  { id: "low", label: "Low" },
-  { id: "medium", label: "Medium", isDefault: true },
-  { id: "high", label: "High" },
-  { id: "extra", label: "Extra" },
-  { id: "max", label: "Max" }
+export const EFFORT_LEVELS: Array<{ id: EffortLevel; label: string; detail: string; isDefault?: boolean }> = [
+  { id: "low", label: "Low", detail: "Fastest route, direct answers" },
+  { id: "medium", label: "Medium", detail: "Balanced speed and depth", isDefault: true },
+  { id: "high", label: "High", detail: "Strongest route, checks its own work" }
 ];
 
 export const EFFORT_EXPLAINER = "Higher effort means more thorough responses, but takes longer.";
 
-/** Old three-way response styles map onto the five-level effort scale. */
+/** Old three-way response styles map onto the effort scale. */
 export function effortFromLegacyStyle(style: ResponseStyle | undefined): EffortLevel {
   return style === "concise" ? "low" : style === "detailed" ? "high" : "medium";
 }
 
 export const DEFAULT_PREFERENCES: NaviPreferences = {
-  preset: "auto",
+  preset: "navi-chat",
   style: "balanced",
   effort: "medium",
   theme: "dark",
@@ -51,6 +50,7 @@ export const DEFAULT_PREFERENCES: NaviPreferences = {
   motion: "full",
   haptics: true,
   saveHistory: true,
+  memory: true,
   notifyOnComplete: false,
   voiceLanguage: "auto",
   profile: { fullName: "", displayName: "", work: "", instructions: "" },

@@ -1,4 +1,5 @@
 import { getProviderStackStatus } from "@/lib/ai/providers";
+import { devToolAvailability } from "@/lib/ai/dev-tools";
 import { getSwarmCatalogStatus } from "@/lib/ai/swarm-router";
 import type { ModelPreset } from "@/lib/ai/types";
 import { MODEL_PRESETS } from "@/lib/chat";
@@ -26,6 +27,8 @@ export async function GET(request: Request): Promise<Response> {
     {
       presets: MODEL_PRESETS,
       providers: stack.providers,
+      // Which developer connections have a token, for the Connectors page.
+      devTools: devToolAvailability(),
       providerStack: {
         active: stack.active,
         total: stack.total,

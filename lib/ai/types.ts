@@ -3,6 +3,8 @@ import type { UIMessage } from "ai";
 export type SwarmPreset = "navi-fable" | "navi-sol";
 
 export type ModelPreset =
+  | "navi-chat"
+  | "navi-code"
   | "auto"
   | SwarmPreset
   | "gemini-direct"
@@ -11,11 +13,11 @@ export type ModelPreset =
 
 export type ResponseStyle = "balanced" | "concise" | "detailed";
 /**
- * How much work a response should do. Five levels, matching the grammar of a
- * native effort control; the middle is the default. Stored values from the
- * old three-way "response style" map onto low/medium/high at load time.
+ * How much work a response should do. Three levels, the grammar people
+ * actually reach for; the middle is the default. Each level is a different
+ * instruction *and* a different route, not a relabel of the same request.
  */
-export type EffortLevel = "low" | "medium" | "high" | "extra" | "max";
+export type EffortLevel = "low" | "medium" | "high";
 export type ChatFontPreference = "serif" | "sans";
 export type ThemePreference = "dark" | "light" | "system";
 export type DensityPreference = "comfortable" | "compact";
@@ -77,6 +79,8 @@ export type NaviPreferences = {
   motion: MotionPreference;
   haptics: boolean;
   saveHistory: boolean;
+  /** Let a new chat draw on passages from earlier ones, computed on-device. */
+  memory: boolean;
   notifyOnComplete: boolean;
   voiceLanguage: string;
   profile: NaviProfile;

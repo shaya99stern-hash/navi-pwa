@@ -27,6 +27,7 @@ import {
   setLocalValue,
   type StorageDurability
 } from "@/lib/storage/indexeddb";
+import { memoryBlock, recall } from "@/lib/memory";
 import { instantAnswer, parseSlashCommand, runSlash } from "@/lib/skills";
 import { haptic } from "@/lib/ui/haptics";
 import { speak, whenVoicesReady } from "@/lib/ui/speech";
@@ -234,10 +235,18 @@ export function AppShell({
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
   const statusText = streamStatus?.detail ?? (generating ? "Navi is working" : activePreset.label);
 
-  const requestBody = useCallback(() => ({
+  /* Recall runs against the question being asked, so it is computed at send
+     time rather than folded into the memoised body. */
+  const recalledContext = useCallback((question: string) => {
+    if (!preferences.memory || !question.trim()) return "";
+    return memoryBlock(recall(question, chats, activeId));
+  }, [activeId, chats, preferences.memory]);
+
+  const requestBody = useCallback((question?: string) => ({
     preset: preferences.preset,
     effort: preferences.effort,
     tools: preferences.tools,
+    memory: question ? recalledContext(question) : "",
     threadSummary: activeChat?.summary ?? compactSummary(messages),
     connectedMcpServers: preferences.connectedMcpServers,
     connectorAccessMode: activeChat?.connectorAccessMode ?? preferences.connectorAccessMode,
@@ -256,7 +265,7 @@ export function AppShell({
       instructions: activeProject.instructions,
       knowledge: activeProject.knowledge
     } : undefined
-  }), [activeChat?.connectorAccessMode, activeChat?.summary, activeProject, messages, preferences]);
+  }), [activeChat?.connectorAccessMode, activeChat?.summary, activeProject, messages, preferences, recalledContext]);
 
   useEffect(() => {
     let cancelled = false;
@@ -670,7 +679,7 @@ export function AppShell({
             : current;
         });
       }
-      await sendMessage({ text, files }, { body: requestBody() });
+      await sendMessage({ text, files }, { body: requestBody(text) });
     } catch (submitError) {
       setAttachmentError(submitError instanceof Error ? submitError.message : "Could not prepare attachments.");
       setStreamStatus({ stage: "error", detail: "Could not prepare or send this request." });
@@ -690,7 +699,7 @@ export function AppShell({
     priorAssistantId.current = latestAssistant?.id ?? null;
     setSpeakNextReply(speakReply);
     try {
-      await sendMessage({ text: text.trim() }, { body: requestBody() });
+      await sendMessage({ text: text.trim() }, { body: requestBody(text) });
     } catch (voiceError) {
       setSpeakNextReply(false);
       setStreamStatus({
@@ -725,7 +734,7 @@ export function AppShell({
       stage: "gather",
       detail: activeProject ? `Reloading ${activeProject.name} project context.` : preferences.tools.web ? "Restarting research." : "Retrying your request."
     });
-    void regenerate({ body: requestBody() });
+    void regenerate({ body: requestBody(messageText([...messages].reverse().find((m) => m.role === "user") ?? messages[0] ?? { id: "", role: "user", parts: [] })) });
   }
 
   function clearThread() {
