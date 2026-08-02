@@ -97,25 +97,71 @@ export function getHuggingFaceToken(): string | undefined {
   return huggingFaceToken();
 }
 
+/* Three optional free tiers. Each is additive: absent, nothing changes;
+   present, it joins the routing pool without any further configuration. */
+
+function cerebrasApiKey(): string | undefined {
+  return firstSecret([
+    process.env.CEREBRAS_API_KEY,
+    process.env.CEREBRAS_KEY,
+    process.env.CEREBRAS_API_TOKEN
+  ]) ?? environmentSecret({
+    keyMatches: (key) => key.includes("CEREBRAS") && (key.includes("KEY") || key.includes("TOKEN")),
+    valuePrefixes: ["csk-"]
+  });
+}
+
+function openRouterApiKey(): string | undefined {
+  return firstSecret([
+    process.env.OPENROUTER_API_KEY,
+    process.env.OPEN_ROUTER_API_KEY,
+    process.env.OPENROUTER_KEY,
+    process.env.OPENROUTER_TOKEN
+  ]) ?? environmentSecret({
+    keyMatches: (key) => key.includes("OPENROUTER") && (key.includes("KEY") || key.includes("TOKEN")),
+    valuePrefixes: ["sk-or-"]
+  });
+}
+
+function mistralApiKey(): string | undefined {
+  return firstSecret([
+    process.env.MISTRAL_API_KEY,
+    process.env.MISTRAL_KEY,
+    process.env.MISTRAL_API_TOKEN
+  ]) ?? environmentSecret({
+    keyMatches: (key) => key.includes("MISTRAL") && (key.includes("KEY") || key.includes("TOKEN")),
+    valuePrefixes: []
+  });
+}
+
 export function getProviderAvailability(): ProviderAvailability {
   return {
     gemini: Boolean(geminiApiKey()),
     groq: Boolean(groqApiKey()),
-    huggingface: Boolean(huggingFaceToken())
+    huggingface: Boolean(huggingFaceToken()),
+    cerebras: Boolean(cerebrasApiKey()),
+    openrouter: Boolean(openRouterApiKey()),
+    mistral: Boolean(mistralApiKey())
   };
 }
 
+/**
+ * The original three carry the app on their own; the rest are upgrades.
+ * "Full stack" therefore still means the three the app needs, so an account
+ * without the optional tiers is not reported as incomplete.
+ */
+const CORE_PROVIDERS: ProviderName[] = ["gemini", "groq", "huggingface"];
+
 export function getProviderStackStatus() {
   const providers = getProviderAvailability();
+  const core = CORE_PROVIDERS.filter((provider) => providers[provider]);
   const active = Object.values(providers).filter(Boolean).length;
   return {
     providers,
     active,
-    total: 3,
-    fullStack: active === 3,
-    missing: (Object.entries(providers) as Array<[ProviderName, boolean]>)
-      .filter(([, ready]) => !ready)
-      .map(([provider]) => provider)
+    total: CORE_PROVIDERS.length,
+    fullStack: core.length === CORE_PROVIDERS.length,
+    missing: CORE_PROVIDERS.filter((provider) => !providers[provider])
   };
 }
 
@@ -139,6 +185,46 @@ export function createProviderModel(route: ProviderRoute, origin: string): any {
       name: "groq",
       apiKey,
       baseURL: "https://api.groq.com/openai/v1",
+      includeUsage: true
+    });
+    return provider.chatModel(route.model);
+  }
+
+  /* All three optional tiers speak the OpenAI-compatible protocol, so they
+     need a base URL and a key and nothing else. */
+  if (route.provider === "cerebras") {
+    const apiKey = cerebrasApiKey();
+    if (!apiKey) throw new Error("A Cerebras API credential is not configured.");
+    const provider = createOpenAICompatible({
+      name: "cerebras",
+      apiKey,
+      baseURL: "https://api.cerebras.ai/v1",
+      includeUsage: true
+    });
+    return provider.chatModel(route.model);
+  }
+
+  if (route.provider === "openrouter") {
+    const apiKey = openRouterApiKey();
+    if (!apiKey) throw new Error("An OpenRouter API credential is not configured.");
+    const provider = createOpenAICompatible({
+      name: "openrouter",
+      apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      includeUsage: true,
+      // OpenRouter attributes free-tier usage by referer and title.
+      headers: { "HTTP-Referer": origin, "X-Title": "NaviOS Hub" }
+    });
+    return provider.chatModel(route.model);
+  }
+
+  if (route.provider === "mistral") {
+    const apiKey = mistralApiKey();
+    if (!apiKey) throw new Error("A Mistral API credential is not configured.");
+    const provider = createOpenAICompatible({
+      name: "mistral",
+      apiKey,
+      baseURL: "https://api.mistral.ai/v1",
       includeUsage: true
     });
     return provider.chatModel(route.model);
@@ -198,6 +284,42 @@ export const ROUTES = {
     label: "Groq tools",
     capability: "tools"
   },
+  /* Cerebras serves very large open weights at unusual speed, which makes it
+     the best High-effort brain available on a free tier — the one place the
+     app's ceiling actually moves. */
+  cerebrasLarge: {
+    provider: "cerebras",
+    model: process.env.CEREBRAS_MODEL ?? "llama-3.3-70b",
+    label: "Cerebras 70B",
+    capability: "reasoning"
+  },
+  cerebrasFast: {
+    provider: "cerebras",
+    model: process.env.CEREBRAS_FAST_MODEL ?? "llama3.1-8b",
+    label: "Cerebras fast",
+    capability: "fast"
+  },
+  /* OpenRouter is breadth rather than depth: one key, many models, and the
+     `:free` suffix keeps it on the free tier. */
+  openRouterReasoning: {
+    provider: "openrouter",
+    model: process.env.OPENROUTER_MODEL ?? "deepseek/deepseek-r1:free",
+    label: "OpenRouter reasoning",
+    capability: "reasoning"
+  },
+  openRouterCoding: {
+    provider: "openrouter",
+    model: process.env.OPENROUTER_CODE_MODEL ?? "qwen/qwen-2.5-coder-32b-instruct:free",
+    label: "OpenRouter coding",
+    capability: "coding"
+  },
+  mistralBalanced: {
+    provider: "mistral",
+    model: process.env.MISTRAL_MODEL ?? "mistral-large-latest",
+    label: "Mistral Large",
+    capability: "balanced"
+  },
+
   hfGptOss: hf("openai/gpt-oss-120b", "HF GPT-OSS 120B", "reasoning"),
   hfDeepSeek: hf("deepseek-ai/DeepSeek-V3.2", "HF DeepSeek V3.2", "reasoning"),
   hfGlm: hf("zai-org/GLM-5.2", "HF GLM 5.2", "long-context"),
@@ -248,12 +370,19 @@ export function availableSwarmRoutes(availability: ProviderAvailability, tools: 
   const hfRoutes = availability.huggingface ? configuredHfRoutes() : [];
   const routes: ProviderRoute[] = [];
 
+  /* A council is only as good as the spread of models in it, so the strongest
+     optional routes are interleaved near the front rather than appended. */
+  if (availability.cerebras) routes.push(ROUTES.cerebrasLarge);
   if (availability.gemini) routes.push(ROUTES.geminiSynthesis);
   if (hfRoutes[0]) routes.push(hfRoutes[0]);
+  if (availability.openrouter) routes.push(ROUTES.openRouterReasoning);
   if (availability.groq) routes.push(tools.web || tools.code ? ROUTES.groqTools : ROUTES.groqReasoning);
   if (hfRoutes[1]) routes.push(hfRoutes[1]);
+  if (availability.mistral) routes.push(ROUTES.mistralBalanced);
   if (availability.groq) routes.push(ROUTES.groqFast);
+  if (availability.openrouter) routes.push(ROUTES.openRouterCoding);
   if (hfRoutes[2]) routes.push(hfRoutes[2]);
+  if (availability.cerebras) routes.push(ROUTES.cerebrasFast);
   routes.push(...hfRoutes.slice(3));
   return routes;
 }
@@ -278,10 +407,13 @@ export function selectDirectRoute(options: {
      route and the everyday one; tool use still needs a tool-capable provider. */
   if (preset === "navi-code") {
     if ((tools.web || tools.code) && availability.groq) return ROUTES.groqTools;
+    if (complex && availability.openrouter) return ROUTES.openRouterCoding;
+    if (complex && availability.cerebras) return ROUTES.cerebrasLarge;
     if (availability.huggingface) return complex ? ROUTES.hfDeepSeek : ROUTES.hfKimi;
+    if (availability.cerebras) return ROUTES.cerebrasFast;
     if (availability.groq) return complex ? ROUTES.groqReasoning : ROUTES.groqFast;
     if (availability.gemini) return ROUTES.geminiSynthesis;
-    throw new Error("No Gemini, Groq, or Hugging Face credential is configured in Vercel.");
+    throw new Error("No AI provider credential is configured in Vercel.");
   }
 
   if (preset === "huggingface-direct") {
@@ -298,19 +430,32 @@ export function selectDirectRoute(options: {
   }
 
   if ((tools.web || tools.code) && availability.groq) return ROUTES.groqTools;
+  /* High effort promises the strongest brain available. Cerebras leads that
+     order because it serves the largest weights on a free tier fast enough to
+     stay inside the request budget. */
+  if (complex && availability.cerebras) return ROUTES.cerebrasLarge;
+  if (complex && availability.openrouter) return ROUTES.openRouterReasoning;
   if (complex && availability.huggingface) return ROUTES.hfGptOss;
   if (complex && availability.groq) return ROUTES.groqReasoning;
+  if (complex && availability.mistral) return ROUTES.mistralBalanced;
   if (availability.gemini) return ROUTES.geminiSynthesis;
   if (availability.huggingface) return ROUTES.hfQwen;
+  if (availability.cerebras) return ROUTES.cerebrasFast;
   if (availability.groq) return ROUTES.groqFast;
-  throw new Error("No Gemini, Groq, or Hugging Face credential is configured in Vercel.");
+  if (availability.mistral) return ROUTES.mistralBalanced;
+  if (availability.openrouter) return ROUTES.openRouterReasoning;
+  throw new Error("No AI provider credential is configured in Vercel.");
 }
 
 export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-sol-5-6"): ProviderRoute {
   if (availability.gemini) return ROUTES.geminiSynthesis;
   if (profile === "navi-sol-5-6" && availability.huggingface) return ROUTES.hfGptOss;
   if (profile === "navi-5" && availability.huggingface) return ROUTES.hfGlm;
+  // Synthesis reads every specialist answer, so it wants headroom.
+  if (availability.cerebras) return ROUTES.cerebrasLarge;
+  if (availability.openrouter) return ROUTES.openRouterReasoning;
   if (availability.groq) return ROUTES.groqReasoning;
+  if (availability.mistral) return ROUTES.mistralBalanced;
   throw new Error("No synthesis provider is configured.");
 }
 
@@ -324,6 +469,10 @@ export function selectVerificationRoute(
     return profile === "navi-sol-5-6" ? ROUTES.hfDeepSeek : ROUTES.hfGptOss;
   }
   if (synthesisProvider !== "gemini" && availability.gemini) return ROUTES.geminiSynthesis;
+  // A checker that shares the writer's provider shares its blind spots.
+  if (synthesisProvider !== "cerebras" && availability.cerebras) return ROUTES.cerebrasLarge;
+  if (synthesisProvider !== "openrouter" && availability.openrouter) return ROUTES.openRouterReasoning;
+  if (synthesisProvider !== "mistral" && availability.mistral) return ROUTES.mistralBalanced;
   if (availability.huggingface) return ROUTES.hfGptOss;
   if (availability.groq) return ROUTES.groqReasoning;
   return ROUTES.geminiSynthesis;

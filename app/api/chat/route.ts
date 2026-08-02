@@ -566,10 +566,12 @@ export async function POST(request: Request): Promise<Response> {
         complex: effortLevel === "high" || (effortLevel === "medium" && effort !== "normal")
       });
       writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : "Preparing the response." }));
-      // Gemini and Groq handle tool calling reliably. The Hugging Face router
-      // fronts many open models, plenty of which reject a tools parameter
-      // outright, so sending one there would break routes that work today.
-      const supportsTools = route.provider === "gemini" || route.provider === "groq";
+      /* These providers handle tool calling reliably. The Hugging Face router
+         fronts many open models, plenty of which reject a tools parameter
+         outright, so sending one there would break routes that work today —
+         it is the one provider deliberately left out. */
+      const TOOL_CAPABLE_PROVIDERS = ["gemini", "groq", "cerebras", "openrouter", "mistral"];
+      const supportsTools = TOOL_CAPABLE_PROVIDERS.includes(route.provider);
       const toolNames = supportsTools ? Object.keys(availableTools) : [];
       if (toolNames.length) {
         writer.write(statusChunk({ stage: "gather", detail: `${toolNames.length} tool${toolNames.length === 1 ? "" : "s"} available.` }));
