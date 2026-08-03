@@ -475,6 +475,44 @@ export function selectDirectRoute(options: {
   throw new Error("No AI provider is configured. Add GEMINI_API_KEY, GROQ_API_KEY, or HF_TOKEN in your Vercel project settings, then redeploy.");
 }
 
+/**
+ * Alternates to try when the chosen route fails outright.
+ *
+ * A provider returning 403 — a key with referrer or IP restrictions, a
+ * disabled API, a revoked token — took the whole app down while four other
+ * configured providers sat idle. Selecting one route and betting the request
+ * on it is the wrong shape for a system whose whole premise is several free
+ * tiers.
+ *
+ * Ordered to change provider first: retrying a different model on the same
+ * provider repeats whatever went wrong at the account level, which is where
+ * these failures actually live.
+ */
+export function fallbackRoutes(options: {
+  primary: ProviderRoute;
+  availability: ProviderAvailability;
+  complex: boolean;
+}): ProviderRoute[] {
+  const { primary, availability, complex } = options;
+  const candidates: ProviderRoute[] = [];
+  if (availability.gemini) candidates.push(ROUTES.geminiSynthesis);
+  if (availability.groq) candidates.push(complex ? ROUTES.groqReasoning : ROUTES.groqFast);
+  if (availability.cerebras) candidates.push(complex ? ROUTES.cerebrasLarge : ROUTES.cerebrasFast);
+  if (availability.mistral) candidates.push(ROUTES.mistralBalanced);
+  if (availability.openrouter) candidates.push(ROUTES.openRouterReasoning);
+  if (availability.huggingface) candidates.push(complex ? ROUTES.hfGptOss : ROUTES.hfQwen);
+
+  const seen = new Set<ProviderName>([primary.provider]);
+  const ordered: ProviderRoute[] = [];
+  for (const candidate of candidates) {
+    if (seen.has(candidate.provider)) continue;
+    seen.add(candidate.provider);
+    ordered.push(candidate);
+  }
+  // Two alternates is enough: a third costs more latency than it recovers.
+  return ordered.slice(0, 2);
+}
+
 export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-sol-5-6"): ProviderRoute {
   if (availability.gemini) return ROUTES.geminiSynthesis;
   if (profile === "navi-sol-5-6" && availability.huggingface) return ROUTES.hfGptOss;
