@@ -1,6 +1,6 @@
 "use client";
 
-import { Eraser, FolderKanban, PencilLine, Share, Star, Trash2 } from "lucide-react";
+import { Eraser, FolderKanban, Ghost, PencilLine, Share, Star, Trash2 } from "lucide-react";
 import type { NaviProject, StoredChat } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
@@ -17,7 +17,9 @@ type Props = {
   chat: StoredChat | null;
   projects: NaviProject[];
   haptics: boolean;
+  incognito: boolean;
   onClose: () => void;
+  onToggleIncognito: () => void;
   onStar: () => void;
   onRename: () => void;
   onShare: () => void;
@@ -49,7 +51,9 @@ export function ChatMenuSheet({
   chat,
   projects,
   haptics,
+  incognito,
   onClose,
+  onToggleIncognito,
   onStar,
   onRename,
   onShare,
@@ -87,6 +91,11 @@ export function ChatMenuSheet({
         {projects.length ? (
           <MenuRow icon={<FolderKanban size={19} strokeWidth={1.8} />} label={chat.projectId ? "Move to project" : "Add to project"} onPick={() => pick(onAddToProject)} />
         ) : null}
+        <MenuRow
+          icon={<Ghost size={19} strokeWidth={1.8} className={incognito ? "text-accent" : ""} />}
+          label={incognito ? "Turn off incognito" : "Incognito — don't save this chat"}
+          onPick={() => pick(onToggleIncognito)}
+        />
         <MenuRow icon={<Eraser size={19} strokeWidth={1.8} />} label="Clear messages" onPick={() => pick(onClearThread)} />
         <div className="mx-5 my-1 border-t border-[var(--border-subtle)]" />
         <MenuRow danger icon={<Trash2 size={19} strokeWidth={1.8} />} label="Delete" onPick={() => pick(onDelete)} />
