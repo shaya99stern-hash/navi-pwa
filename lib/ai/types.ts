@@ -116,6 +116,16 @@ export type ProviderRoute = {
   capability: "fast" | "balanced" | "reasoning" | "multimodal" | "tools" | "long-context" | "coding";
 };
 
+/**
+ * Whether a route accepts a `tools` parameter.
+ *
+ * Tool support is a property of the *model*, not the provider. Groq, for one,
+ * serves both models that take a tools array and agentic systems that reject
+ * one outright — sending tools to the latter fails the whole request. Routes
+ * therefore declare their own answer rather than inheriting the provider's.
+ */
+export type ToolCallingSupport = "custom" | "none";
+
 export type ArtifactKind = "html" | "svg";
 
 export type ArtifactPayload = {
