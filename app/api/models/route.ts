@@ -1,5 +1,6 @@
 import { getProviderStackStatus } from "@/lib/ai/providers";
 import { devToolAvailability } from "@/lib/ai/dev-tools";
+import { searchProviderName } from "@/lib/ai/web-tools";
 import { getSwarmCatalogStatus } from "@/lib/ai/swarm-router";
 import type { ModelPreset } from "@/lib/ai/types";
 import { MODEL_PRESETS } from "@/lib/chat";
@@ -29,6 +30,10 @@ export async function GET(request: Request): Promise<Response> {
       providers: stack.providers,
       // Which developer connections have a token, for the Connectors page.
       devTools: devToolAvailability(),
+      /* Research mode can be switched on with no search provider behind it,
+         which looks identical to working until an answer quietly comes from
+         memory. The Integrations sheet reports the difference. */
+      search: { configured: Boolean(searchProviderName()), provider: searchProviderName() },
       providerStack: {
         active: stack.active,
         total: stack.total,

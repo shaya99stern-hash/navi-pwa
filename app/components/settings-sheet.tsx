@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Monitor,
   Moon,
+  FlaskConical,
   RefreshCw,
   Sun,
   X
@@ -282,6 +283,35 @@ export function SettingsSheet({
   onExport
 }: Props) {
   const [page, setPage] = useState<PageId>("root");
+  const [evalState, setEvalState] = useState<{ phase: "idle" | "running" | "done" | "error"; message: string }>({
+    phase: "idle",
+    message: "Scores Navi against a fixed task set. Takes a couple of minutes."
+  });
+
+  const runEvals = async () => {
+    haptic("impact-light", preferences.haptics);
+    setEvalState({ phase: "running", message: "Running… this takes a couple of minutes, keep the app open." });
+    try {
+      const response = await fetch("/api/eval", { method: "POST", cache: "no-store" });
+      if (!response.ok) throw new Error(`The run could not start (HTTP ${response.status}).`);
+      const data = await response.json() as {
+        passed: number; ran: number; total: number; errored: number; meaningful: boolean; durationMs: number;
+      };
+      /* A run where every task errored scores zero and means nothing — the
+         requests never reached a model. Reporting "0/12" for that would be a
+         lie about quality rather than a report about configuration. */
+      if (!data.meaningful) {
+        setEvalState({ phase: "error", message: `All ${data.ran} tasks failed to reach a model. Check that provider keys are configured.` });
+        return;
+      }
+      const seconds = Math.round(data.durationMs / 1000);
+      const errorNote = data.errored ? ` · ${data.errored} errored` : "";
+      setEvalState({ phase: "done", message: `${data.passed}/${data.ran} passed in ${seconds}s${errorNote}.` });
+    } catch (error) {
+      setEvalState({ phase: "error", message: error instanceof Error ? error.message : "The run did not complete." });
+    }
+  };
+
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus>(DEFAULT_UPDATE_STATUS);
   const [account, setAccount] = useState<{ email: string; canSignOut: boolean }>({ email: "", canSignOut: false });
   const [devTools, setDevTools] = useState<{ github: boolean; vercel: boolean }>({ github: false, vercel: false });
@@ -537,6 +567,24 @@ export function SettingsSheet({
                   <span className={`block text-[0.75rem]/4 ${updateStatus.phase === "error" ? "text-danger" : "text-tertiary"}`}>{updateStatus.message}</span>
                 </span>
                 <RefreshCw size={18} className={`shrink-0 text-secondary ${updateBusy ? "animate-spin" : ""}`} />
+              </button>
+
+              {/* The eval harness needed a terminal, so in practice the app's
+                  own quality was never measured. Same task set, same grading,
+                  run by the deployment against itself — from the phone. */}
+              <button
+                type="button"
+                onClick={() => void runEvals()}
+                disabled={evalState.phase === "running"}
+                className="flex w-full items-center gap-3 border-t border-[var(--border-subtle)] px-4 py-3.5 text-left active:bg-elev-2 disabled:opacity-70"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[0.9375rem]/[1.375rem] font-medium text-primary">Run quality check</span>
+                  <span className={`block text-[0.8125rem]/[1.125rem] ${evalState.phase === "error" ? "text-danger" : "text-secondary"}`}>
+                    {evalState.message}
+                  </span>
+                </span>
+                <FlaskConical size={18} className={`shrink-0 text-secondary ${evalState.phase === "running" ? "animate-pulse" : ""}`} />
               </button>
             </Group>
 
