@@ -13,7 +13,7 @@ import { createProviderModel, getProviderAvailability, routeToolCallingSupport, 
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { buildDevTools } from "@/lib/ai/dev-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
-import { buildWebTools } from "@/lib/ai/web-tools";
+import { buildWebTools, hasWebSearch } from "@/lib/ai/web-tools";
 import { runComposite } from "@/lib/ai/swarm";
 import type { ConnectorAccessMode, EffortLevel, ModelPreset, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { authorizeApiMutation } from "@/lib/auth/api";
@@ -31,6 +31,8 @@ const MAX_TOOL_STEPS = 4;
  * leaves the model guessing at exactly the point it was about to know.
  */
 const MAX_CODE_TOOL_STEPS = 8;
+/** Total time the finished swarm answer may spend being typed out. */
+const SWARM_CADENCE_TOTAL_MS = 2_000;
 
 type ChatRequestBody = {
   messages?: UIMessage[];
@@ -229,7 +231,10 @@ type Dispatch = "code" | "research" | "reasoning" | "general";
 
 const CODE_REQUEST = /\b(code|coding|function|class|method|variable|compile|compiler|syntax|refactor|debug|bug|stack trace|exception|typescript|javascript|python|rust|golang|java|swift|kotlin|sql|html|css|react|next\.?js|vue|svelte|node|npm|yarn|docker|kubernetes|git|regex|api endpoint|unit test|null pointer|segfault|npm install|traceback)\b/i;
 
-const RESEARCH_REQUEST = /\b(search|look ?up|latest|current|today|this (?:week|month|year)|news|who is|what happened|according to|source|sources|cite|citation|price of|stock|weather|release date|is it true|fact ?check)\b/i;
+/* "Can you do a deep research on X" did not match this — the one word a
+   research request is most likely to contain was missing from it, so the
+   clearest possible ask fell through to generic reasoning. */
+const RESEARCH_REQUEST = /\b(search|research|investigate|look ?up|look into|find out|deep ?dive|latest|current|today|this (?:week|month|year)|news|who is|what happened|according to|source|sources|cite|citation|price of|stock|weather|release date|is it true|fact ?check)\b/i;
 
 /** Named so the status line can say what was engaged, in Navi's own words. */
 const DISPATCH_LABEL: Record<Dispatch, string> = {
@@ -476,9 +481,18 @@ function resolveHeadlinePreset(options: {
   effort: EffortLevel;
   providerCount: number;
   hasFiles: boolean;
+  /** True when the request wants live sources and the app can actually fetch them. */
+  needsLiveSources: boolean;
 }): ModelPreset {
-  const { preset, complexityBand, effort, providerCount, hasFiles } = options;
+  const { preset, complexityBand, effort, providerCount, hasFiles, needsLiveSources } = options;
   if (providerCount < 2 || hasFiles) return preset;
+  /* The swarms deliberate; they do not browse. runComposite gets a tool
+     *policy* but never callable tools, so escalating a research request into
+     one silently removes the web access that made it a research request —
+     High effort plus Research mode was the one combination guaranteed to
+     answer from memory alone. For anything wanting live sources the direct
+     route is strictly better: it can actually search. */
+  if (needsLiveSources) return preset;
   // Escalation costs real latency, so it needs both signals: the user asked
   // for depth *and* the request itself is genuinely hard.
   if (effort !== "high" || complexityBand === "normal") return preset;
@@ -558,7 +572,8 @@ export async function POST(request: Request): Promise<Response> {
     complexityBand: effort,
     effort: effortLevel,
     providerCount,
-    hasFiles
+    hasFiles,
+    needsLiveSources: dispatch === "research" && tools.web && hasWebSearch()
   });
   const origin = new URL(request.url).origin;
 
@@ -637,9 +652,17 @@ export async function POST(request: Request): Promise<Response> {
         writer.write(statusChunk({ stage: "stream", detail: "Preparing the final answer." }));
         const textId = generateId();
         writer.write({ type: "text-start", id: textId });
-        for (const chunk of splitForCadence(result.text)) {
+        /* The swarm answer is already complete, so this cadence is pure
+           presentation — it exists so text appears rather than materializing
+           in one block. A fixed per-chunk delay made it a real cost: a long
+           answer added tens of seconds to a request that had already spent
+           most of its budget thinking. Spread a fixed total instead, so
+           length no longer buys extra waiting. */
+        const chunks = splitForCadence(result.text);
+        const perChunkMs = Math.min(24, Math.floor(SWARM_CADENCE_TOTAL_MS / Math.max(chunks.length, 1)));
+        for (const chunk of chunks) {
           writer.write({ type: "text-delta", id: textId, delta: chunk });
-          await delay(24, request.signal);
+          if (perChunkMs > 0) await delay(perChunkMs, request.signal);
         }
         writer.write({ type: "text-end", id: textId });
         writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
