@@ -9,10 +9,13 @@ import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 /**
  * The model picker is a per-message control, so it hangs off the composer
- * pill rather than living inside Settings. Grammar: two-line rows (name over
- * a gray description), the selected row marked with an accent check at the
- * right — never a filled row — and below a divider, Effort and More models
- * as submenu rows.
+ * pill rather than living inside Settings.
+ *
+ * It lists exactly two entries. Navi Soul dispatches to whichever engine leads
+ * at the job; Navi Code assumes a technical conversation. Provider routes are
+ * not offered here at all — picking one should never be part of asking a
+ * question — but an override set in Settings surfaces so it is never a mystery
+ * why answers changed.
  */
 
 type Props = {
@@ -22,7 +25,7 @@ type Props = {
   onPreferences: (preferences: NaviPreferences) => void;
 };
 
-type Pane = "models" | "more" | "effort";
+type Pane = "models" | "effort";
 
 function PickRow({ label, detail, selected, onPick }: {
   label: string;
@@ -62,7 +65,9 @@ export function ModelPickerSheet({ open, preferences, onClose, onPreferences }: 
   if (!open) return null;
 
   const primary = MODEL_PRESETS.filter((preset) => !preset.overflow);
-  const overflow = MODEL_PRESETS.filter((preset) => preset.overflow);
+  /* If a diagnostic override is active, show it here so it is never a mystery
+     why answers changed — but it is set in Settings, not chosen here. */
+  const override = MODEL_PRESETS.find((preset) => preset.overflow && preset.id === preferences.preset);
   const effort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
 
   const pickModel = (preset: ModelPreset) => {
@@ -94,7 +99,7 @@ export function ModelPickerSheet({ open, preferences, onClose, onPreferences }: 
               <ChevronLeft size={20} strokeWidth={1.8} />
             </button>
             <span className="flex-1 text-center text-[0.9375rem]/5 font-semibold text-primary">
-              {pane === "effort" ? "Effort" : "More models"}
+              Effort
             </span>
             <span className="h-10 w-10" aria-hidden="true" />
           </header>
@@ -112,27 +117,18 @@ export function ModelPickerSheet({ open, preferences, onClose, onPreferences }: 
                   onPick={() => pickModel(preset.id)}
                 />
               ))}
+              {override ? (
+                <PickRow
+                  label={override.label}
+                  detail="Diagnostic override — change in Settings → Capabilities"
+                  selected
+                  onPick={() => pickModel("navi-soul")}
+                />
+              ) : null}
               <div className="mx-5 my-1 border-t border-[var(--border-subtle)]" />
               <SubmenuRow label="Effort" value={effort.label} onOpen={() => { haptic("selection", preferences.haptics); setPane("effort"); }} />
-              <SubmenuRow
-                label="More models"
-                value={overflow.some((preset) => preset.id === preferences.preset)
-                  ? overflow.find((preset) => preset.id === preferences.preset)?.label
-                  : undefined}
-                onOpen={() => { haptic("selection", preferences.haptics); setPane("more"); }}
-              />
             </>
           ) : null}
-
-          {pane === "more" ? overflow.map((preset) => (
-            <PickRow
-              key={preset.id}
-              label={preset.label}
-              detail={preset.detail}
-              selected={preferences.preset === preset.id}
-              onPick={() => pickModel(preset.id)}
-            />
-          )) : null}
 
           {pane === "effort" ? (
             <>
