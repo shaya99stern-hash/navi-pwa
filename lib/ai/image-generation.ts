@@ -99,13 +99,26 @@ export const IMAGE_ENGINES = {
     detail: "Everyday images, and every kind of edit",
     model: process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-3.1-flash-image"
   },
-  /** Photoreal and artistic detail, for creation from nothing. */
+  /** Photoreal and editorial detail, for creation from nothing. */
   studio: {
     name: "Navi Image Studio",
-    detail: "Photoreal and artistic detail",
+    detail: "Photoreal and editorial detail",
     model: process.env.HF_IMAGE_MODEL?.trim() || "black-forest-labs/FLUX.1-schnell"
+  },
+  /**
+   * Words inside the picture. Diffusion models famously garble typography;
+   * Qwen-Image reasons about language and layout as part of generation, so it
+   * is the one to use for a poster, a sign, a logo, or a label.
+   */
+  text: {
+    name: "Navi Image Text",
+    detail: "Readable words inside the image",
+    model: process.env.HF_TEXT_IMAGE_MODEL?.trim() || "Qwen/Qwen-Image"
   }
 } as const;
+
+/** Asking for words in the picture, rather than words about the picture. */
+const WANTS_TEXT_IN_IMAGE = /\b(?:that says|which says|saying|reading|with the (?:words?|text|caption)|poster|flyer|sign|signage|banner|logo|wordmark|label|menu|billboard|certificate|invitation|book cover|album cover|typography|lettering|headline|slogan|meme)\b/i;
 
 function inferDimensions(prompt: string): ImageDimensions {
   const lower = prompt.toLowerCase();
@@ -397,12 +410,13 @@ async function generateWithGemini(options: {
 
 async function generateWithHuggingFace(options: {
   prompt: string;
+  model: string;
   dimensions: ImageDimensions;
   abortSignal: AbortSignal;
 }): Promise<ImageBlock> {
   const token = huggingFaceToken();
   if (!token) throw new Error("Hugging Face image generation is unavailable.");
-  const model = IMAGE_ENGINES.studio.model;
+  const model = options.model;
   const encodedModel = model.split("/").map(encodeURIComponent).join("/");
   const timed = timedSignal(options.abortSignal, 32_000);
   try {
@@ -467,12 +481,14 @@ export async function generateNaviImage(options: {
 
   if (!block && huggingFaceToken() && !(options.attachments?.length)) {
     try {
+      const chosen = WANTS_TEXT_IN_IMAGE.test(options.prompt) ? IMAGE_ENGINES.text : IMAGE_ENGINES.studio;
       block = await generateWithHuggingFace({
         prompt: options.prompt,
+        model: chosen.model,
         dimensions,
         abortSignal: options.abortSignal
       });
-      engine = IMAGE_ENGINES.studio.name;
+      engine = chosen.name;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(message);
