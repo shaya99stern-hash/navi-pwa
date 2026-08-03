@@ -3,6 +3,7 @@
 import {
   AudioLines,
   ArrowUp,
+  BookOpen,
   Camera,
   ChevronDown,
   FileText,
@@ -10,6 +11,9 @@ import {
   Mic,
   Paperclip,
   Plus,
+  Check,
+  FolderKanban,
+  Link2,
   Search,
   SlidersHorizontal,
   Square,
@@ -47,6 +51,9 @@ const DOCUMENT_ACCEPT = [
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
+/** Shared row shape for the + menu: icon, label, optional trailing mark. */
+const menuRow = "flex min-h-[50px] w-full items-center gap-3 px-4 text-left text-[0.9375rem]/[1.375rem] font-medium text-primary active:bg-elev-3";
+
 type Props = {
   value: string;
   generating: boolean;
@@ -72,6 +79,9 @@ type Props = {
   onOpenVoice: () => void;
   onToggleResearch: () => void;
   onOpenTools: () => void;
+  onOpenProjects: () => void;
+  onOpenConnectors: () => void;
+  onOpenPlaybooks: () => void;
 };
 
 type ProviderStatus = {
@@ -136,7 +146,10 @@ export function ComposerDock({
   onOpenModels,
   onOpenVoice,
   onToggleResearch,
-  onOpenTools
+  onOpenTools,
+  onOpenProjects,
+  onOpenConnectors,
+  onOpenPlaybooks
 }: Props) {
   const dockRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -144,6 +157,8 @@ export function ComposerDock({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
+  /** True between pointerdown and pointerup on the mic, so a tap is distinguishable from a hold. */
+  const holdingMic = useRef(false);
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -589,10 +604,16 @@ export function ComposerDock({
                   finger disappears mid-thought. Both are icon-weight peers. */}
               <button
                 type="button"
-                onClick={toggleVoice}
+                /* Press and hold to record, release to stop — the gesture a
+                   phone user expects from a microphone. Tap still toggles, so
+                   a keyboard or assistive tap is not locked out. */
+                onPointerDown={() => { holdingMic.current = true; if (!listening) toggleVoice(); }}
+                onPointerUp={() => { if (holdingMic.current && listening) toggleVoice(); holdingMic.current = false; }}
+                onPointerCancel={() => { if (holdingMic.current && listening) toggleVoice(); holdingMic.current = false; }}
+                onClick={(event) => { if (event.detail === 0) toggleVoice(); }}
                 disabled={blocked || generating}
                 className={`composer-action ${listening ? "!bg-accent !text-[var(--accent-on-primary)]" : ""}`}
-                aria-label={listening ? "Stop dictation" : "Dictate"}
+                aria-label={listening ? "Release to stop recording" : "Press and hold to record"}
                 aria-pressed={listening}
               >
                 <Mic size={19} strokeWidth={1.8} />
@@ -694,62 +715,66 @@ export function ComposerDock({
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => imageInputRef.current?.click()}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[0.75rem]/4 font-semibold text-primary active:bg-elev-3"
-              >
-                <ImageIcon size={22} className="text-accent" />
-                Photos
+            {/* A list, not a grid of tiles: the actions here are of different
+                kinds — attach, navigate, toggle — and a grid implies they are
+                all the same kind of thing. Dividers group them. */}
+            <div className="overflow-hidden rounded-card border border-[var(--border-subtle)] bg-elev-2">
+              <button type="button" onClick={() => imageInputRef.current?.click()} className={menuRow}>
+                <ImageIcon size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
+                <span className="flex-1">Add photos</span>
               </button>
-              <button
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[0.75rem]/4 font-semibold text-primary active:bg-elev-3"
-              >
-                <Camera size={22} className="text-accent" />
-                Camera
+              <button type="button" onClick={() => cameraInputRef.current?.click()} className={menuRow}>
+                <Camera size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
+                <span className="flex-1">Take a photo</span>
               </button>
+              <button type="button" onClick={() => documentInputRef.current?.click()} className={menuRow}>
+                <Paperclip size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
+                <span className="flex-1">Add files</span>
+              </button>
+              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenProjects(); }} className={menuRow}>
+                <FolderKanban size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
+                <span className="flex-1">Add to project</span>
+                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
+              </button>
+
+              <div className="h-2 bg-[var(--bg-app)]" aria-hidden="true" />
+
+              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenPlaybooks(); }} className={menuRow}>
+                <BookOpen size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
+                <span className="flex-1">Playbooks</span>
+                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
+              </button>
+              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenConnectors(); }} className={menuRow}>
+                <Link2 size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
+                <span className="flex-1">Connectors</span>
+                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
+              </button>
+              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenTools(); }} className={menuRow}>
+                <SlidersHorizontal size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
+                <span className="flex-1">Capabilities</span>
+                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
+              </button>
+
+              <div className="h-2 bg-[var(--bg-app)]" aria-hidden="true" />
+
+              {/* A checkable row, not a switch: it reads as "this is on for the
+                  next message" rather than as a settings change. */}
               <button
                 type="button"
-                onClick={() => documentInputRef.current?.click()}
-                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-2 text-[0.75rem]/4 font-semibold text-primary active:bg-elev-3"
+                role="menuitemcheckbox"
+                aria-checked={research}
+                onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
+                className={menuRow}
               >
-                <Paperclip size={22} className="text-accent" />
-                Files
+                <Search size={19} strokeWidth={1.8} className={`shrink-0 ${research ? "text-accent" : "text-secondary"}`} />
+                <span className="flex-1">Web search</span>
+                {research ? <Check size={18} strokeWidth={2.2} className="shrink-0 text-accent" /> : null}
               </button>
             </div>
 
-            <button
-              type="button"
-              role="switch"
-              aria-checked={research}
-              onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
-              className="mt-3 flex min-h-[56px] w-full items-center gap-3 rounded-card border border-[var(--border-subtle)] bg-elev-2 px-3 text-left active:bg-elev-3"
-            >
-              <Search size={20} className={research ? "text-accent" : "text-secondary"} />
-              <span className="min-w-0 flex-1">
-                <span className="block text-[0.9375rem]/[1.375rem] font-semibold text-primary">Search the web</span>
-                <span className="block text-[0.75rem]/4 font-medium text-tertiary">Used only when the active route supports it</span>
-              </span>
-              <span className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-[100ms] ${research ? "bg-accent" : "bg-elev-3"}`} aria-hidden="true">
-                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-[140ms] ${research ? "translate-x-6" : "translate-x-1"}`} />
-              </span>
-            </button>
-
-            <div className="mt-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-3 py-2 text-center text-[0.6875rem]/4 font-medium text-tertiary">
-              You can also paste screenshots or drag files directly onto the composer.
-            </div>
-
-            <button
-              type="button"
-              onClick={openTools}
-              className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-[0.8125rem]/5 font-semibold text-secondary active:bg-elev-2"
-            >
-              <SlidersHorizontal size={17} />
-              Configure web, code, artifacts, or clear attachments
-            </button>
+            <p className="mt-2.5 px-1 text-center text-[0.6875rem]/4 font-medium text-tertiary">
+              You can also paste a screenshot or drag files onto the composer.
+            </p>
           </section>
         </div>
       ) : null}

@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Settings,
   Shapes,
+  SlidersHorizontal,
   SquarePen,
   Trash2,
   UserRound,
@@ -35,13 +36,14 @@ type Props = {
   onProjects: () => void;
   onArtifacts: () => void;
   onSettings: () => void;
+  onCustomize: () => void;
   onOpen: (chat: StoredChat) => void;
   onRename: (id: string, title: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onCustomize, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
 
@@ -183,6 +185,12 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
           <button type="button" onClick={() => openSheet(onArtifacts)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <Shapes size={19} strokeWidth={1.8} className="text-secondary" />
             Artifacts
+          </button>
+          {/* The entry point to Skills, Playbooks, and Connectors — otherwise
+              reachable only by going through Settings. */}
+          <button type="button" onClick={() => openSheet(onCustomize)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+            <SlidersHorizontal size={19} strokeWidth={1.8} className="text-secondary" />
+            Customize
           </button>
         </nav>
 

@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
-import { ChevronDown, Ellipsis, FolderKanban, Link2, PanelLeft, Search, SquarePen, WifiOff } from "lucide-react";
+import { ChevronDown, Ellipsis, FolderKanban, Ghost, Link2, PanelLeft, Search, SquarePen, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -156,6 +156,9 @@ export function AppShell({
   );
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [chatMenuOpen, setChatMenuOpen] = useState(false);
+  /* Incognito: this conversation is never written to storage and never
+     recalled by memory. It exists only while the screen is open. */
+  const [incognito, setIncognito] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(initialSheet === "history");
   const [projectsOpen, setProjectsOpen] = useState(initialSheet === "projects");
   const [connectorsOpen, setConnectorsOpen] = useState(initialSheet === "connectors");
@@ -239,9 +242,9 @@ export function AppShell({
   /* Recall runs against the question being asked, so it is computed at send
      time rather than folded into the memoised body. */
   const recalledContext = useCallback((question: string) => {
-    if (!preferences.memory || !question.trim()) return "";
+    if (incognito || !preferences.memory || !question.trim()) return "";
     return memoryBlock(recall(question, chats, activeId));
-  }, [activeId, chats, preferences.memory]);
+  }, [activeId, chats, incognito, preferences.memory]);
 
   /* Built-ins plus anything pasted in; one is chosen per request, or none. */
   const playbooks = useMemo<Playbook[]>(() => [
@@ -361,7 +364,7 @@ export function AppShell({
   }, [activeProjectId, hydrated, projects]);
 
   useEffect(() => {
-    if (!hydrated || !preferences.saveHistory || messages.length === 0) return;
+    if (!hydrated || incognito || !preferences.saveHistory || messages.length === 0) return;
     // A stream rewrites `messages` every throttle tick, so a plain debounce was
     // pushed out for the whole response and never fired: backgrounding the app
     // mid-reply lost the answer *and* the question that produced it. Cap how
@@ -391,7 +394,7 @@ export function AppShell({
       });
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [activeId, activeProjectId, hydrated, messages, preferences.connectorAccessMode, preferences.saveHistory]);
+  }, [activeId, activeProjectId, hydrated, incognito, messages, preferences.connectorAccessMode, preferences.saveHistory]);
 
   /* Sending pins the new user message near the top so the reply has room to
      stream in beneath it, matching the native app. Scrolling up during a
@@ -489,6 +492,7 @@ export function AppShell({
     setMessages([]);
     setDraft("");
     setPendingFiles([]);
+    setIncognito(false);
     setAttachmentError(null);
     setStreamStatus(null);
     clearError();
@@ -824,6 +828,7 @@ export function AppShell({
         onProjects={() => setProjectsOpen(true)}
         onArtifacts={() => setArtifactsOpen(true)}
         onSettings={() => setSettingsOpen(true)}
+        onCustomize={() => { setSettingsSection("skills"); setSettingsOpen(true); }}
         onOpen={openChat}
         onRename={renameChat}
         onPin={pinChat}
@@ -873,6 +878,11 @@ export function AppShell({
         >
           <SquarePen size={20} strokeWidth={1.8} />
         </button>
+        {incognito ? (
+          <span className="flex h-11 w-8 shrink-0 items-center justify-center text-accent" title="Incognito — this chat is not saved">
+            <Ghost size={19} strokeWidth={1.8} />
+          </span>
+        ) : null}
         {/* In a chat this position is chat context; on the launch screen there
             is no chat yet, so it opens Settings. */}
         <button
@@ -1038,6 +1048,12 @@ export function AppShell({
           setSettingsSection("capabilities");
           setSettingsOpen(true);
         }}
+        onOpenProjects={() => setProjectsOpen(true)}
+        onOpenConnectors={() => setConnectorsOpen(true)}
+        onOpenPlaybooks={() => {
+          setSettingsSection("playbooks");
+          setSettingsOpen(true);
+        }}
         onStop={() => {
           stop();
           setStreamStatus({ stage: "interrupted", detail: "You stopped this response." });
@@ -1068,7 +1084,15 @@ export function AppShell({
         chat={activeChat ?? null}
         projects={projects}
         haptics={preferences.haptics}
+        incognito={incognito}
         onClose={() => setChatMenuOpen(false)}
+        onToggleIncognito={() => {
+          const next = !incognito;
+          setIncognito(next);
+          // Turning it on removes whatever was already written for this chat.
+          if (next) mutateChats((current) => current.filter((chat) => chat.id !== activeId));
+          haptic(next ? "impact-medium" : "selection", preferences.haptics);
+        }}
         onStar={() => pinChat(activeId, !(activeChat?.pinned ?? false))}
         onRename={renameActiveChat}
         onShare={() => void shareActiveChat()}
