@@ -267,22 +267,55 @@ function dispatchFor(text: string, band: Effort, effort: EffortLevel): Dispatch 
   return "general";
 }
 
+/* Operations that only make sense performed on the picture itself. These are
+   unambiguous: nobody says "upscale this" about the contents of a screenshot. */
+const PICTURE_OPERATION = /\b(retouch|upscale|recolou?r|inpaint|outpaint|photoshop|crop|rotate|resize|blur|sharpen|brighten|darken|desaturate|touch\s?up|cut\s?out|remove the background)\b/i;
+
+/* Verbs that mean "edit the picture" only when aimed at something pictorial.
+   On their own they are the ordinary vocabulary of asking for help. */
+const GENERIC_EDIT_VERB = /\b(edit|change|changing|remove|removing|delete|replace|swap|add|insert|enhance|restore|fix|correct|clean|update|adjust|make|turn|convert|put|move|extend|fill|mask|highlight|circle|annotate|colou?r|professional)\b/i;
+
+/* What a generic verb has to be aimed at before it counts as an edit. */
+const VISUAL_TARGET = /\b(background|foreground|lighting|shadows?|colou?rs?|contrast|saturation|brightness|hue|tint|sky|face|faces|hair|skin|eyes|smile|teeth|logo|watermark|border|frame|filter|resolution|aspect ratio|blemish|wrinkle|glare|reflection|in (?:the|this) (?:image|picture|photo|screenshot|shot)|of (?:the|this) (?:image|picture|photo))\b/i;
+
+/* A request that opens as a question is asking about the picture, not asking
+   for a new one. "Can you fix this" over a screenshot of a stack trace is the
+   single most common thing anyone does with an attachment in a chat app. */
+const ASKS_ABOUT_CONTENT = /^\s*(?:hey\s+|hi\s+|so\s+|ok(?:ay)?[,\s]+|please\s+)*(?:what|why|how|who|when|where|which|whats|what's|is|are|was|were|does|do|did|can you (?:tell|explain|read|see|help|figure)|could you (?:tell|explain|read)|explain|tell me|read|describe|summar|analy|review|check|look at|help me understand|any idea|do you (?:know|see)|i (?:dont|don't|do not) understand)\b/i;
+
+/* Asking what something says or means, wherever it appears in the sentence.
+   "Don't change anything, just tell me what's wrong" opens with a preservation
+   phrase, so the opening-question check alone did not catch it — and it is
+   about as clear a request for analysis as anyone writes. */
+const WANTS_ANALYSIS = /\b(tell me|what'?s wrong|what is wrong|whats wrong|explain|describe|summar|translate|transcribe|analy[sz]e|what (?:it|this|that) says?|what does (?:it|this) say|read (?:it|this|the))\b/i;
+
 function imageGenerationIntent(text: string, hasImageAttachment: boolean): boolean {
   const creationVerb = /\b(generate|create|make|draw|illustrate|render|design|produce)\b[\s\S]{0,90}\b(image|picture|photo|portrait|illustration|artwork|wallpaper|poster|logo|icon)\b/i;
   const visualFirst = /^\s*(?:(?:a|an|the|some|random)\s+)?(?:image|picture|photo|portrait|illustration|artwork|wallpaper|poster|logo|icon)\s+(?:of|showing|depicting|with)\b/i;
   const directDrawing = /\b(draw|illustrate|visualize|paint|sketch|render)\s+(?:me\s+)?\b/i;
-  /* With an image attached, almost any imperative is an edit request. The old
-     verb list missed the most natural phrasings — "don't change the numbers",
-     "keep the face the same", "swap the date" — and those fell through to the
-     text model, which cannot edit an image and answers by describing one. */
-  const editAttached = hasImageAttachment && (
-    /\b(edit|change|changing|remove|removing|delete|replace|swap|add|insert|enhance|retouch|restore|upscale|recolor|recolour|colour|color|professional|fix|correct|crop|rotate|resize|blur|sharpen|brighten|darken|erase|clean|touch\s?up|redo|update|adjust|make|turn|convert|put|move|extend|fill|mask|highlight|circle|annotate)\b/i.test(text)
-    || /\b(?:do\s?n[o']?t|don't|never)\s+(?:change|alter|modify|touch|edit|move|remove)\b/i.test(text)
-    || /\bkeep\s+.{1,40}?\s+(?:the\s+same|unchanged|as\s+is|intact)\b/i.test(text)
-    || /\b(?:only|just)\s+(?:change|edit|modify|update|replace|fix)\b/i.test(text)
-    || /\bwithout\s+(?:changing|altering|modifying|touching)\b/i.test(text)
-  );
   const explicitImageMode = /\b(text[- ]to[- ]image|image generation|generate an image|generate a picture|make me an image|make me a picture)\b/i;
+
+  /* Editing an attached image used to trigger on any of roughly forty common
+     verbs. "Can you fix this" under a screenshot of a stack trace matched
+     `fix`, went to the image editor, and failed — as did "how do I make this
+     work", "help me correct this", and "add error handling to this". Sending a
+     screenshot and asking about it is the most common thing anyone does with
+     an attachment, and it was the case most reliably broken.
+
+     So a generic verb now has to be aimed at something pictorial, an opening
+     question means the picture is the subject rather than the target, and the
+     preservation phrasings only count alongside an actual edit instruction —
+     "don't change anything, just tell me what's wrong" is not an edit. */
+  const editAttached = hasImageAttachment && (
+    PICTURE_OPERATION.test(text)
+    || (!ASKS_ABOUT_CONTENT.test(text) && !WANTS_ANALYSIS.test(text) && GENERIC_EDIT_VERB.test(text) && (
+      VISUAL_TARGET.test(text)
+      || /\b(?:do\s?n[o\']?t|don\'t|never)\s+(?:change|alter|modify|touch|edit|move|remove)\b/i.test(text)
+      || /\bkeep\s+.{1,40}?\s+(?:the\s+same|unchanged|as\s+is|intact)\b/i.test(text)
+      || /\bwithout\s+(?:changing|altering|modifying|touching)\b/i.test(text)
+    ))
+  );
+
   return creationVerb.test(text) || visualFirst.test(text) || directDrawing.test(text) || editAttached || explicitImageMode.test(text);
 }
 
@@ -431,6 +464,23 @@ function systemPrompt(options: {
   ].filter(Boolean).join("\n\n");
 }
 
+/**
+ * Strip anything credential-shaped out of a provider message.
+ *
+ * The detail below is shown to the person using the app, who is also the
+ * person holding the keys — but a provider echoing part of a request must
+ * never turn into a key on screen or in a screenshot they then share.
+ */
+function redactSecrets(message: string): string {
+  return message
+    .replace(/\b(?:sk|gsk|hf|csk|pk|rk)[-_][A-Za-z0-9_-]{8,}/gi, "[redacted]")
+    .replace(/\bAIza[A-Za-z0-9_-]{10,}/g, "[redacted]")
+    .replace(/\bBearer\s+[A-Za-z0-9._-]{8,}/gi, "Bearer [redacted]")
+    /* The quote is captured and restored rather than swallowed, so a redacted
+       JSON body still reads as JSON instead of looking like a second bug. */
+    .replace(/("?(?:api[_-]?key|authorization|token)"?\s*[:=]\s*)("?)[A-Za-z0-9._-]{8,}\2/gi, "$1$2[redacted]$2");
+}
+
 function streamError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   console.error("Navi stream error:", error);
@@ -445,7 +495,15 @@ function streamError(error: unknown): string {
   if (lower.includes("tool calling") || lower.includes("not supported with this model")) {
     return "Navi routed this to an engine that cannot use tools. Turn off Research mode to answer without them, or try again.";
   }
-  return "Navi could not complete the response. Please try again.";
+  /* Everything unmatched used to collapse into one sentence that named no
+     cause — the same failure as the SDK's "An error occurred.", one layer up.
+     This app has a single user, who owns the deployment and is the person who
+     would have to act on the reason, so the reason is shown rather than
+     swallowed. Without it a screenshot of a failure carries no information. */
+  const detail = redactSecrets(message).replace(/\s+/g, " ").trim().slice(0, 240);
+  return detail
+    ? `Navi could not complete the response.\n\n\`${detail}\``
+    : "Navi could not complete the response. Please try again.";
 }
 
 function statusChunk(status: NaviStreamStatus) {

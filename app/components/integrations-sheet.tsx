@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, ChevronRight, Github, Link2, Search, Triangle, X } from "lucide-react";
+import { useState } from "react";
 import type { ConnectorAccessMode } from "@/lib/ai/types";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
@@ -42,7 +43,9 @@ const SEARCH_LABEL: Record<string, string> = {
   brave: "Brave Search"
 };
 
-function Row({ icon, title, detail, connected, action, onAction }: {
+type TestState = { phase: "idle" | "testing" | "ok" | "failed"; message: string };
+
+function Row({ icon, title, detail, connected, action, onAction, test, onTest }: {
   icon: React.ReactNode;
   title: string;
   detail: string;
@@ -50,6 +53,8 @@ function Row({ icon, title, detail, connected, action, onAction }: {
   connected: boolean | undefined;
   action?: string;
   onAction?: () => void;
+  test?: TestState;
+  onTest?: () => void;
 }) {
   const body = (
     <>
@@ -66,6 +71,24 @@ function Row({ icon, title, detail, connected, action, onAction }: {
           )}
         </span>
         <span className="mt-0.5 block text-[0.8125rem]/[1.125rem] text-tertiary">{detail}</span>
+        {test && test.phase !== "idle" ? (
+          <span className={`mt-1.5 block text-[0.8125rem]/[1.125rem] font-medium ${test.phase === "failed" ? "text-danger" : test.phase === "ok" ? "text-accent" : "text-secondary"}`}>
+            {test.message}
+          </span>
+        ) : null}
+        {onTest ? (
+          /* Nested inside the row rather than beside it: on a phone a second
+             control on the same line is a mis-tap waiting to happen. */
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(event) => { event.stopPropagation(); onTest(); }}
+            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onTest(); } }}
+            className="mt-2 inline-flex min-h-9 items-center rounded-full border border-[var(--border-subtle)] px-3 text-[0.8125rem]/5 font-medium text-primary active:bg-elev-3"
+          >
+            {test?.phase === "testing" ? "Testing…" : "Test connection"}
+          </span>
+        ) : null}
       </span>
     </>
   );
@@ -96,6 +119,29 @@ export function IntegrationsSheet({
   onOpenConnectors
 }: Props) {
   const sheet = useSheetDrag({ open, onDismiss: onClose, haptics });
+  const [tests, setTests] = useState<Record<"github" | "vercel", TestState>>({
+    github: { phase: "idle", message: "" },
+    vercel: { phase: "idle", message: "" }
+  });
+
+  const runTest = async (target: "github" | "vercel") => {
+    setTests((current) => ({ ...current, [target]: { phase: "testing", message: "" } }));
+    try {
+      const response = await fetch(`/api/integrations/test?target=${target}`, { method: "POST", cache: "no-store" });
+      const data = await response.json() as { ok?: boolean; identity?: string; error?: string };
+      setTests((current) => ({
+        ...current,
+        [target]: data.ok
+          /* Naming the account is the whole point: "connected" was never the
+             question, "connected as whom" was. */
+          ? { phase: "ok", message: `Connected as ${data.identity}.` }
+          : { phase: "failed", message: data.error ?? "The connection could not be verified." }
+      }));
+    } catch {
+      setTests((current) => ({ ...current, [target]: { phase: "failed", message: "The test could not run." } }));
+    }
+  };
+
   if (!open) return null;
 
   const known = status.loaded;
@@ -140,6 +186,8 @@ export function IntegrationsSheet({
                     ? "Navi can read your repositories, files, pull requests, and CI runs. Read-only — it cannot push or merge."
                     : "Add NAVI_GITHUB_TOKEN in Vercel, then redeploy. A fine-grained token with Contents, Metadata, Pull requests, and Actions set to Read."
               }
+              test={tests.github}
+              onTest={() => void runTest("github")}
             />
             <Row
               icon={<Triangle size={17} strokeWidth={1.8} />}
@@ -151,6 +199,8 @@ export function IntegrationsSheet({
                     ? "Navi can read your deployments and build logs. Read-only — it cannot deploy or change settings."
                     : "Add NAVI_VERCEL_TOKEN in Vercel, then redeploy. Scope it to the team that owns this project."
               }
+              test={tests.vercel}
+              onTest={() => void runTest("vercel")}
             />
             <Row
               icon={<Search size={19} strokeWidth={1.8} />}
@@ -178,9 +228,11 @@ export function IntegrationsSheet({
           </div>
 
           <p className="px-2 pt-3 text-[0.75rem]/[1.125rem] text-tertiary">
-            Repository and deployment access is read-only by construction: Navi can list, read, and
-            search, but has no tool that writes. Adding a key takes effect on the next deploy — a
-            running deployment does not pick it up.
+            A tick means a token is present. <span className="text-secondary">Test connection</span> is
+            the stronger claim: it calls the service and names the account that answered, so an expired
+            or wrongly-scoped token cannot pass as working. Access is read-only by construction — Navi
+            can list, read, and search, but has no tool that writes. Adding a key takes effect on the
+            next deploy; a running deployment does not pick it up.
           </p>
         </div>
       </section>
