@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
 
 type ProviderStatus = {
-  providers?: { gemini?: boolean; groq?: boolean; huggingface?: boolean };
+  providers?: Record<string, boolean | undefined>;
   providerStack?: { missing?: string[] };
 };
 
@@ -34,7 +34,8 @@ export function ProviderSetupNotice({ haptics }: { haptics: boolean }) {
       }
       const data = (await response.json()) as ProviderStatus;
       const providers = data.providers ?? {};
-      const anyReady = Boolean(providers.gemini || providers.groq || providers.huggingface);
+      // Any provider at all is enough to answer; the notice is about none.
+      const anyReady = Object.values(providers).some(Boolean);
       setMissing(anyReady ? null : Object.keys(KEY_NAMES));
     } catch {
       setMissing(null);

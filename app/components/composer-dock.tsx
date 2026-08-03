@@ -75,11 +75,7 @@ type Props = {
 };
 
 type ProviderStatus = {
-  providers?: {
-    gemini?: boolean;
-    groq?: boolean;
-    huggingface?: boolean;
-  };
+  providers?: Record<string, boolean | undefined>;
 };
 
 function formatBytes(bytes: number): string {
@@ -208,7 +204,8 @@ export function ComposerDock({
             return;
           }
           const providers = data.providers;
-          setProviderReady(Boolean(providers?.gemini || providers?.groq || providers?.huggingface));
+          // Any configured provider can answer; which one is the router's business.
+          setProviderReady(Object.values(providers ?? {}).some(Boolean));
         })
         .catch(() => {
           if (!cancelled) setProviderReady(null);
@@ -255,7 +252,7 @@ export function ComposerDock({
     ?? (!online && !offlineCommand
       ? "Offline · your draft is saved locally"
       : !available
-        ? "Add a Gemini, Groq, or Hugging Face key in Vercel to enable replies"
+        ? "Add an AI provider key in Vercel to enable replies"
         : attachmentCount
           ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready`
           : null);

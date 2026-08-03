@@ -98,7 +98,13 @@ export type MenuSection =
   | "connectors"
   | "skills";
 
-export type ProviderName = "gemini" | "groq" | "huggingface";
+export type ProviderName =
+  | "gemini"
+  | "groq"
+  | "huggingface"
+  | "cerebras"
+  | "openrouter"
+  | "mistral";
 
 export type ProviderRoute = {
   provider: ProviderName;
