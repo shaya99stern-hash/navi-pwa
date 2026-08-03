@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { MenuSection, NaviPreferences } from "@/lib/ai/types";
 import { categories, isImplemented, type Skill } from "@/lib/skills";
 import { BUILT_IN_PLAYBOOKS, parseSkillMarkdown } from "@/lib/playbooks";
+import { MODEL_PRESETS } from "@/lib/chat";
 import {
   PWA_UPDATE_STATUS_EVENT,
   requestPwaUpdate,
@@ -606,6 +607,25 @@ export function SettingsSheet({
                 control={<SettingsToggle label="Code execution" value={preferences.tools.code} onChange={() => update({ tools: { ...preferences.tools, code: !preferences.tools.code } })} />}
               />
             </Group>
+            <SectionHeader>Routing</SectionHeader>
+            <Group>
+              <Row
+                label="Engine"
+                description="Navi Soul reads each request and picks the engine that leads at that job. Pin a specific route only to diagnose a problem — it disables that routing entirely."
+                control={
+                  <BareSelect
+                    label="Engine"
+                    value={preferences.preset}
+                    options={[
+                      ["navi-soul", "Automatic"],
+                      ...MODEL_PRESETS.filter((preset) => preset.overflow).map((preset) => [preset.id, preset.label] as [string, string])
+                    ]}
+                    onChange={(value) => update({ preset: value as NaviPreferences["preset"] })}
+                  />
+                }
+              />
+            </Group>
+
             <SectionHeader>Developer</SectionHeader>
             <Group>
               <Row

@@ -3,7 +3,7 @@ import type { UIMessage } from "ai";
 export type SwarmPreset = "navi-fable" | "navi-sol";
 
 export type ModelPreset =
-  | "navi-chat"
+  | "navi-soul"
   | "navi-code"
   | "auto"
   | SwarmPreset

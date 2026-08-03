@@ -2,12 +2,19 @@ import type { UIMessage } from "ai";
 import type { EffortLevel, ModelPreset, NaviPreferences, ResponseStyle, StoredChat } from "./ai/types";
 
 /**
- * Two headline models — Chat and Code — with everything else behind
- * "More models". The swarms stay reachable but are an escalation tier, not a
- * choice most requests should have to make.
+ * Two entries, and only two. Navi Soul is the lead: it reads each request and
+ * dispatches to whichever engine leads at that job — an image goes to the
+ * image pipeline, a stack trace to the coding routes, a question about today
+ * to search. Navi Code exists for when the whole conversation is technical and
+ * that should be assumed rather than inferred per message.
+ *
+ * Everything below is `overflow: true` and no longer appears in the picker at
+ * all. Those routes remain selectable from Settings as a diagnostic override,
+ * because "which engine answered?" is the first question when something is
+ * wrong — but choosing one should never be part of asking a question.
  */
 export const MODEL_PRESETS: Array<{ id: ModelPreset; label: string; detail: string; composite: boolean; overflow?: boolean }> = [
-  { id: "navi-chat", label: "Navi Chat", detail: "Everyday answers, writing, and reasoning", composite: false },
+  { id: "navi-soul", label: "Navi Soul", detail: "Chooses the right engine for whatever you ask", composite: false },
   { id: "navi-code", label: "Navi Code", detail: "Software, debugging, and technical work", composite: false },
   { id: "navi-fable", label: "Navi Fable", detail: "Long-horizon multi-role project swarm", composite: true, overflow: true },
   { id: "navi-sol", label: "Navi Sol", detail: "Parallel research and verification swarm", composite: true, overflow: true },
@@ -41,7 +48,7 @@ export function effortFromLegacyStyle(style: ResponseStyle | undefined): EffortL
 }
 
 export const DEFAULT_PREFERENCES: NaviPreferences = {
-  preset: "navi-chat",
+  preset: "navi-soul",
   style: "balanced",
   effort: "medium",
   theme: "dark",

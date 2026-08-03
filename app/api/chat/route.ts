@@ -76,7 +76,7 @@ const MAX_MESSAGES = 50;
 const MAX_SERIALIZED_CHARACTERS = 18_000_000;
 const MAX_OUTPUT_TOKENS = 1_900;
 const ALLOWED_PRESETS = new Set<ModelPreset>([
-  "navi-chat",
+  "navi-soul",
   "navi-code",
   "auto",
   "navi-fable",
@@ -110,12 +110,14 @@ function normalizePreset(value: unknown): ModelPreset {
     "navi-5": "navi-fable",
     "fable-5": "navi-fable",
     "navi-sol-5-6": "navi-sol",
-    "opus-4-8": "navi-sol"
+    "opus-4-8": "navi-sol",
+    "navi-chat": "navi-soul",
+    auto: "navi-soul"
   };
   const normalized = legacy[String(value ?? "")] ?? value;
   return typeof normalized === "string" && ALLOWED_PRESETS.has(normalized as ModelPreset)
     ? normalized as ModelPreset
-    : "navi-chat";
+    : "navi-soul";
 }
 
 function normalizeConnectorAccessMode(value: unknown): ConnectorAccessMode {
@@ -213,6 +215,35 @@ function complexity(text: string): Effort {
   if (extreme) return "extreme";
   const complex = text.length > 650 || /\b(architecture|audit|analy[sz]e|debug|proof|strategy|compare|research|legal|financial|medical|typescript|javascript|react|next\.?js|python|sql|multi-step|comprehensive)\b/i.test(text);
   return complex ? "complex" : "normal";
+}
+
+/**
+ * What Soul is actually being asked for.
+ *
+ * Soul is the lead: one entry in the picker, dispatching to whichever engine
+ * leads at the job. Complexity alone is the wrong signal for that — "fix this
+ * TypeScript error" is short and easy but wants a coding model, while a long
+ * rambling story wants nothing special. This reads the request's *kind*.
+ */
+type Dispatch = "code" | "research" | "reasoning" | "general";
+
+const CODE_REQUEST = /\b(code|coding|function|class|method|variable|compile|compiler|syntax|refactor|debug|bug|stack trace|exception|typescript|javascript|python|rust|golang|java|swift|kotlin|sql|html|css|react|next\.?js|vue|svelte|node|npm|yarn|docker|kubernetes|git|regex|api endpoint|unit test|null pointer|segfault|npm install|traceback)\b/i;
+
+const RESEARCH_REQUEST = /\b(search|look ?up|latest|current|today|this (?:week|month|year)|news|who is|what happened|according to|source|sources|cite|citation|price of|stock|weather|release date|is it true|fact ?check)\b/i;
+
+/** Named so the status line can say what was engaged, in Navi's own words. */
+const DISPATCH_LABEL: Record<Dispatch, string> = {
+  code: "Navi Code",
+  research: "Navi Research",
+  reasoning: "Navi Reasoning",
+  general: "Navi Soul"
+};
+
+function dispatchFor(text: string, band: Effort, effort: EffortLevel): Dispatch {
+  if (CODE_REQUEST.test(text)) return "code";
+  if (RESEARCH_REQUEST.test(text)) return "research";
+  if (band !== "normal" || effort === "high") return "reasoning";
+  return "general";
 }
 
 function imageGenerationIntent(text: string, hasImageAttachment: boolean): boolean {
@@ -445,7 +476,7 @@ function resolveHeadlinePreset(options: {
   // Escalation costs real latency, so it needs both signals: the user asked
   // for depth *and* the request itself is genuinely hard.
   if (effort !== "high" || complexityBand === "normal") return preset;
-  if (preset === "navi-chat" || preset === "auto") return "navi-sol";
+  if (preset === "navi-soul" || preset === "auto") return "navi-sol";
   // Fable is the long-horizon build swarm — the right escalation for code.
   if (preset === "navi-code") return "navi-fable";
   return preset;
@@ -512,8 +543,12 @@ export async function POST(request: Request): Promise<Response> {
   const hasFiles = fileParts(messages).length > 0;
   const effort = complexity(lastUserText);
   const artifactRequested = !imageRequested && tools.artifacts && artifactIntent(lastUserText);
+  /* Soul is the architect: it reads the request and routes to whichever
+     engine leads at that job, so nothing has to be chosen by hand. */
+  const dispatch = preset === "navi-code" ? "code" : dispatchFor(lastUserText, effort, effortLevel);
+  const dispatchedPreset: ModelPreset = preset === "navi-soul" && dispatch === "code" ? "navi-code" : preset;
   const resolvedPreset = resolveHeadlinePreset({
-    preset,
+    preset: dispatchedPreset,
     complexityBand: effort,
     effort: effortLevel,
     providerCount,
@@ -615,7 +650,9 @@ export async function POST(request: Request): Promise<Response> {
         // Low keeps the fast route even when it reads as hard.
         complex: effortLevel === "high" || (effortLevel === "medium" && effort !== "normal")
       });
-      writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : "Preparing the response." }));
+      /* Auto-routing has to be visible or it is a black box: when it picks
+         badly there is otherwise no way to tell that it did. */
+      writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : `${DISPATCH_LABEL[dispatch]}…` }));
       /* These providers handle tool calling reliably. The Hugging Face router
          fronts many open models, plenty of which reject a tools parameter
          outright, so sending one there would break routes that work today —
@@ -628,10 +665,10 @@ export async function POST(request: Request): Promise<Response> {
       }
       const result = streamText({
         model: createProviderModel(route, origin),
-        system: systemPrompt({ effort: effortLevel, mode: preset === "navi-code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames, userContext, memoryContext, playbookContext }),
+        system: systemPrompt({ effort: effortLevel, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames, userContext, memoryContext, playbookContext }),
         messages: modelMessages,
         ...(toolNames.length
-          ? { tools: availableTools, stopWhen: stepCountIs(preset === "navi-code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
+          ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
           : {}),
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         maxRetries: 1,

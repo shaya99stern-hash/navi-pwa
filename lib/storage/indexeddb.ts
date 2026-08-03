@@ -158,10 +158,11 @@ async function migrateUnscopedIndexedDbState(): Promise<void> {
 
 function normalizePreset(value: unknown): ModelPreset {
   const map: Record<string, ModelPreset> = {
-    "navi-chat": "navi-chat",
+    "navi-soul": "navi-soul",
     "navi-code": "navi-code",
-    // "Auto" was the old headline preset; Chat is its successor.
-    auto: "navi-chat",
+    // Both earlier headline presets are Soul now.
+    "navi-chat": "navi-soul",
+    auto: "navi-soul",
     "navi-fable": "navi-fable",
     "navi-sol": "navi-sol",
     "navi-5": "navi-fable",
@@ -177,7 +178,7 @@ function normalizePreset(value: unknown): ModelPreset {
     "gemini-flash": "gemini-direct",
     "openrouter-free": "huggingface-direct"
   };
-  return map[String(value ?? "navi-chat")] ?? "navi-chat";
+  return map[String(value ?? "navi-soul")] ?? "navi-soul";
 }
 
 function normalizeConnectorMode(value: unknown): ConnectorAccessMode {
