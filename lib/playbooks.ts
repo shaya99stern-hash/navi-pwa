@@ -110,9 +110,24 @@ export function selectPlaybook(request: string, playbooks: Playbook[]): Playbook
     for (const word of new Set(haystack)) if (query.has(word)) score += 1;
     /* One explicit trigger is enough on its own. Triggers are chosen to be
        specific ("brainstorm", "tdd", "handoff"), so their presence is a real
-       signal, where a shared description word is only weak evidence. */
+       signal, where a shared description word is only weak evidence.
+
+       A multi-word phrase outweighs a single word because it is strictly more
+       specific: "production is broken" and "broken" both match a bug report,
+       but only one of them means the site is down. With a large library the
+       single-word matches collide constantly, and without this the winner
+       would come down to file order. */
     for (const trigger of triggerWords) {
-      if (trigger.includes(" ") ? request.toLowerCase().includes(trigger) : query.has(trigger)) score += MIN_SCORE;
+      if (trigger.includes(" ")) {
+        /* Weighted by how many words the phrase pins down, so the longer
+           phrase wins when two overlap. "What should I call this function"
+           contains both "should i" and "what should i call"; without this it
+           was decided by file order, and the decision playbook happened to
+           come first. */
+        if (request.toLowerCase().includes(trigger)) score += MIN_SCORE + trigger.split(/\s+/).length;
+      } else if (query.has(trigger)) {
+        score += MIN_SCORE;
+      }
     }
     if (!best || score > best.score) best = { playbook, score };
   }
