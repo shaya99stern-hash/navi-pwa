@@ -18,13 +18,18 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://clerk.navikeep.org https://*.clerk.accounts.dev https://api.clerk.com",
+  "connect-src 'self' https://clerk.navikeep.org https://accounts.navikeep.org https://*.clerk.accounts.dev https://api.clerk.com",
   "worker-src 'self' blob:",
-  "frame-src 'self' data: blob: https://clerk.navikeep.org https://*.clerk.accounts.dev",
+  "frame-src 'self' data: blob: https://clerk.navikeep.org https://accounts.navikeep.org https://*.clerk.accounts.dev https://accounts.google.com",
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
-  "form-action 'self'",
+  /* Signing in with a social provider submits a form to Clerk's Frontend API,
+     which then redirects on to the provider. Both hops are cross-origin, so
+     `form-action 'self'` blocked the submission outright — the button appeared
+     to do nothing, with only a CSP violation in the console to show for it.
+     Every origin in the sign-in chain has to be listed here. */
+  "form-action 'self' https://clerk.navikeep.org https://accounts.navikeep.org https://*.clerk.accounts.dev https://accounts.google.com",
   "upgrade-insecure-requests"
 ].join("; ");
 
