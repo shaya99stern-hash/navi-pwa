@@ -258,5 +258,313 @@
       "messy code"
     ],
     "instructions": "# Architecture review\n\nStructure is judged by what it costs to change, not by how it looks.\n\n1. **Find where change is expensive.** Which edits touch many files? Which areas does everyone avoid? That is where the structure is wrong.\n2. **Look for the real causes**: leaky abstractions, modules with wide interfaces and thin behaviour, circular dependencies, business rules scattered across layers.\n3. **Prefer deeper modules** — a small interface hiding substantial implementation — over many shallow ones that only forward calls.\n4. **Propose changes that pay for themselves**, ordered by cost against benefit. Say plainly which are not worth doing.\n5. **Say what stays.** A review that recommends rewriting everything has not been done properly.\n\n## Guidelines\n- Testability is the honest proxy for structure: code that is hard to test is usually coupled to something it should not be.\n- Distinguish an actual design problem from an unfamiliar style.\n- Every restructuring is a risk; say how it would be done incrementally and how it would be verified.\n- Do not recommend a pattern by name without saying what it buys here specifically."
+  },
+  {
+    "id": "ship-to-vercel",
+    "name": "Ship to Vercel",
+    "description": "A deployment failed, a build is red, or a change works locally but not once deployed.",
+    "triggers": [
+      "deploy",
+      "deployment",
+      "build failed",
+      "vercel",
+      "build error",
+      "won't deploy",
+      "production build",
+      "preview deployment"
+    ],
+    "instructions": "# Ship to Vercel\n\nA build that passes locally and fails deployed is almost never random. Find which of the four differences caused it.\n\n1. **Read the build log, not the summary.** The first error is the real one; everything after it is fallout. Quote the failing line.\n2. **Check the four usual differences.** Environment variables missing from the Vercel project. Case-sensitive imports (macOS forgives `Button` vs `button`, Linux does not). A dependency in `devDependencies` that production needs. A Node version mismatch.\n3. **Separate build-time from run-time.** A build error is in the log. A run-time error is in the function logs and produces a working deploy that fails when used. Confusing the two sends you to the wrong place entirely.\n4. **Remember env vars need a redeploy.** Adding a variable does nothing to a running deployment. If a key was \"just added\", that is the answer.\n5. **Check what actually deployed.** Confirm the commit SHA on the deployment matches the commit you think you fixed.\n\n## Guidelines\n- `NEXT_PUBLIC_` prefixed variables are baked in at build time and shipped to the browser. Anything secret must not have it.\n- If the preview works and production does not, the difference is environment scope — check which environments the variable is ticked for.\n- Never advise disabling type checking or linting to make a build pass. That hides the defect and ships it."
+  },
+  {
+    "id": "mobile-pwa-review",
+    "name": "Mobile PWA review",
+    "description": "Check that an interface works as an installed web app on a phone, particularly on iOS.",
+    "triggers": [
+      "pwa",
+      "mobile",
+      "iphone",
+      "ios",
+      "responsive",
+      "safe area",
+      "installed app",
+      "standalone",
+      "touch"
+    ],
+    "instructions": "# Mobile PWA review\n\nAn installed web app on iOS is not a small desktop browser. Check the things that only break there.\n\n1. **Safe area.** Anything fixed to an edge needs `env(safe-area-inset-*)`. Without it the home indicator sits on top of the composer and the notch clips the header.\n2. **Viewport units.** `100vh` is wrong on iOS — it does not account for browser chrome and jumps when the URL bar hides. Use `100dvh`.\n3. **Touch targets.** 44x44px minimum. A 32px icon button is a desktop habit and a miss on a phone.\n4. **The keyboard.** When it opens, does the input stay visible? Does the layout jump? Does Return insert a newline where it should send, or the reverse?\n5. **Font size on inputs.** Below 16px, iOS Safari zooms the whole page on focus and does not zoom back.\n6. **Offline and cold start.** An installed app gets launched with no network. Say what happens — a blank screen is a bug, an offline message is a feature.\n7. **Scroll containment.** A scrollable sheet inside a page needs `overscroll-behavior: contain`, or scrolling past its end drags the page behind it.\n\n## Guidelines\n- Test at 390px wide. That is an iPhone, and it is the width that matters.\n- Hover states do not exist. Anything only reachable by hover is unreachable.\n- No local server, no terminal step, no native dependency — if a solution needs one, it is the wrong solution for this app."
+  },
+  {
+    "id": "incident-triage",
+    "name": "Production is broken",
+    "description": "Something live is failing right now and the priority is restoring it, not understanding it.",
+    "triggers": [
+      "down",
+      "outage",
+      "production is broken",
+      "everything is broken",
+      "urgent",
+      "502",
+      "503",
+      "500 error",
+      "users can't"
+    ],
+    "instructions": "# Production is broken\n\nRestore first, understand second. These are different jobs and doing them in the wrong order costs the user time they do not have.\n\n1. **Establish blast radius.** Everyone or one person? Every request or one route? Since when? A precise start time usually names the cause by itself.\n2. **Ask what changed.** A deploy, an expired key, a hit quota, an upstream provider. Correlate the start time against the deploy history before theorising about code.\n3. **Restore by the fastest route available.** Rolling back a deploy is usually faster and always safer than forward-fixing under pressure. Say so plainly if that is the right call.\n4. **Only then diagnose.** With the bleeding stopped, find the actual cause using proper debugging.\n5. **Name the check that would have caught it.** Every incident should leave behind one test, alert, or guard.\n\n## Guidelines\n- Read the logs before forming a theory. A guess stated confidently during an incident wastes more time than saying \"I do not know yet\".\n- Distinguish \"the deploy failed\" (old version still serving, users fine) from \"the deploy succeeded and is broken\" (users affected). These feel the same and are not.\n- Resist changing several things at once. If it recovers you will not know why."
+  },
+  {
+    "id": "performance-tuning",
+    "name": "Make it faster",
+    "description": "Something is slow — a page, a request, a render, a build — and needs to be measurably faster.",
+    "triggers": [
+      "slow",
+      "performance",
+      "laggy",
+      "optimize",
+      "faster",
+      "speed up",
+      "janky",
+      "takes forever",
+      "bundle size"
+    ],
+    "instructions": "# Make it faster\n\nOptimisation without measurement is decoration. Find the actual cost before changing anything.\n\n1. **Measure first, and say the number.** \"Slow\" is not actionable; \"2.3s to first paint\" is. If no measurement exists, getting one is step one.\n2. **Find the dominant cost.** Almost all of the time is in a small part of the work. Halving everything else changes nothing.\n3. **Identify which kind of slow it is.** Network (too many or too large requests), compute (expensive work on the main thread), render (too many components updating), or waiting (sequential calls that could be parallel). Each has a different fix.\n4. **Fix the biggest one. Measure again.** If the number did not move, revert the change — it was not the cause and it is now unjustified complexity.\n5. **Stop when it is fast enough.** Define that before starting.\n\n## Guidelines\n- Sequential awaits that do not depend on each other are the most common easy win. `Promise.all` them.\n- Re-rendering a large list on every keystroke is the second most common. Memoise the expensive child, not the cheap parent.\n- On mobile, payload size usually matters more than execution speed. A megabyte of JavaScript costs more on a phone than any algorithm in it.\n- Never trade correctness for speed without saying explicitly that you did."
+  },
+  {
+    "id": "security-review",
+    "name": "Security review",
+    "description": "Check code or a design for credential exposure, injection, and access-control mistakes.",
+    "triggers": [
+      "security",
+      "secure",
+      "vulnerability",
+      "xss",
+      "injection",
+      "secret",
+      "api key exposed",
+      "auth",
+      "csrf",
+      "sanitize"
+    ],
+    "instructions": "# Security review\n\nCheck the things that actually cause incidents, in the order they actually happen.\n\n1. **Secrets.** Is any credential reachable from the browser? Anything in client code, a `NEXT_PUBLIC_` variable, or a committed file is public. Treat an exposed key as already compromised: rotate it, do not just remove it.\n2. **Input that becomes output.** User text rendered as HTML, put into a query, or used to build a path. Ask where it is escaped and whether escaping happens on every path or only the one you looked at.\n3. **Authorisation, not just authentication.** Being signed in is not permission. For every operation on someone's data, ask what stops a different signed-in user from doing it to them.\n4. **Server-side trust.** Any check done only in the UI does not exist — the request can be sent directly. Validate on the server regardless of what the client already checked.\n5. **Outbound requests.** A URL supplied by a user and fetched by the server can reach internal addresses. Block private ranges.\n\n## Guidelines\n- Say plainly which findings are exploitable now and which are hardening. Treating them alike gets the real one ignored.\n- Never suggest disabling a security header, CSP directive, or TLS verification to make something work. Fix the cause.\n- If a fix needs a rotated credential, say exactly which one and where it is rotated."
+  },
+  {
+    "id": "read-unfamiliar-code",
+    "name": "Understand this codebase",
+    "description": "Orient in code you did not write — find where something lives and how it flows.",
+    "triggers": [
+      "how does this work",
+      "where is",
+      "understand this code",
+      "unfamiliar",
+      "walk me through",
+      "trace",
+      "codebase"
+    ],
+    "instructions": "# Understand this codebase\n\nFollow the real path rather than reading files in alphabetical order.\n\n1. **Start from an entry point, not a file list.** A route, a command, an event handler. Ask what the user does and follow what happens.\n2. **Trace one complete path end to end.** One request, all the way through. A single traced path teaches more than skimming twenty files.\n3. **Name the layers as you find them.** Where does input get validated, where does state live, where does the side effect happen. Most confusion is not knowing which layer you are in.\n4. **Notice what the code is defending against.** A strange guard usually marks a bug that already happened once. Read comments about *why* as more reliable than comments about *what*.\n5. **Report what you actually verified.** Distinguish \"I read this\" from \"I inferred this from the naming\".\n\n## Guidelines\n- Search for the error text or the label the user sees. It is the fastest route to the relevant code.\n- Tests document intended behaviour better than most prose does.\n- If two places seem to do the same job, find out which one runs. Dead code is common and following it wastes the whole session."
+  },
+  {
+    "id": "extract-structured-data",
+    "name": "Extract structured data",
+    "description": "Pull fields, tables, or records out of a document, screenshot, receipt, or block of text.",
+    "triggers": [
+      "extract",
+      "parse this",
+      "pull out",
+      "into a table",
+      "structured",
+      "transcribe",
+      "from this receipt",
+      "list the fields"
+    ],
+    "instructions": "# Extract structured data\n\nAccuracy over completeness. A confidently wrong number is worse than a gap.\n\n1. **Agree the shape first.** Name the fields and their types before extracting. If the shape was not specified, propose one and proceed.\n2. **Transcribe exactly.** Do not normalise, round, reformat, or correct what is written — including obvious typos. If a value looks wrong, extract it as written and flag it separately.\n3. **Mark what you could not read.** Use an explicit `null` or \"unreadable\". Never infer a digit from context; a plausible number in a financial field is a fabrication.\n4. **Preserve units and currency as shown.** `1,200.00` and `1.200,00` are different conventions, and guessing which one is in play is how totals go wrong by a thousand.\n5. **Check the totals.** If the data contains sums, verify them with the calculator tool. A total that does not reconcile means something was misread.\n\n## Guidelines\n- For tables, keep the source row order. Reordering loses information that was carried by position.\n- If the same field appears twice with different values, report both rather than picking.\n- Say which parts were legible and which were marginal. The person checking your work needs to know where to look."
+  },
+  {
+    "id": "write-the-pull-request",
+    "name": "Write the commit or PR",
+    "description": "Write a commit message, pull request description, or changelog entry for work that is done.",
+    "triggers": [
+      "commit message",
+      "pr description",
+      "pull request description",
+      "changelog",
+      "release notes",
+      "write the pr"
+    ],
+    "instructions": "# Write the commit or PR\n\nThe reader is someone finding this in six months while something is broken. Write for them.\n\n1. **Lead with what changed and why it needed to.** Not what files were touched — the diff already says that.\n2. **State the problem in terms of its symptom.** \"Every request with Research mode on failed\" beats \"fixed routing bug\". The symptom is what someone will search for.\n3. **Explain the cause when it is not obvious.** If the fix looks arbitrary without context, the context belongs in the message.\n4. **Say what was verified, and what was not.** An honest \"not tested against a live provider\" is worth more than silence, because silence reads as tested.\n5. **Keep the subject line under about 70 characters, imperative mood.** \"Fix the thing\", not \"Fixed the thing\" or \"Fixes for the thing\".\n\n## Guidelines\n- Do not list every file. Do not describe the diff line by line. Both are noise.\n- Include the reproduction or the failing output when there was one. It is the best evidence the fix is real.\n- If the change has a known limitation, say so in the description rather than letting a reviewer find it."
+  },
+  {
+    "id": "upgrade-a-dependency",
+    "name": "Upgrade or migrate",
+    "description": "Move to a new version of a framework, library, or API without breaking what works.",
+    "triggers": [
+      "upgrade",
+      "migrate",
+      "migration",
+      "new version",
+      "breaking change",
+      "deprecated",
+      "bump the version"
+    ],
+    "instructions": "# Upgrade or migrate\n\nThe risk is not the upgrade, it is the things that changed quietly.\n\n1. **Read the actual changelog for every version you are skipping.** Going from 3 to 6 means three sets of breaking changes, not one.\n2. **Separate mechanical from behavioural changes.** A renamed import is mechanical and safe. A changed default is behavioural and is where the bugs are.\n3. **Check for silent behaviour changes specifically.** Changed defaults, changed error handling, changed ordering. These pass type checking and fail in production.\n4. **Upgrade one thing at a time.** Two simultaneous upgrades means an unattributable failure.\n5. **Verify with something that exercises the change**, not just that the build passes. A build passing proves the types line up, not that the behaviour survived.\n\n## Guidelines\n- Deprecation warnings in the current version tell you what breaks in the next one. Read them before upgrading, not after.\n- If a codemod exists, run it and then read its diff. They are reliable for renames and unreliable for anything requiring judgement.\n- Note explicitly if a peer dependency now conflicts. That is usually the real blocker."
+  },
+  {
+    "id": "choose-a-model",
+    "name": "Choose the right engine",
+    "description": "Decide which underlying model or provider suits a task, and on what criteria.",
+    "triggers": [
+      "which model",
+      "best model",
+      "which provider",
+      "model selection",
+      "what should i use for",
+      "route this"
+    ],
+    "instructions": "# Choose the right engine\n\nMatch the engine to the failure mode you most need to avoid.\n\n1. **Name the job precisely.** Classification, long-context reading, code generation, tool use, image work, and open conversation are different problems with different leaders.\n2. **Decide what \"wrong\" looks like here.** A slow correct answer and a fast wrong one have very different costs depending on the task. That asymmetry chooses the engine.\n3. **Check the hard constraints first.** Does it need tool calling? Vision? A long context window? Constraints eliminate most candidates before quality is even considered.\n4. **Prefer the fastest model that clears the bar.** Extra capability that the task does not use is pure latency.\n5. **Say what would change the answer.** Naming the condition under which a different engine wins is more useful than the recommendation alone.\n\n## Guidelines\n- Tool support is a property of the model, not the provider. The same provider often serves models that accept tools and models that reject them outright.\n- For classification and routing, speed matters far more than depth — it is an easy problem and the whole value is finishing quickly.\n- Never claim a benchmark result you have not seen. \"Generally strong at code\" is honest; a fabricated score is not."
+  },
+  {
+    "id": "design-the-prompt",
+    "name": "Write a better prompt",
+    "description": "Improve a prompt or system instruction so a model behaves the way it is supposed to.",
+    "triggers": [
+      "prompt",
+      "system prompt",
+      "instructions for the model",
+      "prompt engineering",
+      "make it stop",
+      "get it to"
+    ],
+    "instructions": "# Write a better prompt\n\nMost prompt problems are specification problems. The model is doing what it was told.\n\n1. **Find where the current prompt is silent.** Unwanted behaviour usually fills a gap rather than defying an instruction. Ask what it was never told.\n2. **Replace description with instruction.** \"You are a world-class expert\" changes nothing. \"Read the error before theorising\" changes the output.\n3. **Say the order of operations.** Sequence is the single highest-leverage thing in a prompt, because it determines what the model has decided before it starts writing.\n4. **State prohibitions concretely.** \"Be concise\" is unenforceable. \"Do not restate the question before answering it\" is checkable.\n5. **Put the most important constraint last.** It is the most recently read thing before generation begins.\n6. **Change one thing and compare.** Rewriting wholesale means never learning which part worked.\n\n## Guidelines\n- Negative instructions are weaker than positive ones. Prefer \"answer with the cause\" to \"do not answer with symptoms\".\n- Examples outperform adjectives. One demonstration of the right shape beats a paragraph describing it.\n- If the prompt is long and the behaviour is still wrong, the problem is usually contradiction between two of its parts, not insufficient length."
+  },
+  {
+    "id": "sound-and-music-brief",
+    "name": "Describe the sound you want",
+    "description": "Get a generated sound, cue, or piece of music closer to what was actually wanted.",
+    "triggers": [
+      "ding",
+      "sound effect",
+      "jingle",
+      "music",
+      "chime",
+      "notification sound",
+      "voice over",
+      "make a sound"
+    ],
+    "instructions": "# Describe the sound you want\n\nSound models respond to a description of the sound, not to an instruction to make one.\n\n1. **Say what it is, then what it is like.** \"A short bell for a delivered message, bright and clean, single strike\" beats \"a nice notification sound\".\n2. **Give the length, and mean it.** A cue is one to three seconds. Anything past about five stops being a cue and starts being music that interrupts.\n3. **Describe the envelope for short sounds.** Attack (sharp or soft), decay (clipped or ringing). This is what separates a ding from a gong more than the instrument does.\n4. **Name instruments and texture for music.** \"Solo felt piano, slow, no percussion\" is directable. \"Chill vibes\" is not.\n5. **For speech, give only the words to be spoken.** Delivery notes belong outside the quoted text or they get read aloud.\n\n## Guidelines\n- Say what you do not want. \"No melody, no background music\" is often the difference between a cue and a jingle.\n- Short cues suit a small fast model; music that will be heard repeatedly is worth the slower one.\n- Cold models return a 503 on the first call. That is a wait, not a failure."
+  },
+  {
+    "id": "describe-the-image",
+    "name": "Describe the image you want",
+    "description": "Get a generated or edited image closer to what was actually wanted.",
+    "triggers": [
+      "image prompt",
+      "generate an image",
+      "make a picture",
+      "edit this image",
+      "don't change",
+      "keep the same"
+    ],
+    "instructions": "# Describe the image you want\n\nSubject, then treatment, then framing. In that order, because the model weights the beginning most.\n\n1. **Lead with the subject and what it is doing.** Not the style, not the mood — those go after.\n2. **Then the treatment.** Medium, lighting, palette, lens. \"Soft window light from the left, shallow depth of field\" is directable; \"beautiful\" is not.\n3. **Then the framing.** Close-up, wide, aspect ratio, what is in shot.\n4. **For edits, name what must not change first.** Faces, numbers, text, layout, and geometry are the things that silently drift. State them as preserved before stating the change.\n5. **Make one change per edit.** Two simultaneous instructions on an image usually produces neither.\n\n## Guidelines\n- Text inside an image is the weakest area of every current model. If exact words matter, say so explicitly and expect to check them.\n- Negative instructions work poorly. Describe what should be there rather than what should not.\n- An edit inherits the source's proportions. Asking for a different aspect ratio means asking for a crop — say which part to keep."
+  },
+  {
+    "id": "scope-and-estimate",
+    "name": "Scope it honestly",
+    "description": "Work out what a piece of work actually involves before committing to it.",
+    "triggers": [
+      "how long",
+      "estimate",
+      "scope",
+      "how hard",
+      "effort",
+      "is this feasible",
+      "can we build"
+    ],
+    "instructions": "# Scope it honestly\n\nThe failure mode is confident optimism about work nobody has looked at yet.\n\n1. **Separate what is known from what is assumed.** The estimate is only as good as the assumption underneath it, so state the assumptions out loud.\n2. **Break it until each piece is something you can picture doing.** Anything you cannot picture is where the estimate is wrong.\n3. **Name the riskiest unknown, and do that first.** The thing most likely to invalidate the plan should be resolved before the easy work builds around it.\n4. **Count the work that is not building.** Verification, edge cases, error paths, and the change to whatever this touches. This is usually where estimates fail, not the feature itself.\n5. **Give a range with the reason for its width.** A range that reflects a real unknown is information; a padded single number is not.\n\n## Guidelines\n- If a piece depends on an external service, credential, or approval, that is a blocker and belongs at the top rather than buried in the list.\n- Say what could be cut and what could not. Scope is the user's decision, but they can only make it if the options are visible.\n- Refuse to estimate something genuinely unknown. \"I would need to look at X first\" is a real answer."
+  },
+  {
+    "id": "accessibility-review",
+    "name": "Accessibility review",
+    "description": "Check that an interface works with a screen reader, a keyboard, and imperfect vision.",
+    "triggers": [
+      "accessibility",
+      "a11y",
+      "screen reader",
+      "keyboard navigation",
+      "contrast",
+      "aria",
+      "alt text"
+    ],
+    "instructions": "# Accessibility review\n\nCheck the things that make an interface unusable, before the things that make it imperfect.\n\n1. **Can it be operated without a mouse?** Tab through it. Every action reachable, focus visible at all times, and no trap you cannot escape.\n2. **Does it announce what it is?** An icon-only button with no accessible name is an unlabelled button. Images that carry meaning need alt text; decorative ones need empty alt so they are skipped.\n3. **Is state conveyed by more than colour?** Red-for-error is invisible to a substantial number of people. Colour must be a reinforcement, never the only signal.\n4. **Contrast.** 4.5:1 for body text, 3:1 for large text and interface elements. Grey-on-grey placeholder text fails this constantly.\n5. **Does motion respect the preference?** Anything animated should check `prefers-reduced-motion`.\n6. **Are errors associated with their field?** An error message floating near an input is not connected to it for a screen reader.\n\n## Guidelines\n- Semantic HTML gets most of this for free. A `<button>` is keyboard-operable and announced correctly; a `<div onClick>` is neither.\n- Focus order follows DOM order, not visual order. If they disagree, the layout is the bug.\n- Say which findings block use and which are polish. Conflating them means neither gets fixed."
+  },
+  {
+    "id": "summarize-faithfully",
+    "name": "Summarise faithfully",
+    "description": "Condense a document, thread, transcript, or article without distorting it.",
+    "triggers": [
+      "summarize",
+      "summarise",
+      "tldr",
+      "key points",
+      "condense",
+      "gist",
+      "what does this say"
+    ],
+    "instructions": "# Summarise faithfully\n\nA summary that changes the emphasis has changed the meaning, even if every sentence in it is true.\n\n1. **Lead with the actual point.** Not what the document is about — what it says. \"Three arguments for X\" is a table of contents; \"It argues X because Y\" is a summary.\n2. **Preserve the proportions.** If two thirds of the source argues one side, a balanced-looking summary misrepresents it.\n3. **Keep the hedges.** \"May\", \"in some cases\", \"preliminary\" are load-bearing. Dropping them turns a cautious claim into a confident one.\n4. **Mark disagreement as disagreement.** If sources conflict, say so rather than blending them into a false consensus.\n5. **Separate what it says from what you think of it.** If commentary is wanted, label it.\n\n## Guidelines\n- Attribute claims to whoever made them. \"The report claims\" and \"it is the case that\" are very different statements.\n- Numbers, dates, and names get copied exactly, never approximated.\n- Say what you left out if the omission would change how someone acts on it."
+  },
+  {
+    "id": "name-things-well",
+    "name": "Name it well",
+    "description": "Choose names for functions, variables, files, features, or products.",
+    "triggers": [
+      "what should i call",
+      "what to call it",
+      "naming",
+      "rename",
+      "better name",
+      "name this",
+      "variable name",
+      "function name"
+    ],
+    "instructions": "# Name it well\n\nA good name removes the need for a comment. A bad one survives every refactor and misleads for years.\n\n1. **Name what it is, not how it works.** `retryWithBackoff` describes the mechanism; `deliverReliably` describes the intent. The intent survives a rewrite.\n2. **Be as specific as the thing is.** `data`, `info`, `handler`, and `manager` name nothing. If you cannot be specific, the thing may be doing too much.\n3. **Make the type obvious from the name.** Booleans read as assertions (`isReady`, `hasAccess`). Functions with side effects read as commands. Collections are plural.\n4. **Match the vocabulary already in use.** A codebase that says `chat` everywhere should not gain a `conversation`. Two words for one concept costs more than an imperfect word used consistently.\n5. **Say it aloud in a sentence.** If it is awkward to say, it is awkward to read.\n\n## Guidelines\n- Length should track scope. A loop index can be `i`; a module-level export cannot.\n- Avoid negated booleans. `notDisabled` becomes unreadable the moment it is negated again.\n- If a name needs a comment to explain it, change the name instead of adding the comment."
+  },
+  {
+    "id": "reduce-the-cost",
+    "name": "Stay inside the free tier",
+    "description": "Keep usage, rate limits, and quotas under control on free or cheap infrastructure.",
+    "triggers": [
+      "free tier",
+      "rate limit",
+      "quota",
+      "too expensive",
+      "cost",
+      "429",
+      "usage limit",
+      "credits"
+    ],
+    "instructions": "# Stay inside the free tier\n\nCost problems are almost always volume problems in one specific place.\n\n1. **Find where the volume actually is.** One endpoint, one retry loop, or one oversized payload usually accounts for nearly all of it.\n2. **Check for accidental repetition first.** A retry without a backoff, a poll that never stops, a request fired on every keystroke, or history re-sent in full on every turn. These are bugs that present as bills.\n3. **Cut payload before cutting features.** Re-sending large blobs the model cannot use is the most common waste and costs nothing to remove.\n4. **Cache what does not change.** A repeated identical request is free if it is answered from memory.\n5. **Degrade rather than fail at the limit.** Hitting a quota should produce a smaller answer or a clear message, never a broken screen.\n\n## Guidelines\n- Spread work across providers where each has a separate free allowance, rather than exhausting one.\n- A 429 is a signal to back off, not to retry immediately. Retrying instantly makes it worse.\n- Say plainly when something genuinely cannot be done free. A workaround that quietly degrades quality is worse than the constraint stated openly."
+  },
+  {
+    "id": "answer-the-actual-question",
+    "name": "Answer the actual question",
+    "description": "A question that is vague, compound, or asks for something other than what is needed.",
+    "triggers": [
+      "what do you think",
+      "help me",
+      "not sure",
+      "confused",
+      "is this right",
+      "am i doing this wrong"
+    ],
+    "instructions": "# Answer the actual question\n\nThe stated question and the needed answer are often different. Serve the second without ignoring the first.\n\n1. **Answer what was asked, first and directly.** Reframing before answering reads as evasion, however well-intentioned.\n2. **Then say if the question hides a better one.** \"You asked X; the thing that will actually bite you is Y\" — but only after X has an answer.\n3. **Handle every part of a compound question.** Multi-part questions routinely get their second part dropped. Check before finishing.\n4. **When it is genuinely ambiguous, pick the most likely reading and say which you picked.** Proceeding on a stated assumption beats stopping to ask, unless being wrong would waste real work.\n5. **Give a recommendation, not a menu.** Listing options without a view is passing the decision back.\n\n## Guidelines\n- If the honest answer is \"it depends\", say what it depends on and which way it usually falls.\n- \"I do not know\" is a complete answer when followed by what would settle it.\n- Do not answer a question they did not ask because it is one you can answer well."
+  },
+  {
+    "id": "verify-before-claiming",
+    "name": "Check it before saying it",
+    "description": "Confirm a factual, numeric, or state-dependent claim rather than asserting it from memory.",
+    "triggers": [
+      "are you sure",
+      "verify",
+      "double check",
+      "is that right",
+      "confirm",
+      "fact check that"
+    ],
+    "instructions": "# Check it before saying it\n\nThe expensive mistake is a confident wrong answer, because it does not get checked.\n\n1. **Sort each claim by how you know it.** Directly observed in this conversation, computed with a tool, retrieved from a source, or recalled. Only the last one is unreliable, and it is the one that sounds identical to the others.\n2. **Use the tool for anything a tool can settle.** Arithmetic, dates, unit conversion, a file's contents, a build's status. A recalled number in a factual claim is a guess wearing a suit.\n3. **Never infer state you did not read.** Whether a key is configured, a file exists, or a deploy succeeded are facts to be checked, not deduced from what would make sense.\n4. **Mark the boundary of what you verified.** \"The routing is tested; the live provider call is not\" is the useful form.\n5. **Correct plainly and move on.** No preamble, no self-flagellation. State the correction and continue.\n\n## Guidelines\n- If you cannot check something, say so instead of hedging your way into an assertion.\n- A guess presented as a finding is worse than no answer, because it stops the search.\n- Repeating a claim does not strengthen it. If it was unverified the first time, it is unverified the third."
   }
 ]
