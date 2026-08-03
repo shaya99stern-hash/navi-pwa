@@ -107,12 +107,139 @@ function inferDimensions(prompt: string): ImageDimensions {
   return { aspectRatio: "1:1", width: 1024, height: 1024 };
 }
 
-function polishedPrompt(prompt: string): string {
+/**
+ * What the request actually is, which decides the entire prompt.
+ *
+ * Creating and editing want opposite instructions. "Compose a finished image
+ * with intentional lighting and strong detail" is right for a blank canvas and
+ * catastrophic for an edit: it tells the model to re-render the picture it was
+ * handed, which is exactly how a document comes back with different numbers
+ * and a person comes back with a different face.
+ */
+type ImageRequest = {
+  mode: "create" | "edit";
+  /** The image carries text, numbers, or data that must survive verbatim. */
+  preserveText: boolean;
+  /** The image contains a person whose identity must survive. */
+  preserveIdentity: boolean;
+  /** Things the user explicitly said not to touch. */
+  constraints: string[];
+};
+
+const TEXT_BEARING = /\b(document|paper|form|receipt|invoice|statement|spreadsheet|table|chart|label|sign|menu|page|letter|contract|report|ticket|card|screenshot|text|word|words|number|numbers|digit|digits|figure|figures|amount|amounts|price|date|total|handwriting|handwritten|caption|heading|title)\b/i;
+
+/* Only unambiguous person words. Possessives like "my" and "her" are far too
+   common — "my paper" would otherwise pull face-preservation rules into a
+   document edit, which is noise at best and misdirection at worst. */
+const PERSON_BEARING = /\b(person|people|face|faces|facial|portrait|selfie|headshot|man|men|woman|women|boy|girl|child|children|kid|baby|guy|lady|friend|family|mother|father|mom|mum|dad|sister|brother|son|daughter|wife|husband|hair|skin|smile|eyes)\b/i;
+
+/* Ways people say "leave this alone". Each captures the thing to protect. */
+const CONSTRAINT_PATTERNS: RegExp[] = [
+  /\b(?:do\s?n[o']?t|don't|never|avoid)\s+(?:change|alter|modify|touch|edit|move|remove|replace|adjust|fix)\s+(?:the\s+|my\s+|his\s+|her\s+|their\s+|any\s+)?([^.,;!?\n]{2,80})/gi,
+  /\bkeep\s+(?:the\s+|my\s+|his\s+|her\s+|their\s+)?([^.,;!?\n]{2,80}?)\s+(?:exactly\s+)?(?:the\s+same|unchanged|as\s+(?:is|they\s+are|it\s+is)|identical|intact)/gi,
+  /\b(?:leave|keep)\s+(?:the\s+|my\s+|his\s+|her\s+|their\s+)?([^.,;!?\n]{2,80}?)\s+(?:alone|untouched|intact|be)/gi,
+  /\bwithout\s+(?:changing|altering|modifying|touching|editing|removing)\s+(?:the\s+|my\s+|his\s+|her\s+|their\s+|any\s+)?([^.,;!?\n]{2,80})/gi,
+  /\b(?:preserve|retain|maintain)\s+(?:the\s+|my\s+|his\s+|her\s+|their\s+)?([^.,;!?\n]{2,80})/gi
+];
+
+/** "Only change the date" is also a preservation instruction about everything else. */
+const ONLY_CHANGE = /\b(?:only|just)\s+(?:change|edit|modify|update|replace|fix|adjust)\s+(?:the\s+|my\s+)?([^.,;!?\n]{2,80})/i;
+
+function extractConstraints(prompt: string): string[] {
+  const found = new Set<string>();
+  for (const pattern of CONSTRAINT_PATTERNS) {
+    pattern.lastIndex = 0;
+    for (const match of prompt.matchAll(pattern)) {
+      const phrase = match[1]?.replace(/\s+/g, " ").trim();
+      if (phrase && phrase.length > 1) found.add(phrase.toLowerCase());
+    }
+  }
+  return [...found].slice(0, 8);
+}
+
+export function classifyImageRequest(prompt: string, hasAttachments: boolean): ImageRequest {
+  const mode = hasAttachments ? "edit" : "create";
+  return {
+    mode,
+    preserveText: mode === "edit" && TEXT_BEARING.test(prompt),
+    preserveIdentity: mode === "edit" && PERSON_BEARING.test(prompt),
+    constraints: mode === "edit" ? extractConstraints(prompt) : []
+  };
+}
+
+/** Instructions for a blank canvas: compose something finished. */
+function creationPrompt(prompt: string): string {
   return [
     prompt.trim(),
     "Create a complete, professionally composed raster image with coherent anatomy, intentional lighting, strong detail, and a finished visual style.",
     "Do not output SVG, clip art, diagrams, UI chrome, captions, borders, or watermarks unless explicitly requested."
   ].join("\n\n");
+}
+
+/**
+ * Instructions for an edit: a preservation contract.
+ *
+ * The default failure of an image model handed a picture is to redraw it in
+ * its own style and call that an edit. Everything here exists to make the
+ * untouched parts of the image the priority and the requested change the
+ * exception.
+ */
+function editPrompt(prompt: string, request: ImageRequest): string {
+  const onlyChange = ONLY_CHANGE.exec(prompt)?.[1]?.trim();
+
+  const parts = [
+    "Edit the image that was provided. Return that same image with only the requested change applied to it.",
+    `Requested change:\n${prompt.trim()}`,
+    [
+      "Everything else in the image must be preserved exactly as it appears in the source:",
+      "- Do not redraw, re-render, restyle, repaint, or reinterpret the image.",
+      "- Do not crop, rotate, rescale, reframe, or change the composition, dimensions, or aspect ratio.",
+      "- Do not adjust colour, lighting, contrast, sharpness, or background unless that is what was asked for.",
+      "- Do not add, remove, or move any element that the request did not mention.",
+      "- Do not \"improve\", clean up, or beautify anything you were not asked to change.",
+      "Treat every pixel outside the requested change as something to copy, not something to recreate."
+    ].join("\n")
+  ];
+
+  if (onlyChange) {
+    parts.push(`The request limits the edit to: ${onlyChange}. Nothing else in the image may differ from the source in any way.`);
+  }
+
+  if (request.constraints.length) {
+    parts.push([
+      "The user explicitly named things that must not change. These are absolute:",
+      ...request.constraints.map((item) => `- ${item}`),
+      "If applying the requested change would alter any of these, leave that region untouched and say so rather than changing it."
+    ].join("\n"));
+  }
+
+  if (request.preserveText) {
+    parts.push([
+      "This image contains text or numeric data. Text fidelity outranks visual quality here.",
+      "- Every character, word, number, digit, date, amount, code, and symbol that was not explicitly named for change must appear in the output exactly as in the source, character for character.",
+      "- Do not re-typeset, re-align, re-font, re-space, or re-flow any text.",
+      "- Do not correct spelling, grammar, formatting, arithmetic, or apparent mistakes. A value that looks wrong is still the value.",
+      "- Do not invent, complete, or fill in text that is cut off, blurred, or illegible in the source. Reproduce it as it appears.",
+      "- Keep the original resolution and sharpness so the text stays legible."
+    ].join("\n"));
+  }
+
+  if (request.preserveIdentity) {
+    parts.push([
+      "This image contains a real person. Their identity must survive the edit intact.",
+      "- The face must remain the same face: identical facial structure, proportions, features, skin tone, complexion, hair, eye colour, expression, and apparent age.",
+      "- Do not beautify, smooth, slim, retouch, de-age, age, or idealise the person in any way.",
+      "- Do not alter body shape, posture, or hands.",
+      "- The person in the output must be unmistakably recognisable as the same individual to someone who knows them.",
+      "If the requested change cannot be made without altering the face, make the change only in the surrounding area and leave the face untouched."
+    ].join("\n"));
+  }
+
+  return parts.join("\n\n");
+}
+
+function polishedPrompt(prompt: string, request?: ImageRequest): string {
+  return request?.mode === "edit" ? editPrompt(prompt, request) : creationPrompt(prompt);
 }
 
 function imageTitle(prompt: string): string {
@@ -189,17 +316,34 @@ async function generateWithGemini(options: {
   prompt: string;
   attachments: ImageAttachment[];
   dimensions: ImageDimensions;
+  request: ImageRequest;
   abortSignal: AbortSignal;
 }): Promise<ImageBlock> {
   const apiKey = geminiApiKey();
   if (!apiKey) throw new Error("Gemini image generation is unavailable.");
   const model = process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-3.1-flash-image";
-  const input: Array<Record<string, string>> = [{ type: "text", text: polishedPrompt(options.prompt) }];
+  const editing = options.request.mode === "edit";
+  const input: Array<Record<string, string>> = [{ type: "text", text: polishedPrompt(options.prompt, options.request) }];
   for (const attachment of options.attachments.slice(0, 6)) {
     input.push({ type: "image", mime_type: attachment.mimeType, data: attachment.data });
   }
 
-  const timed = timedSignal(options.abortSignal, 32_000);
+  /* An edit must inherit the source geometry. Sending an aspect ratio asks the
+     model to re-frame, which crops the picture the user wanted preserved —
+     and the word "person" in "don't change the person's face" was enough to
+     force a portrait crop on a landscape document. */
+  const responseFormat: Record<string, string> = { type: "image" };
+  if (editing) {
+    // Lossless output and more pixels, so small text survives the round trip.
+    responseFormat.mime_type = "image/png";
+    if (options.request.preserveText) responseFormat.image_size = "2K";
+  } else {
+    responseFormat.mime_type = "image/jpeg";
+    responseFormat.aspect_ratio = options.dimensions.aspectRatio;
+    responseFormat.image_size = "1K";
+  }
+
+  const timed = timedSignal(options.abortSignal, editing ? 45_000 : 32_000);
   try {
     const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method: "POST",
@@ -210,12 +354,7 @@ async function generateWithGemini(options: {
       body: JSON.stringify({
         model,
         input,
-        response_format: {
-          type: "image",
-          mime_type: "image/jpeg",
-          aspect_ratio: options.dimensions.aspectRatio,
-          image_size: "1K"
-        }
+        response_format: responseFormat
       }),
       signal: timed.signal,
       cache: "no-store"
@@ -280,6 +419,8 @@ export async function generateNaviImage(options: {
   attachments?: ImageAttachment[];
   abortSignal: AbortSignal;
 }): Promise<GeneratedImagePayload> {
+  const attachments = options.attachments ?? [];
+  const request = classifyImageRequest(options.prompt, attachments.length > 0);
   const dimensions = inferDimensions(options.prompt);
   const failures: string[] = [];
   let block: ImageBlock | null = null;
@@ -288,8 +429,9 @@ export async function generateNaviImage(options: {
     try {
       block = await generateWithGemini({
         prompt: options.prompt,
-        attachments: options.attachments ?? [],
+        attachments,
         dimensions,
+        request,
         abortSignal: options.abortSignal
       });
     } catch (error) {
@@ -314,8 +456,13 @@ export async function generateNaviImage(options: {
   }
 
   if (!block) {
-    if (options.attachments?.length && !geminiApiKey()) {
-      throw new Error("Image editing requires the configured Gemini image provider.");
+    /* Editing never silently becomes generating. Returning a fresh invented
+       picture in place of the user's own image is worse than failing, because
+       it looks like it worked. */
+    if (request.mode === "edit") {
+      throw new Error(geminiApiKey()
+        ? "Navi could not edit that image. It will not generate a different picture in its place — try again, or describe the change more specifically."
+        : "Editing an image needs the Gemini image provider, which is not configured on this deployment.");
     }
     throw new Error(failures.length
       ? "The real image providers could not complete this request. Try again after checking provider quota."
@@ -329,7 +476,8 @@ export async function generateNaviImage(options: {
     mimeType: block.mimeType,
     data: block.data,
     prompt: options.prompt.trim(),
-    width: dimensions.width,
-    height: dimensions.height
+    // An edit keeps the source geometry, so reporting inferred dimensions
+    // would mislabel it and stretch the card it renders in.
+    ...(request.mode === "edit" ? {} : { width: dimensions.width, height: dimensions.height })
   };
 }

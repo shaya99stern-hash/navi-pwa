@@ -212,7 +212,17 @@ function imageGenerationIntent(text: string, hasImageAttachment: boolean): boole
   const creationVerb = /\b(generate|create|make|draw|illustrate|render|design|produce)\b[\s\S]{0,90}\b(image|picture|photo|portrait|illustration|artwork|wallpaper|poster|logo|icon)\b/i;
   const visualFirst = /^\s*(?:(?:a|an|the|some|random)\s+)?(?:image|picture|photo|portrait|illustration|artwork|wallpaper|poster|logo|icon)\s+(?:of|showing|depicting|with)\b/i;
   const directDrawing = /\b(draw|illustrate|visualize|paint|sketch|render)\s+(?:me\s+)?\b/i;
-  const editAttached = hasImageAttachment && /\b(edit|change|remove|replace|add|enhance|retouch|restore|upscale|recolor|professional|fix|crop|make)\b/i.test(text);
+  /* With an image attached, almost any imperative is an edit request. The old
+     verb list missed the most natural phrasings — "don't change the numbers",
+     "keep the face the same", "swap the date" — and those fell through to the
+     text model, which cannot edit an image and answers by describing one. */
+  const editAttached = hasImageAttachment && (
+    /\b(edit|change|changing|remove|removing|delete|replace|swap|add|insert|enhance|retouch|restore|upscale|recolor|recolour|colour|color|professional|fix|correct|crop|rotate|resize|blur|sharpen|brighten|darken|erase|clean|touch\s?up|redo|update|adjust|make|turn|convert|put|move|extend|fill|mask|highlight|circle|annotate)\b/i.test(text)
+    || /\b(?:do\s?n[o']?t|don't|never)\s+(?:change|alter|modify|touch|edit|move|remove)\b/i.test(text)
+    || /\bkeep\s+.{1,40}?\s+(?:the\s+same|unchanged|as\s+is|intact)\b/i.test(text)
+    || /\b(?:only|just)\s+(?:change|edit|modify|update|replace|fix)\b/i.test(text)
+    || /\bwithout\s+(?:changing|altering|modifying|touching)\b/i.test(text)
+  );
   const explicitImageMode = /\b(text[- ]to[- ]image|image generation|generate an image|generate a picture|make me an image|make me a picture)\b/i;
   return creationVerb.test(text) || visualFirst.test(text) || directDrawing.test(text) || editAttached || explicitImageMode.test(text);
 }

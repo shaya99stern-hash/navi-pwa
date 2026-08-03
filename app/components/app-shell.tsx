@@ -655,7 +655,12 @@ export function AppShell({
     try {
       // Resize before encoding: the Edge runtime rejects the whole request if
       // the base64 payload overruns its body cap, with no usable error.
-      const { files: outgoing, notice } = await prepareAttachments(pendingFiles);
+      /* An edit that must preserve text needs the source to stay legible, so
+         the usual aggressive downscale is relaxed for those requests. */
+      const preserveDetail = /\b(document|paper|form|receipt|invoice|statement|spreadsheet|table|label|sign|menu|page|letter|contract|report|ticket|screenshot|text|number|numbers|digit|digits|amount|date|total|handwriting|handwritten)\b/i.test(draft)
+        || /\b(?:do\s?n[o']?t|don't|never)\s+(?:change|alter|modify|touch)\b/i.test(draft)
+        || /\bkeep\s+.{1,40}?\s+(?:the\s+same|unchanged|as\s+is|intact)\b/i.test(draft);
+      const { files: outgoing, notice } = await prepareAttachments(pendingFiles, preserveDetail);
       if (notice) setAttachmentError(notice);
       const files = outgoing.length ? await Promise.all(outgoing.map(fileToPart)) : undefined;
       const text = draft.trim() || "Please review the attached file or image.";
