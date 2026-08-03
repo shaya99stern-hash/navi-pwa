@@ -10,6 +10,8 @@ import { validateGeneratedAudioPayload } from "@/lib/security/generated-audio";
 import { validateArtifactPayload } from "@/lib/security/artifacts";
 import { ArtifactFrame } from "./artifact-frame";
 import { CodeBlock } from "./code-block";
+import { parseSkillMarkdown, type Playbook } from "@/lib/playbooks";
+import { CapabilityCard } from "./capability-card";
 import { GeneratedAudioCard } from "./generated-audio-card";
 import { GeneratedImageCard } from "./generated-image-card";
 
@@ -21,7 +23,19 @@ import { GeneratedImageCard } from "./generated-image-card";
  * the entire response. Props are primitives, so the default comparison is
  * exactly right: only the message whose text actually changed re-parses.
  */
-export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, haptics }: { text: string; theme: "dark" | "light"; haptics: boolean }) {
+export type CapabilityHandlers = {
+  /** Ids already installed, so a card reopened later shows its real state. */
+  installedIds: string[];
+  onInstall: (playbook: Omit<Playbook, "source">) => void;
+  onRemove: (id: string) => void;
+};
+
+export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, haptics, capabilities }: {
+  text: string;
+  theme: "dark" | "light";
+  haptics: boolean;
+  capabilities?: CapabilityHandlers;
+}) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -43,6 +57,26 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, ha
             } catch {
               return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Malformed generated image payload.</div>;
             }
+          }
+
+          /* A capability Navi drafted. Parsed with the same reader that
+             handles a pasted SKILL.md, so anything installable from Settings
+             is installable from a message and vice versa. */
+          if (language === "navi-capability") {
+            if (!capabilities) return null;
+            const parsed = parseSkillMarkdown(value.trim());
+            if ("error" in parsed) {
+              return <div className="my-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-tertiary">Navi drafted a capability that could not be read: {parsed.error}</div>;
+            }
+            return (
+              <CapabilityCard
+                playbook={parsed.playbook}
+                installed={capabilities.installedIds.includes(parsed.playbook.id)}
+                haptics={haptics}
+                onInstall={capabilities.onInstall}
+                onRemove={capabilities.onRemove}
+              />
+            );
           }
 
           if (language === "navi-audio") {

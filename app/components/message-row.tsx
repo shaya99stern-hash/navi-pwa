@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { messageText } from "@/lib/chat";
 import { haptic } from "@/lib/ui/haptics";
 import { speak, whenVoicesReady } from "@/lib/ui/speech";
-import { MarkdownRenderer } from "./markdown-renderer";
+import { MarkdownRenderer, type CapabilityHandlers } from "./markdown-renderer";
 
 function messageFiles(message: UIMessage): Array<{ filename?: string; mediaType?: string }> {
   return message.parts.filter((part) => part.type === "file").map((part) => part as unknown as { filename?: string; mediaType?: string });
@@ -25,9 +25,10 @@ type Props = {
   onRate?: (value: "up" | "down") => void;
   onRetry?: () => void;
   onLongPress?: (message: { id: string; text: string; role: string }) => void;
+  capabilities?: CapabilityHandlers;
 };
 
-export function MessageRow({ message, streaming, last, theme, chatFont, haptics, voiceLanguage, rating, onRate, onRetry, onLongPress }: Props) {
+export function MessageRow({ message, streaming, last, theme, chatFont, haptics, voiceLanguage, rating, onRate, onRetry, onLongPress, capabilities }: Props) {
   const text = messageText(message);
   const files = messageFiles(message);
   const user = message.role === "user";
@@ -117,7 +118,7 @@ export function MessageRow({ message, streaming, last, theme, chatFont, haptics,
               single typographic signal of the target design — switchable to
               the system face in Settings → General → Chat font. */}
           <div className={`navi-markdown text-[1rem]/[1.625rem] font-normal ${chatFont === "serif" ? "navi-chat-serif" : ""} ${streaming ? "streaming-cursor" : ""}`}>
-            {text ? <MarkdownRenderer text={text} theme={theme} haptics={haptics} /> : null}
+            {text ? <MarkdownRenderer text={text} theme={theme} haptics={haptics} capabilities={capabilities} /> : null}
           </div>
           {!streaming && text ? (
             <>
