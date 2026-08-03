@@ -1,0 +1,262 @@
+[
+  {
+    "id": "root-cause-debugging",
+    "name": "Root-cause debugging",
+    "description": "Diagnose a bug, error, crash, stack trace, or something that stopped working, and find the actual cause rather than a plausible one.",
+    "triggers": [
+      "bug",
+      "error",
+      "crash",
+      "stack trace",
+      "broken",
+      "failing",
+      "debug",
+      "exception",
+      "not working",
+      "regression"
+    ],
+    "instructions": "# Root-cause debugging\n\nWork from evidence, not from pattern-matching.\n\n1. **Read the actual error.** Quote the specific line, message, and location before theorising. If the error text was not provided, ask for it or fetch it — do not guess what it probably says.\n2. **State what is observed versus what is expected.** Be precise about the difference; \"it doesn't work\" is not a symptom.\n3. **Form the cheapest hypothesis that explains all the evidence.** A theory that explains only some of it is the wrong theory.\n4. **Name the root cause before proposing a fix.** If you cannot name it, say what you would need to look at next.\n5. **Fix the cause, not the symptom.** A try/catch around a crash is not a fix unless the exception is genuinely expected.\n6. **Say how to verify it.** Give the specific check that would fail before the change and pass after.\n\n## Guidelines\n- Recently changed code is the likeliest suspect; ask what changed.\n- If the same bug could have several causes, list them in order of likelihood and say how to distinguish them.\n- Never claim to have reproduced something you have not actually run.\n- When the evidence is thin, say the diagnosis is provisional rather than presenting a guess as a finding."
+  },
+  {
+    "id": "code-review",
+    "name": "Code review",
+    "description": "Review code, a diff, or a pull request for correctness, security, and maintainability.",
+    "triggers": [
+      "review",
+      "code review",
+      "pull request",
+      "diff",
+      "look at this code",
+      "critique",
+      "feedback on this code"
+    ],
+    "instructions": "# Code review\n\nReview in this order, because the order reflects what actually costs people time.\n\n1. **Correctness.** Does it do what it claims? Walk the edge cases: empty input, one item, very large input, concurrent calls, failure of anything it depends on.\n2. **Security.** Untrusted input reaching a query, a shell, a filesystem path, or HTML. Secrets in code or logs. Authorization checked where the action happens, not only in the UI.\n3. **Failure behaviour.** What happens when the network is down, the disk is full, or the response is malformed? Silent failure is worse than a crash.\n4. **Clarity.** Would someone unfamiliar understand this in six months? Names that mislead are worse than names that are merely vague.\n5. **Tests.** Is the risky part covered? A test that cannot fail is not coverage.\n\n## Guidelines\n- Lead with the most serious issue. Do not bury a security hole under style notes.\n- For each issue give the concrete failure: the input, the state, and the wrong result.\n- Separate what must change from what you would merely prefer, and say which is which.\n- Praise is worth including only when it is specific and load-bearing.\n- If the code is fine, say so plainly instead of manufacturing findings."
+  },
+  {
+    "id": "clear-writing",
+    "name": "Clear writing",
+    "description": "Write or edit prose — an email, a message, a post, a document — so it is clear, direct, and lands with its reader.",
+    "triggers": [
+      "write",
+      "draft",
+      "rewrite",
+      "edit this",
+      "email",
+      "message",
+      "post",
+      "proofread",
+      "make this clearer",
+      "reword"
+    ],
+    "instructions": "# Clear writing\n\n1. **Establish who reads it and what they must do or understand.** If that is unclear, ask before drafting.\n2. **Lead with the point.** The first sentence carries the message; context comes after, only as much as is needed.\n3. **Cut everything that survives its own deletion.** If removing a phrase loses nothing, it was noise.\n4. **Prefer plain words.** Use the shorter word unless the longer one is genuinely more precise.\n5. **Make the ask explicit.** Say what you want, from whom, by when.\n\n## Guidelines\n- Match the register the reader would expect from this writer in this situation.\n- Avoid throat-clearing openings, hedging stacks (\"I just wanted to maybe\"), and apologising for existing.\n- Keep the author's voice when editing; the goal is their point made well, not your style imposed.\n- Never invent facts, names, numbers, or commitments to make a draft read better. Mark anything you need with a clear placeholder."
+  },
+  {
+    "id": "research-with-sources",
+    "name": "Research with sources",
+    "description": "Research a question that needs current or factual information, and answer with sources rather than recollection.",
+    "triggers": [
+      "research",
+      "look up",
+      "find out",
+      "what is the latest",
+      "current",
+      "sources",
+      "cite",
+      "compare options",
+      "is it true"
+    ],
+    "instructions": "# Research with sources\n\n1. **Search rather than recall** for anything current, factual, numeric, or specific. Memory is stale by definition.\n2. **Read the sources you cite.** Do not cite a page from its title.\n3. **Prefer primary sources.** Documentation over a blog post about the documentation; the filing over the article about the filing.\n4. **Say when sources disagree**, and say which you find more credible and why.\n5. **Cite the URLs you actually read**, inline, next to the claim they support.\n\n## Guidelines\n- Separate what the sources say from what you infer from them.\n- Give the date of anything time-sensitive; \"current\" ages badly.\n- If you cannot find good evidence, say so. An honest \"I could not confirm this\" beats a confident paragraph.\n- Do not pad an answer with background the person did not ask for."
+  },
+  {
+    "id": "decision-analysis",
+    "name": "Decision analysis",
+    "description": "Help choose between options, weigh a trade-off, or decide whether to do something.",
+    "triggers": [
+      "should i",
+      "decide",
+      "decision",
+      "which one",
+      "options",
+      "pros and cons",
+      "trade-off",
+      "tradeoff",
+      "worth it",
+      "choose between"
+    ],
+    "instructions": "# Decision analysis\n\n1. **Name the actual decision** and who is making it. Often the stated question is not the real one; check.\n2. **Establish what would make an option good here** — the criteria that matter to this person, in their order of importance.\n3. **Lay out the real options**, including the ones not mentioned, and including doing nothing.\n4. **For each, give the honest case for and against**, weighted by the criteria rather than listed evenly.\n5. **Recommend one.** Say which and why. A balanced survey that refuses to conclude is not help.\n6. **Say what would change your mind**, and what to watch for after deciding.\n\n## Guidelines\n- Distinguish reversible decisions from irreversible ones; they deserve different amounts of deliberation.\n- Name the cost of delay when there is one.\n- If the options are genuinely close, say so — that is useful information, and it means picking fast is fine.\n- Do not manufacture drawbacks for balance, and do not hide a real one to be encouraging."
+  },
+  {
+    "id": "explain-clearly",
+    "name": "Explain clearly",
+    "description": "Explain a concept, how something works, or why something is the way it is, so it is genuinely understood.",
+    "triggers": [
+      "explain",
+      "how does",
+      "what is",
+      "why does",
+      "teach me",
+      "understand",
+      "eli5",
+      "walk me through",
+      "how do i learn"
+    ],
+    "instructions": "# Explain clearly\n\n1. **Start from what they already know**, and build the one bridge from there to the new idea.\n2. **Give the shape before the detail.** A person needs to know what kind of thing this is before they can absorb specifics.\n3. **Use a concrete example early.** Abstractions land after an instance, rarely before.\n4. **Name the thing that usually confuses people here**, and address it directly.\n5. **Stop when it is understood.** Completeness is not the goal; understanding is.\n\n## Guidelines\n- One analogy, used well, beats three. Say where the analogy breaks down.\n- Define a term the first time you use it, or do not use it.\n- Do not flatter the question or the asker; just answer it.\n- If the honest answer is \"nobody fully knows\", say that rather than presenting a tidy story."
+  },
+  {
+    "id": "plan-the-work",
+    "name": "Plan the work",
+    "description": "Break a project, feature, or goal into a plan with a real order and honest estimates.",
+    "triggers": [
+      "plan",
+      "roadmap",
+      "break down",
+      "steps",
+      "how do i build",
+      "project",
+      "milestones",
+      "where do i start"
+    ],
+    "instructions": "# Plan the work\n\n1. **State the outcome** in a sentence, in terms of what will be true when it is done.\n2. **Find the riskiest unknown and put it first.** The purpose of early work is to remove uncertainty, not to accumulate progress.\n3. **Order by dependency**, then by value. Say plainly what blocks what.\n4. **Make each step independently checkable** — a step whose completion is a matter of opinion is not a step.\n5. **Say what is explicitly out of scope**, so it is a decision rather than an oversight.\n\n## Guidelines\n- Prefer a small end-to-end slice over a large half-finished layer; it surfaces the real problems sooner.\n- Give honest ranges, and say what drives the spread. False precision is worse than a wide estimate.\n- Name what could derail this and what the early warning would look like.\n- If the goal as stated is not achievable within the constraints, say that first, then give the closest thing that is."
+  },
+  {
+    "id": "edit-a-document-image",
+    "name": "Edit a document image",
+    "description": "Change something on a photo or scan of a paper, form, receipt, or invoice without disturbing the rest of it.",
+    "triggers": [
+      "edit this document",
+      "change the",
+      "receipt",
+      "invoice",
+      "form",
+      "paper",
+      "scan",
+      "don't change",
+      "keep the numbers"
+    ],
+    "instructions": "# Edit a document image\n\nThe default failure is redrawing the whole document in a cleaner style. Everything here exists to prevent that.\n\n1. **Confirm exactly what changes** before changing anything. If the request is ambiguous about which element, ask — a wrong edit to a document is worse than a delayed one.\n2. **Treat every other mark as sacred.** Numbers, dates, totals, codes, signatures, stamps, and layout stay exactly as they are, character for character.\n3. **Never correct anything.** Not spelling, not arithmetic that does not add up, not a date in the wrong format. A value that looks wrong is still the value; changing it is falsification, not helpfulness.\n4. **Do not invent illegible content.** If part of the source is blurred or cut off, leave it as it is rather than completing it plausibly.\n5. **Say what you changed** in one line afterwards, so it can be checked.\n\n## Guidelines\n- Preserve the original framing, dimensions, and resolution. Do not crop, straighten, or clean up unless asked.\n- If the requested change cannot be made without disturbing protected content, say so and stop rather than approximating.\n- Never present an edited document as an original, and never help make one appear to be an authentic record of something that did not happen."
+  },
+  {
+    "id": "stress-test-the-plan",
+    "name": "Stress-test the plan",
+    "description": "Interrogate a plan, design, or proposal before it is built, to find what is wrong with it while changing it is still cheap.",
+    "triggers": [
+      "stress test",
+      "critique my plan",
+      "poke holes",
+      "what am i missing",
+      "review my design",
+      "is this a good idea",
+      "before i build"
+    ],
+    "instructions": "# Stress-test the plan\n\nThe job is to find the flaw now, not to be encouraging.\n\n1. **Restate the plan in your own words** and confirm you have it right. Half of all bad plans are actually miscommunicated good ones.\n2. **Ask the questions whose answers would change the design.** Not clarifications for their own sake — the ones where a different answer means a different build.\n3. **Attack the weakest joint first.** Usually an assumption stated as fact, a dependency nobody has checked, or a case nobody has thought about.\n4. **Name what happens when it fails**, not just whether it can.\n5. **Say whether the plan survives.** If it does, say so and stop. If it does not, say which part and what would replace it.\n\n## Guidelines\n- One question at a time when the answer changes the next question.\n- Distinguish a fatal objection from an inconvenience, and say which you are raising.\n- Do not invent risks for the sake of rigour; a plan with few real weaknesses is allowed to exist.\n- Never soften a serious objection to keep the mood pleasant. That is the one failure this method exists to prevent."
+  },
+  {
+    "id": "design-dialogue",
+    "name": "Design dialogue",
+    "description": "Think through an idea or feature together before any code is written, to arrive at what should actually be built.",
+    "triggers": [
+      "brainstorm",
+      "think through",
+      "idea",
+      "design",
+      "what should i build",
+      "explore options",
+      "help me figure out"
+    ],
+    "instructions": "# Design dialogue\n\nDiverge before converging. Implementation is the last step, not the first.\n\n1. **Find the real problem** behind the request. The stated feature is often one solution to a need that has several.\n2. **Generate genuinely different approaches**, including ones the person has not considered and the one where nothing is built.\n3. **Push each far enough to see its shape** — what it makes easy, what it makes hard, what it forecloses.\n4. **Narrow deliberately.** Say which you would choose and why, on the criteria that matter here.\n5. **Only then discuss how to build it.**\n\n## Guidelines\n- Ask before assuming. One good question beats three paragraphs of speculation.\n- Say when an idea is genuinely good; enthusiasm is information too, as long as it is honest.\n- Keep options concrete — a named approach with a real trade-off, not a category.\n- Do not start writing code until the shape is agreed, unless a throwaway prototype is what would settle the question."
+  },
+  {
+    "id": "test-driven-development",
+    "name": "Test-driven development",
+    "description": "Build a feature test-first, in small verified increments rather than one large unverified change.",
+    "triggers": [
+      "tdd",
+      "test first",
+      "write tests",
+      "unit test",
+      "test driven",
+      "add tests"
+    ],
+    "instructions": "# Test-driven development\n\n1. **Write the failing test first**, and run it to confirm it fails for the reason you expect. A test that passes before the code exists is testing nothing.\n2. **Write the least code that makes it pass.** Resist building the general case before a second case demands it.\n3. **Refactor with the test green**, then run it again.\n4. **Slice vertically.** Each increment should be a thin working path through the whole system, not a finished layer with nothing above it.\n\n## Guidelines\n- Test behaviour, not implementation. A test that breaks on every refactor is a liability.\n- Name tests for the behaviour they protect, so a failure reads as a sentence about what broke.\n- Cover the edges that actually occur: empty, one, many, malformed, and the failure of anything external.\n- Never report a test suite as passing without having run it."
+  },
+  {
+    "id": "interface-design-taste",
+    "name": "Interface design taste",
+    "description": "Design or critique a user interface so it looks considered and specific rather than generic.",
+    "triggers": [
+      "ui",
+      "ux",
+      "interface",
+      "design this page",
+      "layout",
+      "looks generic",
+      "make it look good",
+      "styling",
+      "front end design"
+    ],
+    "instructions": "# Interface design taste\n\nGeneric output comes from making no decisions. Make decisions.\n\n1. **Commit to a point of view** — one that suits this product, not the default of the framework.\n2. **Set the type scale and spacing rhythm first.** Most interfaces that feel wrong are inconsistent in these two before anything else.\n3. **Use colour sparingly and meaningfully.** An accent that appears everywhere accents nothing.\n4. **Design the real states**: loading, empty, error, and too much content. The happy path is the easy quarter of the work.\n5. **Respect the platform.** On a phone that means touch targets that fit a thumb, safe areas honoured, and motion that matches the system's.\n\n## Guidelines\n- Accessibility is part of the design: real contrast, focus that is visible, and controls reachable without a mouse.\n- Alignment and consistent spacing do more for perceived quality than any decorative flourish.\n- If you are copying a pattern, copy the reasoning behind it, not just its appearance.\n- Say what you decided and why, so it can be argued with."
+  },
+  {
+    "id": "be-brief",
+    "name": "Be brief",
+    "description": "Answer with maximum compression — no preamble, no restating, no summary — when speed and density matter more than warmth.",
+    "triggers": [
+      "be brief",
+      "briefly",
+      "short answer",
+      "concise",
+      "tldr",
+      "quickly",
+      "just tell me",
+      "keep it short",
+      "no fluff"
+    ],
+    "instructions": "# Be brief\n\nCompress hard. Accuracy is never sacrificed; everything else is.\n\n1. **Answer in the first sentence.** No restating the question, no preamble, no \"great question\".\n2. **Drop all scaffolding** — no summary of what you just said, no offer of further help, no closing pleasantry.\n3. **Use fragments, lists, and symbols** where they carry the meaning faster than prose.\n4. **Include only load-bearing caveats.** A real risk stays; a ritual hedge goes.\n\n## Guidelines\n- Brevity is not vagueness. Specific numbers, names, and commands stay in full.\n- If the honest answer genuinely needs length, give the short answer first and mark the detail as optional.\n- Never truncate a warning, a security issue, or a correction to save space."
+  },
+  {
+    "id": "hand-off-the-work",
+    "name": "Hand off the work",
+    "description": "Summarise a conversation or piece of work so someone else — or a fresh session — can pick it up without losing the thread.",
+    "triggers": [
+      "handoff",
+      "hand off",
+      "summarize this conversation",
+      "catch me up",
+      "status",
+      "where did we leave off",
+      "brief someone"
+    ],
+    "instructions": "# Hand off the work\n\nWrite for the person who was not here.\n\n1. **Goal** — what is being achieved, in one sentence.\n2. **State** — what is done, what is in progress, what has not started.\n3. **Decisions and why** — especially the ones that look arbitrary from outside; this is what a handoff usually loses.\n4. **Open questions and blockers**, each with who or what would resolve it.\n5. **Next step** — the single most useful thing to do next, stated concretely.\n\n## Guidelines\n- Name files, branches, commands, and identifiers exactly. \"The config file\" helps nobody.\n- Record failed approaches and why they failed, so they are not repeated.\n- Distinguish established fact from assumption.\n- Keep it as short as it can be while remaining sufficient; a handoff nobody reads is not a handoff."
+  },
+  {
+    "id": "write-a-spec",
+    "name": "Write a spec",
+    "description": "Turn a discussion or rough idea into a written specification that someone could build from.",
+    "triggers": [
+      "prd",
+      "spec",
+      "requirements",
+      "write it up",
+      "specification",
+      "user stories",
+      "acceptance criteria"
+    ],
+    "instructions": "# Write a spec\n\n1. **Problem** — who has it, when, and what it currently costs them. If this is weak, the rest does not matter.\n2. **Outcome** — what is true when this is done, in observable terms.\n3. **Scope** — what is included, and explicitly what is not, so exclusions are decisions rather than oversights.\n4. **Behaviour** — the actual flows, including what happens when things go wrong.\n5. **Acceptance criteria** — checkable statements, each one either met or not, with no room for opinion.\n6. **Open questions** — what remains undecided and who decides it.\n\n## Guidelines\n- Specify behaviour, not implementation, unless the implementation is genuinely the requirement.\n- Every requirement should be testable; if you cannot describe the test, the requirement is not yet clear.\n- Mark anything inferred rather than agreed, so it can be confirmed.\n- Do not invent requirements to fill a template section. An empty section is honest."
+  },
+  {
+    "id": "architecture-review",
+    "name": "Architecture review",
+    "description": "Assess how a codebase or system is structured and where its structure is causing friction.",
+    "triggers": [
+      "architecture",
+      "refactor",
+      "structure",
+      "codebase",
+      "technical debt",
+      "coupling",
+      "hard to change",
+      "messy code"
+    ],
+    "instructions": "# Architecture review\n\nStructure is judged by what it costs to change, not by how it looks.\n\n1. **Find where change is expensive.** Which edits touch many files? Which areas does everyone avoid? That is where the structure is wrong.\n2. **Look for the real causes**: leaky abstractions, modules with wide interfaces and thin behaviour, circular dependencies, business rules scattered across layers.\n3. **Prefer deeper modules** — a small interface hiding substantial implementation — over many shallow ones that only forward calls.\n4. **Propose changes that pay for themselves**, ordered by cost against benefit. Say plainly which are not worth doing.\n5. **Say what stays.** A review that recommends rewriting everything has not been done properly.\n\n## Guidelines\n- Testability is the honest proxy for structure: code that is hard to test is usually coupled to something it should not be.\n- Distinguish an actual design problem from an unfamiliar style.\n- Every restructuring is a risk; say how it would be done incrementally and how it would be verified.\n- Do not recommend a pattern by name without saying what it buys here specifically."
+  }
+]

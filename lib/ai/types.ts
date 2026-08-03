@@ -81,6 +81,8 @@ export type NaviPreferences = {
   saveHistory: boolean;
   /** Let a new chat draw on passages from earlier ones, computed on-device. */
   memory: boolean;
+  /** SKILL.md playbooks pasted in by the user, stored on this device. */
+  customPlaybooks: Array<{ id: string; name: string; description: string; instructions: string }>;
   notifyOnComplete: boolean;
   voiceLanguage: string;
   profile: NaviProfile;
@@ -96,7 +98,8 @@ export type MenuSection =
   | "privacy"
   | "capabilities"
   | "connectors"
-  | "skills";
+  | "skills"
+  | "playbooks";
 
 export type ProviderName =
   | "gemini"
