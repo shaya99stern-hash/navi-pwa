@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import type { ModelPreset, ProviderName, ProviderRoute, ToolPolicy } from "./types";
+import type { ModelPreset, ProviderName, ProviderRoute, ToolCallingSupport, ToolPolicy } from "./types";
 
 export type ProviderAvailability = Record<ProviderName, boolean>;
 
@@ -278,9 +278,12 @@ export const ROUTES = {
     label: "Groq fast",
     capability: "fast"
   },
+  /* The route chosen when the request needs tools, so it has to be a model
+     that accepts a `tools` array. Groq's `compound` systems do their own
+     searching and reject one, which failed every tool-enabled request. */
   groqTools: {
     provider: "groq",
-    model: process.env.GROQ_TOOL_MODEL ?? "groq/compound",
+    model: process.env.GROQ_TOOL_MODEL ?? "openai/gpt-oss-120b",
     label: "Groq tools",
     capability: "tools"
   },
@@ -337,6 +340,31 @@ export const ROUTES = {
   hfMistralSmall: hf("mistralai/Mistral-Small-24B-Instruct-2501", "HF Mistral Small 24B", "fast"),
   hfGptOssFast: hf("openai/gpt-oss-20b", "HF GPT-OSS 20B", "fast")
 } satisfies Record<string, ProviderRoute>;
+
+/**
+ * These providers handle tool calling reliably. The Hugging Face router fronts
+ * many open models, plenty of which reject a tools parameter outright, so
+ * sending one there would break routes that work today — it is the one
+ * provider deliberately left out.
+ */
+const TOOL_CAPABLE_PROVIDERS: ProviderName[] = ["gemini", "groq", "cerebras", "openrouter", "mistral"];
+
+/**
+ * Models that reject a `tools` parameter even though their provider accepts
+ * one. Groq's compound systems are agentic in their own right — they search
+ * and run code internally — and answer an incoming tools array with a hard
+ * `tool calling is not supported with this model`, failing the whole request.
+ *
+ * Matched on the model id rather than the route name so an operator pointing
+ * GROQ_TOOL_MODEL at one of them degrades to no-tools instead of to an error.
+ */
+const TOOL_INCAPABLE_MODELS = [/^groq\/compound/i];
+
+export function routeToolCallingSupport(route: ProviderRoute): ToolCallingSupport {
+  if (!TOOL_CAPABLE_PROVIDERS.includes(route.provider)) return "none";
+  if (TOOL_INCAPABLE_MODELS.some((pattern) => pattern.test(route.model))) return "none";
+  return "custom";
+}
 
 function configuredHfRoutes(): ProviderRoute[] {
   const custom = process.env.HF_SWARM_MODELS

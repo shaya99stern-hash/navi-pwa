@@ -9,7 +9,7 @@ import {
   type UIMessage
 } from "ai";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
-import { createProviderModel, getProviderAvailability, selectDirectRoute } from "@/lib/ai/providers";
+import { createProviderModel, getProviderAvailability, routeToolCallingSupport, selectDirectRoute } from "@/lib/ai/providers";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { buildDevTools } from "@/lib/ai/dev-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
@@ -398,6 +398,12 @@ function streamError(error: unknown): string {
   if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "Navi reached a provider limit. Try again shortly or select another Navi mode.";
   if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401")) return "Navi's AI service is not configured correctly. Please try again later.";
   if (lower.includes("timeout") || lower.includes("aborted")) return "The selected Navi mode took too long. Try again or select a direct mode.";
+  /* A model that refuses the tools parameter is a routing mistake, not
+     something the person asking can fix — name it so it is not mistaken for
+     their request being at fault. */
+  if (lower.includes("tool calling") || lower.includes("not supported with this model")) {
+    return "Navi routed this to an engine that cannot use tools. Turn off Research mode to answer without them, or try again.";
+  }
   return "Navi could not complete the response. Please try again.";
 }
 
@@ -653,12 +659,11 @@ export async function POST(request: Request): Promise<Response> {
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
       writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : `${DISPATCH_LABEL[dispatch]}…` }));
-      /* These providers handle tool calling reliably. The Hugging Face router
-         fronts many open models, plenty of which reject a tools parameter
-         outright, so sending one there would break routes that work today —
-         it is the one provider deliberately left out. */
-      const TOOL_CAPABLE_PROVIDERS = ["gemini", "groq", "cerebras", "openrouter", "mistral"];
-      const supportsTools = TOOL_CAPABLE_PROVIDERS.includes(route.provider);
+      /* Whether tools can be sent is a fact about the chosen model, and lives
+         beside the route table that knows which model that is. Asking the
+         provider instead is what sent a tools array to a model that rejects
+         one and failed every request that had web search switched on. */
+      const supportsTools = routeToolCallingSupport(route) === "custom";
       const toolNames = supportsTools ? Object.keys(availableTools) : [];
       if (toolNames.length) {
         writer.write(statusChunk({ stage: "gather", detail: `${toolNames.length} tool${toolNames.length === 1 ? "" : "s"} available.` }));
@@ -677,7 +682,11 @@ export async function POST(request: Request): Promise<Response> {
         experimental_transform: smoothStream({ delayInMs: 26, chunking: "word" }),
         onError: ({ error }) => console.error("Navi provider stream failed:", error)
       });
-      writer.merge(result.toUIMessageStream());
+      /* A provider that fails *mid-stream* never reaches the outer onError,
+         and this inner stream's own default is the bare "An error occurred."
+         that hid a hard model rejection behind three useless words. Route it
+         through the same translator every other failure uses. */
+      writer.merge(result.toUIMessageStream({ onError: streamError }));
     }
   });
 
