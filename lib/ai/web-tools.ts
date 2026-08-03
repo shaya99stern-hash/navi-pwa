@@ -27,6 +27,11 @@ export function hasWebSearch(): boolean {
   return searchProvider() !== null;
 }
 
+/** Which provider is answering searches, for status surfaces. Never the key. */
+export function searchProviderName(): string | null {
+  return searchProvider();
+}
+
 function clip(value: unknown, limit: number): string {
   const text = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
   return text.length > limit ? `${text.slice(0, limit)}…` : text;

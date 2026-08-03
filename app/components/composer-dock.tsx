@@ -31,7 +31,9 @@ import {
   useState
 } from "react";
 import { suggest, type Skill } from "@/lib/skills";
+import type { ConnectorAccessMode } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
+import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 import {
   ATTACHMENT_BUDGET,
@@ -81,11 +83,16 @@ type Props = {
   onOpenTools: () => void;
   onOpenProjects: () => void;
   onOpenConnectors: () => void;
+  /** For the Integrations sheet, which reports real state rather than guessing. */
+  connectorCount: number;
+  connectorAccessMode: ConnectorAccessMode;
   onOpenPlaybooks: () => void;
 };
 
 type ProviderStatus = {
   providers?: Record<string, boolean | undefined>;
+  devTools?: { github?: boolean; vercel?: boolean };
+  search?: { configured?: boolean; provider?: string | null };
 };
 
 function formatBytes(bytes: number): string {
@@ -149,6 +156,8 @@ export function ComposerDock({
   onOpenTools,
   onOpenProjects,
   onOpenConnectors,
+  connectorCount,
+  connectorAccessMode,
   onOpenPlaybooks
 }: Props) {
   const dockRef = useRef<HTMLDivElement>(null);
@@ -168,6 +177,13 @@ export function ComposerDock({
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [providerReady, setProviderReady] = useState<boolean | null>(null);
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const [integrations, setIntegrations] = useState<IntegrationStatus>({
+    github: false,
+    vercel: false,
+    search: { configured: false, provider: null },
+    loaded: false
+  });
   const [touchKeyboard, setTouchKeyboard] = useState(false);
   const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
 
@@ -221,6 +237,14 @@ export function ComposerDock({
           const providers = data.providers;
           // Any configured provider can answer; which one is the router's business.
           setProviderReady(Object.values(providers ?? {}).some(Boolean));
+          /* The same probe already tells us what Navi can reach, so the
+             Integrations sheet costs no extra request. */
+          setIntegrations({
+            github: Boolean(data.devTools?.github),
+            vercel: Boolean(data.devTools?.vercel),
+            search: { configured: Boolean(data.search?.configured), provider: data.search?.provider ?? null },
+            loaded: true
+          });
         })
         .catch(() => {
           if (!cancelled) setProviderReady(null);
@@ -744,9 +768,12 @@ export function ComposerDock({
                 <span className="flex-1">Playbooks</span>
                 <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
               </button>
-              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenConnectors(); }} className={menuRow}>
+              {/* Integrations replaces what would otherwise be a row of loose
+                  icons for GitHub, Vercel, search, and connectors. One entry,
+                  one sheet, and nothing added to the main interface. */}
+              <button type="button" onClick={() => { setSourceMenuOpen(false); setIntegrationsOpen(true); }} className={menuRow}>
                 <Link2 size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Connectors</span>
+                <span className="flex-1">Integrations</span>
                 <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
               </button>
               <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenTools(); }} className={menuRow}>
@@ -778,6 +805,16 @@ export function ComposerDock({
           </section>
         </div>
       ) : null}
+
+      <IntegrationsSheet
+        open={integrationsOpen}
+        status={integrations}
+        connectorCount={connectorCount}
+        connectorAccessMode={connectorAccessMode}
+        haptics={haptics}
+        onClose={() => setIntegrationsOpen(false)}
+        onOpenConnectors={() => { setIntegrationsOpen(false); onOpenConnectors(); }}
+      />
     </>
   );
 }

@@ -1031,6 +1031,8 @@ export function AppShell({
         research={preferences.tools.web}
         statusText={activeProject ? `${activeProject.name} · ${statusText}` : statusText}
         haptics={preferences.haptics}
+        connectorCount={preferences.connectedMcpServers.length}
+        connectorAccessMode={preferences.connectorAccessMode}
         onChange={setDraft}
         onSend={() => void submit()}
         onFiles={addFiles}
