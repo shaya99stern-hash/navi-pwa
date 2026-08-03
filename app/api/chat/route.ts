@@ -9,6 +9,7 @@ import {
   type UIMessage
 } from "ai";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
+import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { createProviderModel, getProviderAvailability, routeToolCallingSupport, selectDirectRoute } from "@/lib/ai/providers";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { buildDevTools } from "@/lib/ai/dev-tools";
@@ -275,11 +276,24 @@ function artifactIntent(text: string): boolean {
     || /\b(click|press|tap)\b[\s\S]{0,50}\b(work|working|respond|button|control)\b/i.test(text);
 }
 
-function redactGeneratedImages(messages: UIMessage[]): UIMessage[] {
+/**
+ * Strip generated media out of the history before it goes back to a model.
+ *
+ * These payloads are megabytes of base64. Left in, every subsequent turn
+ * re-uploads every clip and image the conversation has ever produced, which
+ * costs the request budget and eventually exceeds it outright — the model
+ * gains nothing from re-reading bytes it cannot listen to or look at.
+ */
+function redactGeneratedMedia(messages: UIMessage[]): UIMessage[] {
   return messages.map((message) => ({
     ...message,
     parts: message.parts.map((part) => part.type === "text"
-      ? { ...part, text: part.text.replace(/```navi-image\s*[\s\S]*?```/gi, "[A raster image was generated in this earlier turn.]") }
+      ? {
+        ...part,
+        text: part.text
+          .replace(/```navi-image\s*[\s\S]*?```/gi, "[A raster image was generated in this earlier turn.]")
+          .replace(/```navi-audio\s*[\s\S]*?```/gi, "[An audio clip was generated in this earlier turn.]")
+      }
       : part)
   })) as UIMessage[];
 }
@@ -562,7 +576,10 @@ export async function POST(request: Request): Promise<Response> {
   const providerCount = Object.values(availability).filter(Boolean).length;
   const hasFiles = fileParts(messages).length > 0;
   const effort = complexity(lastUserText);
-  const artifactRequested = !imageRequested && tools.artifacts && artifactIntent(lastUserText);
+  /* Sound is checked after images so "make me a picture of a bell ringing"
+     stays a picture — the image intent is the more specific match. */
+  const audioRequested = !imageRequested && audioGenerationIntent(lastUserText);
+  const artifactRequested = !imageRequested && !audioRequested && tools.artifacts && artifactIntent(lastUserText);
   /* Soul is the architect: it reads the request and routes to whichever
      engine leads at that job, so nothing has to be chosen by hand. */
   const dispatch = preset === "navi-code" ? "code" : dispatchFor(lastUserText, effort, effortLevel);
@@ -602,6 +619,29 @@ export async function POST(request: Request): Promise<Response> {
         return;
       }
 
+      if (audioRequested) {
+        const kind = classifyAudioRequest(lastUserText);
+        writer.write(statusChunk({
+          stage: "plan",
+          detail: kind === "speech"
+            ? "Preparing the words to speak."
+            : kind === "effect"
+              ? "Shaping a short sound cue."
+              : "Composing the music request."
+        }));
+        writer.write(statusChunk({ stage: "draft", detail: kind === "speech" ? "Generating speech." : "Generating audio." }));
+        const payload = await generateNaviAudio({ prompt: lastUserText, abortSignal: request.signal });
+        writer.write(statusChunk({ stage: "verify", detail: "Validating the generated clip." }));
+        const responseText = `\`\`\`navi-audio\n${JSON.stringify(payload)}\n\`\`\``;
+        const audioTextId = generateId();
+        writer.write(statusChunk({ stage: "stream", detail: "Delivering the clip." }));
+        writer.write({ type: "text-start", id: audioTextId });
+        for (const chunk of splitLargePayload(responseText)) writer.write({ type: "text-delta", id: audioTextId, delta: chunk });
+        writer.write({ type: "text-end", id: audioTextId });
+        writer.write(statusChunk({ stage: "complete", detail: "Audio complete." }));
+        return;
+      }
+
       const allowedConnectorIds = connectorAccessMode === "ask" ? [] : body.connectedMcpServers;
       const connectorIds = Array.isArray(allowedConnectorIds) ? allowedConnectorIds : [];
       // Metadata tells the model what exists; the tool set lets it actually act.
@@ -624,7 +664,7 @@ export async function POST(request: Request): Promise<Response> {
         ...buildDevTools(announce),
         ...mcpTools
       };
-      const modelMessages = await convertToModelMessages(redactGeneratedImages(messages));
+      const modelMessages = await convertToModelMessages(redactGeneratedMedia(messages));
 
       if (resolvedPreset === "navi-fable" || resolvedPreset === "navi-sol") {
         const swarmProfile: SwarmPreset = resolvedPreset;

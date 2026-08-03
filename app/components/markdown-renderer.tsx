@@ -6,9 +6,11 @@ import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import type { ArtifactPayload } from "@/lib/ai/types";
 import { validateGeneratedImagePayload } from "@/lib/security/generated-images";
+import { validateGeneratedAudioPayload } from "@/lib/security/generated-audio";
 import { validateArtifactPayload } from "@/lib/security/artifacts";
 import { ArtifactFrame } from "./artifact-frame";
 import { CodeBlock } from "./code-block";
+import { GeneratedAudioCard } from "./generated-audio-card";
 import { GeneratedImageCard } from "./generated-image-card";
 
 /**
@@ -40,6 +42,16 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, ha
               return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Invalid generated image: {validation.error}</div>;
             } catch {
               return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Malformed generated image payload.</div>;
+            }
+          }
+
+          if (language === "navi-audio") {
+            try {
+              const validation = validateGeneratedAudioPayload(JSON.parse(value.trim()));
+              if (validation.ok) return <GeneratedAudioCard payload={validation.payload} haptics={haptics} />;
+              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Invalid generated audio: {validation.error}</div>;
+            } catch {
+              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Malformed generated audio payload.</div>;
             }
           }
 
