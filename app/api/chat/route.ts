@@ -426,10 +426,12 @@ function systemPrompt(options: {
   userContext?: string;
   memoryContext?: string;
   playbookContext?: string;
+  /** The request asked Navi to learn something, so it may offer a capability. */
+  capabilityRequested?: boolean;
   /** The plan Soul made for this request, and what the answer must satisfy. */
   constraints?: string;
 }): string {
-  const { effort, mode, tools, artifactRequested, threadSummary, mcpContext, toolNames = [], userContext, memoryContext, playbookContext, constraints } = options;
+  const { effort, mode, tools, artifactRequested, threadSummary, mcpContext, toolNames = [], userContext, memoryContext, playbookContext, constraints, capabilityRequested = false } = options;
   return [
     "You are Navi.",
     NAVI_CONSTITUTION,
@@ -458,6 +460,7 @@ function systemPrompt(options: {
         : "You cannot browse the web in this request.",
     tools.code ? "Code-execution capability is enabled only when the selected route actually supplies it." : "Code execution is disabled.",
     tools.artifacts ? artifactInstruction(artifactRequested) : "Interactive artifact output is disabled.",
+    capabilityRequested ? capabilityInstruction() : "",
     memoryContext || "",
     threadSummary ? `Compact summary and active project context:\n${threadSummary.slice(0, 8_000)}` : "",
     mcpContext ? `Connected MCP resource metadata:\n${mcpContext}` : ""
@@ -479,6 +482,49 @@ function redactSecrets(message: string): string {
     /* The quote is captured and restored rather than swallowed, so a redacted
        JSON body still reads as JSON instead of looking like a second bug. */
     .replace(/("?(?:api[_-]?key|authorization|token)"?\s*[:=]\s*)("?)[A-Za-z0-9._-]{8,}\2/gi, "$1$2[redacted]$2");
+}
+
+/**
+ * How Navi installs a new capability.
+ *
+ * The user asked for this in plain terms: tell it to learn something and have
+ * it keep it, rather than managing a separate library by hand. The mechanism
+ * is the one already carrying images and audio — a fenced block the client
+ * recognises — so it needs no storage and no backend.
+ *
+ * Held to an explicit ask. A model that volunteers capabilities would fill the
+ * library with things nobody wanted, and each one changes how every future
+ * request is answered.
+ */
+/* An explicit ask to keep something for later. Deliberately narrow: the
+   contract below is only useful when a block is actually wanted, and carrying
+   it on every request would spend the prompt budget on nothing. */
+const CAPABILITY_REQUEST = /\b(?:add|learn|remember|save|install|create|build|give you|teach you|pick up)\b[\s\S]{0,60}\b(?:capabilit(?:y|ies)|skill|skills|playbook|playbooks|ability|method|workflow|routine|instruction set)\b|\b(?:capabilit(?:y|ies)|skill|skills|playbook)\b[\s\S]{0,40}\b(?:for (?:future|next time)|from now on|permanently|so you (?:know|remember|can))\b|\bfrom now on\b[\s\S]{0,80}\b(?:always|remember|use this)\b|\b(?:find|search for|search the web for|scour(?: the web)? for|look for|go get)\b[\s\S]{0,50}\b(?:skills?|capabilit(?:y|ies)|playbooks?)\b/i;
+
+function capabilityInstruction(): string {
+  return [
+    "## Adding a capability",
+    "",
+    "When the user asks you to learn, add, remember, or install a capability, skill, method, or way of working — or gives you instructions they want kept for future conversations — reply with a short sentence and then a `navi-capability` fenced block containing a SKILL.md document:",
+    "",
+    "```navi-capability",
+    "---",
+    "name: A short title, five words at most",
+    "description: One sentence on what it is for. This is matched against future requests, so use the words someone would actually type.",
+    "---",
+    "",
+    "# The title again",
+    "",
+    "Numbered steps giving the method, in the order it should be carried out. Then a short Guidelines section for the non-obvious traps.",
+    "```",
+    "",
+    "Rules for this block:",
+    "- Write a method with an order of operations, not a description of a topic. \"Be careful about X\" changes nothing; \"check A, then B, then C, and here is why that order\" changes the answer.",
+    "- Emit at most one block per reply, and only when actually asked. Never volunteer one.",
+    "- If web search is available and the user asked you to find an existing skill, search first and base the block on what you found, naming the source in your sentence.",
+    "- Do not claim it has been added. The user installs it by tapping the card; say what it would do, not that it is done.",
+    "- If you cannot write something genuinely useful, say so instead of emitting a thin block."
+  ].join("\n");
 }
 
 function streamError(error: unknown): string {
@@ -662,6 +708,7 @@ export async function POST(request: Request): Promise<Response> {
   /* Sound is checked after images so "make me a picture of a bell ringing"
      stays a picture — the image intent is the more specific match. */
   const audioRequested = !imageRequested && audioGenerationIntent(lastUserText);
+  const capabilityRequested = CAPABILITY_REQUEST.test(lastUserText);
   const artifactRequested = !imageRequested && !audioRequested && tools.artifacts && artifactIntent(lastUserText);
   /* Soul is the architect: it reads the request and routes to whichever
      engine leads at that job, so nothing has to be chosen by hand. */
@@ -829,7 +876,7 @@ export async function POST(request: Request): Promise<Response> {
       }
       const result = streamText({
         model: createProviderModel(route, origin),
-        system: systemPrompt({ effort: effortLevel, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan) }),
+        system: systemPrompt({ effort: effortLevel, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
         messages: modelMessages,
         ...(toolNames.length
           ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }

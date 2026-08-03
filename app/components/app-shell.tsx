@@ -476,6 +476,35 @@ export function AppShell({
 
   useEffect(() => () => stopSpeaking(), []);
 
+  /* Installing a capability Navi drafted. Same store and same cap as pasting
+     one into Settings, so there is one library rather than two — a capability
+     added from a message is indistinguishable afterwards from one added by
+     hand, which is the point of the feature. */
+  const installCapability = useCallback((playbook: { id: string; name: string; description: string; instructions: string }) => {
+    setPreferences((current) => ({
+      ...current,
+      customPlaybooks: [
+        // Re-adding an existing id replaces it rather than duplicating it.
+        ...current.customPlaybooks.filter((entry) => entry.id !== playbook.id),
+        playbook
+      ].slice(-40)
+    }));
+    haptic("impact-medium", preferences.haptics);
+  }, [preferences.haptics]);
+
+  const removeCapability = useCallback((id: string) => {
+    setPreferences((current) => ({
+      ...current,
+      customPlaybooks: current.customPlaybooks.filter((entry) => entry.id !== id)
+    }));
+  }, []);
+
+  const capabilityHandlers = useMemo(() => ({
+    installedIds: preferences.customPlaybooks.map((entry) => entry.id),
+    onInstall: installCapability,
+    onRemove: removeCapability
+  }), [preferences.customPlaybooks, installCapability, removeCapability]);
+
   const updatePreferences = useCallback((next: NaviPreferences) => {
     setPreferences(next);
     setChats((current) => current.map((chat) => chat.id === activeId
@@ -974,6 +1003,7 @@ export function AppShell({
                   onRate={message.role === "assistant" ? (value) => rateMessage(message.id, value) : undefined}
                   onRetry={message.role === "assistant" && index === messages.length - 1 && !generating && online ? retry : undefined}
                   onLongPress={setContextMessage}
+                  capabilities={capabilityHandlers}
                 />
               ))}
             </div>
