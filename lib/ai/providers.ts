@@ -413,19 +413,19 @@ export function selectDirectRoute(options: {
     if (availability.cerebras) return ROUTES.cerebrasFast;
     if (availability.groq) return complex ? ROUTES.groqReasoning : ROUTES.groqFast;
     if (availability.gemini) return ROUTES.geminiSynthesis;
-    throw new Error("No AI provider credential is configured in Vercel.");
+    throw new Error("No AI provider is configured. Add GEMINI_API_KEY, GROQ_API_KEY, or HF_TOKEN in your Vercel project settings, then redeploy.");
   }
 
   if (preset === "huggingface-direct") {
-    if (!availability.huggingface) throw new Error("A Hugging Face API credential is not configured.");
+    if (!availability.huggingface) throw new Error("Hugging Face is not configured. Add HF_TOKEN in Vercel, or pick a different model.");
     return complex ? ROUTES.hfGptOss : ROUTES.hfQwen;
   }
   if (preset === "gemini-direct") {
-    if (!availability.gemini) throw new Error("A Gemini API credential is not configured.");
+    if (!availability.gemini) throw new Error("Gemini is not configured. Add GEMINI_API_KEY in Vercel, or pick a different model.");
     return ROUTES.geminiSynthesis;
   }
   if (preset === "groq-direct") {
-    if (!availability.groq) throw new Error("A Groq API credential is not configured.");
+    if (!availability.groq) throw new Error("Groq is not configured. Add GROQ_API_KEY in Vercel, or pick a different model.");
     return tools.web || tools.code ? ROUTES.groqTools : complex ? ROUTES.groqReasoning : ROUTES.groqFast;
   }
 
@@ -444,7 +444,7 @@ export function selectDirectRoute(options: {
   if (availability.groq) return ROUTES.groqFast;
   if (availability.mistral) return ROUTES.mistralBalanced;
   if (availability.openrouter) return ROUTES.openRouterReasoning;
-  throw new Error("No AI provider credential is configured in Vercel.");
+  throw new Error("No AI provider is configured. Add GEMINI_API_KEY, GROQ_API_KEY, or HF_TOKEN in your Vercel project settings, then redeploy.");
 }
 
 export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-sol-5-6"): ProviderRoute {

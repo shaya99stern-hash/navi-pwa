@@ -127,6 +127,8 @@ export type ArtifactPayload = {
 export type GeneratedImagePayload = {
   id: string;
   title: string;
+  /** Navi-branded engine name shown on the card, never the raw model id. */
+  engine?: string;
   alt: string;
   mimeType: "image/png" | "image/jpeg" | "image/webp";
   data: string;

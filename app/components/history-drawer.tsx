@@ -6,6 +6,7 @@ import {
   Pin,
   PinOff,
   Search,
+  RefreshCw,
   Settings,
   Shapes,
   SquarePen,
@@ -15,7 +16,9 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { StoredChat } from "@/lib/ai/types";
+import { PWA_UPDATE_STATUS_EVENT, requestPwaUpdate, type PwaUpdateStatus } from "@/lib/pwa-update";
 import { haptic } from "@/lib/ui/haptics";
+import { versionLabel } from "@/lib/version";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 type Props = {
@@ -40,6 +43,16 @@ type Props = {
 
 export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
+  const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
+
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent<PwaUpdateStatus>).detail;
+      if (detail?.phase && detail.message) setUpdateStatus(detail);
+    };
+    window.addEventListener(PWA_UPDATE_STATUS_EVENT, receive);
+    return () => window.removeEventListener(PWA_UPDATE_STATUS_EVENT, receive);
+  }, []);
   const [selected, setSelected] = useState<StoredChat | null>(null);
   const holdTimer = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -194,6 +207,29 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
         </div>
 
         <footer className="shrink-0 border-t border-[var(--border-subtle)] px-2 py-2">
+          {/* Updating an installed PWA is otherwise invisible — people reinstall
+              the app because they cannot find this. It belongs where the app is
+              navigated from, not only inside Settings. */}
+          <button
+            type="button"
+            onClick={() => {
+              haptic("impact-light", haptics);
+              setUpdateStatus({ phase: "checking", message: "Checking…" });
+              requestPwaUpdate();
+            }}
+            disabled={updateStatus?.phase === "checking" || updateStatus?.phase === "downloading" || updateStatus?.phase === "restarting"}
+            className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-2 text-left active:bg-elev-2 disabled:opacity-70"
+          >
+            <RefreshCw size={17} strokeWidth={1.8} className={`shrink-0 text-secondary ${updateStatus?.phase === "checking" || updateStatus?.phase === "downloading" || updateStatus?.phase === "restarting" ? "animate-spin" : ""}`} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[0.875rem]/5 font-medium text-primary">
+                {updateStatus?.phase === "available" ? "Update ready — tap to install" : "Update NaviOS Hub"}
+              </span>
+              <span className={`block truncate text-[0.6875rem]/4 font-medium ${updateStatus?.phase === "error" ? "text-danger" : updateStatus?.phase === "available" ? "text-accent" : "text-tertiary"}`}>
+                {updateStatus?.message ?? versionLabel()}
+              </span>
+            </span>
+          </button>
           <button type="button" onClick={() => openSheet(onSettings)} className="flex min-h-12 w-full items-center gap-3 rounded-[10px] px-2 text-left active:bg-elev-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-[0.8125rem] font-semibold text-[var(--accent-on-primary)]">
               <UserRound size={16} />
