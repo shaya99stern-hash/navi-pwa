@@ -16,6 +16,15 @@ import { buildDevTools } from "@/lib/ai/dev-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
 import { buildWebTools, hasWebSearch } from "@/lib/ai/web-tools";
 import { runComposite } from "@/lib/ai/swarm";
+import {
+  architectPlan,
+  constraintBlock,
+  heuristicPlan,
+  NAVI_ARCHITECT_PROMPT,
+  reviewDraft,
+  shouldConsultArchitect,
+  type ExecutionPlan
+} from "@/lib/ai/architect";
 import type { ConnectorAccessMode, EffortLevel, ModelPreset, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
@@ -34,6 +43,12 @@ const MAX_TOOL_STEPS = 4;
 const MAX_CODE_TOOL_STEPS = 8;
 /** Total time the finished swarm answer may spend being typed out. */
 const SWARM_CADENCE_TOTAL_MS = 2_000;
+/**
+ * The wall-clock the whole request has, kept under the 60s edge ceiling so a
+ * review that starts late is skipped rather than started and killed.
+ */
+const REQUEST_BUDGET_MS = 52_000;
+const REVIEW_DELIVERY_RESERVE_MS = 2_000;
 
 type ChatRequestBody = {
   messages?: UIMessage[];
@@ -378,12 +393,19 @@ function systemPrompt(options: {
   userContext?: string;
   memoryContext?: string;
   playbookContext?: string;
+  /** The plan Soul made for this request, and what the answer must satisfy. */
+  constraints?: string;
 }): string {
-  const { effort, mode, tools, artifactRequested, threadSummary, mcpContext, toolNames = [], userContext, memoryContext, playbookContext } = options;
+  const { effort, mode, tools, artifactRequested, threadSummary, mcpContext, toolNames = [], userContext, memoryContext, playbookContext, constraints } = options;
   return [
     "You are Navi.",
     NAVI_CONSTITUTION,
+    /* Method before facts: how Soul works, then what it knows about the app
+       it works inside. Constraints come last so they are the most recent
+       thing read before the request itself. */
+    NAVI_ARCHITECT_PROMPT,
     APP_KNOWLEDGE,
+    constraints || "",
     "Identify yourself only as Navi. Do not impersonate or claim to literally be an underlying provider model.",
     "Be accurate, practical, and explicit about uncertainty.",
     "Never claim that you browsed, executed code, accessed files, used MCP, or changed external data unless supplied results prove it.",
@@ -517,6 +539,9 @@ function resolveHeadlinePreset(options: {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  /* Every budget in this handler is measured from here, so a stage that starts
+     late gets the time that is actually left rather than the time it wanted. */
+  const requestStartedAt = Date.now();
   /* Authorization refusals are JSON too, and the client renders any
      non-stream body as a bare "An error occurred." Re-emit the real sentence
      through the stream so a signed-out session or a stale tab says so. */
@@ -582,7 +607,21 @@ export async function POST(request: Request): Promise<Response> {
   const artifactRequested = !imageRequested && !audioRequested && tools.artifacts && artifactIntent(lastUserText);
   /* Soul is the architect: it reads the request and routes to whichever
      engine leads at that job, so nothing has to be chosen by hand. */
-  const dispatch = preset === "navi-code" ? "code" : dispatchFor(lastUserText, effort, effortLevel);
+  const origin = new URL(request.url).origin;
+  /* Soul plans before it answers. The heuristic plan is the primary path and
+     is correct for most requests; the architect is consulted only when the
+     patterns could plausibly be wrong and the request is worth the latency.
+     Planning can never fail a request — every path here falls back. */
+  const basePlan = preset === "navi-code"
+    ? { ...heuristicPlan({ text: lastUserText, hasFiles, imageRequested, audioRequested, tools, effort: effortLevel }), lane: "code" as const }
+    : heuristicPlan({ text: lastUserText, hasFiles, imageRequested, audioRequested, tools, effort: effortLevel });
+  const plan = shouldConsultArchitect({ text: lastUserText, plan: basePlan, effort: effortLevel })
+    ? await architectPlan({ text: lastUserText, fallback: basePlan, origin, effort: effortLevel, abortSignal: request.signal })
+    : basePlan;
+  const dispatch: Dispatch = plan.lane === "code" ? "code"
+    : plan.lane === "research" ? "research"
+      : plan.lane === "reasoning" ? "reasoning"
+        : "general";
   const dispatchedPreset: ModelPreset = preset === "navi-soul" && dispatch === "code" ? "navi-code" : preset;
   const resolvedPreset = resolveHeadlinePreset({
     preset: dispatchedPreset,
@@ -592,7 +631,6 @@ export async function POST(request: Request): Promise<Response> {
     hasFiles,
     needsLiveSources: dispatch === "research" && tools.web && hasWebSearch()
   });
-  const origin = new URL(request.url).origin;
 
   const stream = createUIMessageStream({
     originalMessages: messages,
@@ -721,7 +759,7 @@ export async function POST(request: Request): Promise<Response> {
       });
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
-      writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : `${DISPATCH_LABEL[dispatch]}…` }));
+      writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : `${plan.summary}` }));
       /* Whether tools can be sent is a fact about the chosen model, and lives
          beside the route table that knows which model that is. Asking the
          provider instead is what sent a tools array to a model that rejects
@@ -733,7 +771,7 @@ export async function POST(request: Request): Promise<Response> {
       }
       const result = streamText({
         model: createProviderModel(route, origin),
-        system: systemPrompt({ effort: effortLevel, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames, userContext, memoryContext, playbookContext }),
+        system: systemPrompt({ effort: effortLevel, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan) }),
         messages: modelMessages,
         ...(toolNames.length
           ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
@@ -749,6 +787,38 @@ export async function POST(request: Request): Promise<Response> {
          and this inner stream's own default is the bare "An error occurred."
          that hid a hard model rejection behind three useless words. Route it
          through the same translator every other failure uses. */
+      /* The QA gate. Reviewing an answer means having the whole answer first,
+         which costs the streaming feel — so it is scoped to output that can be
+         objectively wrong. Code either runs or it does not; prose "improved"
+         by a second model just comes back blander, and the round trip is not
+         free. Status lines keep the pause explained rather than looking hung. */
+      if (plan.needsReview) {
+        writer.write(statusChunk({ stage: "draft", detail: "Drafting the implementation." }));
+        const draft = await result.text;
+        const spent = Date.now() - requestStartedAt;
+        const reviewBudget = REQUEST_BUDGET_MS - spent - REVIEW_DELIVERY_RESERVE_MS;
+        writer.write(statusChunk({ stage: "verify", detail: "Checking it against the constraints." }));
+        const review = await reviewDraft({
+          draft,
+          request: lastUserText,
+          plan,
+          origin,
+          budgetMs: reviewBudget,
+          abortSignal: request.signal
+        });
+        const finalText = review.verdict === "revised" ? review.text : draft;
+        if (!finalText.trim()) throw new Error("The response came back empty.");
+        const reviewedId = generateId();
+        writer.write(statusChunk({ stage: "stream", detail: "Delivering the answer." }));
+        writer.write({ type: "text-start", id: reviewedId });
+        for (const chunk of splitLargePayload(finalText, 2_000)) {
+          writer.write({ type: "text-delta", id: reviewedId, delta: chunk });
+        }
+        writer.write({ type: "text-end", id: reviewedId });
+        writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
+        return;
+      }
+
       writer.merge(result.toUIMessageStream({ onError: streamError }));
     }
   });
