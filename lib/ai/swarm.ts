@@ -16,6 +16,39 @@ const MAX_SYNTHESIS_TOKENS = 2_100;
 const MAX_VERIFY_TOKENS = 2_300;
 const MAX_ARTIFACT_TOKENS = 5_000;
 
+/**
+ * The whole pipeline has to finish inside one edge invocation.
+ *
+ * Three stages ran back to back on fixed 13s/18s/18s timeouts — 49 seconds of
+ * model time before the answer had even begun streaming, inside a 60-second
+ * limit. Any real-world slowness pushed it over and the request died with
+ * nothing to show, which is exactly what High effort was doing.
+ *
+ * So the budget is now shared and tracked. Each stage gets what is actually
+ * left rather than what it would like, and a stage with too little time to
+ * finish is skipped rather than started and killed.
+ */
+const TOTAL_BUDGET_MS = 44_000;
+/** Under this a stage cannot return anything worth having, so skip it. */
+const MIN_STAGE_MS = 5_500;
+/** Kept back so the finished answer has time to reach the client. */
+const DELIVERY_RESERVE_MS = 1_500;
+
+type Deadline = {
+  remaining: () => number;
+  /** What a stage may spend, holding `reserve` back for the stages after it. */
+  budget: (preferred: number, reserve: number) => number;
+};
+
+function createDeadline(totalMs: number): Deadline {
+  const start = Date.now();
+  const remaining = () => Math.max(0, totalMs - (Date.now() - start));
+  return {
+    remaining,
+    budget: (preferred, reserve) => Math.min(preferred, Math.max(0, remaining() - reserve))
+  };
+}
+
 const FABLE_PHASES = [
   "requirements discovery",
   "stage planning",
@@ -266,6 +299,7 @@ export async function runComposite(options: CompositeOptions): Promise<{
     onStage,
     abortSignal
   } = options;
+  const deadline = createDeadline(TOTAL_BUDGET_MS);
   const availability = getProviderAvailability();
   const plan = await buildSwarmRoutePlan({ profile, prompt: requestText, effort, availability, tools, abortSignal });
   const roles = rolesFor(profile);
@@ -282,7 +316,11 @@ export async function runComposite(options: CompositeOptions): Promise<{
       : "Exploring independent parallel solutions and checking contradictions."
   });
 
-  const councilResults = await Promise.allSettled(
+  /* Evidence is the most expendable stage: candidates can answer the original
+     request without it, just less well. It therefore holds back enough for
+     both stages that follow. */
+  const councilBudget = deadline.budget(13_000, 21_000);
+  const councilResults = councilBudget < MIN_STAGE_MS ? [] : await Promise.allSettled(
     plan.routes.map(async (route, index) => {
       const result = await generateText({
         model: createProviderModel(route, origin),
@@ -309,7 +347,7 @@ export async function runComposite(options: CompositeOptions): Promise<{
         ],
         maxOutputTokens: MAX_COUNCIL_TOKENS,
         maxRetries: 0,
-        timeout: { totalMs: 13_000 },
+        timeout: { totalMs: councilBudget },
         abortSignal
       });
       return result.text.trim();
@@ -320,8 +358,6 @@ export async function runComposite(options: CompositeOptions): Promise<{
     .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled" && Boolean(result.value))
     .map((result) => result.value);
 
-  if (!evidence.length) throw new Error(`${profileLabel(profile)} could not obtain a usable specialist response.`);
-
   onStage({
     stage: "synthesize",
     detail: profile === "navi-fable"
@@ -329,8 +365,14 @@ export async function runComposite(options: CompositeOptions): Promise<{
       : "Building and comparing independent candidate solutions."
   });
 
+  /* This is the stage that actually produces something a person can read, so
+     it gets whatever is left bar the delivery reserve. When time is short it
+     runs a single candidate instead of racing several — one finished answer
+     beats three half-written ones. */
+  const candidateBudget = deadline.budget(18_000, 9_000) || deadline.budget(18_000, DELIVERY_RESERVE_MS);
+  const candidateRoutes = candidateBudget >= 12_000 ? plan.synthesisRoutes : plan.synthesisRoutes.slice(0, 1);
   const candidateResults = await Promise.allSettled(
-    plan.synthesisRoutes.map(async (route, index) => {
+    candidateRoutes.map(async (route, index) => {
       const result = await generateText({
         model: createProviderModel(route, origin),
         system: candidateSystem(profile, plan.task, style, tools, artifactRequested),
@@ -339,7 +381,12 @@ export async function runComposite(options: CompositeOptions): Promise<{
           {
             role: "user",
             content: [
-              `Create candidate ${index + 1} independently from the original request and the evidence below.`,
+              evidence.length
+                ? `Create candidate ${index + 1} independently from the original request and the evidence below.`
+                /* The evidence stage can be skipped when time is short, and a
+                   prompt that promises evidence then shows none invites the
+                   model to invent it. */
+                : `Answer the original request directly and completely. No prior research was gathered, so rely on your own knowledge and be explicit about anything you are unsure of.`,
               contextNote,
               ...evidence.map((item, evidenceIndex) => `\n--- Independent evidence ${evidenceIndex + 1} ---\n${item}`)
             ].filter(Boolean).join("\n\n")
@@ -347,7 +394,7 @@ export async function runComposite(options: CompositeOptions): Promise<{
         ],
         maxOutputTokens: artifactRequested ? MAX_ARTIFACT_TOKENS : MAX_SYNTHESIS_TOKENS,
         maxRetries: 0,
-        timeout: { totalMs: artifactRequested ? 21_000 : 18_000 },
+        timeout: { totalMs: Math.max(candidateBudget, MIN_STAGE_MS) },
         abortSignal
       });
       return result.text.trim();
@@ -359,6 +406,22 @@ export async function runComposite(options: CompositeOptions): Promise<{
     .map((result) => result.value);
 
   if (!candidates.length) throw new Error(`${profileLabel(profile)} could not synthesize a candidate answer.`);
+
+  /* Verification improves an answer that already exists. With one candidate
+     and little time it earns nothing, so skip it and deliver — a good answer
+     now beats a slightly better one that never arrives. */
+  const verifyBudget = deadline.budget(18_000, DELIVERY_RESERVE_MS);
+  if (candidates.length < 2 || verifyBudget < MIN_STAGE_MS) {
+    const delivered = validateArtifactFences(cleanFinal(candidates[0]));
+    if (!delivered) throw new Error(`${profileLabel(profile)} produced an empty response.`);
+    return {
+      text: delivered,
+      label: profileLabel(profile),
+      agentCount: roles.length,
+      activeModelCount: plan.routes.length + candidateRoutes.length,
+      catalogSize: plan.catalogSize
+    };
+  }
 
   onStage({ stage: "verify", detail: "Blind-ranking candidates and checking accuracy, constraints, and final quality." });
   const verified = await generateText({
@@ -376,18 +439,20 @@ export async function runComposite(options: CompositeOptions): Promise<{
     ],
     maxOutputTokens: artifactRequested ? MAX_ARTIFACT_TOKENS : MAX_VERIFY_TOKENS,
     maxRetries: 0,
-    timeout: { totalMs: artifactRequested ? 21_000 : 18_000 },
+    timeout: { totalMs: verifyBudget },
     abortSignal
-  });
+  }).catch(() => null);
 
-  const cleaned = validateArtifactFences(cleanFinal(verified.text || candidates[0]));
+  /* A failed verification is not a failed response — the candidates it was
+     going to rank are still perfectly good answers. */
+  const cleaned = validateArtifactFences(cleanFinal(verified?.text || candidates[0]));
   if (!cleaned) throw new Error(`${profileLabel(profile)} verification produced an empty response.`);
 
   return {
     text: cleaned,
     label: profileLabel(profile),
     agentCount: roles.length,
-    activeModelCount: plan.routes.length + plan.synthesisRoutes.length + 1,
+    activeModelCount: plan.routes.length + candidateRoutes.length + (verified ? 1 : 0),
     catalogSize: plan.catalogSize
   };
 }
