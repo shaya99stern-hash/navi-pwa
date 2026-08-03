@@ -12,6 +12,7 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { MenuSection, NaviPreferences } from "@/lib/ai/types";
 import { categories, isImplemented, type Skill } from "@/lib/skills";
+import { BUILT_IN_PLAYBOOKS, parseSkillMarkdown } from "@/lib/playbooks";
 import {
   PWA_UPDATE_STATUS_EVENT,
   requestPwaUpdate,
@@ -84,7 +85,8 @@ const PAGE_TITLES: Record<Exclude<PageId, "root">, string> = {
   privacy: "Privacy",
   capabilities: "Capabilities",
   connectors: "Connectors",
-  skills: "Skills"
+  skills: "Skills",
+  playbooks: "Playbooks"
 };
 
 const DURABILITY_DETAIL: Record<StorageDurability, string> = {
@@ -282,6 +284,8 @@ export function SettingsSheet({
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus>(DEFAULT_UPDATE_STATUS);
   const [account, setAccount] = useState<{ email: string; canSignOut: boolean }>({ email: "", canSignOut: false });
   const [devTools, setDevTools] = useState<{ github: boolean; vercel: boolean }>({ github: false, vercel: false });
+  const [playbookDraft, setPlaybookDraft] = useState("");
+  const [playbookNotice, setPlaybookNotice] = useState<string | null>(null);
   const skillGroups = useMemo(
     () => categories()
       .map((group) => ({ ...group, skills: group.skills.filter((skill: Skill) => isImplemented(skill.id)) }))
@@ -391,6 +395,7 @@ export function SettingsSheet({
             <p className="mt-8 px-4 text-[0.6875rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">Customize</p>
             <Group>
               <RootRow label="Skills" onOpen={() => openPage("skills")} />
+              <RootRow label="Playbooks" onOpen={() => openPage("playbooks")} />
               <RootRow label="Connectors" onOpen={() => openPage("connectors")} />
             </Group>
             <p className="px-4 py-6 text-[0.75rem]/4 text-tertiary">NaviOS Hub · {versionLabel()}</p>
@@ -622,6 +627,87 @@ export function SettingsSheet({
             <SectionHeader>Skills</SectionHeader>
             <Group>
               <RootRow label="Skills have moved to Customize" onOpen={() => openPage("skills")} />
+            </Group>
+          </>
+        ) : null}
+
+        {page === "playbooks" ? (
+          <>
+            <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
+              Playbooks are methods Navi applies when a request matches one — how to debug, how to review code,
+              how to edit a document without disturbing it. They use Anthropic&apos;s SKILL.md format, so any skill
+              published for Claude can be pasted in below and works here unchanged.
+            </p>
+
+            <SectionHeader>Add a playbook</SectionHeader>
+            <Group>
+              <Row
+                label="Paste a SKILL.md"
+                description="Copy the whole file, including the --- block at the top."
+                fullWidthControl={
+                  <div>
+                    <textarea
+                      aria-label="Paste a SKILL.md file"
+                      value={playbookDraft}
+                      onChange={(event) => { setPlaybookDraft(event.target.value); setPlaybookNotice(null); }}
+                      placeholder={"---\nname: my-playbook\ndescription: When Navi should use this\n---\n\n# Instructions…"}
+                      rows={5}
+                      className="min-h-[128px] w-full resize-y rounded-[12px] bg-elev-2 px-3.5 py-3 font-mono text-[0.8125rem]/[1.125rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
+                    />
+                    <div className="mt-2 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const result = parseSkillMarkdown(playbookDraft);
+                          if ("error" in result) { setPlaybookNotice(result.error); haptic("error", preferences.haptics); return; }
+                          const next = preferences.customPlaybooks.filter((entry) => entry.id !== result.playbook.id);
+                          update({ customPlaybooks: [...next, result.playbook].slice(0, 40) });
+                          setPlaybookDraft("");
+                          setPlaybookNotice(`Added “${result.playbook.name}”.`);
+                          haptic("success", preferences.haptics);
+                        }}
+                        disabled={!playbookDraft.trim()}
+                        className="h-9 rounded-full bg-accent px-4 text-[0.8125rem]/5 font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed disabled:opacity-50"
+                      >
+                        Add playbook
+                      </button>
+                      {playbookNotice ? (
+                        <span className={`min-w-0 flex-1 text-[0.75rem]/4 ${playbookNotice.startsWith("Added") ? "text-success" : "text-danger"}`}>{playbookNotice}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                }
+              />
+            </Group>
+
+            {preferences.customPlaybooks.length ? (
+              <>
+                <SectionHeader>Yours</SectionHeader>
+                <Group>
+                  {preferences.customPlaybooks.map((entry) => (
+                    <Row
+                      key={entry.id}
+                      label={entry.name}
+                      description={entry.description}
+                      control={
+                        <InlineButton
+                          destructive
+                          onClick={() => update({ customPlaybooks: preferences.customPlaybooks.filter((item) => item.id !== entry.id) })}
+                        >
+                          Remove
+                        </InlineButton>
+                      }
+                    />
+                  ))}
+                </Group>
+              </>
+            ) : null}
+
+            <SectionHeader>Built in</SectionHeader>
+            <Group>
+              {BUILT_IN_PLAYBOOKS.map((entry) => (
+                <Row key={entry.id} label={entry.name} description={entry.description} />
+              ))}
             </Group>
           </>
         ) : null}

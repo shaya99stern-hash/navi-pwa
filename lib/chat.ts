@@ -51,6 +51,7 @@ export const DEFAULT_PREFERENCES: NaviPreferences = {
   haptics: true,
   saveHistory: true,
   memory: true,
+  customPlaybooks: [],
   notifyOnComplete: false,
   voiceLanguage: "auto",
   profile: { fullName: "", displayName: "", work: "", instructions: "" },

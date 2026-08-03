@@ -184,7 +184,7 @@ function normalizeConnectorMode(value: unknown): ConnectorAccessMode {
   return value === "auto" || value === "always" ? value : "ask";
 }
 
-const MENU_SECTIONS = ["general", "account", "privacy", "capabilities", "connectors", "skills"] as const;
+const MENU_SECTIONS = ["general", "account", "privacy", "capabilities", "connectors", "skills", "playbooks"] as const;
 const EFFORTS = ["low", "medium", "high"] as const;
 /** The scale was briefly five levels; fold the retired top two into High. */
 const RETIRED_EFFORTS: Record<string, NaviPreferences["effort"]> = { extra: "high", max: "high" };
@@ -202,6 +202,12 @@ function mergePreferences(value?: PreferenceInput): NaviPreferences {
       : RETIRED_EFFORTS[String(stored?.effort ?? "")] ?? effortFromLegacyStyle(stored?.style),
     chatFont: stored?.chatFont === "sans" ? "sans" : "serif",
     memory: stored?.memory !== false,
+    customPlaybooks: Array.isArray(stored?.customPlaybooks)
+      ? stored.customPlaybooks
+        .filter((entry): entry is NaviPreferences["customPlaybooks"][number] =>
+          Boolean(entry && typeof entry === "object" && typeof entry.id === "string" && typeof entry.instructions === "string"))
+        .slice(0, 40)
+      : [],
     notifyOnComplete: stored?.notifyOnComplete === true,
     voiceLanguage: typeof stored?.voiceLanguage === "string" && stored.voiceLanguage
       ? stored.voiceLanguage

@@ -28,6 +28,7 @@ import {
   type StorageDurability
 } from "@/lib/storage/indexeddb";
 import { memoryBlock, recall } from "@/lib/memory";
+import { BUILT_IN_PLAYBOOKS, playbookBlock, selectPlaybook, type Playbook } from "@/lib/playbooks";
 import { instantAnswer, parseSlashCommand, runSlash } from "@/lib/skills";
 import { haptic } from "@/lib/ui/haptics";
 import { speak, whenVoicesReady } from "@/lib/ui/speech";
@@ -242,11 +243,18 @@ export function AppShell({
     return memoryBlock(recall(question, chats, activeId));
   }, [activeId, chats, preferences.memory]);
 
+  /* Built-ins plus anything pasted in; one is chosen per request, or none. */
+  const playbooks = useMemo<Playbook[]>(() => [
+    ...BUILT_IN_PLAYBOOKS,
+    ...preferences.customPlaybooks.map((entry) => ({ ...entry, source: "custom" as const }))
+  ], [preferences.customPlaybooks]);
+
   const requestBody = useCallback((question?: string) => ({
     preset: preferences.preset,
     effort: preferences.effort,
     tools: preferences.tools,
     memory: question ? recalledContext(question) : "",
+    playbook: question ? playbookBlock(selectPlaybook(question, playbooks)) : "",
     threadSummary: activeChat?.summary ?? compactSummary(messages),
     connectedMcpServers: preferences.connectedMcpServers,
     connectorAccessMode: activeChat?.connectorAccessMode ?? preferences.connectorAccessMode,
@@ -265,7 +273,7 @@ export function AppShell({
       instructions: activeProject.instructions,
       knowledge: activeProject.knowledge
     } : undefined
-  }), [activeChat?.connectorAccessMode, activeChat?.summary, activeProject, messages, preferences, recalledContext]);
+  }), [activeChat?.connectorAccessMode, activeChat?.summary, activeProject, messages, playbooks, preferences, recalledContext]);
 
   useEffect(() => {
     let cancelled = false;
