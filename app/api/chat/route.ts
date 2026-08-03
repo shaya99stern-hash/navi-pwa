@@ -10,7 +10,7 @@ import {
 } from "ai";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
-import { createProviderModel, getProviderAvailability, routeToolCallingSupport, selectDirectRoute } from "@/lib/ai/providers";
+import { createProviderModel, fallbackRoutes, getProviderAvailability, routeToolCallingSupport, selectDirectRoute } from "@/lib/ai/providers";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { buildDevTools } from "@/lib/ai/dev-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
@@ -534,6 +534,13 @@ function streamError(error: unknown): string {
   if (lower.includes("image providers") || lower.includes("image-generation provider")) return "Navi's image service is unavailable right now. Try again shortly.";
   if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "Navi reached a provider limit. Try again shortly or select another Navi mode.";
   if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401")) return "Navi's AI service is not configured correctly. Please try again later.";
+  /* A bare 403 is what a provider returns for a key with referrer or IP
+     restrictions, a disabled API, or a revoked token — all of which look like
+     a working key from a dashboard. Naming it saves the hour it otherwise
+     takes to find. */
+  if (lower === "forbidden" || lower.includes("403") || lower.includes("forbidden")) {
+    return "Every AI provider refused this request (403). Usually a key restricted to certain referrers or IP addresses, an API not enabled on the project, or a revoked token. Check the provider dashboards for the keys in your Vercel project.";
+  }
   if (lower.includes("timeout") || lower.includes("aborted")) return "The selected Navi mode took too long. Try again or select a direct mode.";
   /* A model that refuses the tools parameter is a routing mistake, not
      something the person asking can fix — name it so it is not mistaken for
@@ -852,6 +859,7 @@ export async function POST(request: Request): Promise<Response> {
         return;
       }
 
+      const complexRoute = effortLevel === "high" || (effortLevel === "medium" && effort !== "normal");
       const route = selectDirectRoute({
         preset: resolvedPreset,
         availability,
@@ -860,7 +868,7 @@ export async function POST(request: Request): Promise<Response> {
         // The effort dial is a promise of thoroughness, so High buys the
         // stronger route even when the request itself reads as simple — and
         // Low keeps the fast route even when it reads as hard.
-        complex: effortLevel === "high" || (effortLevel === "medium" && effort !== "normal")
+        complex: complexRoute
       });
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
@@ -874,8 +882,24 @@ export async function POST(request: Request): Promise<Response> {
       if (toolNames.length) {
         writer.write(statusChunk({ stage: "gather", detail: `${toolNames.length} tool${toolNames.length === 1 ? "" : "s"} available.` }));
       }
-      const result = streamText({
-        model: createProviderModel(route, origin),
+      /* Try the chosen route, then a route on a *different* provider if it
+         fails before producing anything. A 403 from one provider took the
+         whole app down while four other configured providers sat idle — for a
+         system whose premise is several free tiers, betting the request on one
+         of them is the wrong shape.
+
+         The attempt only counts as recoverable while nothing has reached the
+         screen. Once text is streaming, a failure is reported rather than
+         retried: restarting mid-answer would replay a partial reply. */
+      const attempts = [route, ...fallbackRoutes({ primary: route, availability, complex: complexRoute })];
+      let lastFailure: unknown = null;
+
+      for (const [index, attempt] of attempts.entries()) {
+        if (index > 0) {
+          writer.write(statusChunk({ stage: "gather", detail: "Switching to another engine." }));
+        }
+        const result = streamText({
+        model: createProviderModel(attempt, origin),
         system: systemPrompt({ effort: effortLevel, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
         messages: modelMessages,
         ...(toolNames.length
@@ -897,34 +921,60 @@ export async function POST(request: Request): Promise<Response> {
          objectively wrong. Code either runs or it does not; prose "improved"
          by a second model just comes back blander, and the round trip is not
          free. Status lines keep the pause explained rather than looking hung. */
-      if (plan.needsReview) {
-        writer.write(statusChunk({ stage: "draft", detail: "Drafting the implementation." }));
-        const draft = await result.text;
-        const spent = Date.now() - requestStartedAt;
-        const reviewBudget = REQUEST_BUDGET_MS - spent - REVIEW_DELIVERY_RESERVE_MS;
-        writer.write(statusChunk({ stage: "verify", detail: "Checking it against the constraints." }));
-        const review = await reviewDraft({
-          draft,
-          request: lastUserText,
-          plan,
-          origin,
-          budgetMs: reviewBudget,
-          abortSignal: request.signal
-        });
-        const finalText = review.verdict === "revised" ? review.text : draft;
-        if (!finalText.trim()) throw new Error("The response came back empty.");
-        const reviewedId = generateId();
-        writer.write(statusChunk({ stage: "stream", detail: "Delivering the answer." }));
-        writer.write({ type: "text-start", id: reviewedId });
-        for (const chunk of splitLargePayload(finalText, 2_000)) {
-          writer.write({ type: "text-delta", id: reviewedId, delta: chunk });
+        if (plan.needsReview) {
+          writer.write(statusChunk({ stage: "draft", detail: "Drafting the implementation." }));
+          let draft: string;
+          try {
+            draft = await result.text;
+          } catch (error) {
+            /* Nothing was shown, so another provider may still answer. */
+            lastFailure = error;
+            continue;
+          }
+          if (!draft.trim()) { lastFailure = new Error("The response came back empty."); continue; }
+          const spent = Date.now() - requestStartedAt;
+          const reviewBudget = REQUEST_BUDGET_MS - spent - REVIEW_DELIVERY_RESERVE_MS;
+          writer.write(statusChunk({ stage: "verify", detail: "Checking it against the constraints." }));
+          const review = await reviewDraft({
+            draft,
+            request: lastUserText,
+            plan,
+            origin,
+            budgetMs: reviewBudget,
+            abortSignal: request.signal
+          });
+          const finalText = review.verdict === "revised" ? review.text : draft;
+          const reviewedId = generateId();
+          writer.write(statusChunk({ stage: "stream", detail: "Delivering the answer." }));
+          writer.write({ type: "text-start", id: reviewedId });
+          for (const chunk of splitLargePayload(finalText, 2_000)) {
+            writer.write({ type: "text-delta", id: reviewedId, delta: chunk });
+          }
+          writer.write({ type: "text-end", id: reviewedId });
+          writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
+          return;
         }
-        writer.write({ type: "text-end", id: reviewedId });
-        writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
-        return;
+
+        /* Await the first chunk before committing to this route. Until
+           something has actually arrived the attempt is still recoverable;
+           after that it is not, so the stream is merged and any later failure
+           is reported rather than retried. */
+        try {
+          const stream = result.toUIMessageStream({ onError: streamError });
+          const reader = stream.getReader();
+          const first = await reader.read();
+          if (first.done) { lastFailure = new Error("The provider closed without answering."); reader.releaseLock(); continue; }
+          reader.releaseLock();
+          writer.write(first.value as never);
+          writer.merge(stream);
+          return;
+        } catch (error) {
+          lastFailure = error;
+          continue;
+        }
       }
 
-      writer.merge(result.toUIMessageStream({ onError: streamError }));
+      throw lastFailure ?? new Error("No provider could answer this request.");
     }
   });
 
