@@ -29,7 +29,8 @@ export function GeneratedImageCard({ payload, haptics }: { payload: GeneratedIma
       <div className="flex min-h-12 items-center gap-3 border-b border-[var(--border-subtle)] px-4">
         <ImageIcon size={17} className="shrink-0 text-accent" />
         <figcaption className="min-w-0 flex-1 truncate text-[0.875rem]/5 font-semibold text-primary">{payload.title}</figcaption>
-        <span className="text-[0.625rem]/3 font-semibold uppercase tracking-[0.1em] text-tertiary">Image</span>
+        {/* The engine carries Navi's own name for it, never the raw model id. */}
+        <span className="shrink-0 text-[0.625rem]/3 font-semibold uppercase tracking-[0.1em] text-tertiary">{payload.engine ?? "Navi Image"}</span>
       </div>
 
       <div className="bg-black/20 p-2">

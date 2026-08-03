@@ -64,7 +64,13 @@ type FilePart = { mediaType?: string; url?: string; filename?: string };
 type Effort = "normal" | "complex" | "extreme";
 
 const REQUEST_WINDOW_MS = 60_000;
-const REQUESTS_PER_WINDOW = 14;
+/**
+ * A person typing quickly, retrying a failed send, or bouncing between models
+ * hits far more than a dozen requests in a minute, and being throttled for it
+ * reads as the app being broken. This still bounds abuse; it no longer
+ * punishes ordinary use.
+ */
+const REQUESTS_PER_WINDOW = 60;
 const MAX_MESSAGES = 50;
 const MAX_SERIALIZED_CHARACTERS = 18_000_000;
 const MAX_OUTPUT_TOKENS = 1_900;
@@ -212,7 +218,17 @@ function imageGenerationIntent(text: string, hasImageAttachment: boolean): boole
   const creationVerb = /\b(generate|create|make|draw|illustrate|render|design|produce)\b[\s\S]{0,90}\b(image|picture|photo|portrait|illustration|artwork|wallpaper|poster|logo|icon)\b/i;
   const visualFirst = /^\s*(?:(?:a|an|the|some|random)\s+)?(?:image|picture|photo|portrait|illustration|artwork|wallpaper|poster|logo|icon)\s+(?:of|showing|depicting|with)\b/i;
   const directDrawing = /\b(draw|illustrate|visualize|paint|sketch|render)\s+(?:me\s+)?\b/i;
-  const editAttached = hasImageAttachment && /\b(edit|change|remove|replace|add|enhance|retouch|restore|upscale|recolor|professional|fix|crop|make)\b/i.test(text);
+  /* With an image attached, almost any imperative is an edit request. The old
+     verb list missed the most natural phrasings — "don't change the numbers",
+     "keep the face the same", "swap the date" — and those fell through to the
+     text model, which cannot edit an image and answers by describing one. */
+  const editAttached = hasImageAttachment && (
+    /\b(edit|change|changing|remove|removing|delete|replace|swap|add|insert|enhance|retouch|restore|upscale|recolor|recolour|colour|color|professional|fix|correct|crop|rotate|resize|blur|sharpen|brighten|darken|erase|clean|touch\s?up|redo|update|adjust|make|turn|convert|put|move|extend|fill|mask|highlight|circle|annotate)\b/i.test(text)
+    || /\b(?:do\s?n[o']?t|don't|never)\s+(?:change|alter|modify|touch|edit|move|remove)\b/i.test(text)
+    || /\bkeep\s+.{1,40}?\s+(?:the\s+same|unchanged|as\s+is|intact)\b/i.test(text)
+    || /\b(?:only|just)\s+(?:change|edit|modify|update|replace|fix)\b/i.test(text)
+    || /\bwithout\s+(?:changing|altering|modifying|touching)\b/i.test(text)
+  );
   const explicitImageMode = /\b(text[- ]to[- ]image|image generation|generate an image|generate a picture|make me an image|make me a picture)\b/i;
   return creationVerb.test(text) || visualFirst.test(text) || directDrawing.test(text) || editAttached || explicitImageMode.test(text);
 }
@@ -355,6 +371,28 @@ function statusChunk(status: NaviStreamStatus) {
   return { type: "data-status", data: status, transient: true } as any;
 }
 
+/**
+ * Reject a request in the format the client can actually read.
+ *
+ * A plain JSON body is not a UI message stream, so the AI SDK cannot parse it
+ * and falls back to its own "An error occurred." That hid every real reason —
+ * rate limits, oversized conversations, unconfigured providers — behind three
+ * useless words. Returning the refusal *through* the stream means the actual
+ * sentence reaches the person who needs to act on it.
+ */
+function refuse(message: string, headers?: Record<string, string>): Response {
+  const stream = createUIMessageStream({
+    onError: () => message,
+    execute() {
+      throw new Error(message);
+    }
+  });
+  return createUIMessageStreamResponse({
+    stream,
+    headers: { "Cache-Control": "no-store, no-cache, must-revalidate", ...headers }
+  });
+}
+
 function splitForCadence(text: string): string[] {
   const words = text.match(/\S+\s*/g) ?? [text];
   const chunks: string[] = [];
@@ -411,28 +449,36 @@ function resolveHeadlinePreset(options: {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  /* Authorization refusals are JSON too, and the client renders any
+     non-stream body as a bare "An error occurred." Re-emit the real sentence
+     through the stream so a signed-out session or a stale tab says so. */
   const authorizationError = await authorizeApiMutation(request);
-  if (authorizationError) return authorizationError;
-  if (isRateLimited(clientIdentifier(request))) return Response.json({ error: "Too many requests. Try again shortly." }, { status: 429, headers: { "Retry-After": "60" } });
+  if (authorizationError) {
+    const reason = await authorizationError.json().catch(() => null) as { error?: string } | null;
+    return refuse(reason?.error === "Sign in to continue."
+      ? "Your session expired. Reload the app to sign back in."
+      : reason?.error || "Navi could not authorize this request.");
+  }
+  if (isRateLimited(clientIdentifier(request))) return refuse("You are sending messages faster than Navi can answer them. Wait a few seconds and try again.", { "Retry-After": "30" });
 
   let body: ChatRequestBody;
   try {
     body = (await request.json()) as ChatRequestBody;
   } catch {
-    return Response.json({ error: "The request body must be valid JSON." }, { status: 400 });
+    return refuse("Navi could not read that request. Reload the app and try again.");
   }
 
-  if (!Array.isArray(body.messages) || body.messages.length === 0) return Response.json({ error: "At least one chat message is required." }, { status: 400 });
-  if (body.messages.length > MAX_MESSAGES) return Response.json({ error: `A maximum of ${MAX_MESSAGES} messages may be sent at once.` }, { status: 413 });
-  if (JSON.stringify(body.messages).length > MAX_SERIALIZED_CHARACTERS) return Response.json({ error: "The conversation and attachments are too large." }, { status: 413 });
+  if (!Array.isArray(body.messages) || body.messages.length === 0) return refuse("There was no message to send.");
+  if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; Navi will still remember the important parts.`);
+  if (JSON.stringify(body.messages).length > MAX_SERIALIZED_CHARACTERS) return refuse("This conversation and its attachments are too large to send. Start a new chat, or remove an attachment.");
 
   const messages = body.messages.slice(-MAX_MESSAGES);
   const fileError = validateFiles(messages);
-  if (fileError) return Response.json({ error: fileError }, { status: 415 });
+  if (fileError) return refuse(fileError);
 
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
   const lastUserText = textOf(lastUserMessage);
-  if (!lastUserText) return Response.json({ error: "The latest user message must contain text." }, { status: 400 });
+  if (!lastUserText) return refuse("Add a short description of what you want Navi to do with this.");
 
   const currentImageAttachments = imageAttachments(lastUserMessage);
   const imageRequested = imageGenerationIntent(lastUserText, currentImageAttachments.length > 0);
