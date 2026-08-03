@@ -50,8 +50,10 @@ export function resolveSlash(cmd: string) {
   return bySlash.get(cmd.trim().split(/\s+/)[0]);
 }
 
-/** The catalog describes 200 skills; only some are built. Offering the rest
- *  would be a menu of dead ends, so suggestions are drawn from what runs. */
+/** Every skill in the catalog is now implemented — the 118 that were names
+ *  without code have been removed rather than left as a menu of dead ends.
+ *  This still draws from the registry, so the invariant is enforced and not
+ *  merely assumed. */
 function suggestable(): Skill[] {
   return SKILLS.filter((skill) => impls.has(skill.id));
 }
