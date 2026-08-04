@@ -10,7 +10,8 @@ import {
 } from "ai";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
-import { createProviderModel, fallbackRoutes, getProviderAvailability, routeToolCallingSupport, selectDirectRoute } from "@/lib/ai/providers";
+import { createProviderModel, fallbackRoutes, getProviderAvailability, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
+import { githubModelsAvailable, githubModelsRoute, GITHUB_MODELS_MAX_OUTPUT_TOKENS, selectGithubModel } from "@/lib/ai/github-models";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { buildDevTools } from "@/lib/ai/dev-tools";
 import { readGithubToken } from "@/lib/github/oauth";
@@ -50,6 +51,8 @@ const SWARM_CADENCE_TOTAL_MS = 2_000;
  */
 const REQUEST_BUDGET_MS = 52_000;
 const REVIEW_DELIVERY_RESERVE_MS = 2_000;
+/** Past this many turns a conversation is a context problem, not a hard one. */
+const LONG_CONTEXT_TURNS = 14;
 
 type ChatRequestBody = {
   messages?: UIMessage[];
@@ -899,6 +902,26 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       const complexRoute = effortLevel === "high" || (effortLevel === "medium" && effort !== "normal");
+
+      /* Lane 3 is the rationed one, so it is tried first and abandoned without
+         ceremony. `githubModelsAvailable` is advisory — it only skips a round
+         trip already known to 429 — so a `true` here is never a promise, and
+         the ordinary route below is what actually answers when it does not
+         work out. A quota is never an error the user sees. */
+      const lane = selectLane({
+        mode,
+        effort: effortLevel,
+        complex: complexRoute,
+        hasFiles,
+        longContext: modelMessages.length > LONG_CONTEXT_TURNS
+      });
+      const deepRoute = (lane === 3 || lane === 4) && githubModelsAvailable(userGithubToken)
+        ? githubModelsRoute(
+          await selectGithubModel({ token: userGithubToken!, capability: lane === 4 ? "long-code" : "reasoning" }),
+          lane === 4 ? "coding" : "reasoning"
+        )
+        : null;
+
       const route = selectDirectRoute({
         preset: resolvedPreset,
         availability,
@@ -930,7 +953,11 @@ export async function POST(request: Request): Promise<Response> {
          The attempt only counts as recoverable while nothing has reached the
          screen. Once text is streaming, a failure is reported rather than
          retried: restarting mid-answer would replay a partial reply. */
-      const attempts = [route, ...fallbackRoutes({ primary: route, availability, complex: complexRoute })];
+      const attempts = [
+        ...(deepRoute ? [deepRoute] : []),
+        route,
+        ...fallbackRoutes({ primary: route, availability, complex: complexRoute })
+      ];
       let lastFailure: unknown = null;
 
       for (const [index, attempt] of attempts.entries()) {
@@ -938,13 +965,15 @@ export async function POST(request: Request): Promise<Response> {
           writer.write(statusChunk({ stage: "gather", detail: "Switching to another engine." }));
         }
         const result = streamText({
-        model: createProviderModel(attempt, origin),
+        model: createProviderModel(attempt, origin, userGithubToken),
         system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
         messages: modelMessages,
         ...(toolNames.length
           ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
           : {}),
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        maxOutputTokens: attempt.provider === "githubmodels"
+          ? Math.min(MAX_OUTPUT_TOKENS, GITHUB_MODELS_MAX_OUTPUT_TOKENS)
+          : MAX_OUTPUT_TOKENS,
         maxRetries: 1,
         timeout: { totalMs: 50_000, chunkMs: 14_000 },
         abortSignal: request.signal,

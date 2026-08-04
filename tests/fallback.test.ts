@@ -6,7 +6,7 @@ const check = (n: string, a: unknown, e: unknown) => {
   const ok = JSON.stringify(a) === JSON.stringify(e); ok ? pass++ : fail++;
   console.log(`${ok ? "PASS" : "FAIL"}  ${n}${ok ? "" : `\n   got:  ${JSON.stringify(a)}\n   want: ${JSON.stringify(e)}`}`);
 };
-const all: ProviderAvailability = { gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true };
+const all: ProviderAvailability = { githubmodels: false, gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true };
 
 // The live failure: Gemini answers 403, four other providers are configured.
 const afterGemini = fallbackRoutes({ primary: ROUTES.geminiSynthesis, availability: all, complex: false });
@@ -22,7 +22,7 @@ for (const route of [ROUTES.groqFast, ROUTES.cerebrasLarge, ROUTES.mistralBalanc
 }
 
 // Only one provider configured: nothing to fall back to, and no crash.
-const onlyGemini: ProviderAvailability = { gemini: true, groq: false, huggingface: false, cerebras: false, openrouter: false, mistral: false };
+const onlyGemini: ProviderAvailability = { githubmodels: false, gemini: true, groq: false, huggingface: false, cerebras: false, openrouter: false, mistral: false };
 check("single provider yields no alternates", fallbackRoutes({ primary: ROUTES.geminiSynthesis, availability: onlyGemini, complex: false }), []);
 
 // Effort is respected in the alternate, not just the primary.
