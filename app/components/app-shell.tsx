@@ -362,7 +362,7 @@ export function AppShell({
           setMessages([]);
         }
       })
-      .catch((storageError) => console.error("Navi local-state restore failed:", storageError))
+      .catch((storageError) => console.error("NaviOS local-state restore failed:", storageError))
       .finally(() => {
         if (!cancelled) setHydrated(true);
       });
@@ -1081,7 +1081,7 @@ export function AppShell({
             />
             {error ? (
               <div className="mt-4 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
-                <p className="text-[0.8125rem]/[1.125rem] font-medium text-primary">{error.message || "NaviSol could not complete that response."}</p>
+                <p className="text-[0.8125rem]/[1.125rem] font-medium text-primary">{error.message || "That didn't go through. Tap to retry."}</p>
                 <div className="mt-3 flex gap-2">
                   <button type="button" onClick={retry} className="min-h-11 rounded-xl bg-accent px-4 text-[0.8125rem]/[1.125rem] font-semibold text-white active:bg-accent-pressed">Try again</button>
                   <button type="button" onClick={clearError} className="min-h-11 rounded-xl px-4 text-[0.8125rem]/[1.125rem] font-semibold text-secondary active:bg-elev-3">Dismiss</button>

@@ -8,6 +8,7 @@ import { haptic } from "@/lib/ui/haptics";
 import { speak, whenVoicesReady } from "@/lib/ui/speech";
 import { MarkdownRenderer, type CapabilityHandlers } from "./markdown-renderer";
 import { ExecutionTrace, executionRuns } from "./execution-trace";
+import { ToolActivityList, toolActivity } from "./tool-activity";
 
 function messageFiles(message: UIMessage): Array<{ filename?: string; mediaType?: string }> {
   return message.parts.filter((part) => part.type === "file").map((part) => part as unknown as { filename?: string; mediaType?: string });
@@ -119,7 +120,16 @@ export function MessageRow({ message, streaming, last, theme, chatFont, haptics,
               single typographic signal of the target design — switchable to
               the system face in Settings → General → Chat font. */}
           {/* Above the answer, because it is what the answer rests on: the
-              user sees that the code was checked before reading the claim. */}
+              user sees the work was done before reading the claim.
+
+              Two components rather than one: code execution has its own richer
+              trace showing each repair attempt, and everything else gets the
+              plain chip. `run_javascript` is filtered out of the generic list
+              so a run never renders twice. */}
+          <ToolActivityList
+            activities={toolActivity(message).filter((activity) => activity.name !== "run_javascript")}
+            haptics={haptics}
+          />
           <ExecutionTrace runs={executionRuns(message)} haptics={haptics} />
           <div className={`navi-markdown text-[1rem]/[1.625rem] font-normal ${chatFont === "serif" ? "navi-chat-serif" : ""} ${streaming ? "streaming-cursor" : ""}`}>
             {text ? <MarkdownRenderer text={text} theme={theme} haptics={haptics} capabilities={capabilities} /> : null}

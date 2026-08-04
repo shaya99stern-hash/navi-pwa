@@ -128,8 +128,8 @@ const promptEnd = routeSource.indexOf("const CAPABILITY_REQUEST");
 const prompt = routeSource.slice(promptStart, promptEnd);
 
 const at = (needle: string) => prompt.indexOf(needle);
-check("the constitution is in the stable prefix", at("NAVI_CONSTITUTION") > -1, true);
-check("the architect prompt comes before per-request context", at("NAVI_ARCHITECT_PROMPT") < at("threadSummary ?"), true);
+check("the stable prefix is first", at("stablePrefix(") > -1, true);
+check("nothing per-request precedes the stable prefix", at("stablePrefix(") < at("effortInstruction("), true);
 check("app knowledge comes before per-request context", at("APP_KNOWLEDGE") < at("memoryContext ||"), true);
 check("constraints come after the architect prompt", at("constraints || \"\"") > at("NAVI_ARCHITECT_PROMPT"), true);
 check("constraints come after app knowledge", at("constraints || \"\"") > at("APP_KNOWLEDGE"), true);

@@ -461,6 +461,11 @@ aside .scroll-area {
   overflow-wrap: anywhere;
   word-break: normal;
   color: var(--text-primary);
+  /* Roughly 68 characters. Past that the eye loses its place returning to the
+     start of the next line, which is why every book ever printed stops well
+     short of the page edge. Below ~430px the viewport is already narrower than
+     this, so it costs a phone nothing and fixes the desktop width. */
+  max-width: 68ch;
 }
 
 .navi-markdown > :first-child { margin-top: 0; }
@@ -468,27 +473,46 @@ aside .scroll-area {
 .navi-markdown p { margin: 0 0 0.8rem; line-height: 1.6; }
 /* Tailwind's preflight removes list markers, which left bullets and numbers
    missing from every rendered reply. */
+/* Tightened: at the old spacing a three-item list took most of a phone screen
+   and read as three paragraphs rather than one list. */
 .navi-markdown ul,
-.navi-markdown ol { margin: 0.65rem 0 0.95rem; padding-left: 1.35rem; }
+.navi-markdown ol { margin: 0.5rem 0 0.7rem; padding-left: 1.25rem; }
 .navi-markdown ul { list-style: disc outside; }
 .navi-markdown ol { list-style: decimal outside; }
 .navi-markdown ul ul { list-style: circle outside; }
-.navi-markdown li { margin: 0.25rem 0; }
+.navi-markdown li > ul,
+.navi-markdown li > ol { margin: 0.15rem 0 0.15rem; }
+.navi-markdown li { margin: 0.15rem 0; }
 .navi-markdown li::marker { color: var(--text-tertiary); }
 .navi-markdown li > p { margin: 0; }
+/* Three visual levels, no more. A message is not a document, so an `h1` here
+   would be larger than the app's own title; everything from the fourth level
+   down collapses onto the third rather than inventing new sizes. */
 .navi-markdown h1,
 .navi-markdown h2,
-.navi-markdown h3 { margin: 1.25rem 0 0.55rem; font-weight: 600; line-height: 1.28; }
-.navi-markdown h1 { font-size: 1.35rem; }
-.navi-markdown h2 { font-size: 1.16rem; }
-.navi-markdown h3 { font-size: 1rem; }
+.navi-markdown h3,
+.navi-markdown h4,
+.navi-markdown h5,
+.navi-markdown h6 { margin: 1.1rem 0 0.45rem; font-weight: 600; line-height: 1.28; }
+.navi-markdown h1 { font-size: 1.3rem; }
+.navi-markdown h2 { font-size: 1.12rem; }
+.navi-markdown h3,
+.navi-markdown h4,
+.navi-markdown h5,
+.navi-markdown h6 { font-size: 1rem; }
 .navi-markdown blockquote { margin: 0.9rem 0; border-left: 2px solid var(--border-strong); padding-left: 0.9rem; color: var(--text-secondary); }
 .navi-markdown a { color: var(--accent-info); text-decoration: underline; text-underline-offset: 3px; }
-.navi-markdown code:not(pre code) { border: 1px solid var(--border-subtle); border-radius: 0.4rem; background: var(--bg-elev-2); padding: 0.12rem 0.34rem; font-family: "SFMono-Regular", ui-monospace, Consolas, monospace; font-size: 0.88em; }
-.navi-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 1rem 0; -webkit-overflow-scrolling: touch; }
+/* Background only, no border: a boxed inline span breaks the line's rhythm and
+   reads as a control rather than as a word set in another face. */
+.navi-markdown code:not(pre code) { border-radius: 0.35rem; background: var(--bg-elev-2); padding: 0.1rem 0.32rem; font-family: "SFMono-Regular", ui-monospace, Consolas, monospace; font-size: 0.875em; }
+/* Scrolls in its own box rather than pushing the page sideways. The header
+   sticks to the left edge while the body scrolls, so a wide table never leaves
+   the reader looking at unlabelled columns. */
+.navi-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: separate; border-spacing: 0; margin: 1rem 0; -webkit-overflow-scrolling: touch; }
 .navi-markdown th,
-.navi-markdown td { border: 1px solid var(--border-subtle); padding: 0.55rem 0.7rem; text-align: left; white-space: nowrap; }
-.navi-markdown th { background: var(--bg-elev-2); font-weight: 600; }
+.navi-markdown td { border-bottom: 1px solid var(--border-subtle); padding: 0.5rem 0.7rem; text-align: left; white-space: nowrap; }
+.navi-markdown thead th { position: sticky; top: 0; z-index: 1; background: var(--bg-elev-2); font-weight: 600; }
+.navi-markdown tbody tr:last-child td { border-bottom: 0; }
 
 
 /* Floating pill sits just above the composer, which is in flow below the

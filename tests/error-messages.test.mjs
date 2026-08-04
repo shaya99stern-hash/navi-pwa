@@ -40,7 +40,14 @@ check('a 403 points at configuration', streamError(new Error('403 Forbidden')).i
 check('a 401 points at configuration', streamError(new Error('401 unauthorized api key')).includes('Settings'), true);
 check('a timeout suggests lowering effort', streamError(new Error('request timeout')).includes('effort'), true);
 // One message, one voice.
-check('every message names NaviSol', cases.every((c) => streamError(c).includes('NaviSol')), true);
+/* The spec's rule, replacing an earlier one of mine that required every error
+   to say "NaviSol". It does not need to: the user knows who they are talking
+   to, and the words are better spent on the next step. What matters is that no
+   error apologises — an apology is not information, and repeated it reads as
+   evasion — and that every one of them says what to do. */
+const APOLOGY = /\b(sorry|apolog|unfortunately|regret)\b/i;
+check('no message apologises', cases.some((c) => APOLOGY.test(streamError(c))), false);
+check('every message says what to do next', cases.every((c) => /\b(retry|add one|lower the effort)\b/i.test(streamError(c))), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
