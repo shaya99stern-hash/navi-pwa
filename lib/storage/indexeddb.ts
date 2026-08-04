@@ -26,7 +26,7 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!database.objectStoreNames.contains(STORE)) database.createObjectStore(STORE);
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("Could not open Navi local storage."));
+    request.onerror = () => reject(request.error ?? new Error("Could not open NaviOS local storage."));
   });
 }
 
@@ -126,7 +126,7 @@ export async function clearLocalState(): Promise<void> {
       cursor.continue();
     };
     transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error ?? new Error("Could not clear Navi local data."));
+    transaction.onerror = () => reject(transaction.error ?? new Error("Could not clear NaviOS local data."));
   });
   database.close();
 

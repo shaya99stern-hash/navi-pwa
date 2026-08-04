@@ -50,6 +50,14 @@ type Props = {
 export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onCustomize, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
+  /* Null until the user picks; the persisted value is the source of truth
+     everywhere else. Cleared once the prop catches up. */
+  const [optimisticMode, setOptimisticMode] = useState<NaviMode | null>(null);
+  const activeMode = optimisticMode ?? mode;
+
+  useEffect(() => {
+    if (optimisticMode && optimisticMode === mode) setOptimisticMode(null);
+  }, [mode, optimisticMode]);
 
   useEffect(() => {
     const receive = (event: Event) => {
@@ -169,7 +177,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
         <div className="shrink-0 px-3 pt-3" role="group" aria-label="Mode">
           <div className="flex gap-1 rounded-[12px] bg-elev-1 p-1">
             {NAVI_MODES.map((entry) => {
-              const active = entry.id === mode;
+              const active = entry.id === activeMode;
               return (
                 <button
                   key={entry.id}
@@ -179,7 +187,14 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
                     /* Switching routes the *next* message. The open
                        conversation is untouched — clearing it would make a
                        mode change feel like losing work. */
-                    if (entry.id !== mode) onMode(entry.id);
+                    if (entry.id !== mode) {
+                      /* Paint the new selection before persisting. The write
+                         lands asynchronously, and reopening the drawer before
+                         it settled read the old value back — so the control
+                         showed the mode the user had just left. */
+                      setOptimisticMode(entry.id);
+                      onMode(entry.id);
+                    }
                     onClose();
                   }}
                   aria-pressed={active}

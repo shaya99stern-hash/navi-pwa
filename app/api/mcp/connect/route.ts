@@ -19,7 +19,7 @@ export async function POST(request: Request): Promise<Response> {
       {
         protocolVersion: "2025-06-18",
         capabilities: {},
-        clientInfo: { name: "Navi", version: "3.0.0" }
+        clientInfo: { name: "NaviOS", version: "4.4.0" }
       },
       request.signal
     );

@@ -54,14 +54,14 @@ export default function PWARegister() {
     // not an update, and must not surface an update banner.
     const hadController = Boolean(navigator.serviceWorker.controller);
 
-    const showAvailable = (message = "A new Navi version is ready. Update when you are ready.") => {
+    const showAvailable = (message = "A new NaviOS version is ready. Update when you are ready.") => {
       if (!cancelled) emitPwaUpdateStatus({ phase: "available", message });
     };
 
     const restartWithFreshShell = async () => {
       if (cancelled || reloading) return;
       reloading = true;
-      emitPwaUpdateStatus({ phase: "restarting", message: "Refreshing Navi and applying the latest version…" });
+      emitPwaUpdateStatus({ phase: "restarting", message: "Refreshing NaviOS and applying the latest version…" });
       try {
         await clearNaviShellCaches();
         const freshUrl = new URL(window.location.href);
@@ -76,7 +76,7 @@ export default function PWARegister() {
       const waiting = registration?.waiting;
       if (!waiting) return false;
       applyingUpdate = true;
-      emitPwaUpdateStatus({ phase: "downloading", message: "Installing the ready Navi update…" });
+      emitPwaUpdateStatus({ phase: "downloading", message: "Installing the ready NaviOS update…" });
       waiting.postMessage({ type: "SKIP_WAITING" });
       window.setTimeout(() => void restartWithFreshShell(), 4_000);
       return true;
@@ -88,7 +88,7 @@ export default function PWARegister() {
         return;
       }
 
-      if (manual) emitPwaUpdateStatus({ phase: "checking", message: "Checking for the newest Navi version…" });
+      if (manual) emitPwaUpdateStatus({ phase: "checking", message: "Checking for the newest NaviOS version…" });
 
       try {
         registration = registration ?? await navigator.serviceWorker.getRegistration("/");
@@ -101,7 +101,7 @@ export default function PWARegister() {
             return;
           }
           if (registration.installing) {
-            if (manual) emitPwaUpdateStatus({ phase: "downloading", message: "Downloading the latest Navi version…" });
+            if (manual) emitPwaUpdateStatus({ phase: "downloading", message: "Downloading the latest NaviOS version…" });
             await waitForWorker(registration.installing);
             if (reloading) return;
             if (registration.waiting) {
@@ -115,11 +115,11 @@ export default function PWARegister() {
         if (manual) {
           await restartWithFreshShell();
         } else {
-          emitPwaUpdateStatus({ phase: "current", message: "NaviSol is up to date." });
+          emitPwaUpdateStatus({ phase: "current", message: "NaviOS is up to date." });
         }
       } catch (error) {
         console.error("Navi update check failed:", error);
-        if (manual) emitPwaUpdateStatus({ phase: "error", message: "Navi could not refresh. Check your connection and try again." });
+        if (manual) emitPwaUpdateStatus({ phase: "error", message: "NaviOS could not refresh. Check your connection and try again." });
       }
     };
 
@@ -136,7 +136,7 @@ export default function PWARegister() {
     };
     const controllerChanged = () => {
       if (applyingUpdate) void restartWithFreshShell();
-      else if (hadController) showAvailable("A newer Navi version is active. Restart when you are ready.");
+      else if (hadController) showAvailable("A newer NaviOS version is active. Restart when you are ready.");
     };
 
     window.addEventListener(PWA_UPDATE_REQUEST_EVENT, manualCheck);

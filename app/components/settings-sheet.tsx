@@ -485,7 +485,7 @@ export function SettingsSheet({
               <Row label="What best describes your work?" control={<BareSelect label="Work" value={preferences.profile.work} options={WORK_OPTIONS} onChange={(work) => updateProfile({ work })} />} />
               <Row
                 label="Instructions for NaviSol"
-                description="Navi keeps these in mind across every chat on this device."
+                description="NaviSol keeps these in mind across every chat on this device."
                 fullWidthControl={
                   <textarea
                     aria-label="Instructions for NaviSol"
@@ -522,7 +522,7 @@ export function SettingsSheet({
                   <BareSelect
                     label="Chat font"
                     value={preferences.chatFont}
-                    options={[["serif", "Navi Serif"], ["sans", "System"]]}
+                    options={[["serif", "NaviOS Serif"], ["sans", "System"]]}
                     onChange={(value) => update({ chatFont: value === "sans" ? "sans" : "serif" })}
                   />
                 }
@@ -583,7 +583,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Response completions"
-                description="Get notified when Navi has finished a response. Useful for long-running tasks."
+                description="Get notified when NaviSol has finished a response. Useful for long-running tasks."
                 control={<SettingsToggle label="Response completions" value={preferences.notifyOnComplete} onChange={() => void enableNotifications()} />}
               />
             </Group>
@@ -636,7 +636,7 @@ export function SettingsSheet({
               <Row
                 label="Clear all local data"
                 description="Deletes every chat, project, and preference stored on this device."
-                control={<InlineButton destructive onClick={() => { if (window.confirm("Clear all Navi history, projects, and settings from this device?")) { onClearData(); onClose(); } }}>Clear</InlineButton>}
+                control={<InlineButton destructive onClick={() => { if (window.confirm("Clear all NaviOS history, projects, and settings from this device?")) { onClearData(); onClose(); } }}>Clear</InlineButton>}
               />
             </Group>
           </>
@@ -657,7 +657,7 @@ export function SettingsSheet({
               />
               <Row
                 label="Memory"
-                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages Navi actually uses are sent."
+                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages NaviSol actually uses are sent."
                 control={<SettingsToggle label="Memory" value={preferences.memory} onChange={() => update({ memory: !preferences.memory })} />}
               />
             </Group>
@@ -678,7 +678,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Web search"
-                description="Let Navi search the web and read pages when a request needs live information."
+                description="Let NaviSol search the web and read pages when a request needs live information."
                 control={<SettingsToggle label="Web search" value={preferences.tools.web} onChange={() => update({ tools: { ...preferences.tools, web: !preferences.tools.web } })} />}
               />
             </Group>
@@ -730,8 +730,8 @@ export function SettingsSheet({
               <Row
                 label="Vercel"
                 description={devTools.vercel
-                  ? "Connected. Navi Code can read your deployments and build logs."
-                  : "Not connected. Add a Vercel token as NAVI_VERCEL_TOKEN in Vercel to let Navi Code read deployments and build logs."}
+                  ? "Connected. NaviOS Code can read your deployments and build logs."
+                  : "Not connected. Add a Vercel token as NAVI_VERCEL_TOKEN in Vercel to let NaviSol read deployments and build logs in Code mode."}
                 control={<StatusPill on={devTools.vercel} />}
               />
             </Group>
@@ -746,7 +746,7 @@ export function SettingsSheet({
         {page === "playbooks" ? (
           <>
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
-              Playbooks are methods Navi applies when a request matches one — how to debug, how to review code,
+              Playbooks are methods NaviSol applies when a request matches one — how to debug, how to review code,
               how to edit a document without disturbing it. They use Anthropic&apos;s SKILL.md format, so any skill
               published for Claude can be pasted in below and works here unchanged.
             </p>
@@ -762,7 +762,7 @@ export function SettingsSheet({
                       aria-label="Paste a SKILL.md file"
                       value={playbookDraft}
                       onChange={(event) => { setPlaybookDraft(event.target.value); setPlaybookNotice(null); }}
-                      placeholder={"---\nname: my-playbook\ndescription: When Navi should use this\n---\n\n# Instructions…"}
+                      placeholder={"---\nname: my-playbook\ndescription: When NaviSol should use this\n---\n\n# Instructions…"}
                       rows={5}
                       className="min-h-[128px] w-full resize-y rounded-[12px] bg-elev-2 px-3.5 py-3 font-mono text-[0.8125rem]/[1.125rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
                     />

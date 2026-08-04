@@ -1,6 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { ModelPreset, ProviderName, ProviderRoute, ToolCallingSupport, ToolPolicy } from "./types";
-import { createGithubModelsProvider } from "./github-models";
 
 export type ProviderAvailability = Record<ProviderName, boolean>;
 
@@ -137,9 +136,6 @@ function mistralApiKey(): string | undefined {
 
 export function getProviderAvailability(): ProviderAvailability {
   return {
-    /* Lane 3 is keyed on a per-request token, so availability is decided in the
-       route rather than here. Reported false so nothing else routes to it. */
-    githubmodels: false,
     gemini: Boolean(geminiApiKey()),
     groq: Boolean(groqApiKey()),
     huggingface: Boolean(huggingFaceToken()),
@@ -198,14 +194,7 @@ export function providerProbes(): Array<{ provider: ProviderName; label: string;
   return probes;
 }
 
-export function createProviderModel(route: ProviderRoute, origin: string, githubToken?: string): any {
-  if (route.provider === "githubmodels") {
-    /* Lane 3 authenticates as the *user*, not the install, so the token
-       arrives from the request scope rather than from process.env. */
-    if (!githubToken) throw new Error("GitHub Models needs a GitHub token.");
-    return createGithubModelsProvider(githubToken, origin).chatModel(route.model);
-  }
-
+export function createProviderModel(route: ProviderRoute, origin: string): any {
   if (route.provider === "gemini") {
     const apiKey = geminiApiKey();
     if (!apiKey) throw new Error("A Gemini API credential is not configured.");
@@ -279,7 +268,7 @@ export function createProviderModel(route: ProviderRoute, origin: string, github
     includeUsage: true,
     headers: {
       "HTTP-Referer": origin,
-      "X-Title": "Navi"
+      "X-Title": "NaviOS"
     }
   });
   return provider.chatModel(route.model);
@@ -387,7 +376,7 @@ export const ROUTES = {
  * sending one there would break routes that work today — it is the one
  * provider deliberately left out.
  */
-const TOOL_CAPABLE_PROVIDERS: ProviderName[] = ["githubmodels", "gemini", "groq", "cerebras", "openrouter", "mistral"];
+const TOOL_CAPABLE_PROVIDERS: ProviderName[] = ["gemini", "groq", "cerebras", "openrouter", "mistral"];
 
 /**
  * Models that reject a `tools` parameter even though their provider accepts

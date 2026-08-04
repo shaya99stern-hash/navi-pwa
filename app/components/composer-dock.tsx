@@ -592,7 +592,12 @@ export function ComposerDock({
               spellCheck
               disabled={blocked}
               placeholder={placeholder}
-              aria-label="Chat with Navi"
+              aria-label="Chat with NaviSol"
+              /* Stable hook for anything that needs to prefill the composer
+                 from outside React — the artifact frame's edit button, for
+                 one. Keying off the aria-label coupled that to copy, and the
+                 copy changed. */
+              data-navi-composer=""
               className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[1rem]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 

@@ -200,9 +200,9 @@ function validateArtifactFences(text: string): string {
   return text.replace(/```navi-artifact\s*([\s\S]*?)```/gi, (full, json: string) => {
     try {
       const validation = validateArtifactPayload(JSON.parse(json.trim()));
-      return validation.ok ? full : `\n> Navi removed an invalid artifact payload: ${validation.error}\n`;
+      return validation.ok ? full : `\n> NaviSol removed an invalid artifact payload: ${validation.error}\n`;
     } catch {
-      return "\n> Navi removed a malformed artifact payload.\n";
+      return "\n> NaviSol removed a malformed artifact payload.\n";
     }
   });
 }

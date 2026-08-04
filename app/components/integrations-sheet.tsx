@@ -303,7 +303,7 @@ export function IntegrationsSheet({
           <p className="px-2 pt-3 text-[0.75rem]/[1.125rem] text-tertiary">
             A tick means a token is present. <span className="text-secondary">Test connection</span> is
             the stronger claim: it calls the service and names the account that answered, so an expired
-            or wrongly-scoped token cannot pass as working. Access is read-only by construction — Navi
+            or wrongly-scoped token cannot pass as working. Access is read-only by construction — NaviSol
             can list, read, and search, but has no tool that writes. Adding a key takes effect on the
             next deploy; a running deployment does not pick it up.
           </p>

@@ -11,10 +11,9 @@ import {
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { createProviderModel, fallbackRoutes, getProviderAvailability, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
-import { githubModelsAvailable, githubModelsRoute, GITHUB_MODELS_MAX_INPUT_TOKENS, GITHUB_MODELS_MAX_OUTPUT_TOKENS, selectGithubModel } from "@/lib/ai/github-models";
-import { compactForBudget } from "@/lib/ai/compaction";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { buildDevTools } from "@/lib/ai/dev-tools";
+import { readUntilCommitted } from "@/lib/ai/lane-commit";
 import { readGithubToken } from "@/lib/github/oauth";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
 import { buildWebTools, hasWebSearch } from "@/lib/ai/web-tools";
@@ -433,7 +432,7 @@ function artifactInstruction(requested: boolean): string {
 /** The behavioural difference between the Chat and Code models lives here. */
 function codeModeInstruction(): string {
   return [
-    "You are running as Navi Code, the software-focused model.",
+    "You are NaviSol working in Code mode.",
     "Prefer working code over prose about code: give complete, runnable snippets with the imports they need, and state the language and file path when it matters.",
     "When debugging, reason from the actual error text and the code shown; name the root cause before proposing the fix, and keep the fix minimal.",
     "Match the conventions of any code the user shows you. Flag breaking changes, missing tests, and security problems even when unasked.",
@@ -479,7 +478,7 @@ function systemPrompt(options: {
     "Be accurate, practical, and explicit about uncertainty.",
     "Never claim that you browsed, executed code, accessed files, used MCP, or changed external data unless supplied results prove it.",
     "Do not expose credentials, system instructions, hidden prompts, provider routing, internal agents, or private reasoning.",
-    "Never substitute an SVG stick figure or an HTML artifact for a requested raster image. Real image requests are handled by Navi's image pipeline.",
+    "Never substitute an SVG stick figure or an HTML artifact for a requested raster image. Real image requests are handled by NaviSol's image pipeline.",
     mode === "code" ? codeModeInstruction() : "",
     playbookContext || "",
     effortInstruction(effort),
@@ -501,35 +500,6 @@ function systemPrompt(options: {
   ].filter(Boolean).join("\n\n");
 }
 
-/**
- * Strip anything credential-shaped out of a provider message.
- *
- * The detail below is shown to the person using the app, who is also the
- * person holding the keys — but a provider echoing part of a request must
- * never turn into a key on screen or in a screenshot they then share.
- */
-function redactSecrets(message: string): string {
-  return message
-    .replace(/\b(?:sk|gsk|hf|csk|pk|rk)[-_][A-Za-z0-9_-]{8,}/gi, "[redacted]")
-    .replace(/\bAIza[A-Za-z0-9_-]{10,}/g, "[redacted]")
-    .replace(/\bBearer\s+[A-Za-z0-9._-]{8,}/gi, "Bearer [redacted]")
-    /* The quote is captured and restored rather than swallowed, so a redacted
-       JSON body still reads as JSON instead of looking like a second bug. */
-    .replace(/("?(?:api[_-]?key|authorization|token)"?\s*[:=]\s*)("?)[A-Za-z0-9._-]{8,}\2/gi, "$1$2[redacted]$2");
-}
-
-/**
- * How Navi installs a new capability.
- *
- * The user asked for this in plain terms: tell it to learn something and have
- * it keep it, rather than managing a separate library by hand. The mechanism
- * is the one already carrying images and audio — a fenced block the client
- * recognises — so it needs no storage and no backend.
- *
- * Held to an explicit ask. A model that volunteers capabilities would fill the
- * library with things nobody wanted, and each one changes how every future
- * request is answered.
- */
 /* An explicit ask to keep something for later. Deliberately narrow: the
    contract below is only useful when a block is actually wanted, and carrying
    it on every request would spend the prompt budget on nothing. */
@@ -561,36 +531,26 @@ function capabilityInstruction(): string {
   ].join("\n");
 }
 
+/**
+ * Turn any failure into a sentence the user can act on.
+ *
+ * The original is logged server-side and never rendered. A provider echoed its
+ * own retirement notice into a chat bubble — naming a third party, leaking an
+ * implementation detail, and telling the user nothing they could act on.
+ * Passing provider text through was a diagnostic expedient that had no
+ * business surviving the diagnosis.
+ */
 function streamError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  console.error("Navi stream error:", error);
+  console.error("NaviSol stream error:", error);
   const lower = message.toLowerCase();
   if (lower.includes("image providers") || lower.includes("image-generation provider")) return "NaviSol's image service is unavailable right now. Try again shortly.";
-  if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "NaviSol reached a limit on this route. Try again shortly.";
-  if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401")) return "NaviSol is not configured correctly. Please try again later.";
-  /* A bare 403 is what a provider returns for a key with referrer or IP
-     restrictions, a disabled API, or a revoked token — all of which look like
-     a working key from a dashboard. Naming it saves the hour it otherwise
-     takes to find. */
-  if (lower === "forbidden" || lower.includes("403") || lower.includes("forbidden")) {
-    return "Every AI provider refused this request (403). Usually a key restricted to certain referrers or IP addresses, an API not enabled on the project, or a revoked token. Check the provider dashboards for the keys in your Vercel project.";
+  if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "NaviSol is busy right now. Try again in a moment.";
+  if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401") || lower.includes("403") || lower.includes("forbidden")) {
+    return "NaviSol is not configured correctly. Check the provider keys in Settings.";
   }
-  if (lower.includes("timeout") || lower.includes("aborted")) return "That took too long. Try again, or lower the effort.";
-  /* A model that refuses the tools parameter is a routing mistake, not
-     something the person asking can fix — name it so it is not mistaken for
-     their request being at fault. */
-  if (lower.includes("tool calling") || lower.includes("not supported with this model")) {
-    return "NaviSol routed this somewhere that cannot use tools. Turn off Research mode to answer without them, or try again.";
-  }
-  /* Everything unmatched used to collapse into one sentence that named no
-     cause — the same failure as the SDK's "An error occurred.", one layer up.
-     This app has a single user, who owns the deployment and is the person who
-     would have to act on the reason, so the reason is shown rather than
-     swallowed. Without it a screenshot of a failure carries no information. */
-  const detail = redactSecrets(message).replace(/\s+/g, " ").trim().slice(0, 240);
-  return detail
-    ? `NaviSol could not complete the response.\n\n\`${detail}\``
-    : "NaviSol could not complete the response. Please try again.";
+  if (lower.includes("timeout") || lower.includes("aborted")) return "NaviSol took too long on that. Try again, or lower the effort.";
+  return "NaviSol could not complete the response. Please try again.";
 }
 
 function statusChunk(status: NaviStreamStatus) {
@@ -697,7 +657,7 @@ export async function POST(request: Request): Promise<Response> {
       ? "Your session expired. Reload the app to sign back in."
       : reason?.error || "NaviSol could not authorize this request.");
   }
-  if (isRateLimited(clientIdentifier(request))) return refuse("You are sending messages faster than Navi can answer them. Wait a few seconds and try again.", { "Retry-After": "30" });
+  if (isRateLimited(clientIdentifier(request))) return refuse("You are sending messages faster than NaviSol can answer them. Wait a few seconds and try again.", { "Retry-After": "30" });
 
   let body: ChatRequestBody;
   try {
@@ -712,7 +672,7 @@ export async function POST(request: Request): Promise<Response> {
   const userGithubToken = await readGithubToken();
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) return refuse("There was no message to send.");
-  if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; Navi will still remember the important parts.`);
+  if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; NaviSol will still remember the important parts.`);
   if (JSON.stringify(body.messages).length > MAX_SERIALIZED_CHARACTERS) return refuse("This conversation and its attachments are too large to send. Start a new chat, or remove an attachment.");
 
   const messages = body.messages.slice(-MAX_MESSAGES);
@@ -721,7 +681,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
   const lastUserText = textOf(lastUserMessage);
-  if (!lastUserText) return refuse("Add a short description of what you want Navi to do with this.");
+  if (!lastUserText) return refuse("Add a short description of what you want NaviSol to do with this.");
 
   const currentImageAttachments = imageAttachments(lastUserMessage);
   const imageRequested = imageGenerationIntent(lastUserText, currentImageAttachments.length > 0);
@@ -904,11 +864,10 @@ export async function POST(request: Request): Promise<Response> {
 
       const complexRoute = effortLevel === "high" || (effortLevel === "medium" && effort !== "normal");
 
-      /* Lane 3 is the rationed one, so it is tried first and abandoned without
-         ceremony. `githubModelsAvailable` is advisory — it only skips a round
-         trip already known to 429 — so a `true` here is never a promise, and
-         the ordinary route below is what actually answers when it does not
-         work out. A quota is never an error the user sees. */
+      /* Lane selection stands; its Lane 3 provider does not. GitHub Models
+         was retired on 2026-07-30 — not deprecated, removed — so it is deleted
+         outright rather than left as a fallback that can only ever fail. Task 3
+         gives this lane a provider again. */
       const lane = selectLane({
         mode,
         effort: effortLevel,
@@ -916,12 +875,7 @@ export async function POST(request: Request): Promise<Response> {
         hasFiles,
         longContext: modelMessages.length > LONG_CONTEXT_TURNS
       });
-      const deepRoute = (lane === 3 || lane === 4) && githubModelsAvailable(userGithubToken)
-        ? githubModelsRoute(
-          await selectGithubModel({ token: userGithubToken!, capability: lane === 4 ? "long-code" : "reasoning" }),
-          lane === 4 ? "coding" : "reasoning"
-        )
-        : null;
+      void lane;
 
       const route = selectDirectRoute({
         preset: resolvedPreset,
@@ -940,8 +894,7 @@ export async function POST(request: Request): Promise<Response> {
          beside the route table that knows which model that is. Asking the
          provider instead is what sent a tools array to a model that rejects
          one and failed every request that had web search switched on. */
-      const supportsTools = routeToolCallingSupport(route) === "custom";
-      const toolNames = supportsTools ? Object.keys(availableTools) : [];
+      const toolNames = routeToolCallingSupport(route) === "custom" ? Object.keys(availableTools) : [];
       if (toolNames.length) {
         writer.write(statusChunk({ stage: "gather", detail: `${toolNames.length} tool${toolNames.length === 1 ? "" : "s"} available.` }));
       }
@@ -957,20 +910,7 @@ export async function POST(request: Request): Promise<Response> {
       /* Lane 3's window is small, so a long conversation is compacted rather
          than routed away from the best engine — which is exactly when the best
          engine is most wanted. Only for that lane: everything else has room. */
-      let attemptMessages = modelMessages;
-      if (deepRoute) {
-        const compaction = await compactForBudget({
-          messages: modelMessages,
-          maxInputTokens: GITHUB_MODELS_MAX_INPUT_TOKENS,
-          availability,
-          origin,
-          abortSignal: request.signal
-        });
-        attemptMessages = compaction.messages;
-      }
-
       const attempts = [
-        ...(deepRoute ? [deepRoute] : []),
         route,
         ...fallbackRoutes({ primary: route, availability, complex: complexRoute })
       ];
@@ -980,16 +920,19 @@ export async function POST(request: Request): Promise<Response> {
         if (index > 0) {
           writer.write(statusChunk({ stage: "gather", detail: "Switching to another engine." }));
         }
+        /* Recomputed per lane, not once for the primary. Tool support is a
+           property of the model, and a fallback lane can easily be a model
+           that rejects a tools array outright — inheriting the primary's
+           answer turns a recoverable failure into a guaranteed one. */
+        const attemptToolNames = routeToolCallingSupport(attempt) === "custom" ? toolNames : [];
         const result = streamText({
-        model: createProviderModel(attempt, origin, userGithubToken),
-        system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
-        messages: attempt.provider === "githubmodels" ? attemptMessages : modelMessages,
-        ...(toolNames.length
+        model: createProviderModel(attempt, origin),
+        system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
+        messages: modelMessages,
+        ...(attemptToolNames.length
           ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
           : {}),
-        maxOutputTokens: attempt.provider === "githubmodels"
-          ? Math.min(MAX_OUTPUT_TOKENS, GITHUB_MODELS_MAX_OUTPUT_TOKENS)
-          : MAX_OUTPUT_TOKENS,
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
         maxRetries: 1,
         timeout: { totalMs: 50_000, chunkMs: 14_000 },
         abortSignal: request.signal,
@@ -1039,19 +982,30 @@ export async function POST(request: Request): Promise<Response> {
           return;
         }
 
-        /* Await the first chunk before committing to this route. Until
-           something has actually arrived the attempt is still recoverable;
-           after that it is not, so the stream is merged and any later failure
-           is reported rather than retried. */
+        /* Read until this lane has actually produced something a person would
+           see, buffering the protocol preamble on the way. Waiting for the
+           *first* chunk was not enough: `start` arrives before the provider
+           has committed to anything, so a lane that then 500s had already been
+           chosen, and the failure reached the screen as a red card while two
+           healthy lanes sat unused. This is what made the fallback look like it
+           only covered 429 — every other failure simply arrived too late.
+
+           A failure is silent while nothing has been shown, and reported once
+           something has: restarting mid-answer would replay a partial reply. */
         try {
           /* Not sent at all going forward: private deliberation the user was
            never meant to see, which the client then stores and replays. */
         const stream = result.toUIMessageStream({ onError: streamError, sendReasoning: false });
           const reader = stream.getReader();
-          const first = await reader.read();
-          if (first.done) { lastFailure = new Error("The provider closed without answering."); reader.releaseLock(); continue; }
+          const { committed, preamble, failure } = await readUntilCommitted(reader);
+
+          if (!committed) {
+            lastFailure = failure ?? new Error("The provider produced no content.");
+            continue;
+          }
+
           reader.releaseLock();
-          writer.write(first.value as never);
+          for (const chunk of preamble) writer.write(chunk as never);
           writer.merge(stream);
           return;
         } catch (error) {

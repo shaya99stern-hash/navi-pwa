@@ -142,7 +142,7 @@ export function ProjectsSheet({
 
               <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
                 <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Project knowledge</h2>
-                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">Durable notes supplied to Navi without altering the saved conversations.</p>
+                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">Durable notes supplied to NaviSol without altering the saved conversations.</p>
                 <div className="mt-3 flex gap-2">
                   <textarea value={knowledgeDraft} onChange={(event) => setKnowledgeDraft(event.target.value)} placeholder="Add a decision, requirement, source note, or project fact…" className="min-h-[92px] min-w-0 flex-1 resize-none rounded-2xl border border-[var(--border-subtle)] bg-elev-2 p-3 text-[0.8125rem]/5 font-medium text-primary outline-none focus:border-accent" />
                   <button type="button" onClick={addKnowledge} disabled={!knowledgeDraft.trim()} className="flex w-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-white active:bg-accent-pressed disabled:opacity-40" aria-label="Add project knowledge"><Plus size={19} /></button>

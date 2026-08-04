@@ -15,7 +15,7 @@ type Props = {
 };
 
 const MODES: Array<{ id: ConnectorAccessMode; title: string; detail: string }> = [
-  { id: "ask", title: "Ask every time", detail: "Navi may inspect connector availability, but external access waits for your approval." },
+  { id: "ask", title: "Ask every time", detail: "NaviSol may inspect connector availability, but external access waits for your approval." },
   { id: "auto", title: "Auto for reads", detail: "Read-only resources may be used automatically. Writes, deletes, sends, bookings, and purchases still require approval." },
   { id: "always", title: "Always available", detail: "Connected read-only resources stay available in this conversation. Sensitive actions still require explicit confirmation." }
 ];

@@ -11,7 +11,7 @@ import {
   useRef,
   useState
 } from "react";
-import type { AttachmentMeta, MenuSection, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
+import type { AttachmentMeta, MenuSection, NaviMode, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
 import {
   ATTACHMENT_BUDGET,
   MAX_ATTACHMENTS,
@@ -87,7 +87,7 @@ function compactSummary(messages: UIMessage[]): string {
   if (messages.length <= 14) return "";
   const lines = messages
     .slice(0, -12)
-    .map((message) => `${message.role === "user" ? "User" : "Navi"}: ${messageText(message).slice(0, 700)}`)
+    .map((message) => `${message.role === "user" ? "User" : "NaviSol"}: ${messageText(message).slice(0, 700)}`)
     .filter((line) => !line.endsWith(": "));
   if (!lines.length) return "";
 
@@ -125,6 +125,21 @@ function stopSpeaking() {
 
 /** Which layer a deep link should open over the chat, rather than navigating. */
 export type InitialSheet = "history" | "projects" | "artifacts" | "connectors" | "settings" | "customize";
+
+/**
+ * Which mode is active, at a glance.
+ *
+ * Shown in both modes rather than only Code: an indicator that appears only
+ * sometimes teaches the user nothing about where they are, and the whole point
+ * is not having to open the drawer to check.
+ */
+function ModePill({ mode }: { mode: NaviMode }) {
+  return (
+    <span className="shrink-0 rounded-full bg-elev-2 px-2 py-0.5 text-[0.625rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">
+      {mode === "code" ? "Code" : "Chat"}
+    </span>
+  );
+}
 
 export function AppShell({
   initialChatId,
@@ -205,7 +220,9 @@ export function AppShell({
         return;
       }
       if (isError) {
-        setStreamStatus({ stage: "error", detail: "Navi could not finish the response." });
+        /* The stream renders its own error card, so a second status line is a
+           duplicate of the same failure. Clear it instead. */
+        setStreamStatus(null);
         return;
       }
       setStreamStatus({ stage: "complete", detail: "Response complete." });
@@ -216,7 +233,7 @@ export function AppShell({
         && "Notification" in window && Notification.permission === "granted") {
         void navigator.serviceWorker?.getRegistration("/")
           .then((registration) => registration?.showNotification("NaviOS", {
-            body: "Navi has finished a response.",
+            body: "NaviSol has finished a response.",
             icon: "/pwa-icon-192-v5.png",
             badge: "/pwa-icon-192-v5.png",
             tag: "navi-response-complete"
@@ -225,8 +242,8 @@ export function AppShell({
       }
     },
     onError: (chatError) => {
-      console.error("Navi chat error:", chatError);
-      setStreamStatus({ stage: "error", detail: chatError.message || "Navi could not finish the response." });
+      console.error("NaviSol chat error:", chatError);
+      setStreamStatus(null);
       haptic("error", preferences.haptics);
     }
   });
@@ -590,13 +607,13 @@ export function AppShell({
   async function shareActiveChat() {
     const current = chats.find((chat) => chat.id === activeId);
     const transcript = messages
-      .map((message) => `${message.role === "user" ? "You" : "Navi"}: ${messageText(message)}`)
+      .map((message) => `${message.role === "user" ? "You" : "NaviSol"}: ${messageText(message)}`)
       .filter((line) => !line.endsWith(": "))
       .join("\n\n");
     if (!transcript) return;
     if (navigator.share) {
       try {
-        await navigator.share({ title: current?.title ?? "Navi chat", text: transcript });
+        await navigator.share({ title: current?.title ?? "NaviOS chat", text: transcript });
       } catch {
         // Cancelled by the user.
       }
@@ -884,7 +901,10 @@ export function AppShell({
         </button>
         <div className="min-w-0 flex-1 text-center">
           {messages.length === 0 && !activeChat ? (
-            <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">NaviOS</div>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">NaviOS</div>
+              <ModePill mode={preferences.mode} />
+            </div>
           ) : (
             /* The title is the chat's own menu: star, rename, share, delete.
                The chevron is the affordance that says so. */
@@ -902,6 +922,7 @@ export function AppShell({
                 ) : null}
               </span>
               <ChevronDown size={14} className="shrink-0 text-tertiary" />
+              <ModePill mode={preferences.mode} />
             </button>
           )}
         </div>
@@ -947,7 +968,7 @@ export function AppShell({
       ) : preferences.tools.web ? (
         <div className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[0.6875rem]/4 font-semibold text-accent" role="status">
           <Search size={14} />
-          Research mode on · Navi will use available web or connected sources
+          Research mode on · NaviSol will use available web or connected sources
         </div>
       ) : preferences.connectedMcpServers.length ? (
         <button type="button" onClick={() => setConnectorsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-[var(--border-subtle)] bg-elev-2 px-4 text-center text-[0.6875rem]/4 font-semibold text-secondary active:bg-elev-3">
@@ -1020,7 +1041,7 @@ export function AppShell({
             />
             {error ? (
               <div className="mt-4 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
-                <p className="text-[0.8125rem]/[1.125rem] font-medium text-primary">{error.message || "Navi could not complete that response."}</p>
+                <p className="text-[0.8125rem]/[1.125rem] font-medium text-primary">{error.message || "NaviSol could not complete that response."}</p>
                 <div className="mt-3 flex gap-2">
                   <button type="button" onClick={retry} className="min-h-11 rounded-xl bg-accent px-4 text-[0.8125rem]/[1.125rem] font-semibold text-white active:bg-accent-pressed">Try again</button>
                   <button type="button" onClick={clearError} className="min-h-11 rounded-xl px-4 text-[0.8125rem]/[1.125rem] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
