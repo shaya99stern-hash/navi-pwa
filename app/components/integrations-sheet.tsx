@@ -239,7 +239,7 @@ export function IntegrationsSheet({
                 !known ? "Checking…"
                   : searchName
                     ? `Live results through ${searchName}. Turn Research mode on to use it for a message.`
-                    : "Research mode has nothing to search with. Add EXA_API_KEY, TAVILY_API_KEY, or BRAVE_SEARCH_API_KEY in Vercel, then redeploy."
+                    : "Research mode has nothing to search with. Add TAVILY_API_KEY or EXA_API_KEY in Vercel, then redeploy."
               }
             />
             <Row

@@ -1,5 +1,6 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
+import { guardWrite, workingBranchName } from "./write-guards";
 
 /**
  * The write half of the GitHub surface. The read tools stay in dev-tools.ts and
@@ -107,10 +108,14 @@ export function buildGitHubWriteTools({ token, onActivity }: WriteContext): Tool
     inputSchema: z.object({
       owner: z.string().describe("Repository owner, e.g. 'shaya'"),
       repo: z.string().describe("Repository name, e.g. 'navi-pwa'"),
-      branch: z.string().describe("New branch name, e.g. 'navi/fix-composer-inset'"),
+      intent: z.string().max(80).describe("A few words on what this change is, e.g. 'fix composer inset'. The branch name is generated from it."),
       from: z.string().optional().describe("Branch to base on. Defaults to the repository's default branch.")
     }),
-    execute: async ({ owner, repo, branch, from }) => {
+    execute: async ({ owner, repo, intent, from }) => {
+      /* Generated, not accepted. A consistent `navisol/` prefix makes every
+         branch this app created identifiable in GitHub's own branch list, and
+         the random suffix means two attempts at the same fix do not collide. */
+      const branch = workingBranchName(intent);
       const slug = repoSlug(owner, repo);
       if (!slug) return { error: "Owner and repo must be plain repository segments." };
       if (!BRANCH_NAME.test(branch)) return { error: "That branch name contains characters git will not accept." };
@@ -148,7 +153,12 @@ export function buildGitHubWriteTools({ token, onActivity }: WriteContext): Tool
       if (!slug) return { error: "Owner and repo must be plain repository segments." };
       if (!BRANCH_NAME.test(branch)) return { error: "That branch name contains characters git will not accept." };
       if (PROTECTED_BRANCHES.has(branch)) return { error: `Refusing to commit directly to '${branch}'. Create a working branch first.` };
-      if (path.startsWith("/") || path.includes("..")) return { error: "Path must be repository-relative and must not traverse upward." };
+      /* Branch guards stop the wrong branch; these stop the wrong file. A bad
+         commit on a working branch is reviewed and discarded, but a workflow
+         file runs when the pull request opens — before anyone has read it —
+         and a committed credential is compromised the moment it exists. */
+      const guard = guardWrite(path, content);
+      if (!guard.ok) return { error: guard.reason };
       if (new TextEncoder().encode(content).length > MAX_CONTENT_BYTES) {
         return { error: "That file is larger than the 512 KB write limit." };
       }

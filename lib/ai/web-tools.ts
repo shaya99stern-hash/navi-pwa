@@ -1,6 +1,7 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { isPrivateHostname } from "../mcp";
+import { cacheSearch, readCachedSearch, recordSearch, searchAllowed } from "./search-budget";
 
 /** Enough context to answer from, without swamping the prompt. */
 const MAX_RESULTS = 6;
@@ -16,10 +17,18 @@ type SearchHit = { title: string; url: string; snippet: string };
  * model: Tavily returns extracted prose, Exa returns page text, Brave returns
  * short descriptions.
  */
-function searchProvider(): "tavily" | "exa" | "brave" | null {
+/**
+ * Whichever search provider has a key wins.
+ *
+ * Brave was here and is deliberately gone. Its perpetual free tier was retired
+ * in February 2026 — a new account gets a one-time credit and a card on file
+ * with no spend cap, which turns "just add a key" into a way to start billing
+ * without noticing. A provider that cannot fail closed does not belong in an
+ * app whose whole premise is free tiers.
+ */
+function searchProvider(): "tavily" | "exa" | null {
   if (process.env.TAVILY_API_KEY) return "tavily";
   if (process.env.EXA_API_KEY) return "exa";
-  if (process.env.BRAVE_SEARCH_API_KEY) return "brave";
   return null;
 }
 
@@ -83,18 +92,7 @@ async function runSearch(query: string, signal?: AbortSignal): Promise<SearchHit
       }));
     }
 
-    const url = new URL("https://api.search.brave.com/res/v1/web/search");
-    url.searchParams.set("q", query);
-    url.searchParams.set("count", String(MAX_RESULTS));
-    const response = await fetch(url, {
-      headers: { Accept: "application/json", "X-Subscription-Token": String(process.env.BRAVE_SEARCH_API_KEY) },
-      signal: inner
-    });
-    if (!response.ok) throw new Error(`Search provider returned ${response.status}.`);
-    const data = (await response.json()) as { web?: { results?: Array<{ title?: string; url?: string; description?: string }> } };
-    return (data.web?.results ?? []).slice(0, MAX_RESULTS).map((hit) => ({
-      title: clip(hit.title, 200), url: String(hit.url ?? ""), snippet: clip(hit.description, MAX_SNIPPET_CHARS)
-    }));
+    throw new Error("No search provider is configured.");
   }, signal);
 }
 
@@ -202,13 +200,34 @@ export function buildWebTools({ search, signal, onActivity = () => {} }: {
       description: "Search the web for current information. Use it for anything recent, factual, or that you are unsure of, then read the most promising result with fetch_url before answering.",
       inputSchema: z.object({ query: z.string().describe("What to search for.") }),
       execute: async ({ query }) => {
+        /* Cache first. The same question asked twice within the hour is one
+           call, not two, and near-repeats are most of what a chat generates —
+           this is a larger saving than the ceiling below ever is. */
+        const cached = readCachedSearch(query);
+        if (cached) {
+          onActivity(`Searching for “${query}”`);
+          return cached;
+        }
+
+        /* Then the ceiling. Past 90% of the month's allotment the tool stops
+           and NaviSol answers from its own knowledge. The refusal is written
+           for the model, not the user: it says what happened so the answer can
+           be honest about not having looked, without turning into a notice
+           about quotas that nobody asked for. */
+        if (!(await searchAllowed())) {
+          return "Web search is unavailable for the rest of this period. Answer from your own knowledge and say plainly that you could not check anything current.";
+        }
+
         try {
           onActivity(`Searching for “${query}”`);
           const hits = await runSearch(query, signal);
+          void recordSearch();
           if (!hits.length) return `No results for "${query}".`;
-          return hits
+          const rendered = hits
             .map((hit, index) => `${index + 1}. ${hit.title}\n   ${hit.url}\n   ${hit.snippet}`)
             .join("\n\n");
+          cacheSearch(query, rendered);
+          return rendered;
         } catch (error) {
           return `Search failed: ${error instanceof Error ? error.message : "unknown error"}`;
         }
