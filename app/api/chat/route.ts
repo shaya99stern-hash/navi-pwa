@@ -19,6 +19,7 @@ import { readUntilCommitted } from "@/lib/ai/lane-commit";
 import { readGithubToken } from "@/lib/github/oauth";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
 import { buildWebTools, hasWebSearch } from "@/lib/ai/web-tools";
+import { buildExecutionTools, executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { runComposite } from "@/lib/ai/swarm";
 import {
   architectPlan,
@@ -500,7 +501,10 @@ function systemPrompt(options: {
       : tools.web
         ? "Web search is switched on but unavailable on this route, so you cannot browse. Say so rather than implying you looked something up."
         : "You cannot browse the web in this request.",
-    tools.code ? "Code-execution capability is enabled only when the selected route actually supplies it." : "Code execution is disabled.",
+    /* The capability is the app's own now, not the route's. It used to be
+       described as available "only when the selected route actually supplies
+       it", which made a core ability hostage to whichever provider answered. */
+    tools.code && toolNames.includes("run_javascript") ? executionInstruction() : "Code execution is disabled in this request.",
     tools.artifacts ? artifactInstruction(artifactRequested) : "Interactive artifact output is disabled.",
     capabilityRequested ? capabilityInstruction() : "",
     memoryContext || "",
@@ -833,6 +837,10 @@ export async function POST(request: Request): Promise<Response> {
       const availableTools = {
         ...buildSkillTools(announce),
         ...buildWebTools({ search: tools.web, signal: request.signal, onActivity: announce }),
+        /* Runs on the device, not here. The tool carries no `execute`, so the
+           SDK forwards the call to the client, which runs it in a worker and
+           submits the result back into this same conversation. */
+        ...(tools.code ? buildExecutionTools() : {}),
         // Repository and deployment reads, present only when their tokens are.
         ...buildDevTools(announce, { githubToken: userGithubToken }),
         ...mcpTools

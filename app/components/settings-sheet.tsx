@@ -714,7 +714,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Code execution and file creation"
-                description="Available only when the selected route actually supplies it."
+                description="NaviSol runs JavaScript on this device to check its own work before answering, then fixes what fails. Nothing it runs can reach the network or your files."
                 control={<SettingsToggle label="Code execution" value={preferences.tools.code} onChange={() => update({ tools: { ...preferences.tools, code: !preferences.tools.code } })} />}
               />
             </Group>

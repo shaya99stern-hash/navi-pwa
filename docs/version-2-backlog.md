@@ -44,6 +44,30 @@ feature working badly rather than a feature that is off.
 
 ---
 
+## Python in the code-execution sandbox
+
+Task 5 ships JavaScript execution in a Web Worker. Python was in the same spec
+and is not here.
+
+**Why it was left.** Running Python in a browser means Pyodide, which is several
+megabytes of WebAssembly before any user code runs. On a mobile-first PWA over
+cellular that is the wrong trade for a capability most turns will not use, and
+loading it eagerly would slow every session to serve a few.
+
+**What it would take.** Load it lazily, on the first Python run rather than at
+startup, behind a visible "preparing Python" state, and cache it in the service
+worker so the cost is paid once per device rather than once per session. Then
+decide whether it is opt-in in Settings — a several-megabyte download is a
+choice a user on a metered connection should get to make. The sandbox interface
+in `lib/execution/sandbox.ts` already returns a neutral `ExecutionResult`, so a
+second runtime slots in beside the first without changing the repair loop.
+
+Do **not** solve this by running Python server-side. The reasoning that ruled
+out a server sandbox for JavaScript applies unchanged: the edge runtime cannot
+isolate a script, and Node's `vm` module is explicitly not a security boundary.
+
+---
+
 ## Third-party model names in swarm guardrails
 
 `lib/ai/swarm.ts` carries negative instructions naming specific third-party

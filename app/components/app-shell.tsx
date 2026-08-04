@@ -1,7 +1,9 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
+import { describeResult, runInSandbox } from "@/lib/execution/sandbox";
+import { MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type FileUIPart, type UIMessage } from "ai";
 import { ChevronDown, Ellipsis, FolderKanban, Ghost, Link2, PanelLeft, Search, SquarePen, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -199,6 +201,10 @@ export function AppShell({
   const edgeSwipe = useEdgeSwipe({ disabled: historyOpen, haptics: preferences.haptics, onOpen: openHistory });
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
+  /* Counted per user turn, not per conversation: three attempts at this
+     problem, then three fresh ones at the next. Reset on send below. */
+  const repairRounds = useRef(0);
+
   const {
     messages,
     sendMessage,
@@ -207,10 +213,42 @@ export function AppShell({
     status,
     error,
     clearError,
-    setMessages
+    setMessages,
+    addToolResult
   } = useChat({
     transport,
     experimental_throttle: 32,
+    /* Submit the tool result and let the model continue on its own. Without
+       this the run happens, the result sits there, and the conversation stops
+       one step short of the model ever reading its own error. */
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    onToolCall: async ({ toolCall }) => {
+      if (toolCall.toolName !== "run_javascript") return;
+      const input = toolCall.input as { code?: string };
+      const code = typeof input?.code === "string" ? input.code : "";
+
+      if (!code.trim()) {
+        addToolResult({ tool: "run_javascript", toolCallId: toolCall.toolCallId, output: "No code was supplied to run." });
+        return;
+      }
+
+      /* The cap lives here because this is the only place that can count. The
+         model is asked to stop after three attempts and mostly will; a model
+         that does not would otherwise loop on the device until the request
+         budget ran out. */
+      repairRounds.current += 1;
+      if (repairRounds.current > MAX_REPAIR_ROUNDS) {
+        addToolResult({
+          tool: "run_javascript",
+          toolCallId: toolCall.toolCallId,
+          output: `This code has already been run ${MAX_REPAIR_ROUNDS} times without succeeding. Stop repairing it. Present your best attempt and state plainly what is still failing.`
+        });
+        return;
+      }
+
+      const result = await runInSandbox(code);
+      addToolResult({ tool: "run_javascript", toolCallId: toolCall.toolCallId, output: describeResult(result) });
+    },
     onData: (part) => {
       if (part.type === "data-status") setStreamStatus(part.data as NaviStreamStatus);
     },
@@ -746,6 +784,7 @@ export function AppShell({
             : current;
         });
       }
+      repairRounds.current = 0;
       await sendMessage({ text, files }, { body: requestBody(text) });
     } catch (submitError) {
       setAttachmentError(submitError instanceof Error ? submitError.message : "Could not prepare attachments.");
@@ -766,6 +805,7 @@ export function AppShell({
     priorAssistantId.current = latestAssistant?.id ?? null;
     setSpeakNextReply(speakReply);
     try {
+      repairRounds.current = 0;
       await sendMessage({ text: text.trim() }, { body: requestBody(text) });
     } catch (voiceError) {
       setSpeakNextReply(false);
