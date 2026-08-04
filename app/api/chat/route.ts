@@ -14,12 +14,11 @@ import { createProviderModel, fallbackRoutes, getProviderAvailability, routeForL
 import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
-import { buildDevTools } from "@/lib/ai/dev-tools";
 import { readUntilCommitted } from "@/lib/ai/lane-commit";
-import { readGithubToken } from "@/lib/github/oauth";
-import { buildSkillTools } from "@/lib/ai/skill-tools";
-import { buildWebTools, hasWebSearch } from "@/lib/ai/web-tools";
-import { buildExecutionTools, executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
+import { githubWritesEnabled, readGithubToken } from "@/lib/github/oauth";
+import { hasWebSearch } from "@/lib/ai/web-tools";
+import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
+import { buildToolset } from "@/lib/tools/registry";
 import { runComposite } from "@/lib/ai/swarm";
 import {
   architectPlan,
@@ -843,17 +842,20 @@ export async function POST(request: Request): Promise<Response> {
         : ["", {} as Awaited<ReturnType<typeof buildMcpTools>>];
       // Clock and page reading need no configuration, so they are always on;
       // search joins them only when a provider key is present.
-      const availableTools = {
-        ...buildSkillTools(announce),
-        ...buildWebTools({ search: tools.web, signal: request.signal, onActivity: announce }),
-        /* Runs on the device, not here. The tool carries no `execute`, so the
-           SDK forwards the call to the client, which runs it in a worker and
-           submits the result back into this same conversation. */
-        ...(tools.code ? buildExecutionTools() : {}),
-        // Repository and deployment reads, present only when their tokens are.
-        ...buildDevTools(announce, { githubToken: userGithubToken }),
-        ...mcpTools
-      };
+      /* One registry decides what NaviSol can do this turn, rather than five
+         builders assembled here with five separate ideas of when they apply.
+         It also enforces the ceiling on how many tools go out — past roughly a
+         dozen, selection accuracy falls and every turn pays the schema cost of
+         the ones the model will not call. */
+      const availableTools = buildToolset({
+        mode,
+        policy: tools,
+        githubToken: userGithubToken,
+        githubWritesEnabled: githubWritesEnabled(),
+        signal: request.signal,
+        onActivity: announce,
+        mcpTools
+      });
       const modelMessages = await convertToModelMessages(redactGeneratedMedia(messages));
 
       if (resolvedPreset === "navi-fable" || resolvedPreset === "navi-sol") {
