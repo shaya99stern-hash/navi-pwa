@@ -1,4 +1,5 @@
 import { githubToken, vercelToken } from "@/lib/ai/dev-tools";
+import { providerProbes } from "@/lib/ai/providers";
 import { authorizeApiMutation } from "@/lib/auth/api";
 
 /**
@@ -77,6 +78,37 @@ async function testVercel(): Promise<IntegrationTest> {
   }
 }
 
+/**
+ * Test every AI provider at once and report each separately.
+ *
+ * The chat route cannot distinguish "one provider is refusing" from "all of
+ * them are" — it reports whatever the last attempt said, and a fallback chain
+ * makes that worse by hiding the first two failures. Probing them individually
+ * turns "every provider refused (403)" into a list naming which, and with what.
+ */
+async function testProviders(): Promise<Array<{ provider: string; label: string; ok: boolean; status?: number; detail?: string }>> {
+  const probes = providerProbes();
+  if (!probes.length) return [];
+  return Promise.all(probes.map(async (probe) => {
+    try {
+      const response = await fetchWithTimeout(probe.url, probe.headers);
+      if (response.ok) return { provider: probe.provider, label: probe.label, ok: true, status: response.status };
+      /* The body carries the actual reason — "API key not valid", "referer
+         blocked", "billing required" — which the status code alone never
+         gives. Trimmed hard: this is a diagnostic line, not a log. */
+      const body = (await response.text().catch(() => "")).replace(/\s+/g, " ").trim();
+      return { provider: probe.provider, label: probe.label, ok: false, status: response.status, detail: body.slice(0, 180) };
+    } catch (error) {
+      return {
+        provider: probe.provider,
+        label: probe.label,
+        ok: false,
+        detail: error instanceof Error ? error.message.slice(0, 180) : "unreachable"
+      };
+    }
+  }));
+}
+
 export async function POST(request: Request): Promise<Response> {
   /* Each call spends a little of the owner's rate limit and reveals which
      account a token belongs to, so it needs the same authorization as any
@@ -85,6 +117,13 @@ export async function POST(request: Request): Promise<Response> {
   if (authorizationError) return authorizationError;
 
   const target = new URL(request.url).searchParams.get("target");
+  if (target === "providers") {
+    const results = await testProviders();
+    return Response.json(
+      { ok: results.some((r) => r.ok), results, total: results.length, working: results.filter((r) => r.ok).length },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
   if (target !== "github" && target !== "vercel") {
     return Response.json({ ok: false, error: "Unknown integration." }, { status: 400 });
   }

@@ -165,6 +165,35 @@ export function getProviderStackStatus() {
   };
 }
 
+/**
+ * A minimal authenticated request per provider, for diagnosing credentials.
+ *
+ * Every provider refusing at once is a different problem from one refusing,
+ * and the chat route cannot tell them apart — it reports whatever the last
+ * attempt said. Listing models is the cheapest call that still proves the key
+ * works and the host is reachable, and it costs no tokens.
+ *
+ * The key never leaves this module: the caller receives a prepared request, so
+ * a diagnostic surface can report a status without ever holding a credential.
+ */
+export function providerProbes(): Array<{ provider: ProviderName; label: string; url: string; headers: Record<string, string> }> {
+  const bearer = (key: string) => ({ Authorization: `Bearer ${key}` });
+  const probes: Array<{ provider: ProviderName; label: string; url: string; headers: Record<string, string> }> = [];
+  const gemini = geminiApiKey();
+  if (gemini) probes.push({ provider: "gemini", label: "Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai/models", headers: bearer(gemini) });
+  const groq = groqApiKey();
+  if (groq) probes.push({ provider: "groq", label: "Groq", url: "https://api.groq.com/openai/v1/models", headers: bearer(groq) });
+  const hf = huggingFaceToken();
+  if (hf) probes.push({ provider: "huggingface", label: "Hugging Face", url: "https://router.huggingface.co/v1/models", headers: bearer(hf) });
+  const cerebras = cerebrasApiKey();
+  if (cerebras) probes.push({ provider: "cerebras", label: "Cerebras", url: "https://api.cerebras.ai/v1/models", headers: bearer(cerebras) });
+  const openrouter = openRouterApiKey();
+  if (openrouter) probes.push({ provider: "openrouter", label: "OpenRouter", url: "https://openrouter.ai/api/v1/models", headers: bearer(openrouter) });
+  const mistral = mistralApiKey();
+  if (mistral) probes.push({ provider: "mistral", label: "Mistral", url: "https://api.mistral.ai/v1/models", headers: bearer(mistral) });
+  return probes;
+}
+
 export function createProviderModel(route: ProviderRoute, origin: string): any {
   if (route.provider === "gemini") {
     const apiKey = geminiApiKey();

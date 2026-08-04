@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Github, Link2, Search, Triangle, X } from "lucide-react";
+import { Check, ChevronRight, Cpu, Github, Link2, Search, Triangle, X } from "lucide-react";
 import { useState } from "react";
 import type { ConnectorAccessMode } from "@/lib/ai/types";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
@@ -124,6 +124,35 @@ export function IntegrationsSheet({
     vercel: { phase: "idle", message: "" }
   });
 
+  const [providerReport, setProviderReport] = useState<{
+    phase: "idle" | "testing" | "done" | "error";
+    message: string;
+    rows: Array<{ label: string; ok: boolean; status?: number; detail?: string }>;
+  }>({ phase: "idle", message: "", rows: [] });
+
+  const runProviderTest = async () => {
+    setProviderReport({ phase: "testing", message: "Testing every configured provider…", rows: [] });
+    try {
+      const response = await fetch("/api/integrations/test?target=providers", { method: "POST", cache: "no-store" });
+      const data = await response.json() as {
+        results?: Array<{ label: string; ok: boolean; status?: number; detail?: string }>;
+        working?: number; total?: number;
+      };
+      const rows = data.results ?? [];
+      if (!rows.length) {
+        setProviderReport({ phase: "error", message: "No AI provider keys are configured at all.", rows: [] });
+        return;
+      }
+      setProviderReport({
+        phase: data.working ? "done" : "error",
+        message: `${data.working} of ${data.total} providers answered.`,
+        rows
+      });
+    } catch {
+      setProviderReport({ phase: "error", message: "The test could not run.", rows: [] });
+    }
+  };
+
   const runTest = async (target: "github" | "vercel") => {
     setTests((current) => ({ ...current, [target]: { phase: "testing", message: "" } }));
     try {
@@ -225,6 +254,50 @@ export function IntegrationsSheet({
               action="Manage"
               onAction={onOpenConnectors}
             />
+          </div>
+
+          {/* The AI providers are the app's engine, and until now nothing
+              reported on them individually. A chat failure names whichever
+              attempt failed last, which with a fallback chain hides the first
+              two — so "every provider refused" and "one provider refused"
+              looked identical. */}
+          <div className="mt-3 overflow-hidden rounded-card border border-[var(--border-subtle)] bg-elev-2">
+            <div className="flex items-start gap-3 px-4 py-3">
+              <Cpu size={19} strokeWidth={1.8} className="mt-0.5 shrink-0 text-secondary" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[0.9375rem]/5 font-semibold text-primary">AI providers</span>
+                <span className="mt-0.5 block text-[0.8125rem]/[1.125rem] text-tertiary">
+                  Checks each configured key against its provider and reports what each one says.
+                </span>
+                {providerReport.message ? (
+                  <span className={`mt-1.5 block text-[0.8125rem]/[1.125rem] font-medium ${providerReport.phase === "error" ? "text-danger" : providerReport.phase === "done" ? "text-accent" : "text-secondary"}`}>
+                    {providerReport.message}
+                  </span>
+                ) : null}
+                {providerReport.rows.length ? (
+                  <span className="mt-2 block space-y-1.5">
+                    {providerReport.rows.map((row) => (
+                      <span key={row.label} className="block text-[0.75rem]/[1.125rem]">
+                        <span className={row.ok ? "font-semibold text-accent" : "font-semibold text-danger"}>
+                          {row.ok ? "OK" : row.status ? String(row.status) : "ERR"}
+                        </span>
+                        <span className="text-secondary"> {row.label}</span>
+                        {row.detail ? <span className="text-tertiary"> — {row.detail}</span> : null}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => void runProviderTest()}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); void runProviderTest(); } }}
+                  className="mt-2 inline-flex min-h-11 items-center rounded-full border border-[var(--border-subtle)] px-3 text-[0.8125rem]/5 font-medium text-primary active:bg-elev-3"
+                >
+                  {providerReport.phase === "testing" ? "Testing…" : "Test AI providers"}
+                </span>
+              </span>
+            </div>
           </div>
 
           <p className="px-2 pt-3 text-[0.75rem]/[1.125rem] text-tertiary">
