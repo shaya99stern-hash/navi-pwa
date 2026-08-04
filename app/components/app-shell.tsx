@@ -19,7 +19,7 @@ import {
   isResizableImage,
   prepareAttachments
 } from "@/lib/ui/attachments";
-import { DEFAULT_PREFERENCES, EFFORT_LEVELS, MODEL_PRESETS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
+import { DEFAULT_PREFERENCES, EFFORT_LEVELS, NAVI_MODES, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
 import {
   clearLocalState,
   loadLocalState,
@@ -44,7 +44,7 @@ import { MessageActionSheet } from "./message-action-sheet";
 import { MessageRow } from "./message-row";
 import { ArtifactsSheet } from "./artifacts-sheet";
 import { ChatMenuSheet } from "./chat-menu-sheet";
-import { ModelPickerSheet } from "./model-picker-sheet";
+import { EffortSheet } from "./effort-sheet";
 import { ProjectsSheet } from "./projects-sheet";
 import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { SettingsSheet } from "./settings-sheet";
@@ -154,7 +154,7 @@ export function AppShell({
   const [settingsSection, setSettingsSection] = useState<MenuSection | undefined>(
     initialSheet === "customize" ? "skills" : undefined
   );
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [effortSheetOpen, setEffortSheetOpen] = useState(false);
   const [chatMenuOpen, setChatMenuOpen] = useState(false);
   /* Incognito: this conversation is never written to storage and never
      recalled by memory. It exists only while the screen is open. */
@@ -215,7 +215,7 @@ export function AppShell({
       if (preferences.notifyOnComplete && document.visibilityState === "hidden"
         && "Notification" in window && Notification.permission === "granted") {
         void navigator.serviceWorker?.getRegistration("/")
-          .then((registration) => registration?.showNotification("NaviOS Hub", {
+          .then((registration) => registration?.showNotification("NaviOS", {
             body: "Navi has finished a response.",
             icon: "/pwa-icon-192-v5.png",
             badge: "/pwa-icon-192-v5.png",
@@ -234,10 +234,13 @@ export function AppShell({
   const generating = status === "submitted" || status === "streaming";
   const activeChat = chats.find((chat) => chat.id === activeId);
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
-  const activePreset = MODEL_PRESETS.find((item) => item.id === preferences.preset) ?? MODEL_PRESETS[0];
+  /* The mode is the product; the route is chosen per request by the router.
+     Code mode reads as a state worth naming, Chat mode is the default and
+     naming it would be noise. */
+  const activeMode = NAVI_MODES.find((item) => item.id === preferences.mode) ?? NAVI_MODES[0];
   const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
-  const statusText = streamStatus?.detail ?? (generating ? "Navi is working" : activePreset.label);
+  const statusText = streamStatus?.detail ?? (generating ? "NaviSol is working" : preferences.mode === "code" ? activeMode.label : "");
 
   /* Recall runs against the question being asked, so it is computed at send
      time rather than folded into the memoised body. */
@@ -253,7 +256,8 @@ export function AppShell({
   ], [preferences.customPlaybooks]);
 
   const requestBody = useCallback((question?: string) => ({
-    preset: preferences.preset,
+    mode: preferences.mode,
+    routeOverride: preferences.routeOverride,
     effort: preferences.effort,
     tools: preferences.tools,
     memory: question ? recalledContext(question) : "",
@@ -850,6 +854,8 @@ export function AppShell({
         dragProgress={edgeSwipe.progress}
         chats={chats}
         activeId={activeId}
+        mode={preferences.mode}
+        onMode={(mode) => updatePreferences({ ...preferences, mode })}
         profileName={preferences.profile.displayName || preferences.profile.fullName}
         haptics={preferences.haptics}
         onClose={() => setHistoryOpen(false)}
@@ -878,7 +884,7 @@ export function AppShell({
         </button>
         <div className="min-w-0 flex-1 text-center">
           {messages.length === 0 && !activeChat ? (
-            <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">NaviOS Hub</div>
+            <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">NaviOS</div>
           ) : (
             /* The title is the chat's own menu: star, rename, share, delete.
                The chevron is the affordance that says so. */
@@ -1055,7 +1061,6 @@ export function AppShell({
         generating={generating}
         online={online}
         attachmentCount={pendingFiles.length}
-        modelLabel={activePreset.label}
         effortLabel={activeEffort.label}
         hasMessages={messages.length > 0}
         research={preferences.tools.web}
@@ -1066,9 +1071,9 @@ export function AppShell({
         onChange={setDraft}
         onSend={() => void submit()}
         onFiles={addFiles}
-        onOpenModels={() => {
+        onOpenEffort={() => {
           haptic("selection", preferences.haptics);
-          setModelPickerOpen(true);
+          setEffortSheetOpen(true);
         }}
         onOpenVoice={() => {
           setSettingsOpen(false);
@@ -1104,10 +1109,10 @@ export function AppShell({
         onExport={exportData}
       />
 
-      <ModelPickerSheet
-        open={modelPickerOpen}
+      <EffortSheet
+        open={effortSheetOpen}
         preferences={preferences}
-        onClose={() => setModelPickerOpen(false)}
+        onClose={() => setEffortSheetOpen(false)}
         onPreferences={updatePreferences}
       />
 

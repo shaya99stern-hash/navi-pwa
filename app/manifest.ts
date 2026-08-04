@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   const value = {
     id: "/",
-    name: "NaviOS Hub — Private AI Workspace",
-    short_name: "NaviOS Hub",
+    name: "NaviOS — Private AI Workspace",
+    short_name: "NaviOS",
     description: "A private, local-first AI workspace for conversations, files, images, interactive tools, and long-running projects.",
     start_url: "/new?source=pwa",
     scope: "/",
@@ -25,21 +25,21 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         name: "New chat",
         short_name: "New chat",
-        description: "Start a new conversation in NaviOS Hub",
+        description: "Start a new conversation in NaviOS",
         url: "/new",
         icons: [{ src: "/pwa-icon-192-v5.png", sizes: "192x192", type: "image/png" }]
       },
       {
         name: "Voice mode",
         short_name: "Voice",
-        description: "Start a voice conversation in NaviOS Hub",
+        description: "Start a voice conversation in NaviOS",
         url: "/voice",
         icons: [{ src: "/pwa-icon-192-v5.png", sizes: "192x192", type: "image/png" }]
       },
       {
         name: "Projects",
         short_name: "Projects",
-        description: "Open your NaviOS Hub projects",
+        description: "Open your NaviOS projects",
         url: "/projects",
         icons: [{ src: "/pwa-icon-192-v5.png", sizes: "192x192", type: "image/png" }]
       }
@@ -56,14 +56,14 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "1179x2556",
         type: "image/png",
         form_factor: "narrow",
-        label: "NaviOS Hub mobile conversation launch and composer"
+        label: "NaviOS mobile conversation launch and composer"
       },
       {
         src: "/manifest-tools",
         sizes: "1600x900",
         type: "image/png",
         form_factor: "wide",
-        label: "NaviOS Hub models, files, tools, and connections"
+        label: "NaviOS models, files, tools, and connections"
       }
     ]
   };

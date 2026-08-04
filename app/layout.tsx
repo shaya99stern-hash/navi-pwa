@@ -38,19 +38,19 @@ async function buildMetadata(): Promise<Metadata> {
   const theme = await readThemeCookie();
   return {
   metadataBase: new URL(siteUrl),
-  applicationName: "NaviOS Hub",
-  title: { default: "NaviOS Hub — Private AI Workspace", template: "%s · NaviOS Hub" },
+  applicationName: "NaviOS",
+  title: { default: "NaviOS — Private AI Workspace", template: "%s · NaviOS" },
   description: "A private, local-first AI workspace for conversations, files, images, interactive tools, and long-running projects.",
   manifest: "/manifest.webmanifest",
   alternates: { canonical: "/" },
-  keywords: ["NaviOS Hub", "Navi", "NaviOS", "AI workspace", "AI assistant", "private AI", "PWA"],
+  keywords: ["NaviOS", "Navi", "NaviOS", "AI workspace", "AI assistant", "private AI", "PWA"],
   formatDetection: { telephone: false, address: false, email: false },
   /* iOS reads this once at launch and ignores later mutation, so it has to be
      rendered per request. black-translucent draws white glyphs, which vanish
      against the ivory light theme; default keeps them dark. */
   appleWebApp: {
     capable: true,
-    title: "NaviOS Hub",
+    title: "NaviOS",
     statusBarStyle: theme === "light" ? "default" : "black-translucent"
   },
   icons: {
@@ -60,14 +60,14 @@ async function buildMetadata(): Promise<Metadata> {
   openGraph: {
     type: "website",
     url: siteUrl,
-    siteName: "NaviOS Hub",
-    title: "NaviOS Hub — Private AI Workspace",
+    siteName: "NaviOS",
+    title: "NaviOS — Private AI Workspace",
     description: "Conversations, files, images, tools, and multi-provider AI in one installable workspace.",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "NaviOS Hub private AI workspace" }]
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "NaviOS private AI workspace" }]
   },
   twitter: {
     card: "summary_large_image",
-    title: "NaviOS Hub — Private AI Workspace",
+    title: "NaviOS — Private AI Workspace",
     description: "Conversations, files, images, tools, and multi-provider AI in one installable workspace.",
     images: ["/opengraph-image"]
   },

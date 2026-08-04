@@ -62,7 +62,6 @@ type Props = {
   online: boolean;
   attachmentCount: number;
   statusText: string;
-  modelLabel: string;
   /** Current effort level label, shown gray beside the model name in the pill. */
   effortLabel: string;
   /** Placeholder and disclaimer differ between a fresh chat and one under way. */
@@ -77,7 +76,7 @@ type Props = {
   onSend: () => void;
   onStop: () => void;
   onFiles: (files: FileList | null) => void;
-  onOpenModels: () => void;
+  onOpenEffort: () => void;
   onOpenVoice: () => void;
   onToggleResearch: () => void;
   onOpenTools: () => void;
@@ -139,7 +138,6 @@ export function ComposerDock({
   online,
   attachmentCount,
   statusText,
-  modelLabel,
   effortLabel,
   hasMessages,
   research,
@@ -150,7 +148,7 @@ export function ComposerDock({
   onSend,
   onStop,
   onFiles,
-  onOpenModels,
+  onOpenEffort,
   onOpenVoice,
   onToggleResearch,
   onOpenTools,
@@ -612,12 +610,13 @@ export function ComposerDock({
 
               <button
                 type="button"
-                onClick={onOpenModels}
+                onClick={onOpenEffort}
                 className="flex min-h-9 min-w-0 max-w-[180px] items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2"
-                aria-label={`Model: ${modelLabel} ${effortLabel}. Change model or effort`}
+                /* Effort only. There is one brain, so a model name here would
+                   be offering an implementation detail as a choice. */
+                aria-label={`Effort: ${effortLabel}. Change effort`}
               >
-                <span className="truncate font-semibold text-primary">{modelLabel}</span>
-                <span className="shrink-0 font-medium text-tertiary">{effortLabel}</span>
+                <span className="truncate font-semibold text-primary">{effortLabel}</span>
                 <ChevronDown size={13} className="shrink-0 text-tertiary" />
               </button>
 
@@ -671,7 +670,7 @@ export function ComposerDock({
             {footer ? (
               <span className={`block pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
             ) : hasMessages ? (
-              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">Navi is AI and can make mistakes. Double-check important answers.</span>
+              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">NaviSol is AI and can make mistakes. Double-check important answers.</span>
             ) : null}
           </div>
 

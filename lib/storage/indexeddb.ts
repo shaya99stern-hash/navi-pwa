@@ -1,4 +1,4 @@
-import type { ConnectorAccessMode, ModelPreset, NaviPreferences, NaviProject, StoredChat } from "../ai/types";
+import type { ConnectorAccessMode, NaviMode, NaviPreferences, NaviProject, StoredChat } from "../ai/types";
 import { DEFAULT_PREFERENCES, effortFromLegacyStyle, sortChats } from "../chat";
 
 const DB_NAME = "navi-local-v3";
@@ -8,7 +8,7 @@ const STORAGE_SCOPE_KEY = "navi.storage.scope.v1";
 const LEGACY_OWNER_KEY = "navi.storage.legacy-owner.v1";
 const KNOWN_STATE_KEYS = ["chats", "preferences", "draft", "projects", "activeProjectId"] as const;
 
-type PreferenceInput = Omit<Partial<NaviPreferences>, "preset"> & { preset?: unknown };
+type PreferenceInput = Partial<NaviPreferences> & { preset?: unknown };
 
 export type LocalState = {
   chats: StoredChat[];
@@ -156,30 +156,37 @@ async function migrateUnscopedIndexedDbState(): Promise<void> {
   localStorage.setItem(marker, "1");
 }
 
-function normalizePreset(value: unknown): ModelPreset {
-  const map: Record<string, ModelPreset> = {
-    "navi-soul": "navi-soul",
-    "navi-code": "navi-code",
-    // Both earlier headline presets are Soul now.
-    "navi-chat": "navi-soul",
-    auto: "navi-soul",
-    "navi-fable": "navi-fable",
-    "navi-sol": "navi-sol",
-    "navi-5": "navi-fable",
-    "navi-sol-5-6": "navi-sol",
-    "gemini-direct": "gemini-direct",
-    "groq-direct": "groq-direct",
-    "huggingface-direct": "huggingface-direct",
-    "fable-5": "navi-fable",
-    "opus-4-8": "navi-sol",
-    "groq-balanced": "navi-fable",
-    "groq-reasoning": "navi-sol",
-    "groq-fast": "groq-direct",
-    "gemini-flash": "gemini-direct",
-    "openrouter-free": "huggingface-direct"
-  };
-  return map[String(value ?? "navi-soul")] ?? "navi-soul";
+/* v4.2.0 shipped a model picker. v4.3.0 has one brain and two modes, so every
+   stored preset collapses to the mode it was really expressing. Anyone on Code
+   keeps Code; everyone else lands on Chat. Nobody is left unset. */
+const LEGACY_PRESET_TO_MODE: Record<string, NaviMode> = {
+  "navi-code": "code",
+  "navi-fable": "code",
+  "navi-soul": "chat",
+  "navi-sol": "chat",
+  "navi-chat": "chat",
+  auto: "chat",
+  "gemini-direct": "chat",
+  "groq-direct": "chat",
+  "huggingface-direct": "chat",
+  // Presets retired before v4.2.0, still on devices that have not opened since.
+  "navi-5": "code",
+  "fable-5": "code",
+  "navi-sol-5-6": "chat",
+  "opus-4-8": "chat",
+  "groq-balanced": "chat",
+  "groq-reasoning": "chat",
+  "groq-fast": "chat",
+  "gemini-flash": "chat",
+  "openrouter-free": "chat"
+};
+
+function normalizeMode(value: unknown, legacyPreset: unknown): NaviMode {
+  // A v4.3.0 preference already carries a mode; trust it before the fallback.
+  if (value === "chat" || value === "code") return value;
+  return LEGACY_PRESET_TO_MODE[String(legacyPreset ?? "")] ?? "chat";
 }
+
 
 function normalizeConnectorMode(value: unknown): ConnectorAccessMode {
   return value === "auto" || value === "always" ? value : "ask";
@@ -196,7 +203,7 @@ function mergePreferences(value?: PreferenceInput): NaviPreferences {
   return {
     ...DEFAULT_PREFERENCES,
     ...value,
-    preset: normalizePreset(value?.preset),
+    mode: normalizeMode((value as { mode?: unknown } | undefined)?.mode, value?.preset),
     // Pre-effort clients stored a three-way response style; carry it forward.
     effort: EFFORTS.includes(stored?.effort as (typeof EFFORTS)[number])
       ? (stored?.effort as NaviPreferences["effort"])
@@ -326,7 +333,9 @@ export async function loadLocalState(): Promise<LocalState> {
   }
 
   const normalizedPreferences = mergePreferences(storedPreferences);
-  if (storedPreferences?.preset !== normalizedPreferences.preset || storedPreferences?.connectorAccessMode !== normalizedPreferences.connectorAccessMode) {
+  /* Persist immediately when normalisation changed anything, so a v4.2.0
+     device is migrated on first open rather than on first settings change. */
+  if (storedPreferences?.mode !== normalizedPreferences.mode || storedPreferences?.connectorAccessMode !== normalizedPreferences.connectorAccessMode) {
     await setLocalValue("preferences", normalizedPreferences);
   }
 

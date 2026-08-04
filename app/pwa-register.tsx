@@ -84,7 +84,7 @@ export default function PWARegister() {
 
     const checkForUpdate = async (manual: boolean) => {
       if (cancelled || !navigator.onLine) {
-        if (manual) emitPwaUpdateStatus({ phase: "error", message: "NaviOS Hub is offline. Reconnect and try again." });
+        if (manual) emitPwaUpdateStatus({ phase: "error", message: "NaviOS is offline. Reconnect and try again." });
         return;
       }
 
@@ -115,7 +115,7 @@ export default function PWARegister() {
         if (manual) {
           await restartWithFreshShell();
         } else {
-          emitPwaUpdateStatus({ phase: "current", message: "Navi is up to date." });
+          emitPwaUpdateStatus({ phase: "current", message: "NaviSol is up to date." });
         }
       } catch (error) {
         console.error("Navi update check failed:", error);

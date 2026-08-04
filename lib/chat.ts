@@ -1,27 +1,28 @@
 import type { UIMessage } from "ai";
-import type { EffortLevel, ModelPreset, NaviPreferences, ResponseStyle, StoredChat } from "./ai/types";
+import type { EffortLevel, ModelPreset, NaviMode, NaviPreferences, ResponseStyle, StoredChat } from "./ai/types";
 
 /**
- * Two entries, and only two. Navi Soul is the lead: it reads each request and
- * dispatches to whichever engine leads at that job — an image goes to the
- * image pipeline, a stack trace to the coding routes, a question about today
- * to search. Navi Code exists for when the whole conversation is technical and
- * that should be assumed rather than inferred per message.
+ * The two modes, and the only product choice the interface offers.
  *
- * Everything below is `overflow: true` and no longer appears in the picker at
- * all. Those routes remain selectable from Settings as a diagnostic override,
- * because "which engine answered?" is the first question when something is
- * wrong — but choosing one should never be part of asking a question.
+ * There is one brain — NaviSol — behind both. Which free provider answers a
+ * given turn is chosen by the router and never named on screen, so nothing
+ * here mentions a model.
  */
-export const MODEL_PRESETS: Array<{ id: ModelPreset; label: string; detail: string; composite: boolean; overflow?: boolean }> = [
-  { id: "navi-soul", label: "Navi Soul", detail: "Chooses the right engine for whatever you ask", composite: false },
-  { id: "navi-code", label: "Navi Code", detail: "Software, debugging, and technical work", composite: false },
-  { id: "navi-fable", label: "Navi Fable", detail: "Long-horizon multi-role project swarm", composite: true, overflow: true },
-  { id: "navi-sol", label: "Navi Sol", detail: "Parallel research and verification swarm", composite: true, overflow: true },
-  { id: "huggingface-direct", label: "Hugging Face Direct", detail: "Best currently available Hugging Face route", composite: false, overflow: true },
-  { id: "gemini-direct", label: "Gemini Direct", detail: "Direct Gemini multimodal route", composite: false, overflow: true },
-  { id: "groq-direct", label: "Groq Direct", detail: "Direct low-latency reasoning route", composite: false, overflow: true }
+export const NAVI_MODES: Array<{ id: NaviMode; label: string; detail: string }> = [
+  { id: "chat", label: "NaviOS Chat", detail: "General conversation" },
+  { id: "code", label: "NaviOS Code", detail: "Software, debugging, repositories" }
 ];
+
+/** The internal routes a diagnostics pin may select. Never shown otherwise. */
+export const DIAGNOSTIC_ROUTES: Array<{ id: ModelPreset; label: string }> = [
+  { id: "navi-soul", label: "Automatic" },
+  { id: "navi-fable", label: "Staged council" },
+  { id: "navi-sol", label: "Parallel council" },
+  { id: "huggingface-direct", label: "Hugging Face" },
+  { id: "gemini-direct", label: "Gemini" },
+  { id: "groq-direct", label: "Groq" }
+];
+
 
 export const RESPONSE_STYLES: Array<{ id: ResponseStyle; label: string }> = [
   { id: "balanced", label: "Balanced" },
@@ -35,9 +36,9 @@ export const RESPONSE_STYLES: Array<{ id: ResponseStyle; label: string }> = [
  * to the model — not a relabel of the same prompt.
  */
 export const EFFORT_LEVELS: Array<{ id: EffortLevel; label: string; detail: string; isDefault?: boolean }> = [
-  { id: "low", label: "Low", detail: "Fastest route, direct answers" },
-  { id: "medium", label: "Medium", detail: "Balanced speed and depth", isDefault: true },
-  { id: "high", label: "High", detail: "Strongest route, checks its own work" }
+  { id: "low", label: "Standard", detail: "Fastest route, direct answers" },
+  { id: "medium", label: "Extended", detail: "Balanced speed and depth", isDefault: true },
+  { id: "high", label: "Maximum", detail: "Strongest route, checks its own work" }
 ];
 
 export const EFFORT_EXPLAINER = "Higher effort means more thorough responses, but takes longer.";
@@ -48,7 +49,7 @@ export function effortFromLegacyStyle(style: ResponseStyle | undefined): EffortL
 }
 
 export const DEFAULT_PREFERENCES: NaviPreferences = {
-  preset: "navi-soul",
+  mode: "chat",
   style: "balanced",
   effort: "medium",
   theme: "dark",

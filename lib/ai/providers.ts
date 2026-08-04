@@ -242,7 +242,7 @@ export function createProviderModel(route: ProviderRoute, origin: string): any {
       baseURL: "https://openrouter.ai/api/v1",
       includeUsage: true,
       // OpenRouter attributes free-tier usage by referer and title.
-      headers: { "HTTP-Referer": origin, "X-Title": "NaviOS Hub" }
+      headers: { "HTTP-Referer": origin, "X-Title": "NaviOS" }
     });
     return provider.chatModel(route.model);
   }
@@ -401,7 +401,7 @@ function configuredHfRoutes(): ProviderRoute[] {
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, 24)
-    .map((model, index) => hf(model, `HF specialist ${index + 1}`, "balanced"));
+    .map((model, index) => hf(model, `NaviSol · analysis ${index + 1}`, "balanced"));
   if (custom?.length) return custom;
 
   /* Capability-ordered so a council of any size still spans reasoning,

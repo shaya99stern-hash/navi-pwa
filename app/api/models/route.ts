@@ -3,11 +3,11 @@ import { devToolAvailability } from "@/lib/ai/dev-tools";
 import { searchProviderName } from "@/lib/ai/web-tools";
 import { getSwarmCatalogStatus } from "@/lib/ai/swarm-router";
 import type { ModelPreset } from "@/lib/ai/types";
-import { MODEL_PRESETS } from "@/lib/chat";
+import { DIAGNOSTIC_ROUTES, NAVI_MODES } from "@/lib/chat";
 
 export const runtime = "edge";
 
-const VALID_PRESETS = new Set<ModelPreset>(MODEL_PRESETS.map((preset) => preset.id));
+const VALID_PRESETS = new Set<ModelPreset>(DIAGNOSTIC_ROUTES.map((route) => route.id));
 
 function normalizeConfiguredDefault(value: string | undefined): ModelPreset {
   if (value === "navi-5" || value === "fable-5") return "navi-fable";
@@ -26,7 +26,8 @@ export async function GET(request: Request): Promise<Response> {
 
   return Response.json(
     {
-      presets: MODEL_PRESETS,
+      // Modes are the product surface; routes are diagnostics only.
+      modes: NAVI_MODES,
       providers: stack.providers,
       // Which developer connections have a token, for the Connectors page.
       devTools: devToolAvailability(),

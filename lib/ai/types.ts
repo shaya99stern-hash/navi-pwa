@@ -2,6 +2,25 @@ import type { UIMessage } from "ai";
 
 export type SwarmPreset = "navi-fable" | "navi-sol";
 
+/**
+ * The product mode. One brain — NaviSol — and two ways to work with it.
+ *
+ * The user switches mode, never model. Which free provider answers is an
+ * implementation detail they neither see nor choose, so it does not belong in
+ * a type the interface reads.
+ */
+export type NaviMode = "chat" | "code";
+
+/** Retained only so preferences stored by v4.2.0 and earlier still migrate. */
+export type LegacyModelPreset =
+  | "navi-soul" | "navi-chat" | "navi-code" | "auto"
+  | "navi-fable" | "navi-sol"
+  | "gemini-direct" | "groq-direct" | "huggingface-direct";
+
+/**
+ * Internal routing identity. Never surfaced: the diagnostics page may pin one,
+ * and the router selects one, but no ordinary screen names it.
+ */
 export type ModelPreset =
   | "navi-soul"
   | "navi-code"
@@ -70,7 +89,9 @@ export type NaviProfile = {
 };
 
 export type NaviPreferences = {
-  preset: ModelPreset;
+  mode: NaviMode;
+  /** Diagnostics-only route pin. Absent for every ordinary user. */
+  routeOverride?: ModelPreset;
   style: ResponseStyle;
   effort: EffortLevel;
   theme: ThemePreference;
