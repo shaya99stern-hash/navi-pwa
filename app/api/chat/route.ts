@@ -44,8 +44,6 @@ const MAX_TOOL_STEPS = 4;
  * leaves the model guessing at exactly the point it was about to know.
  */
 const MAX_CODE_TOOL_STEPS = 8;
-/** Total time the finished swarm answer may spend being typed out. */
-const SWARM_CADENCE_TOTAL_MS = 2_000;
 /**
  * The wall-clock the whole request has, kept under the 60s edge ceiling so a
  * review that starts late is skipped rather than started and killed.
@@ -580,36 +578,12 @@ function refuse(message: string, headers?: Record<string, string>): Response {
   });
 }
 
-function splitForCadence(text: string): string[] {
-  const words = text.match(/\S+\s*/g) ?? [text];
-  const chunks: string[] = [];
-  let buffer = "";
-  for (const word of words) {
-    buffer += word;
-    if (buffer.length >= 38 || buffer.includes("\n")) {
-      chunks.push(buffer);
-      buffer = "";
-    }
-  }
-  if (buffer) chunks.push(buffer);
-  return chunks;
-}
-
 function splitLargePayload(text: string, size = 32_000): string[] {
   const chunks: string[] = [];
   for (let index = 0; index < text.length; index += size) chunks.push(text.slice(index, index + size));
   return chunks;
 }
 
-function delay(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => {
-      clearTimeout(timer);
-      reject(signal.reason ?? new Error("Aborted"));
-    }, { once: true });
-  });
-}
 
 /**
  * Chat and Code are the two headline models; the swarms sit behind them as an
@@ -828,7 +802,13 @@ export async function POST(request: Request): Promise<Response> {
             ? "Planning staged long-horizon work."
             : "Planning independent parallel workstreams."
         }));
-        const result = await runComposite({
+        /* Opened before the swarm runs, not after it finishes. The answer now
+           streams from its first token while the council checks it in the
+           background, so there is no completed text to pace out — the cadence
+           is the model's own. */
+        const textId = generateId();
+        writer.write({ type: "text-start", id: textId });
+        await runComposite({
           profile: swarmProfile,
           messages: modelMessages,
           requestText: lastUserText,
@@ -841,23 +821,9 @@ export async function POST(request: Request): Promise<Response> {
           threadSummary: [userContext, threadSummary].filter(Boolean).join("\n\n").slice(0, 8_000),
           mcpContext,
           onStage: (status) => writer.write(statusChunk(status)),
+          onDelta: (delta) => writer.write({ type: "text-delta", id: textId, delta }),
           abortSignal: request.signal
         });
-        writer.write(statusChunk({ stage: "stream", detail: "Preparing the final answer." }));
-        const textId = generateId();
-        writer.write({ type: "text-start", id: textId });
-        /* The swarm answer is already complete, so this cadence is pure
-           presentation — it exists so text appears rather than materializing
-           in one block. A fixed per-chunk delay made it a real cost: a long
-           answer added tens of seconds to a request that had already spent
-           most of its budget thinking. Spread a fixed total instead, so
-           length no longer buys extra waiting. */
-        const chunks = splitForCadence(result.text);
-        const perChunkMs = Math.min(24, Math.floor(SWARM_CADENCE_TOTAL_MS / Math.max(chunks.length, 1)));
-        for (const chunk of chunks) {
-          writer.write({ type: "text-delta", id: textId, delta: chunk });
-          if (perChunkMs > 0) await delay(perChunkMs, request.signal);
-        }
         writer.write({ type: "text-end", id: textId });
         writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
         return;
