@@ -36,8 +36,17 @@ import { needsAppKnowledge, stablePrefix } from "@/lib/ai/prompt/base";
 
 export const runtime = "edge";
 export const maxDuration = 60;
-/** Tool round trips share the request budget, so cap how many the model may take. */
-const MAX_TOOL_STEPS = 4;
+/**
+ * Tool round trips share the request budget, so cap how many the model may take.
+ *
+ * Raised from four. The SDK's own default is twenty, which bounds nothing worth
+ * bounding on a phone; eight is the spec's number and it is deliberate. Four
+ * was set when the only tools were search and a clock, and it is too tight now
+ * that code execution is available in Chat mode as well: generate, run, read
+ * the error, fix, run again is already four, so a repair loop could be cut off
+ * at exactly the point it was about to succeed.
+ */
+const MAX_TOOL_STEPS = 8;
 /**
  * Code mode earns more hops: finding a bug is list repos → list directory →
  * read file → check CI → read log → answer, and cutting that off at four
