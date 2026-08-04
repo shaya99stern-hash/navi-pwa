@@ -70,8 +70,8 @@ for (const id of PROVIDER_IDS) {
   check(`${id} has a base URL`, /^https:\/\//.test(adapter.baseURL), true);
   check(`${id} has a models endpoint`, /^https:\/\//.test(adapter.modelsUrl), true);
   check(`${id} names at least one env var`, adapter.envKeys.length > 0, true);
-  // Every lane in this build is free; a paid one arrives with Task 3.
-  check(`${id} is on a free tier`, adapter.costPerMTok, 0);
+  // Exactly one metered provider, and it is the one the spend ceiling guards.
+  check(`${id} cost matches its tier`, adapter.costPerMTok > 0, id === "deepseek");
 }
 
 /* The registry is the single source of tool capability. Hugging Face fronts
@@ -86,8 +86,10 @@ check("no credential yields undefined", providerApiKey({ ...PROVIDERS.mistral, e
 
 /* ── Lanes resolve to routes ─────────────────────────────────────────────── */
 
-const all: ProviderAvailability = { gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true };
-const nothing: ProviderAvailability = { gemini: false, groq: false, huggingface: false, cerebras: false, openrouter: false, mistral: false };
+/* The paid lane is switched on in this fixture on purpose: the assertions
+   below prove the free paths never reach for it. */
+const all: ProviderAvailability = { gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true, deepseek: true };
+const nothing: ProviderAvailability = { gemini: false, groq: false, huggingface: false, cerebras: false, openrouter: false, mistral: false, deepseek: false };
 const noTools = { web: false, code: false, artifacts: true };
 const withTools = { web: true, code: false, artifacts: true };
 

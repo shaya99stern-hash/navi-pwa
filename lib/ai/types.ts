@@ -128,7 +128,9 @@ export type ProviderName =
   | "huggingface"
   | "cerebras"
   | "openrouter"
-  | "mistral";
+  | "mistral"
+  /** The one metered provider. Guarded by the spend ceiling in `spend.ts`. */
+  | "deepseek";
 
 export type ProviderRoute = {
   provider: ProviderName;

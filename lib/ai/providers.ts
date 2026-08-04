@@ -150,6 +150,26 @@ export const ROUTES = {
     label: "OpenRouter coding",
     capability: "coding"
   },
+  /**
+   * The metered quality lane.
+   *
+   * The provider's `deepseek-chat` and `deepseek-reasoner` aliases are
+   * deprecated and point at whatever the vendor decides they point at, which is
+   * exactly how a model id turns into a surprise. These name the model
+   * explicitly, and an operator can still repoint them without a deploy.
+   */
+  deepseekFlash: {
+    provider: "deepseek",
+    model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
+    label: "NaviSol quality",
+    capability: "reasoning"
+  },
+  deepseekPro: {
+    provider: "deepseek",
+    model: process.env.DEEPSEEK_PRO_MODEL ?? "deepseek-v4-pro",
+    label: "NaviSol quality",
+    capability: "reasoning"
+  },
   mistralBalanced: {
     provider: "mistral",
     model: process.env.MISTRAL_MODEL ?? "mistral-large-latest",
@@ -289,8 +309,15 @@ export function routeForLane(options: {
   hasFiles: boolean;
   /** The best free coding model discovery found, if the cache was warm. */
   discovered?: ProviderRoute | null;
+  /**
+   * Whether the metered lane may spend right now. Resolved by the caller from
+   * the spend ledger, because this function is synchronous and reading a
+   * budget is not — and because a routing table is the wrong place to decide
+   * whether the account can afford something.
+   */
+  meteredAllowed?: boolean;
 }): ProviderRoute | null {
-  const { lane, availability, tools, hasFiles, discovered } = options;
+  const { lane, availability, tools, hasFiles, discovered, meteredAllowed } = options;
 
   /* A request that needs tools needs a model that accepts them, whatever the
      lane would have preferred. Capability beats tier. */
@@ -314,10 +341,12 @@ export function routeForLane(options: {
     return null;
   }
 
-  /* Lane 3 has no metered provider yet — Task 3 gives it DeepSeek. Until then
-     it resolves to the strongest free engine configured, which is a weaker
-     promise than the lane makes but a better answer than no lane at all. */
+  /* Lane 3 is the only lane that may spend, and only when the ledger says so.
+     When the budget is exhausted it falls through to the free routes below
+     without a word — the user asked for a good answer, not for a lecture about
+     billing, and the free routes still give them one. */
   if (lane === 3) {
+    if (availability.deepseek && meteredAllowed) return ROUTES.deepseekFlash;
     if (availability.cerebras) return ROUTES.cerebrasLarge;
     if (availability.openrouter) return ROUTES.openRouterReasoning;
     if (availability.huggingface) return ROUTES.hfGptOss;

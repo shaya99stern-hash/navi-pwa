@@ -12,6 +12,7 @@ import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generati
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { createProviderModel, fallbackRoutes, getProviderAvailability, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
 import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
+import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { buildDevTools } from "@/lib/ai/dev-tools";
 import { readUntilCommitted } from "@/lib/ai/lane-commit";
@@ -461,18 +462,27 @@ function systemPrompt(options: {
   constraints?: string;
 }): string {
   const { effort, mode, tools, artifactRequested, threadSummary, mcpContext, toolNames = [], userContext, memoryContext, playbookContext, constraints, capabilityRequested = false, productMode } = options;
+  /* Ordered stable-first, volatile-last, and that ordering is load-bearing.
+     The metered lane bills a cached prompt prefix at roughly one fiftieth of an
+     uncached one, and the cache matches on an exact byte prefix — so a single
+     per-request string placed early invalidates everything after it and turns a
+     cheap request into a full-price one.
+
+     `constraints` is the clearest example: it changes every single turn, and it
+     used to sit fifth, ahead of the architect prompt and the app knowledge.
+     Those two are the largest stable blocks in the prompt, so nothing before
+     the end of them could ever cache. It now sits with the other per-request
+     material at the bottom, which is also where the comment always claimed it
+     was. Do not move anything up this list without checking the hit rate. */
   return [
     /* One identity across both modes. The mode changes how the work is
        approached, never who is doing it — claiming to be a different model
        when the mode changes would be a lie the user could catch. */
     productMode === "code" ? "You are NaviSol, working in NaviOS Code." : "You are NaviSol.",
     NAVI_CONSTITUTION,
-    /* Method before facts: how Soul works, then what it knows about the app
-       it works inside. Constraints come last so they are the most recent
-       thing read before the request itself. */
+    // Method before facts: how Soul works, then what it knows about the app.
     NAVI_ARCHITECT_PROMPT,
     APP_KNOWLEDGE,
-    constraints || "",
     "Identify yourself only as NaviSol. Never name, hint at, or claim to be an underlying third-party provider or model.",
     "Be accurate, practical, and explicit about uncertainty.",
     "Never claim that you browsed, executed code, accessed files, used MCP, or changed external data unless supplied results prove it.",
@@ -495,7 +505,10 @@ function systemPrompt(options: {
     capabilityRequested ? capabilityInstruction() : "",
     memoryContext || "",
     threadSummary ? `Compact summary and active project context:\n${threadSummary.slice(0, 8_000)}` : "",
-    mcpContext ? `Connected MCP resource metadata:\n${mcpContext}` : ""
+    mcpContext ? `Connected MCP resource metadata:\n${mcpContext}` : "",
+    /* Last, because it is the most volatile thing here and the most recent
+       thing read before the request itself. Both reasons point the same way. */
+    constraints || ""
   ].filter(Boolean).join("\n\n");
 }
 
@@ -576,6 +589,38 @@ function refuse(message: string, headers?: Record<string, string>): Response {
     stream,
     headers: { "Cache-Control": "no-store, no-cache, must-revalidate", ...headers }
   });
+}
+
+/**
+ * Charge a metered response to the monthly ledger.
+ *
+ * Deliberately fire-and-forget: usage settles after the answer has streamed,
+ * and nobody should wait on bookkeeping. The cache-hit and cache-miss counts
+ * live in provider metadata rather than the SDK's normalised usage object, so
+ * both are merged before reading — missing them entirely would price a cheap
+ * cached request as a full miss, which errs expensive and therefore safe.
+ */
+async function meterSpend(result: { usage: PromiseLike<unknown>; providerMetadata?: PromiseLike<unknown> }, model: string): Promise<void> {
+  try {
+    const [usage, metadata] = await Promise.all([
+      Promise.resolve(result.usage),
+      Promise.resolve(result.providerMetadata ?? null)
+    ]);
+    const extras = metadata && typeof metadata === "object"
+      ? (metadata as Record<string, unknown>).deepseek
+      : null;
+    const merged = {
+      ...(usage && typeof usage === "object" ? usage as Record<string, unknown> : {}),
+      ...(extras && typeof extras === "object" ? extras as Record<string, unknown> : {})
+    };
+    const parsed = readUsage(merged);
+    if (!parsed) return;
+    const tier = /pro/i.test(model) ? "pro" : "flash";
+    console.info("NaviSol metered request", { model, ...parsed });
+    await recordSpend(parsed, tier);
+  } catch (error) {
+    console.error("NaviSol could not meter a request:", error);
+  }
 }
 
 function splitLargePayload(text: string, size = 32_000): string[] {
@@ -844,6 +889,14 @@ export async function POST(request: Request): Promise<Response> {
          first token arriving. */
       refreshFreeModels(request.signal);
 
+      /* The one place the app is allowed to spend money, and it asks
+         permission first. `readSpend` treats an unreadable ledger as exhausted,
+         so a storage outage degrades to the free routes rather than to
+         unlimited billing. */
+      const spendStore = getSpendStore();
+      const meteredAllowed = meteredLaneEnabled(spendStore)
+        && (await readSpend().then((snapshot) => snapshot.state === "ok").catch(() => false));
+
       const generalRoute = selectDirectRoute({
         preset: resolvedPreset,
         availability,
@@ -866,7 +919,8 @@ export async function POST(request: Request): Promise<Response> {
           availability,
           tools,
           hasFiles,
-          discovered: lane === 4 ? cachedRoute("coding") : null
+          discovered: lane === 4 ? cachedRoute("coding") : null,
+          meteredAllowed
         }) ?? generalRoute;
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
@@ -906,6 +960,7 @@ export async function POST(request: Request): Promise<Response> {
            that rejects a tools array outright — inheriting the primary's
            answer turns a recoverable failure into a guaranteed one. */
         const attemptToolNames = routeToolCallingSupport(attempt) === "custom" ? toolNames : [];
+        const metered = attempt.provider === "deepseek";
         const result = streamText({
         model: createProviderModel(attempt, origin),
         system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
@@ -918,8 +973,12 @@ export async function POST(request: Request): Promise<Response> {
         timeout: { totalMs: 50_000, chunkMs: 14_000 },
         abortSignal: request.signal,
         experimental_transform: smoothStream({ delayInMs: 26, chunking: "word" }),
-        onError: ({ error }) => console.error("Navi provider stream failed:", error)
+        onError: ({ error }) => console.error("NaviSol provider stream failed:", error)
       });
+      /* Billed from what the response actually reported, not from an estimate.
+         Cache hits and misses differ in price by roughly fifty times, so a
+         guess based on request counts would be wrong by orders of magnitude. */
+      if (metered) void meterSpend(result, attempt.model);
       /* A provider that fails *mid-stream* never reaches the outer onError,
          and this inner stream's own default is the bare "An error occurred."
          that hid a hard model rejection behind three useless words. Route it

@@ -290,11 +290,21 @@ export function SettingsSheet({
      gets a sentence — a raw code on screen is not an explanation. */
   const [githubNotice, setGithubNotice] = useState("");
 
+  /* Monthly spend on the one metered lane. Read here and nowhere else: it
+     belongs on the account page, not in the middle of an answer. */
+  const [spend, setSpend] = useState<{ configured: boolean; enabled: boolean; durable?: boolean; summary: string | null }>(
+    { configured: false, enabled: false, summary: null }
+  );
+
   useEffect(() => {
     if (!open) return;
     void fetch("/api/github/status", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => { if (data) setGithub(data); })
+      .catch(() => {});
+    void fetch("/api/spend", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => { if (data) setSpend(data); })
       .catch(() => {});
   }, [open]);
 
@@ -599,6 +609,16 @@ export function SettingsSheet({
                 description={account.email || "This device only — no account is attached."}
                 control={account.canSignOut ? <InlineButton onClick={() => void signOut()}>Log out</InlineButton> : undefined}
               />
+              {/* Only shown when there is actually something to spend. An app
+                  that is entirely free has no business displaying a budget. */}
+              {spend.configured ? (
+                <Row
+                  label="Monthly usage"
+                  description={spend.enabled
+                    ? `${spend.summary}${spend.durable === false ? " · counted on this server only" : ""}`
+                    : "The quality lane is off. Its spending limit cannot be enforced without a shared store, so it stays off until one is configured."}
+                />
+              ) : null}
             </Group>
 
             <SectionHeader>App</SectionHeader>

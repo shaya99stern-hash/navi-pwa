@@ -146,6 +146,27 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     costPerMTok: 0,
     headers: attribution
   },
+  /**
+   * The quality lane, and the only row here that costs money.
+   *
+   * `costPerMTok` is the cache-miss input rate for the default model, recorded
+   * so nothing has to infer "this one is metered" from the provider's name.
+   * The authority on spend is `spend.ts`, which prices from each response's own
+   * usage object rather than from this number.
+   */
+  deepseek: {
+    id: "deepseek",
+    label: "DeepSeek",
+    baseURL: "https://api.deepseek.com/v1",
+    modelsUrl: "https://api.deepseek.com/v1/models",
+    envKeys: ["DEEPSEEK_API_KEY", "DEEPSEEK_KEY", "DEEPSEEK_API_TOKEN"],
+    envHint: "DEEPSEEK",
+    keyPrefixes: [],
+    supportsTools: true,
+    supportsVision: false,
+    contextWindow: 1_000_000,
+    costPerMTok: 0.14
+  },
   mistral: {
     id: "mistral",
     label: "Mistral",
