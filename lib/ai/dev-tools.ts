@@ -1,5 +1,7 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
+import { githubWritesEnabled } from "../github/oauth";
+import { buildGitHubWriteTools } from "./github-write-tools";
 
 /**
  * GitHub and Vercel, as tools the model can actually call.
@@ -57,11 +59,11 @@ function repoPath(owner: string, repo: string): string | null {
   return `${owner}/${repo}`;
 }
 
-async function github(path: string, signal: AbortSignal, accept = "application/vnd.github+json"): Promise<unknown> {
+async function githubFetch(token: string, path: string, signal: AbortSignal, accept = "application/vnd.github+json"): Promise<unknown> {
   const response = await fetch(`https://api.github.com${path}`, {
     headers: {
       Accept: accept,
-      Authorization: `Bearer ${githubToken()}`,
+      Authorization: `Bearer ${token}`,
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "NaviOS-Hub"
     },
@@ -85,11 +87,22 @@ async function vercel(path: string, signal: AbortSignal): Promise<any> {
 
 type Announce = (label: string) => void;
 
-export function buildDevTools(onActivity?: Announce): ToolSet {
+export type DevToolContext = {
+  /** The signed-in user's OAuth token. Falls back to the install-wide PAT. */
+  githubToken?: string;
+};
+
+export function buildDevTools(onActivity?: Announce, context?: DevToolContext): ToolSet {
   const tools: ToolSet = {};
   const say = (label: string) => onActivity?.(label);
+  const resolvedGithubToken = context?.githubToken?.trim() || githubToken();
 
-  if (githubToken()) {
+  /* Shadows the module helper, so every existing tool body below sends the
+     signed-in user's token without a single call-site edit. */
+  const github = (path: string, signal: AbortSignal, accept = "application/vnd.github+json") =>
+    githubFetch(resolvedGithubToken ?? "", path, signal, accept);
+
+  if (resolvedGithubToken) {
     tools.github_list_repos = tool({
       description: "List the GitHub repositories this account can access, most recently pushed first. Use when the user refers to their repos without naming one.",
       inputSchema: z.object({
@@ -335,10 +348,22 @@ export function buildDevTools(onActivity?: Announce): ToolSet {
     });
   }
 
+  /* Off unless the install opts in. Read tools are always safe; these are not,
+     so they are a separate switch rather than a scope on the same one. */
+  if (resolvedGithubToken && githubWritesEnabled()) {
+    Object.assign(tools, buildGitHubWriteTools({ token: resolvedGithubToken, onActivity }));
+  }
+
   return tools;
 }
 
 /** For the setup notice: which developer connections are live. */
-export function devToolAvailability(): { github: boolean; vercel: boolean } {
-  return { github: Boolean(githubToken()), vercel: Boolean(vercelToken()) };
+export function devToolAvailability(): { github: boolean; vercel: boolean; githubWrites: boolean } {
+  return {
+    github: Boolean(githubToken()),
+    vercel: Boolean(vercelToken()),
+    /* Reported separately: a read token and an opted-in write switch are two
+       different states, and Settings must not imply the second from the first. */
+    githubWrites: Boolean(githubToken()) && githubWritesEnabled()
+  };
 }
