@@ -1,5 +1,6 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { ModelPreset, ProviderName, ProviderRoute, ToolCallingSupport, ToolPolicy } from "./types";
+import { createGithubModelsProvider } from "./github-models";
 
 export type ProviderAvailability = Record<ProviderName, boolean>;
 
@@ -136,6 +137,9 @@ function mistralApiKey(): string | undefined {
 
 export function getProviderAvailability(): ProviderAvailability {
   return {
+    /* Lane 3 is keyed on a per-request token, so availability is decided in the
+       route rather than here. Reported false so nothing else routes to it. */
+    githubmodels: false,
     gemini: Boolean(geminiApiKey()),
     groq: Boolean(groqApiKey()),
     huggingface: Boolean(huggingFaceToken()),
@@ -194,7 +198,14 @@ export function providerProbes(): Array<{ provider: ProviderName; label: string;
   return probes;
 }
 
-export function createProviderModel(route: ProviderRoute, origin: string): any {
+export function createProviderModel(route: ProviderRoute, origin: string, githubToken?: string): any {
+  if (route.provider === "githubmodels") {
+    /* Lane 3 authenticates as the *user*, not the install, so the token
+       arrives from the request scope rather than from process.env. */
+    if (!githubToken) throw new Error("GitHub Models needs a GitHub token.");
+    return createGithubModelsProvider(githubToken, origin).chatModel(route.model);
+  }
+
   if (route.provider === "gemini") {
     const apiKey = geminiApiKey();
     if (!apiKey) throw new Error("A Gemini API credential is not configured.");
@@ -376,7 +387,7 @@ export const ROUTES = {
  * sending one there would break routes that work today — it is the one
  * provider deliberately left out.
  */
-const TOOL_CAPABLE_PROVIDERS: ProviderName[] = ["gemini", "groq", "cerebras", "openrouter", "mistral"];
+const TOOL_CAPABLE_PROVIDERS: ProviderName[] = ["githubmodels", "gemini", "groq", "cerebras", "openrouter", "mistral"];
 
 /**
  * Models that reject a `tools` parameter even though their provider accepts
@@ -442,6 +453,34 @@ export function availableSwarmRoutes(availability: ProviderAvailability, tools: 
   if (availability.cerebras) routes.push(ROUTES.cerebrasFast);
   routes.push(...hfRoutes.slice(3));
   return routes;
+}
+
+/**
+ * Lane selection: which tier of engine a request deserves.
+ *
+ * Lane 3 is the only rationed one, so it is the only lane that has to earn its
+ * turn. It is spent on requests where a stronger model changes the answer —
+ * high effort, or genuinely hard code — and never on a follow-up that a fast
+ * route answers just as well.
+ */
+export type Lane = 1 | 2 | 3 | 4;
+
+export function selectLane(options: {
+  mode: "chat" | "code";
+  effort: "low" | "medium" | "high";
+  complex: boolean;
+  hasFiles: boolean;
+  longContext: boolean;
+}): Lane {
+  const { mode, effort, complex, hasFiles, longContext } = options;
+  // Attachments need the multimodal route regardless of how hard the ask is.
+  if (hasFiles) return 2;
+  // Whole-repository reading is a context problem, not a reasoning one.
+  if (longContext) return 4;
+  if (effort === "high") return 3;
+  if (mode === "code") return complex ? 3 : 4;
+  if (effort === "low") return 1;
+  return complex ? 3 : 2;
 }
 
 export function selectDirectRoute(options: {

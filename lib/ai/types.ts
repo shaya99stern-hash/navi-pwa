@@ -123,6 +123,7 @@ export type MenuSection =
   | "playbooks";
 
 export type ProviderName =
+  | "githubmodels"
   | "gemini"
   | "groq"
   | "huggingface"
