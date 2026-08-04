@@ -13,6 +13,7 @@ import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "
 import { createProviderModel, fallbackRoutes, getProviderAvailability, routeToolCallingSupport, selectDirectRoute } from "@/lib/ai/providers";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { buildDevTools } from "@/lib/ai/dev-tools";
+import { readGithubToken } from "@/lib/github/oauth";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
 import { buildWebTools, hasWebSearch } from "@/lib/ai/web-tools";
 import { runComposite } from "@/lib/ai/swarm";
@@ -413,7 +414,7 @@ function userContextBlock(value: unknown): string {
 
 function artifactInstruction(requested: boolean): string {
   const contract = [
-    "Navi artifacts are real interactive documents rendered in an isolated browser sandbox.",
+    "NaviOS artifacts are real interactive documents rendered in an isolated browser sandbox.",
     "Emit them as a fenced navi-artifact JSON block containing id, title, kind, html or svg, and height.",
     "For interactive HTML, include all markup, CSS, and JavaScript inside the html field. Buttons, inputs, forms, tabs, counters, calculators, and other controls must actually work.",
     "Use inline script with addEventListener. Do not use onclick or other on* attributes because those are removed by the sanitizer.",
@@ -560,9 +561,9 @@ function streamError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   console.error("Navi stream error:", error);
   const lower = message.toLowerCase();
-  if (lower.includes("image providers") || lower.includes("image-generation provider")) return "Navi's image service is unavailable right now. Try again shortly.";
-  if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "Navi reached a provider limit. Try again shortly or select another Navi mode.";
-  if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401")) return "Navi's AI service is not configured correctly. Please try again later.";
+  if (lower.includes("image providers") || lower.includes("image-generation provider")) return "NaviSol's image service is unavailable right now. Try again shortly.";
+  if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "NaviSol reached a limit on this route. Try again shortly.";
+  if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401")) return "NaviSol is not configured correctly. Please try again later.";
   /* A bare 403 is what a provider returns for a key with referrer or IP
      restrictions, a disabled API, or a revoked token — all of which look like
      a working key from a dashboard. Naming it saves the hour it otherwise
@@ -570,12 +571,12 @@ function streamError(error: unknown): string {
   if (lower === "forbidden" || lower.includes("403") || lower.includes("forbidden")) {
     return "Every AI provider refused this request (403). Usually a key restricted to certain referrers or IP addresses, an API not enabled on the project, or a revoked token. Check the provider dashboards for the keys in your Vercel project.";
   }
-  if (lower.includes("timeout") || lower.includes("aborted")) return "The selected Navi mode took too long. Try again or select a direct mode.";
+  if (lower.includes("timeout") || lower.includes("aborted")) return "That took too long. Try again, or lower the effort.";
   /* A model that refuses the tools parameter is a routing mistake, not
      something the person asking can fix — name it so it is not mistaken for
      their request being at fault. */
   if (lower.includes("tool calling") || lower.includes("not supported with this model")) {
-    return "Navi routed this to an engine that cannot use tools. Turn off Research mode to answer without them, or try again.";
+    return "NaviSol routed this somewhere that cannot use tools. Turn off Research mode to answer without them, or try again.";
   }
   /* Everything unmatched used to collapse into one sentence that named no
      cause — the same failure as the SDK's "An error occurred.", one layer up.
@@ -584,8 +585,8 @@ function streamError(error: unknown): string {
      swallowed. Without it a screenshot of a failure carries no information. */
   const detail = redactSecrets(message).replace(/\s+/g, " ").trim().slice(0, 240);
   return detail
-    ? `Navi could not complete the response.\n\n\`${detail}\``
-    : "Navi could not complete the response. Please try again.";
+    ? `NaviSol could not complete the response.\n\n\`${detail}\``
+    : "NaviSol could not complete the response. Please try again.";
 }
 
 function statusChunk(status: NaviStreamStatus) {
@@ -690,7 +691,7 @@ export async function POST(request: Request): Promise<Response> {
     const reason = await authorizationError.json().catch(() => null) as { error?: string } | null;
     return refuse(reason?.error === "Sign in to continue."
       ? "Your session expired. Reload the app to sign back in."
-      : reason?.error || "Navi could not authorize this request.");
+      : reason?.error || "NaviSol could not authorize this request.");
   }
   if (isRateLimited(clientIdentifier(request))) return refuse("You are sending messages faster than Navi can answer them. Wait a few seconds and try again.", { "Retry-After": "30" });
 
@@ -698,8 +699,13 @@ export async function POST(request: Request): Promise<Response> {
   try {
     body = (await request.json()) as ChatRequestBody;
   } catch {
-    return refuse("Navi could not read that request. Reload the app and try again.");
+    return refuse("NaviSol could not read that request. Reload the app and try again.");
   }
+
+  /* Read inside the request scope. `cookies()` throws once the request closes,
+     and the stream callback below runs after that — so resolving it lazily
+     inside the callback would fail for every signed-in user. */
+  const userGithubToken = await readGithubToken();
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) return refuse("There was no message to send.");
   if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; Navi will still remember the important parts.`);
@@ -844,7 +850,7 @@ export async function POST(request: Request): Promise<Response> {
         ...buildSkillTools(announce),
         ...buildWebTools({ search: tools.web, signal: request.signal, onActivity: announce }),
         // Repository and deployment reads, present only when their tokens are.
-        ...buildDevTools(announce),
+        ...buildDevTools(announce, { githubToken: userGithubToken }),
         ...mcpTools
       };
       const modelMessages = await convertToModelMessages(redactGeneratedMedia(messages));

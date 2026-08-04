@@ -283,6 +283,49 @@ export function SettingsSheet({
   onExport
 }: Props) {
   const [page, setPage] = useState<PageId>("root");
+  const [github, setGithub] = useState<{ connected: boolean; login: string | null; oauthAvailable: boolean; writesEnabled: boolean; scopes: string[] }>(
+    { connected: false, login: null, oauthAvailable: false, writesEnabled: false, scopes: [] }
+  );
+  /* The OAuth callback returns here with a reason in the query string. Each one
+     gets a sentence — a raw code on screen is not an explanation. */
+  const [githubNotice, setGithubNotice] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    void fetch("/api/github/status", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => { if (data) setGithub(data); })
+      .catch(() => {});
+  }, [open]);
+
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("github");
+    if (!code) return;
+    setGithubNotice({
+      connected: "GitHub connected.",
+      state: "That sign-in could not be verified. Start it again from this page.",
+      denied: "GitHub sign-in was cancelled.",
+      exchange: "GitHub did not complete the sign-in. Try again.",
+      unconfigured: "GitHub sign-in is not configured on this deployment."
+    }[code] ?? "");
+    /* Clear it from the URL so a reload does not replay the notice. */
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+
+  const disconnectGithub = async () => {
+    haptic("impact-light", preferences.haptics);
+    await fetch("/api/github/status", { method: "DELETE" }).catch(() => {});
+    setGithub((current) => ({ ...current, connected: false, login: null, scopes: [] }));
+    setGithubNotice("GitHub disconnected.");
+  };
+
+  const githubDescription = githubNotice
+    || (github.connected
+      ? `Connected as ${github.login ?? "your account"}. NaviOS Code can read your repositories, pull requests, and CI logs.${github.writesEnabled ? " Writes are enabled: edits land on a working branch and ship as a pull request." : ""}`
+      : github.oauthAvailable
+        ? "Connect your GitHub account so NaviOS Code can read your repositories, pull requests, and CI logs."
+        : "Not connected. Add NAVI_GITHUB_TOKEN in Vercel, or configure GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET to let each user connect their own account.");
+
   const [evalState, setEvalState] = useState<{ phase: "idle" | "running" | "done" | "error"; message: string }>({
     phase: "idle",
     message: "Scores NaviSol against a fixed task set. Takes a couple of minutes."
@@ -675,10 +718,14 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="GitHub"
-                description={devTools.github
-                  ? "Connected. Navi Code can read your repositories, pull requests, and CI logs."
-                  : "Not connected. Add a fine-grained personal access token as NAVI_GITHUB_TOKEN in Vercel to let Navi Code read your repositories and CI logs."}
-                control={<StatusPill on={devTools.github} />}
+                description={githubDescription}
+                control={github.connected
+                  ? <InlineButton destructive onClick={() => void disconnectGithub()}>Disconnect</InlineButton>
+                  : github.oauthAvailable
+                    /* A top-level navigation, not fetch: the OAuth redirect
+                       must leave the app, and an anchor needs no CSP change. */
+                    ? <a href="/api/github/oauth/start" className="flex min-h-9 items-center rounded-full bg-elev-3 px-3 text-[0.8125rem]/5 font-medium text-primary active:bg-elev-2">Connect</a>
+                    : <StatusPill on={devTools.github} />}
               />
               <Row
                 label="Vercel"
