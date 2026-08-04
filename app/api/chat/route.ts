@@ -10,7 +10,8 @@ import {
 } from "ai";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
-import { createProviderModel, fallbackRoutes, getProviderAvailability, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
+import { createProviderModel, fallbackRoutes, getProviderAvailability, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
+import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { buildDevTools } from "@/lib/ai/dev-tools";
 import { readUntilCommitted } from "@/lib/ai/lane-commit";
@@ -864,10 +865,6 @@ export async function POST(request: Request): Promise<Response> {
 
       const complexRoute = effortLevel === "high" || (effortLevel === "medium" && effort !== "normal");
 
-      /* Lane selection stands; its Lane 3 provider does not. GitHub Models
-         was retired on 2026-07-30 — not deprecated, removed — so it is deleted
-         outright rather than left as a fallback that can only ever fail. Task 3
-         gives this lane a provider again. */
       const lane = selectLane({
         mode,
         effort: effortLevel,
@@ -875,9 +872,13 @@ export async function POST(request: Request): Promise<Response> {
         hasFiles,
         longContext: modelMessages.length > LONG_CONTEXT_TURNS
       });
-      void lane;
 
-      const route = selectDirectRoute({
+      /* Warm the free-model catalogue for the next request. Not awaited: a
+         catalogue lookup must never sit between a person pressing send and the
+         first token arriving. */
+      refreshFreeModels(request.signal);
+
+      const generalRoute = selectDirectRoute({
         preset: resolvedPreset,
         availability,
         hasFiles,
@@ -887,6 +888,20 @@ export async function POST(request: Request): Promise<Response> {
         // Low keeps the fast route even when it reads as hard.
         complex: complexRoute
       });
+
+      /* A pinned diagnostic route is an explicit instruction and outranks the
+         lane; everything else lets the lane decide, falling back to the general
+         selector whenever the lane has no provider configured. */
+      const pinned = resolvedPreset !== "navi-soul" && resolvedPreset !== "navi-code";
+      const route = pinned
+        ? generalRoute
+        : routeForLane({
+          lane,
+          availability,
+          tools,
+          hasFiles,
+          discovered: lane === 4 ? cachedRoute("coding") : null
+        }) ?? generalRoute;
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
       writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : `${plan.summary}` }));
