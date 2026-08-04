@@ -11,7 +11,8 @@ import {
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { createProviderModel, fallbackRoutes, getProviderAvailability, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
-import { githubModelsAvailable, githubModelsRoute, GITHUB_MODELS_MAX_OUTPUT_TOKENS, selectGithubModel } from "@/lib/ai/github-models";
+import { githubModelsAvailable, githubModelsRoute, GITHUB_MODELS_MAX_INPUT_TOKENS, GITHUB_MODELS_MAX_OUTPUT_TOKENS, selectGithubModel } from "@/lib/ai/github-models";
+import { compactForBudget } from "@/lib/ai/compaction";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { buildDevTools } from "@/lib/ai/dev-tools";
 import { readGithubToken } from "@/lib/github/oauth";
@@ -953,6 +954,21 @@ export async function POST(request: Request): Promise<Response> {
          The attempt only counts as recoverable while nothing has reached the
          screen. Once text is streaming, a failure is reported rather than
          retried: restarting mid-answer would replay a partial reply. */
+      /* Lane 3's window is small, so a long conversation is compacted rather
+         than routed away from the best engine — which is exactly when the best
+         engine is most wanted. Only for that lane: everything else has room. */
+      let attemptMessages = modelMessages;
+      if (deepRoute) {
+        const compaction = await compactForBudget({
+          messages: modelMessages,
+          maxInputTokens: GITHUB_MODELS_MAX_INPUT_TOKENS,
+          availability,
+          origin,
+          abortSignal: request.signal
+        });
+        attemptMessages = compaction.messages;
+      }
+
       const attempts = [
         ...(deepRoute ? [deepRoute] : []),
         route,
@@ -967,7 +983,7 @@ export async function POST(request: Request): Promise<Response> {
         const result = streamText({
         model: createProviderModel(attempt, origin, userGithubToken),
         system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, threadSummary, mcpContext, toolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
-        messages: modelMessages,
+        messages: attempt.provider === "githubmodels" ? attemptMessages : modelMessages,
         ...(toolNames.length
           ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
           : {}),
