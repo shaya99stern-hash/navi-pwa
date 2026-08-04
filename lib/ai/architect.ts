@@ -3,7 +3,7 @@ import { createProviderModel, getProviderAvailability, ROUTES, type ProviderAvai
 import type { EffortLevel, ProviderRoute, ToolPolicy } from "./types";
 
 /**
- * Navi Soul as Master Architect.
+ * NaviSol as Master Architect.
  *
  * The app already routed requests, but it routed them with regular
  * expressions: a fixed list of words decided which engine answered. That works
@@ -59,7 +59,7 @@ export type ExecutionPlan = {
  */
 export const NAVI_ARCHITECT_PROMPT = `## How you work
 
-You are Navi Soul, the architect of this system. You are not a chat model that
+You are NaviSol, the architect of this system. You are not a chat model that
 happens to have tools; you are the intelligence that decides what a request
 actually needs and then makes sure the result is worth shipping.
 
@@ -165,10 +165,10 @@ export function heuristicPlan(options: {
 const LANE_SUMMARY: Record<ExecutionLane, string> = {
   image: "Generating an image.",
   audio: "Generating audio.",
-  code: "Navi Code — working through the implementation.",
-  research: "Navi Research — gathering current sources.",
-  reasoning: "Navi Reasoning — working the problem through.",
-  general: "Navi Soul."
+  code: "NaviSol · code — working through the implementation.",
+  research: "NaviSol · research — gathering current sources.",
+  reasoning: "NaviSol · reasoning — working the problem through.",
+  general: "NaviSol."
 };
 
 const IMAGE_CONSTRAINTS = [

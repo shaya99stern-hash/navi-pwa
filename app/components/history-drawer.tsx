@@ -16,7 +16,8 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { StoredChat } from "@/lib/ai/types";
+import type { NaviMode, StoredChat } from "@/lib/ai/types";
+import { NAVI_MODES } from "@/lib/chat";
 import { PWA_UPDATE_STATUS_EVENT, requestPwaUpdate, type PwaUpdateStatus } from "@/lib/pwa-update";
 import { haptic } from "@/lib/ui/haptics";
 import { versionLabel } from "@/lib/version";
@@ -30,6 +31,9 @@ type Props = {
   activeId: string;
   /** Display name from the profile; falls back to the workspace label. */
   profileName?: string;
+  /** The active product mode. One brain; this chooses how it works. */
+  mode: NaviMode;
+  onMode: (mode: NaviMode) => void;
   haptics: boolean;
   onClose: () => void;
   onNew: () => void;
@@ -43,7 +47,7 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onCustomize, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onCustomize, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
 
@@ -157,6 +161,37 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
         className={`safe-top safe-bottom absolute inset-y-0 left-0 flex w-[85vw] max-w-[340px] flex-col bg-[var(--bg-sidebar)] shadow-menu ${dragging ? "" : "drawer-enter"}`}
         style={dragging ? { transform: `translateX(${((dragProgress ?? 0) - 1) * 100}%)`, transition: "none" } : undefined}
       >
+        {/* The product switch sits above everything, the way a side panel is
+            read: what am I working in, then what am I working on. It was in
+            the composer, which put a durable choice inside a per-message
+            control and meant checking the current mode required looking at
+            the send row. */}
+        <div className="shrink-0 px-3 pt-3" role="group" aria-label="Mode">
+          <div className="flex gap-1 rounded-[12px] bg-elev-1 p-1">
+            {NAVI_MODES.map((entry) => {
+              const active = entry.id === mode;
+              return (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => {
+                    haptic("selection", haptics);
+                    /* Switching routes the *next* message. The open
+                       conversation is untouched — clearing it would make a
+                       mode change feel like losing work. */
+                    if (entry.id !== mode) onMode(entry.id);
+                    onClose();
+                  }}
+                  aria-pressed={active}
+                  className={`min-h-11 flex-1 rounded-[9px] px-2 text-[0.8125rem]/5 font-semibold transition-colors ${active ? "bg-elev-2 text-primary" : "text-tertiary active:bg-elev-2/60"}`}
+                >
+                  {entry.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex shrink-0 items-center gap-2 px-4 pb-1 pt-3">
           <label className="flex min-h-10 flex-1 items-center gap-2 rounded-full bg-elev-2 px-3.5">
             <Search size={16} className="shrink-0 text-tertiary" />
@@ -231,7 +266,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
             <RefreshCw size={17} strokeWidth={1.8} className={`shrink-0 text-secondary ${updateStatus?.phase === "checking" || updateStatus?.phase === "downloading" || updateStatus?.phase === "restarting" ? "animate-spin" : ""}`} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[0.875rem]/5 font-medium text-primary">
-                {updateStatus?.phase === "available" ? "Update ready — tap to install" : "Update NaviOS Hub"}
+                {updateStatus?.phase === "available" ? "Update ready — tap to install" : "Update NaviOS"}
               </span>
               <span className={`block truncate text-[0.6875rem]/4 font-medium ${updateStatus?.phase === "error" ? "text-danger" : updateStatus?.phase === "available" ? "text-accent" : "text-tertiary"}`}>
                 {updateStatus?.message ?? versionLabel()}

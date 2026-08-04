@@ -139,7 +139,7 @@ function rolesFor(profile: SwarmProfile): string[] {
 }
 
 function profileLabel(profile: SwarmProfile): string {
-  return profile === "navi-fable" ? "Navi Fable" : "Navi Sol";
+  return "NaviSol";
 }
 
 function styleInstruction(style: ResponseStyle): string {
@@ -165,7 +165,7 @@ function artifactContract(requested: boolean): string {
 function profileInstruction(profile: SwarmProfile): string {
   if (profile === "navi-fable") {
     return [
-      "You are operating inside Navi Fable, a long-horizon orchestration profile modeled on publicly described strengths of frontier project and coding agents.",
+      "You are operating inside NaviSol's staged orchestration profile modeled on publicly described strengths of frontier project and coding agents.",
       "Treat the request as a project that must reach a reviewer-ready deliverable, not merely a discussion.",
       "Plan across stages, maintain a durable constraint ledger, divide work cleanly, test proposed implementation, inspect outputs, and identify the next executable checkpoint.",
       "Prioritize ambitious coding, migrations, multi-step professional work, document-heavy analysis, visual verification, and minimal-supervision completion.",
@@ -174,7 +174,7 @@ function profileInstruction(profile: SwarmProfile): string {
   }
 
   return [
-    "You are operating inside Navi Sol, a parallel flagship-reasoning orchestration profile modeled on publicly described strengths of frontier multi-agent systems.",
+    "You are operating inside NaviSol's parallel orchestration profile modeled on publicly described strengths of frontier multi-agent systems.",
     "Split difficult work into independent workstreams, explore materially different solutions, coordinate tool plans, and reconcile the strongest evidence rather than averaging opinions.",
     "Prioritize coding, knowledge work, science and quantitative reasoning, computer-task planning, design judgment, adversarial verification, and high usefulness per token.",
     "For visual or implementation work, inspect likely rendered behavior and refine hierarchy, interaction, and failure handling.",

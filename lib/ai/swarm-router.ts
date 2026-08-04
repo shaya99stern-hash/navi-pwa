@@ -109,7 +109,9 @@ function hfRoute(model: string, profile: SwarmProfile, index: number): ProviderR
   return {
     provider: "huggingface",
     model: `${model}:${routingPolicy(profile)}`,
-    label: `${profile === "navi-sol" ? "Sol" : "Fable"} specialist ${index + 1}`,
+    /* Surfaces in the status stream, so it carries the product name and
+       never a provider or a retired brand. */
+    label: `NaviSol · analysis ${index + 1}`,
     capability: "balanced"
   };
 }

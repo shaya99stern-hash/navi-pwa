@@ -191,7 +191,7 @@ export function IntegrationsSheet({
         <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-3 pt-1">
           <div>
             <div className="text-[1.0625rem]/6 font-semibold text-primary">Integrations</div>
-            <div className="text-[0.75rem]/4 font-medium text-tertiary">What Navi can reach outside this app</div>
+            <div className="text-[0.75rem]/4 font-medium text-tertiary">What NaviSol can reach outside this app</div>
           </div>
           <button
             type="button"
@@ -212,7 +212,7 @@ export function IntegrationsSheet({
               detail={
                 !known ? "Checking…"
                   : status.github
-                    ? "Navi can read your repositories, files, pull requests, and CI runs. Read-only — it cannot push or merge."
+                    ? "NaviSol can read your repositories, files, pull requests, and CI runs. Read-only — it cannot push or merge."
                     : "Add NAVI_GITHUB_TOKEN in Vercel, then redeploy. A fine-grained token with Contents, Metadata, Pull requests, and Actions set to Read."
               }
               test={tests.github}
@@ -225,7 +225,7 @@ export function IntegrationsSheet({
               detail={
                 !known ? "Checking…"
                   : status.vercel
-                    ? "Navi can read your deployments and build logs. Read-only — it cannot deploy or change settings."
+                    ? "NaviSol can read your deployments and build logs. Read-only — it cannot deploy or change settings."
                     : "Add NAVI_VERCEL_TOKEN in Vercel, then redeploy. Scope it to the team that owns this project."
               }
               test={tests.vercel}
@@ -249,7 +249,7 @@ export function IntegrationsSheet({
               detail={
                 connectorCount
                   ? `${connectorCount} connected · access is ${connectorAccessMode === "ask" ? "asked for each chat" : connectorAccessMode}`
-                  : "Connect a remote MCP server over HTTPS to give Navi access to your own tools and data."
+                  : "Connect a remote MCP server over HTTPS to give NaviSol access to your own tools and data."
               }
               action="Manage"
               onAction={onOpenConnectors}

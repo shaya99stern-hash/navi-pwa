@@ -16,7 +16,7 @@ export default function OpenGraphImage() {
           </svg>
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 5, textTransform: "uppercase", color: "#C96F50" }}>NaviOS Hub</div>
+          <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 5, textTransform: "uppercase", color: "#C96F50" }}>NaviOS</div>
           <div style={{ marginTop: 24, fontFamily: "Georgia", fontSize: 70, lineHeight: 1.02, color: "#211914" }}>Your private AI workspace.</div>
           <div style={{ marginTop: 24, fontSize: 28, lineHeight: 1.45, color: "#5D5148" }}>Conversations, files, images, tools, and multi-provider reasoning in one installable app.</div>
         </div>

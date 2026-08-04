@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { MenuSection, NaviPreferences } from "@/lib/ai/types";
 import { categories, isImplemented, type Skill } from "@/lib/skills";
 import { BUILT_IN_PLAYBOOKS, parseSkillMarkdown } from "@/lib/playbooks";
-import { MODEL_PRESETS } from "@/lib/chat";
+import { DIAGNOSTIC_ROUTES } from "@/lib/chat";
 import {
   PWA_UPDATE_STATUS_EVENT,
   requestPwaUpdate,
@@ -285,7 +285,7 @@ export function SettingsSheet({
   const [page, setPage] = useState<PageId>("root");
   const [evalState, setEvalState] = useState<{ phase: "idle" | "running" | "done" | "error"; message: string }>({
     phase: "idle",
-    message: "Scores Navi against a fixed task set. Takes a couple of minutes."
+    message: "Scores NaviSol against a fixed task set. Takes a couple of minutes."
   });
 
   const runEvals = async () => {
@@ -429,7 +429,7 @@ export function SettingsSheet({
               <RootRow label="Playbooks" onOpen={() => openPage("playbooks")} />
               <RootRow label="Connectors" onOpen={() => openPage("connectors")} />
             </Group>
-            <p className="px-4 py-6 text-[0.75rem]/4 text-tertiary">NaviOS Hub · {versionLabel()}</p>
+            <p className="px-4 py-6 text-[0.75rem]/4 text-tertiary">NaviOS · {versionLabel()}</p>
           </>
         ) : null}
 
@@ -438,14 +438,14 @@ export function SettingsSheet({
             <SectionHeader>Profile</SectionHeader>
             <Group>
               <Row label="Full name" control={<TextField label="Full name" value={preferences.profile.fullName} onChange={(fullName) => updateProfile({ fullName })} />} />
-              <Row label="What should Navi call you?" control={<TextField label="Display name" value={preferences.profile.displayName} onChange={(displayName) => updateProfile({ displayName })} />} />
+              <Row label="What should NaviSol call you?" control={<TextField label="Display name" value={preferences.profile.displayName} onChange={(displayName) => updateProfile({ displayName })} />} />
               <Row label="What best describes your work?" control={<BareSelect label="Work" value={preferences.profile.work} options={WORK_OPTIONS} onChange={(work) => updateProfile({ work })} />} />
               <Row
-                label="Instructions for Navi"
+                label="Instructions for NaviSol"
                 description="Navi keeps these in mind across every chat on this device."
                 fullWidthControl={
                   <textarea
-                    aria-label="Instructions for Navi"
+                    aria-label="Instructions for NaviSol"
                     value={preferences.profile.instructions}
                     onChange={(event) => updateProfile({ instructions: event.target.value.slice(0, 4_000) })}
                     placeholder="e.g. keep explanations brief and to the point"
@@ -562,7 +562,7 @@ export function SettingsSheet({
             <Group>
               <button type="button" onClick={() => { haptic("impact-light", preferences.haptics); setUpdateStatus({ phase: "checking", message: "Checking for the newest version…" }); requestPwaUpdate(); }} disabled={updateBusy} className="flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-elev-2 disabled:opacity-70">
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[0.9375rem]/[1.375rem] font-medium text-primary">Update NaviOS Hub</span>
+                  <span className="block text-[0.9375rem]/[1.375rem] font-medium text-primary">Update NaviOS</span>
                   <span className="block text-[0.8125rem]/[1.125rem] text-secondary">{versionLabel()}</span>
                   <span className={`block text-[0.75rem]/4 ${updateStatus.phase === "error" ? "text-danger" : "text-tertiary"}`}>{updateStatus.message}</span>
                 </span>
@@ -602,7 +602,7 @@ export function SettingsSheet({
         {page === "privacy" ? (
           <>
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
-              NaviOS Hub is local-first: conversations, projects, and preferences live in this browser&apos;s storage
+              NaviOS is local-first: conversations, projects, and preferences live in this browser&apos;s storage
               and leave the device only as requests to the AI providers you have configured.
             </p>
             <SectionHeader>Preferences</SectionHeader>
@@ -658,17 +658,14 @@ export function SettingsSheet({
             <SectionHeader>Routing</SectionHeader>
             <Group>
               <Row
-                label="Engine"
-                description="Navi Soul reads each request and picks the engine that leads at that job. Pin a specific route only to diagnose a problem — it disables that routing entirely."
+                label="Routing"
+                description="NaviSol reads each request and routes it to whichever engine leads at that job. Pin one only to diagnose a problem — it disables that routing entirely."
                 control={
                   <BareSelect
-                    label="Engine"
-                    value={preferences.preset}
-                    options={[
-                      ["navi-soul", "Automatic"],
-                      ...MODEL_PRESETS.filter((preset) => preset.overflow).map((preset) => [preset.id, preset.label] as [string, string])
-                    ]}
-                    onChange={(value) => update({ preset: value as NaviPreferences["preset"] })}
+                    label="Routing"
+                    value={preferences.routeOverride ?? "navi-soul"}
+                    options={DIAGNOSTIC_ROUTES.map((route) => [route.id, route.label] as [string, string])}
+                    onChange={(value) => update({ routeOverride: value === "navi-soul" ? undefined : value as NaviPreferences["routeOverride"] })}
                   />
                 }
               />

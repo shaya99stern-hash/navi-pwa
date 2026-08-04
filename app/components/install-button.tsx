@@ -66,7 +66,7 @@ export function InstallButton({ haptics }: { haptics: boolean }) {
       className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border-subtle)] bg-elev-1 px-4 text-[0.8125rem]/5 font-semibold text-secondary shadow-sm active:bg-elev-2"
     >
       <Download size={16} />
-      Install NaviOS Hub
+      Install NaviOS
     </button>
   );
 }

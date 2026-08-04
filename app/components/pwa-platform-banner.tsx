@@ -156,7 +156,7 @@ export function PwaPlatformBanner({ inline = false }: { inline?: boolean } = {})
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[0.8125rem]/[1.125rem] font-semibold text-primary">
-            {mode === "update" ? "Update ready" : mode === "ios" ? "Add to Home Screen" : "Install NaviOS Hub"}
+            {mode === "update" ? "Update ready" : mode === "ios" ? "Add to Home Screen" : "Install NaviOS"}
           </span>
           <span className="block truncate text-[0.6875rem]/4 font-medium text-tertiary">
             {mode === "update"
