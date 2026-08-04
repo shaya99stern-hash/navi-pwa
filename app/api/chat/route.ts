@@ -335,7 +335,19 @@ function artifactIntent(text: string): boolean {
 function redactGeneratedMedia(messages: UIMessage[]): UIMessage[] {
   return messages.map((message) => ({
     ...message,
-    parts: message.parts.map((part) => part.type === "text"
+    parts: message.parts
+      /* Reasoning traces are provider-specific and not portable. An assistant
+         turn recorded with one provider's `reasoning_content` is rejected
+         outright by providers that do not accept the field —
+         "property 'reasoning_content' is unsupported" — which turns one
+         reasoning reply into a permanently broken conversation.
+
+         Falling back across providers made this certain rather than likely,
+         since the whole point is that turn two may go somewhere turn one did
+         not. They are intermediate work in any case: the constitution forbids
+         exposing them, and replaying them buys the model nothing. */
+      .filter((part) => part.type !== "reasoning")
+      .map((part) => part.type === "text"
       ? {
         ...part,
         text: part.text
@@ -960,7 +972,9 @@ export async function POST(request: Request): Promise<Response> {
            after that it is not, so the stream is merged and any later failure
            is reported rather than retried. */
         try {
-          const stream = result.toUIMessageStream({ onError: streamError });
+          /* Not sent at all going forward: private deliberation the user was
+           never meant to see, which the client then stores and replays. */
+        const stream = result.toUIMessageStream({ onError: streamError, sendReasoning: false });
           const reader = stream.getReader();
           const first = await reader.read();
           if (first.done) { lastFailure = new Error("The provider closed without answering."); reader.releaseLock(); continue; }
