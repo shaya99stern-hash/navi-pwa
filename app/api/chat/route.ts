@@ -847,7 +847,21 @@ export async function POST(request: Request): Promise<Response> {
      credential lives — the client never sees the store. */
   const storedFacts = mayRemember && clerkToken && factsConfigured() ? await listFacts(clerkToken) : [];
   const rememberedBlock = factsBlock(storedFacts);
-  const memoryContext = [rememberedBlock, recalledContext].filter(Boolean).join("\n\n");
+  /* Told the mechanism exists, not just handed its output.
+   *
+   * Rendering facts alone left the model with no idea it had a memory at all:
+   * asked "add that to your memory" it answered that it had no way to store
+   * anything across sessions — denying a capability it has — and a turn earlier
+   * it said it had "noted" a preference, claiming a save it could not make.
+   * Both are the same gap. It cannot describe a system nothing describes to it. */
+  const memoryCapability = mayRemember && factsConfigured()
+    ? [
+      "You have a durable memory. Standing facts about this user — how they work, what they use, what they always want — are extracted and stored automatically, and are listed under Settings → Privacy where the user can remove any of them.",
+      "So: if asked to remember something durable, confirm plainly that you will. Never say you cannot store anything between conversations, and never claim to have saved a specific item, since the extraction happens outside this reply and you cannot see its result."
+    ].join("\n")
+    : "";
+
+  const memoryContext = [memoryCapability, rememberedBlock, recalledContext].filter(Boolean).join("\n\n");
   const playbookContext = typeof body.playbook === "string" ? body.playbook.trim().slice(0, 4_500) : "";
   const threadSummary = [
     typeof body.threadSummary === "string" ? body.threadSummary.trim().slice(0, 5_000) : "",
