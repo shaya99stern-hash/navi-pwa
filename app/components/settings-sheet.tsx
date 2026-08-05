@@ -10,7 +10,7 @@ import {
   Sun,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, NaviPreferences } from "@/lib/ai/types";
 import { categories, isImplemented, type Skill } from "@/lib/skills";
 import { BUILT_IN_PLAYBOOKS, parseSkillMarkdown } from "@/lib/playbooks";
@@ -50,7 +50,18 @@ type Props = {
   onExport: () => void;
 };
 
-type PageId = "root" | MenuSection;
+/**
+ * `diagnostics` is deliberately not a `MenuSection`.
+ *
+ * `MenuSection` is what gets persisted as `lastMenuSection` and reopened next
+ * time. A hidden page that reopens itself is not hidden, and it would strand
+ * anyone who found it by accident on a screen with no row leading to it.
+ */
+type PageId = "root" | "diagnostics" | MenuSection;
+
+/** Taps on the version string that reveal diagnostics, and how long they have. */
+const DIAGNOSTICS_TAPS = 5;
+const DIAGNOSTICS_TAP_WINDOW_MS = 3_000;
 
 const DEFAULT_UPDATE_STATUS: PwaUpdateStatus = {
   phase: "idle",
@@ -82,6 +93,7 @@ const WORK_OPTIONS: Array<[string, string]> = [
 ];
 
 const PAGE_TITLES: Record<Exclude<PageId, "root">, string> = {
+  diagnostics: "Diagnostics",
   general: "General",
   account: "Account",
   privacy: "Privacy",
@@ -276,11 +288,19 @@ function InlineButton({ children, onClick, destructive }: { children: ReactNode;
   );
 }
 
-function RootRow({ label, onOpen }: { label: string; onOpen: () => void }) {
+function RootRow({ label, active, onOpen }: { label: string; active?: boolean; onOpen: () => void }) {
   return (
-    <button type="button" onClick={onOpen} className="flex min-h-[52px] w-full items-center justify-between px-4 text-left active:bg-elev-2">
+    <button
+      type="button"
+      onClick={onOpen}
+      /* The selected state only means something beside the pane it selects, so
+         it is a two-pane affordance. The chevron is the opposite: it promises a
+         drill-down, which at two panes is not what happens. */
+      aria-current={active ? "page" : undefined}
+      className={`flex min-h-[52px] w-full items-center justify-between px-4 text-left active:bg-elev-2 ${active ? "md:bg-elev-2" : ""}`}
+    >
       <span className="text-[0.9375rem]/[1.375rem] font-medium text-primary">{label}</span>
-      <ChevronRight size={18} className="text-tertiary" />
+      <ChevronRight size={18} className="text-tertiary md:hidden" />
     </button>
   );
 }
@@ -301,6 +321,8 @@ export function SettingsSheet({
      gets a sentence — a raw code on screen is not an explanation. The rows
      themselves live in the Connectors sheet now; this is only the landing. */
   const [oauthNotice, setOauthNotice] = useState("");
+  const [diagnosticsTaps, setDiagnosticsTaps] = useState(0);
+  const lastTapAt = useRef(0);
 
   /* Monthly spend on the one metered lane. Read here and nowhere else: it
      belongs on the account page, not in the middle of an answer. */
@@ -452,6 +474,28 @@ export function SettingsSheet({
     }
   }
 
+  /**
+   * Five taps on the version string, within a few seconds of each other.
+   *
+   * The window is what makes it a gesture rather than a trap: without it, four
+   * stray taps across a whole session would leave the page one tap from
+   * opening, months later, for someone who never intended it.
+   */
+  function revealDiagnostics() {
+    const now = Date.now();
+    const next = now - lastTapAt.current > DIAGNOSTICS_TAP_WINDOW_MS ? 1 : diagnosticsTaps + 1;
+    lastTapAt.current = now;
+
+    if (next >= DIAGNOSTICS_TAPS) {
+      setDiagnosticsTaps(0);
+      haptic("success", preferences.haptics);
+      setPage("diagnostics");
+      return;
+    }
+    setDiagnosticsTaps(next);
+    if (next > 1) haptic("selection", preferences.haptics);
+  }
+
   function signIn() {
     haptic("impact-light", preferences.haptics);
     /* A full navigation, not a router push: the sign-in page lives outside the
@@ -473,14 +517,16 @@ export function SettingsSheet({
   return (
     <div className="fixed inset-0 z-[95] flex flex-col bg-app" role="dialog" aria-modal="true" aria-label="Settings">
       <header className="navi-sheet-header sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1 border-b border-[var(--border-subtle)] px-2 pt-[var(--safe-top)]">
+        {/* At two panes the list is always on screen, so a back button points
+            at a page that is not hidden — it reads as an extra step to nowhere. */}
         {page === "root" ? (
           <div className="flex h-11 w-11 items-center justify-center" aria-hidden="true" />
         ) : (
-          <button type="button" onClick={() => setPage("root")} aria-label="Back to Settings" className="flex h-11 w-11 items-center justify-center rounded-full text-primary active:bg-elev-2">
+          <button type="button" onClick={() => setPage("root")} aria-label="Back to Settings" className="flex h-11 w-11 items-center justify-center rounded-full text-primary active:bg-elev-2 md:hidden">
             <ChevronLeft size={22} strokeWidth={1.8} />
           </button>
         )}
-        <div className="flex-1 text-center text-[1.0625rem]/6 font-semibold tracking-[-0.01em] text-primary">
+        <div className="flex-1 text-center text-[1.0625rem]/6 font-semibold tracking-[-0.01em] text-primary md:pl-4 md:text-left">
           {page === "root" ? "Settings" : PAGE_TITLES[page]}
         </div>
         <button type="button" onClick={onClose} aria-label="Close settings" className="flex h-11 w-11 items-center justify-center rounded-full text-primary active:bg-elev-2">
@@ -488,25 +534,52 @@ export function SettingsSheet({
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(24px+var(--safe-bottom))]">
-        {page === "root" ? (
-          <>
-            <p className="mt-4 px-4 text-[0.6875rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">Settings</p>
-            <Group>
-              <RootRow label="General" onOpen={() => openPage("general")} />
-              <RootRow label="Account" onOpen={() => openPage("account")} />
-              <RootRow label="Privacy" onOpen={() => openPage("privacy")} />
-              <RootRow label="Capabilities" onOpen={() => openPage("capabilities")} />
-            </Group>
-            <p className="mt-8 px-4 text-[0.6875rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">Customize</p>
-            <Group>
-              <RootRow label="Skills" onOpen={() => openPage("skills")} />
-              <RootRow label="Playbooks" onOpen={() => openPage("playbooks")} />
-              <RootRow label="Connectors" onOpen={() => openPage("connectors")} />
-            </Group>
-            <p className="px-4 py-6 text-[0.75rem]/4 text-tertiary">NaviOS · {versionLabel()}</p>
-          </>
-        ) : null}
+      {/* One list, two arrangements. Under 768px it is a drill-down: the list
+          fills the sheet and a section replaces it. At 768px and up both are on
+          screen at once, because there is room and because moving between
+          sections is the common act — a drill-down on a wide screen spends a
+          full-width column on nothing and makes every move a round trip. */}
+      <div className="flex min-h-0 flex-1 md:mx-auto md:w-full md:max-w-[1000px]">
+        <nav
+          aria-label="Settings sections"
+          className={`min-h-0 shrink-0 overflow-y-auto overscroll-contain pb-[calc(24px+var(--safe-bottom))] md:block md:w-[264px] md:border-r md:border-[var(--border-subtle)] ${page === "root" ? "w-full" : "hidden"}`}
+        >
+          <p className="mt-4 px-4 text-[0.6875rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">Settings</p>
+          <Group>
+            <RootRow label="General" active={page === "general"} onOpen={() => openPage("general")} />
+            <RootRow label="Account" active={page === "account"} onOpen={() => openPage("account")} />
+            <RootRow label="Privacy" active={page === "privacy"} onOpen={() => openPage("privacy")} />
+            <RootRow label="Capabilities" active={page === "capabilities"} onOpen={() => openPage("capabilities")} />
+          </Group>
+          <p className="mt-8 px-4 text-[0.6875rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">Customize</p>
+          <Group>
+            <RootRow label="Skills" active={page === "skills"} onOpen={() => openPage("skills")} />
+            <RootRow label="Playbooks" active={page === "playbooks"} onOpen={() => openPage("playbooks")} />
+            <RootRow label="Connectors" onOpen={() => openPage("connectors")} />
+          </Group>
+          {/* Diagnostics live behind this. They are for proving a suspicion
+              about the app, not for using it, and a routing override left on
+              by someone exploring Settings silently disables the routing the
+              product depends on. */}
+          <button
+            type="button"
+            onClick={revealDiagnostics}
+            className="w-full px-4 py-6 text-left text-[0.75rem]/4 text-tertiary"
+            aria-label={`NaviOS ${versionLabel()}`}
+          >
+            NaviOS · {versionLabel()}
+            {diagnosticsTaps > 1 && diagnosticsTaps < DIAGNOSTICS_TAPS ? (
+              <span className="ml-2 text-tertiary">{DIAGNOSTICS_TAPS - diagnosticsTaps} more</span>
+            ) : null}
+          </button>
+        </nav>
+
+        <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(24px+var(--safe-bottom))] ${page === "root" ? "hidden md:block" : ""}`}>
+          {/* Wide and nothing chosen yet: the pane says what it is for rather
+              than sitting blank, and choosing is one click away in the list. */}
+          {page === "root" ? (
+            <p className="px-6 pt-8 text-[0.8125rem]/[1.25rem] text-tertiary">Choose a section.</p>
+          ) : null}
 
         {page === "general" ? (
           <>
@@ -673,23 +746,6 @@ export function SettingsSheet({
                 <RefreshCw size={18} className={`shrink-0 text-secondary ${updateBusy ? "animate-spin" : ""}`} />
               </button>
 
-              {/* The eval harness needed a terminal, so in practice the app's
-                  own quality was never measured. Same task set, same grading,
-                  run by the deployment against itself — from the phone. */}
-              <button
-                type="button"
-                onClick={() => void runEvals()}
-                disabled={evalState.phase === "running"}
-                className="flex w-full items-center gap-3 border-t border-[var(--border-subtle)] px-4 py-3.5 text-left active:bg-elev-2 disabled:opacity-70"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[0.9375rem]/[1.375rem] font-medium text-primary">Run quality check</span>
-                  <span className={`block text-[0.8125rem]/[1.125rem] ${evalState.phase === "error" ? "text-danger" : "text-secondary"}`}>
-                    {evalState.message}
-                  </span>
-                </span>
-                <FlaskConical size={18} className={`shrink-0 text-secondary ${evalState.phase === "running" ? "animate-pulse" : ""}`} />
-              </button>
             </Group>
 
             <SectionHeader>Danger zone</SectionHeader>
@@ -759,22 +815,6 @@ export function SettingsSheet({
                 control={<SettingsToggle label="Code execution" value={preferences.tools.code} onChange={() => update({ tools: { ...preferences.tools, code: !preferences.tools.code } })} />}
               />
             </Group>
-            <SectionHeader>Routing</SectionHeader>
-            <Group>
-              <Row
-                label="Routing"
-                description="NaviSoul reads each request and routes it to whichever engine leads at that job. Pin one only to diagnose a problem — it disables that routing entirely."
-                control={
-                  <BareSelect
-                    label="Routing"
-                    value={preferences.routeOverride ?? "navi-soul"}
-                    options={DIAGNOSTIC_ROUTES.map((route) => [route.id, route.label] as [string, string])}
-                    onChange={(value) => update({ routeOverride: value === "navi-soul" ? undefined : value as NaviPreferences["routeOverride"] })}
-                  />
-                }
-              />
-            </Group>
-
             {/* Connecting an account happens in one place. This screen used to
                 carry its own GitHub and Vercel rows while the sheet called
                 Connectors listed only MCP servers, so a connected account was
@@ -789,6 +829,74 @@ export function SettingsSheet({
               {oauthNotice || "Google, GitHub, Vercel, and any connector servers this deployment offers."}
             </p>
 
+          </>
+        ) : null}
+
+        {page === "diagnostics" ? (
+          <>
+            <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
+              For proving a suspicion about the app, not for using it. Nothing here improves an
+              answer, and the routing override makes answers worse by design — it exists so a
+              single engine can be blamed or cleared.
+            </p>
+
+            <SectionHeader>Routing</SectionHeader>
+            <Group>
+              <Row
+                label="Pin an engine"
+                description="NaviSoul reads each request and routes it to whichever engine leads at that job. Pinning one disables that routing entirely, for every request, until it is set back to automatic."
+                control={
+                  <BareSelect
+                    label="Pin an engine"
+                    value={preferences.routeOverride ?? "navi-soul"}
+                    options={DIAGNOSTIC_ROUTES.map((route) => [route.id, route.label] as [string, string])}
+                    onChange={(value) => update({ routeOverride: value === "navi-soul" ? undefined : value as NaviPreferences["routeOverride"] })}
+                  />
+                }
+              />
+              {/* A pin is the one setting here with a lasting cost, and it is
+                  invisible from every other screen once this page is closed. */}
+              {preferences.routeOverride ? (
+                <Row
+                  label="Routing is pinned"
+                  description="Automatic routing is off. Answers will not improve until this is cleared."
+                  control={<InlineButton destructive onClick={() => update({ routeOverride: undefined })}>Clear</InlineButton>}
+                />
+              ) : null}
+            </Group>
+
+            <SectionHeader>Measurement</SectionHeader>
+            <Group>
+              {/* The eval harness needed a terminal, so in practice the app's
+                  own quality was never measured. Same task set, same grading,
+                  run by the deployment against itself — from the phone. */}
+              <button
+                type="button"
+                onClick={() => void runEvals()}
+                disabled={evalState.phase === "running"}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-elev-2 disabled:opacity-70"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[0.9375rem]/[1.375rem] font-medium text-primary">Run quality check</span>
+                  <span className={`block text-[0.8125rem]/[1.125rem] ${evalState.phase === "error" ? "text-danger" : "text-secondary"}`}>
+                    {evalState.message}
+                  </span>
+                </span>
+                <FlaskConical size={18} className={`shrink-0 text-secondary ${evalState.phase === "running" ? "animate-pulse" : ""}`} />
+              </button>
+            </Group>
+
+            <SectionHeader>Build</SectionHeader>
+            <Group>
+              <Row label="Version" description={versionLabel()} />
+              <Row
+                label="Sign-in"
+                description={CLERK_AVAILABLE
+                  ? "Configured on this deployment."
+                  : "Not configured on this deployment. The deployment logs name what is absent."}
+              />
+              <Row label="Local storage" description={DURABILITY_DETAIL[durability]} />
+            </Group>
           </>
         ) : null}
 
@@ -893,6 +1001,7 @@ export function SettingsSheet({
             ))}
           </>
         ) : null}
+        </div>
       </div>
     </div>
   );
