@@ -35,6 +35,7 @@ import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
 import { APP_KNOWLEDGE } from "@/lib/ai/app-knowledge";
 import { needsAppKnowledge, stablePrefix } from "@/lib/ai/prompt/base";
+import { csvToMarkdown, documentBlock, extractPdfText } from "@/lib/ai/document-text";
 
 export const runtime = "edge";
 export const maxDuration = 60;
@@ -472,10 +473,12 @@ function systemPrompt(options: {
   capabilityRequested?: boolean;
   /** Repository files fetched before generating, when the repo was knowable. */
   retrieved?: string;
+  /** Attached documents, extracted as text rather than shown as pages. */
+  documents?: string;
   /** The plan Soul made for this request, and what the answer must satisfy. */
   constraints?: string;
 }): string {
-  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, memoryContext, playbookContext, constraints, retrieved, capabilityRequested = false, productMode } = options;
+  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, productMode } = options;
   /* Ordered stable-first, volatile-last, and that ordering is load-bearing.
      The metered lane bills a cached prompt prefix at roughly one fiftieth of an
      uncached one, and the cache matches on an exact byte prefix — so a single
@@ -520,6 +523,7 @@ function systemPrompt(options: {
        question — so placing them early would invalidate the cached prefix for
        the metered lane on every single turn. */
     retrieved || "",
+    documents || "",
     threadSummary ? `Compact summary and active project context:\n${threadSummary.slice(0, 8_000)}` : "",
     mcpContext ? `Connected MCP resource metadata:\n${mcpContext}` : "",
     /* Last, because it is the most volatile thing here and the most recent
@@ -651,6 +655,52 @@ async function meterSpend(result: { usage: PromiseLike<unknown>; providerMetadat
   } catch (error) {
     console.error("NaviSol could not meter a request:", error);
   }
+}
+
+/**
+ * Extract text from every attached document that has any.
+ *
+ * A file that yields nothing is left alone rather than dropped: it goes to the
+ * model as it always did, which for a scan is the correct path rather than a
+ * degraded one.
+ */
+async function extractDocuments(messages: UIMessage[]): Promise<Array<{ name: string; block: string }>> {
+  const parts = fileParts(messages.slice(-2));
+  const out: Array<{ name: string; block: string }> = [];
+
+  for (const part of parts) {
+    const url = part.url ?? "";
+    if (!url.startsWith("data:")) continue;
+    const name = part.filename ?? "document";
+
+    try {
+      if (part.mediaType === "application/pdf") {
+        const bytes = Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (char) => char.charCodeAt(0));
+        const extracted = await extractPdfText(bytes);
+        if (extracted) out.push({ name, block: documentBlock(name, extracted) });
+        continue;
+      }
+      if (part.mediaType === "text/csv") {
+        const text = atob(url.slice(url.indexOf(",") + 1));
+        const table = csvToMarkdown(text);
+        if (table.text) out.push({ name, block: documentBlock(name, table) });
+      }
+    } catch (error) {
+      console.warn("NaviSol could not read an attached document:", error);
+    }
+  }
+
+  return out;
+}
+
+function documentsBlock(documents: Array<{ name: string; block: string }>): string {
+  return [
+    "## Attached documents, read as text",
+    "",
+    "This is the document's own text, not a picture of it. Reason from it directly.",
+    "",
+    ...documents.map((document) => document.block)
+  ].join("\n");
 }
 
 function splitLargePayload(text: string, size = 32_000): string[] {
@@ -898,6 +948,22 @@ export async function POST(request: Request): Promise<Response> {
         }));
       }
 
+      /* Documents are read as documents, not looked at as pictures. Vision on a
+         rendered page loses the things that make a document one: a table's
+         column alignment becomes a guess, two columns interleave into nonsense,
+         and a long contract exceeds what any vision pass attends to. The
+         answers come back confident and wrong.
+
+         Vision stays as the fallback for scans with no text layer, where a
+         picture genuinely is all there is. */
+      const documents = await extractDocuments(messages);
+      if (documents.length) {
+        writer.write(statusChunk({
+          stage: "gather",
+          detail: `Read ${documents.length} document${documents.length === 1 ? "" : "s"} as text.`
+        }));
+      }
+
       const modelMessages = await convertToModelMessages(redactGeneratedMedia(messages));
 
       if (resolvedPreset === "navi-fable" || resolvedPreset === "navi-sol") {
@@ -1035,7 +1101,7 @@ export async function POST(request: Request): Promise<Response> {
         const metered = attempt.provider === "deepseek";
         const result = streamText({
         model: createProviderModel(attempt, origin),
-        system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
+        system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
         messages: modelMessages,
         ...(attemptToolNames.length
           ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
