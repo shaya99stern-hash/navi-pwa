@@ -172,6 +172,10 @@ export function AppShell({
   /* Incognito: this conversation is never written to storage and never
      recalled by memory. It exists only while the screen is open. */
   const [incognito, setIncognito] = useState(false);
+  /* The name Clerk already knows, used only when the profile has none. Someone
+     signed in has told the app who they are once already; making them type it
+     again to be greeted by name is asking twice for the same thing. */
+  const [accountName, setAccountName] = useState("");
   const [historyOpen, setHistoryOpen] = useState(initialSheet === "history");
   const [projectsOpen, setProjectsOpen] = useState(initialSheet === "projects");
   const [connectorsOpen, setConnectorsOpen] = useState(initialSheet === "connectors");
@@ -292,6 +296,23 @@ export function AppShell({
   const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
   const statusText = streamStatus?.detail ?? (generating ? "NaviSoul is working" : preferences.mode === "code" ? activeMode.label : "");
+
+  useEffect(() => {
+    if (preferences.profile.displayName) return;
+    type ClerkGlobal = { loaded?: boolean; user?: { firstName?: string | null } | null };
+    const read = () => {
+      const clerk = (window as unknown as { Clerk?: ClerkGlobal }).Clerk;
+      if (!clerk?.loaded) return false;
+      setAccountName(clerk.user?.firstName?.trim() ?? "");
+      return true;
+    };
+    if (read()) return;
+    /* Clerk loads asynchronously and the launch screen is the first thing
+       drawn, so a single read almost always runs too early. */
+    const poll = window.setInterval(() => { if (read()) window.clearInterval(poll); }, 300);
+    const stop = window.setTimeout(() => window.clearInterval(poll), 5_000);
+    return () => { window.clearInterval(poll); window.clearTimeout(stop); };
+  }, [preferences.profile.displayName]);
 
   /* Recall runs against the question being asked, so it is computed at send
      time rather than folded into the memoised body. */
@@ -943,11 +964,16 @@ export function AppShell({
         >
           <PanelLeft size={21} strokeWidth={1.8} />
         </button>
+        <div className="flex-1" aria-hidden="true" />
         {/* The mode holds the top line in every state. What the chat is called
             moves underneath it: a title is worth reading, but which product you
             are talking to is worth reading first, and it was previously a pill
             small enough to scan past. */}
-        <div className="min-w-0 flex-1 text-center">
+        {/* Absolutely centred, not flex-centred. One button sits on the left and
+            two or three on the right, so a `flex-1` middle centres inside what
+            is left over — which put the title about half a button off centre.
+            The max width keeps it clear of both clusters on a narrow phone. */}
+        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex max-w-[calc(100%-184px)] -translate-x-1/2 -translate-y-1/2 justify-center text-center [&>*]:pointer-events-auto">
           {messages.length === 0 && !activeChat ? (
             <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">
               {modeTitle(preferences.mode)}
@@ -1056,7 +1082,7 @@ export function AppShell({
             </div>
           </div>
         ) : messages.length === 0 ? (
-          <LaunchSurface online={online} name={preferences.profile.displayName || undefined}>
+          <LaunchSurface online={online} name={preferences.profile.displayName || accountName || undefined}>
             <ProviderSetupNotice haptics={preferences.haptics} />
           </LaunchSurface>
         ) : (

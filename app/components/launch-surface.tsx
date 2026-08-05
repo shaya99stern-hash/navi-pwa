@@ -63,9 +63,14 @@ export function LaunchSurface({ online, name, children }: { online: boolean; nam
   return (
     <div className="navi-launch launch-surface flex min-h-full flex-col px-gutter pb-28 pt-6">
       <div className="mx-auto flex w-full max-w-app flex-1 flex-col items-center justify-center text-center">
-        <h1 className="greeting-title flex items-center gap-3 text-[2rem]/[2.375rem] text-primary">
+        {/* `w-full justify-center` rather than relying on the parent: an inline
+            flex row centres as a block, so the spark on its left pushed the
+            words right of the screen's centre and the whole line read as
+            misaligned. Centring the contents inside a full-width row makes it
+            exact regardless of what sits beside the text. */}
+        <h1 className="greeting-title flex w-full items-center justify-center gap-3 text-[1.75rem]/[2.125rem] text-primary">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand-spark.png" alt="" aria-hidden="true" className="h-9 w-9 shrink-0" />
+          <img src="/brand-spark.png" alt="" aria-hidden="true" className="h-8 w-8 shrink-0" />
           {greeting}
         </h1>
 
