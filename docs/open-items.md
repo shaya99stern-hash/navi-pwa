@@ -5,7 +5,7 @@ is *not* closed, and who has to close it. Kept in the repository because the
 build environment is ephemeral and a list held only in a conversation is a list
 that gets lost.
 
-Last updated after Parity 3.5 Phase B.
+Last updated after handoff Task 14 and the Task 11 removals.
 
 ---
 
@@ -38,6 +38,8 @@ Shipped but never exercised against the real thing.
 | Free-model discovery | `openrouter.ai` is unreachable from the build environment, so the catalogue's field names were never checked against the live response | One request to `/api/v1/models` and a look at the JSON |
 | DeepSeek quality lane | No key configured | Set `DEEPSEEK_API_KEY` |
 | Web search | No key configured | Set `TAVILY_API_KEY` |
+| PDF extraction | `unpdf` verified against its own exports, but no real PDF was run through it here | Attach a PDF and ask about its contents |
+| Repository retrieval | Needs a connected GitHub account and a real repository | Ask about a repo by `owner/name` in Code mode |
 
 Discovery is default-deny and the sandbox fails closed, so being wrong about
 either costs a degraded answer rather than a bill. But neither is *confirmed*.
@@ -81,10 +83,18 @@ a build task. Some of Phase D could be done on-device instead — full-text
 search across local conversations needs no server — and that would be a
 different, smaller piece of work.
 
-### Handoff tasks not yet started
+### Handoff tasks not yet finished
 
-Tasks 6, 7, 8, 9, 10, 11, 13, 14, 17, 18 of `NAVIOS-HANDOFF.md`. Task 12 is
-absorbed by Phase D. Tasks 15 and 16 overlap Phase B and Phase C respectively.
+| Task | State |
+|---|---|
+| 8 — Context compaction | Partly done. `lib/ai/compaction.ts` exists and is used; the `prepareStep` hook the spec names is not wired |
+| 10 — One voice mode | Not started. Flagged three times as possibly larger than it reads; worth scoping before committing to it |
+| 11 — Remove redundancy | Deletions done. The engine picker and "Run quality check" still live in Settings; the spec moves them to a hidden diagnostics page behind a five-tap gesture on the version string, which is a new surface rather than a removal |
+| 17 — Settings two-pane at ≥768px | Not started |
+
+Task 12 is absorbed by Phase D. Tasks 15 and 16 overlap Phase B and Phase C.
+
+Done: 1, 2, 3, 4, 5, 6, 7, 9, 13, 14, 18, and Parity 3.5 Phases A and B.
 
 ---
 
