@@ -152,11 +152,15 @@ which is a stated product property rather than an accident.
   every message all work without a server. What Supabase would add is
   *cross-device* memory, which is a sync feature rather than a memory one.
 
-  Still open within Phase D: **durable extracted facts** — "I use TypeScript",
-  "my timezone is ET" — remembered as facts rather than found by searching the
-  conversation that mentioned them, and a screen showing what is remembered so
-  it can be corrected or forgotten. That needs no server either; it is simply
-  not built.
+  **Phase D is now complete.** Durable facts are extracted, stored in Supabase
+  under row-level security keyed on the Clerk user id, recalled into the prompt,
+  and listed on Settings → Privacy where any one can be forgotten. Conversations
+  still never leave the device.
+
+  Unproven: no request has been made against the live table from this
+  environment, so the Clerk-token-to-RLS path and the extractor's judgement are
+  both untested against reality. Needs `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` set, and a signed-in device.
 
 Adding Supabase is a new service, a new dependency, and a change to what the
 app promises about where a person's data lives. That is a product decision, not

@@ -322,6 +322,12 @@ export function SettingsSheet({
      themselves live in the Connectors sheet now; this is only the landing. */
   const [oauthNotice, setOauthNotice] = useState("");
   const [diagnosticsTaps, setDiagnosticsTaps] = useState(0);
+  /* What is remembered about this person, and the ability to forget it. Loaded
+     only on the Privacy page: it is a network read, and every other page would
+     be paying for it. */
+  const [facts, setFacts] = useState<{ loaded: boolean; configured: boolean; items: Array<{ id: string; fact: string }> }>(
+    { loaded: false, configured: false, items: [] }
+  );
   const lastTapAt = useRef(0);
 
   /* Monthly spend on the one metered lane. Read here and nowhere else: it
@@ -402,6 +408,18 @@ export function SettingsSheet({
     if (!open) return;
     setPage(initialSection ?? "root");
   }, [initialSection, open]);
+
+  useEffect(() => {
+    if (!open || page !== "privacy") return;
+    void fetch("/api/memory/facts", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { configured?: boolean; facts?: Array<{ id: string; fact: string }> } | null) => {
+        setFacts({ loaded: true, configured: data?.configured === true, items: data?.facts ?? [] });
+      })
+      /* Unreachable storage is not "nothing remembered" — saying so would
+         invite someone to conclude the feature is off when it is merely down. */
+      .catch(() => setFacts((current) => ({ ...current, loaded: true })));
+  }, [open, page]);
 
   useEffect(() => {
     const receive = (event: Event) => {
@@ -494,6 +512,15 @@ export function SettingsSheet({
     }
     setDiagnosticsTaps(next);
     if (next > 1) haptic("selection", preferences.haptics);
+  }
+
+  async function forget(id: string) {
+    haptic("impact-light", preferences.haptics);
+    const response = await fetch(`/api/memory/facts?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => null);
+    /* Only drop it from the list once the server confirms. Removing optimistically
+       would show a fact as forgotten while it was still stored, which is the one
+       lie a privacy control must not tell. */
+    if (response?.ok) setFacts((current) => ({ ...current, items: current.items.filter((item) => item.id !== id) }));
   }
 
   function signIn() {
@@ -603,6 +630,36 @@ export function SettingsSheet({
                 }
               />
             </Group>
+
+            <SectionHeader>What NaviSoul remembers</SectionHeader>
+            <Group>
+              {!facts.loaded ? (
+                <Row label="Loading…" />
+              ) : !facts.configured ? (
+                <Row
+                  label="Not enabled"
+                  description="Durable facts are not configured on this deployment, so nothing is remembered between conversations. Recall within this device still works."
+                />
+              ) : !facts.items.length ? (
+                <Row
+                  label="Nothing yet"
+                  description="Standing facts you mention — how you work, what you use, what you always want — are kept here so they do not have to be repeated. Passing details of a request are not."
+                />
+              ) : (
+                facts.items.map((item) => (
+                  <Row
+                    key={item.id}
+                    label={item.fact}
+                    control={<InlineButton destructive onClick={() => void forget(item.id)}>Forget</InlineButton>}
+                  />
+                ))
+              )}
+            </Group>
+            {facts.configured && facts.items.length ? (
+              <p className="px-4 pt-2 text-[0.75rem]/[1.125rem] text-tertiary">
+                Forgetting is immediate and cannot be undone. The memory switch below stops anything new being added.
+              </p>
+            ) : null}
 
             <SectionHeader>Preferences</SectionHeader>
             <Group>

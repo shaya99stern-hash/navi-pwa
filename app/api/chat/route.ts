@@ -17,9 +17,12 @@ import { createProviderModel, fallbackRoutes, getProviderAvailability, routeForL
 import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
+import { getRequestClerkSessionToken, getRequestClerkUserId } from "@/lib/auth/session";
 import { readUntilCommitted } from "@/lib/ai/lane-commit";
 import { githubWritesEnabled, readGithubToken } from "@/lib/github/oauth";
 import { googleAccessToken } from "@/lib/google/oauth";
+import { factsBlock, factsConfigured, listFacts, rememberFact } from "@/lib/memory/facts";
+import { extractFacts, looksDurable } from "@/lib/memory/extract";
 import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { buildToolset } from "@/lib/tools/registry";
@@ -91,6 +94,8 @@ type ChatRequestBody = {
   tools?: Partial<ToolPolicy>;
   threadSummary?: string;
   memory?: string;
+  /** May this turn add to durable memory? False under incognito or the switch. */
+  remember?: boolean;
   playbook?: string;
   connectedMcpServers?: string[];
   connectorAccessMode?: unknown;
@@ -789,6 +794,11 @@ export async function POST(request: Request): Promise<Response> {
      stream callback where a failure would surface as a dead tool rather than as
      a disconnected account. */
   const userGoogleToken = await googleAccessToken();
+  /* Read in request scope for the same reason: `cookies()` throws once the
+     request closes, and both the recall read and the extraction write happen
+     inside the stream callback that runs after that. */
+  const clerkToken = getRequestClerkSessionToken(request);
+  const clerkUserId = clerkToken ? await getRequestClerkUserId(request) : null;
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) return refuse("There was no message to send.");
   if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; NaviSoul will still remember the important parts.`);
@@ -824,7 +834,20 @@ export async function POST(request: Request): Promise<Response> {
   const projectSummary = projectContextSummary(body.projectContext);
   /* Recall is computed on the device from chats the server never sees, so it
      arrives as text and is bounded here like any other client input. */
-  const memoryContext = typeof body.memory === "string" ? body.memory.trim().slice(0, 3_000) : "";
+  const recalledContext = typeof body.memory === "string" ? body.memory.trim().slice(0, 3_000) : "";
+  /* Whether this turn may add to memory. The client decides, because the two
+     things that forbid it — the memory switch and incognito — are both its
+     state, and an empty `memory` string means nothing was recalled rather than
+     that memory is off. */
+  const mayRemember = body.remember === true;
+
+  /* Facts outrank recalled passages, and are placed before them: a passage is
+     evidence that something was once said, while a fact is a standing
+     statement about the person. Read server-side because that is where the
+     credential lives — the client never sees the store. */
+  const storedFacts = mayRemember && clerkToken && factsConfigured() ? await listFacts(clerkToken) : [];
+  const rememberedBlock = factsBlock(storedFacts);
+  const memoryContext = [rememberedBlock, recalledContext].filter(Boolean).join("\n\n");
   const playbookContext = typeof body.playbook === "string" ? body.playbook.trim().slice(0, 4_500) : "";
   const threadSummary = [
     typeof body.threadSummary === "string" ? body.threadSummary.trim().slice(0, 5_000) : "",
@@ -1119,6 +1142,19 @@ export async function POST(request: Request): Promise<Response> {
 
          `compactForBudget` returns the messages unchanged on any failure, so a
          summariser that is down costs a longer prompt, never the request. */
+      /* Extraction runs beside the answer rather than after it. It reads only
+         the question, so it has no reason to wait for the reply — and waiting
+         would put a model call between the user and their last token. Nothing
+         downstream awaits this: a failure to remember must never delay or fail
+         a turn that already succeeded. */
+      if (mayRemember && clerkToken && clerkUserId && factsConfigured() && looksDurable(lastUserText)) {
+        void extractFacts({ text: lastUserText, availability, origin, signal: request.signal })
+          .then(async (found) => {
+            for (const fact of found) await rememberFact(clerkToken, clerkUserId, fact, undefined);
+          })
+          .catch(() => {});
+      }
+
       const compactionCache = new Map<number, ModelMessage[]>();
       const messagesFor = async (attempt: typeof route): Promise<ModelMessage[]> => {
         const budget = Math.floor(PROVIDERS[attempt.provider].contextWindow * CONTEXT_INPUT_SHARE);
