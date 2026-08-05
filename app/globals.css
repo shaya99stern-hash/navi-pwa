@@ -666,3 +666,19 @@ aside .scroll-area {
 @media (prefers-reduced-motion: reduce) {
   .navi-context-preview { animation-duration: 1ms; }
 }
+
+/* iOS zooms the whole page when a focused field computes below 16px, then
+   unzooms on blur — and that scaling is the keyboard jump, not the inset
+   arithmetic, which is already correct. Floored here rather than at each call
+   site so a new field cannot reintroduce it. `:is()` takes the specificity of
+   its most specific argument, so this ties with a Tailwind `text-[…]` utility
+   and wins on source order. `max()` preserves Dynamic Type scaling above the
+   floor. */
+:is(input, textarea, select, [contenteditable="true"]) {
+  font-size: max(16px, 1em);
+}
+
+/* Checkboxes and radios carry no text; the floor would only inflate their box. */
+:is(input[type="checkbox"], input[type="radio"]) {
+  font-size: inherit;
+}

@@ -855,7 +855,7 @@ export function SettingsSheet({
                 <Group>
                   {group.skills.map((skill: Skill) => (
                     <div key={skill.id} className="px-4 py-3">
-                      <div className="text-[0.9375rem]/[1.375rem] font-medium text-primary">/{skill.triggers.slash}</div>
+                      <div className="text-[0.9375rem]/[1.375rem] font-medium text-primary">{skill.triggers.slash}</div>
                       <div className="text-[0.8125rem]/[1.125rem] text-tertiary">{skill.description}</div>
                     </div>
                   ))}

@@ -87,6 +87,14 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  /* Chromium shrinks the layout viewport instead of overlaying the keyboard,
+     so the fixed shell lands above it with no scripting. iOS ignores this
+     today — visualViewport in ViewportMetrics covers iOS — but declaring it
+     costs nothing and fixes Android outright.
+     Deliberately no maximum-scale or user-scalable: iOS ignores both and they
+     break pinch-zoom for low-vision users. The 16px floor in globals.css is
+     the real zoom fix. */
+  interactiveWidget: "resizes-content",
   colorScheme: "dark light",
   themeColor: [
     { media: "(prefers-color-scheme: dark)", color: "#262624" },

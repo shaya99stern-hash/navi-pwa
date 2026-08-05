@@ -12,6 +12,16 @@ export function ViewportMetrics() {
     const viewport = window.visualViewport;
     let frame = 0;
     let settleTimer = 0;
+    /* iOS scrolls the *layout* viewport to reveal a focused field even though
+       `body` is `position: fixed`, sliding the pinned header out of view. The
+       shell is positioned from `visualViewport`, so that scroll is pure drift.
+       Nothing here ever wants a non-zero window scroll — every scroller is an
+       inner element — so zeroing it is safe, and it is what keeps the header
+       behaving like a native navigation bar. */
+    const pinLayoutViewport = () => {
+      if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+
     let stableLayoutHeight = Math.max(
       window.innerHeight,
       root.clientHeight,
@@ -45,6 +55,7 @@ export function ViewportMetrics() {
         root.style.setProperty("--navi-viewport-offset-left", px(offsetLeft));
         root.style.setProperty("--navi-keyboard-inset", px(keyboardInset));
         root.dataset.keyboardOpen = keyboardOpen ? "true" : "false";
+        pinLayoutViewport();
       });
     };
 
@@ -52,6 +63,9 @@ export function ViewportMetrics() {
       window.clearTimeout(settleTimer);
       update();
       settleTimer = window.setTimeout(update, 180);
+      /* WebKit re-scrolls partway through the keyboard's ~250ms animation, so
+         one pass lands before the drift it is meant to undo. */
+      window.setTimeout(pinLayoutViewport, 320);
     };
 
     const resetForOrientation = () => {
@@ -61,6 +75,7 @@ export function ViewportMetrics() {
 
     update();
     window.addEventListener("resize", update, { passive: true });
+    window.addEventListener("scroll", pinLayoutViewport, { passive: true });
     window.addEventListener("orientationchange", resetForOrientation, { passive: true });
     window.addEventListener("pageshow", settle, { passive: true });
     document.addEventListener("focusin", settle, { passive: true });
@@ -72,6 +87,7 @@ export function ViewportMetrics() {
       cancelAnimationFrame(frame);
       window.clearTimeout(settleTimer);
       window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", pinLayoutViewport);
       window.removeEventListener("orientationchange", resetForOrientation);
       window.removeEventListener("pageshow", settle);
       document.removeEventListener("focusin", settle);
