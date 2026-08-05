@@ -21,7 +21,21 @@ for (const text of [
   "I prefer short replies",
   "remember that I bill hourly",
   "from now on skip the preamble",
-  "I never want emoji in code comments"
+  "I never want emoji in code comments",
+  /* Found by a real user, missed by the first version of this list. "like" was
+     not among the preference verbs and "save to memory" was not among the
+     instructions, so someone asking in as many words to have something
+     remembered was turned away before a model ever read it. */
+  "I like honesty can you save to memory",
+  "I like short answers",
+  "save this to memory",
+  "add that to your memory",
+  "note that I bill hourly",
+  "don't forget I work weekends",
+  "I value directness over politeness",
+  "I live in Toronto",
+  "I speak Hebrew at home",
+  "I need you to never use emoji"
 ]) check(`considered: ${text}`, looksDurable(text), true);
 
 /* Ordinary requests must not reach the model. These are the overwhelming

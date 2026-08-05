@@ -19,18 +19,33 @@ import { createProviderModel, ROUTES, type ProviderAvailability } from "../ai/pr
  * what they use, what they always want — not the topic of one request.
  */
 
-/** Only these shapes are even considered. */
+/**
+ * Only these shapes are even considered.
+ *
+ * The first version of this list was too narrow in a way that only a real user
+ * found: "I like honesty can you save to memory" matched nothing, because
+ * `like` was not among the preference verbs and `save to memory` was not among
+ * the instructions. Someone asking in as many words to have something
+ * remembered was turned away before a model ever read it — the clearest signal
+ * available, missed.
+ *
+ * Strict is still right for the *implicit* shapes: a false positive there costs
+ * a call and possibly a junk row. But an explicit request is not a guess about
+ * intent, it is the intent, and it always passes.
+ */
 const DURABLE_SHAPES = [
+  // An explicit request. Never turned away — this is someone telling us.
+  /\b(remember|memori[sz]e|keep in mind|bear in mind|for future reference|from now on|going forward|don'?t forget)\b/i,
+  /\b(save|add|commit|write|put)\b[^.!?]{0,24}\b(to|in|into)\s+(your\s+)?memory\b/i,
+  /\bnote\s+(that|this|down)\b/i,
   // Stated identity, situation, or possession.
   /\bI(?:'m| am)\s+(?:a|an|the)?\s*\w+/i,
   /\bmy\s+(?:name|team|company|job|role|stack|setup|timezone|time zone|project|repo|editor|language)\b/i,
   // Stated preference or habit.
-  /\bI\s+(?:use|prefer|always|never|usually|generally|tend to|work with|write in|code in)\b/i,
-  /\bI\s+(?:don't|do not|can't|cannot)\s+\w+/i,
-  // A direct instruction to remember.
-  /\b(remember|keep in mind|for future reference|from now on|going forward)\b/i,
+  /\bI\s+(?:use|prefer|like|love|hate|value|avoid|always|never|usually|generally|tend to|care about|stick to|work with|work in|write in|code in|live in|speak)\b/i,
+  /\bI\s+(?:don'?t|do not|can'?t|cannot)\s+\w+/i,
   // Stated constraint that outlives the request.
-  /\bI\s+(?:need|want)\s+(?:you\s+to\s+)?always\b/i
+  /\bI\s+(?:need|want)\s+(?:you\s+to\s+)?(?:always|never)\b/i
 ];
 
 /** Below this there is nothing to extract from. */

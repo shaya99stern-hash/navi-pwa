@@ -66,7 +66,12 @@ check("the greeting is no longer 2rem", launch.includes("text-[2rem]/[2.375rem]"
 
 /* One button sits left of the title and two or three right of it, so a flex-1
    middle centres inside the leftover space — about half a button off. */
-check("the header title is absolutely centred", /absolute left-1\/2 top-1\/2[\s\S]{0,120}-translate-x-1\/2/.test(shell), true);
+check("the header title is absolutely centred", /absolute bottom-0 left-1\/2 top-\[var\(--safe-top\)\][\s\S]{0,140}-translate-x-1\/2/.test(shell), true);
+/* `.navi-header` carries the notch in its padding, so centring against the
+   padded box lifts the title by half the inset and it lands in the status bar.
+   Spanning from the inset to the bottom centres it in the visible row. */
+check("it is not centred against the padded box", /top-1\/2[\s\S]{0,60}-translate-y-1\/2/.test(shell), false);
+check("it spans below the notch", shell.includes("top-[var(--safe-top)]"), true);
 check("it cannot overlap the buttons", /max-w-\[calc\(100%-184px\)\]/.test(shell), true);
 /* Absolute positioning lifts it out of flow, so the clusters need a spacer to
    stay at the edges, and the title still has to be tappable. */
