@@ -46,6 +46,42 @@ either costs a degraded answer rather than a bill. But neither is *confirmed*.
 
 ---
 
+## Two different GitHub connections, easily confused
+
+The app talks to GitHub twice, for unrelated reasons, and they need **separate
+OAuth apps**:
+
+| | Purpose | Callback URL | Configured in |
+|---|---|---|---|
+| Clerk's GitHub social connection | Signing in to NaviOS | The URI Clerk shows on that connection's screen | Clerk dashboard |
+| `GITHUB_OAUTH_CLIENT_ID` / `_SECRET` | Reading and writing repositories | `https://navikeep.org/api/github/oauth/callback` | Vercel env |
+
+A GitHub **OAuth App** holds exactly one authorization callback URL, so one app
+cannot serve both. Pointing an existing app at Clerk silently repurposes it: the
+repository tools then fail with `redirect_uri_mismatch` at
+`/api/github/oauth/start`, which reads as the repository feature breaking rather
+than as sign-in configuration.
+
+Signing in *with* GitHub also grants no repository access — Clerk's connection
+requests identity scopes, while the repository tools need `public_repo` or
+`repo`. Connecting GitHub in Settings stays a separate step either way.
+
+## Adding a social provider means a CSP change
+
+`form-action` is enforced across redirects, and Clerk hands off to a provider by
+redirecting a form submission. An origin missing from the policy makes the
+button do nothing, with only a console violation to show for it — and enabling a
+connection in the Clerk dashboard is a change nothing in this repository can
+see.
+
+`oauthProviders` in `next.config.mjs` is the list. Enabling a new connection in
+Clerk means adding that provider's authorization host to it. `tests/clerk-csp.test.mjs`
+evaluates the real `headers()` output rather than grepping the source.
+
+Both sign-in pages set `oauthFlow="redirect"` deliberately. `Cross-Origin-Opener-Policy:
+same-origin` breaks the popup flow, so switching to popups needs that header
+relaxed too.
+
 ## Environment variables
 
 | Variable | Effect | Required? |

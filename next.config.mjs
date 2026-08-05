@@ -53,6 +53,24 @@ function clerkOrigins() {
 
 const clerk = clerkOrigins().join(" ");
 
+/**
+ * Where a social sign-in is allowed to hand off to.
+ *
+ * Clerk submits a form to its Frontend API, which then redirects on to the
+ * provider's own authorization page. `form-action` is enforced across that
+ * redirect, so an origin missing here does not fail loudly — the button appears
+ * to do nothing and only a CSP violation reaches the console. That is a
+ * per-provider failure: enabling a new connection in the Clerk dashboard is a
+ * change nothing in this repository can see.
+ *
+ * So the list is a list, not a literal appended each time. Adding a provider in
+ * Clerk means adding its authorization host here.
+ */
+const oauthProviders = [
+  "https://accounts.google.com",
+  "https://github.com"
+].join(" ");
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${developmentEval} ${clerk}`,
@@ -61,16 +79,15 @@ const contentSecurityPolicy = [
   "font-src 'self' data:",
   `connect-src 'self' ${clerk} https://api.clerk.com`,
   "worker-src 'self' blob:",
-  `frame-src 'self' data: blob: ${clerk} https://accounts.google.com`,
+  `frame-src 'self' data: blob: ${clerk} ${oauthProviders}`,
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
-  /* Signing in with a social provider submits a form to Clerk's Frontend API,
-     which then redirects on to the provider. Both hops are cross-origin, so
-     `form-action 'self'` blocked the submission outright — the button appeared
-     to do nothing, with only a CSP violation in the console to show for it.
-     Every origin in the sign-in chain has to be listed here. */
-  `form-action 'self' ${clerk} https://accounts.google.com`,
+  /* Both hops of a social sign-in are cross-origin, so `form-action 'self'`
+     blocked the submission outright. Every origin in the chain — Clerk's, and
+     each provider's — has to be listed. `/api/github/oauth/start` redirects to
+     github.com too, though as a navigation rather than a form submission. */
+  `form-action 'self' ${clerk} ${oauthProviders}`,
   "upgrade-insecure-requests"
 ].join("; ");
 
