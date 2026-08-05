@@ -43,7 +43,7 @@ async function buildMetadata(): Promise<Metadata> {
   description: "A private, local-first AI workspace for conversations, files, images, interactive tools, and long-running projects.",
   manifest: "/manifest.webmanifest",
   alternates: { canonical: "/" },
-  keywords: ["NaviOS", "NaviSol", "AI workspace", "AI assistant", "private AI", "PWA"],
+  keywords: ["NaviOS", "NaviSoul", "AI workspace", "AI assistant", "private AI", "PWA"],
   formatDetection: { telephone: false, address: false, email: false },
   /* iOS reads this once at launch and ignores later mutation, so it has to be
      rendered per request. black-translucent draws white glyphs, which vanish

@@ -133,7 +133,7 @@ const UI_FILES = [
 ];
 
 /* Matches a bare `Navi` not followed by the letters that make it NaviOS or
-   NaviSol, and not part of an identifier like `naviMarkdown`. Comments are
+   NaviSoul, and not part of an identifier like `naviMarkdown`. Comments are
    stripped first — this rule is about what a user reads. */
 const BARE_NAVI = /\bNavi(?![A-Za-z])/;
 
@@ -141,7 +141,7 @@ for (const file of UI_FILES) {
   const source = readFileSync(join(root, file), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|\s)\/\/.*$/gm, "");
-  check(`${file} says NaviSol or NaviOS, never bare Navi`, BARE_NAVI.test(source), false);
+  check(`${file} says NaviSoul or NaviOS, never bare Navi`, BARE_NAVI.test(source), false);
 }
 
 console.log(`\n${pass}/${pass + fail} passed`);

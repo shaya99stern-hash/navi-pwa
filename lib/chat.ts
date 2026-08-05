@@ -4,7 +4,7 @@ import type { EffortLevel, ModelPreset, NaviMode, NaviPreferences, ResponseStyle
 /**
  * The two modes, and the only product choice the interface offers.
  *
- * There is one brain — NaviSol — behind both. Which free provider answers a
+ * There is one brain — NaviSoul — behind both. Which free provider answers a
  * given turn is chosen by the router and never named on screen, so nothing
  * here mentions a model.
  */

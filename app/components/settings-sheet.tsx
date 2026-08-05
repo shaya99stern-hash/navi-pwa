@@ -97,6 +97,24 @@ const DURABILITY_DETAIL: Record<StorageDurability, string> = {
   unavailable: "Stored on this device · export regularly, this browser cannot protect it"
 };
 
+/**
+ * Whether this build has a sign-in system at all.
+ *
+ * Inlined at build time, so it is the one thing the client can know without
+ * waiting for Clerk's script. A deployment missing the key has no account to
+ * offer and should say so plainly rather than showing a button that leads to a
+ * page reading "sign-in is unavailable".
+ */
+const CLERK_AVAILABLE = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+type ClerkGlobal = {
+  loaded?: boolean;
+  user?: { primaryEmailAddress?: { emailAddress?: string } } | null;
+  signOut?: () => Promise<void>;
+};
+
+type AccountState = { email: string; signedIn: boolean; ready: boolean };
+
 /** Section header: bold, sentence case, generous top margin, no dividers of its own. */
 function SectionHeader({ children }: { children: ReactNode }) {
   return <h3 className="mb-1 mt-10 px-4 text-[0.9375rem]/5 font-semibold text-primary first:mt-4">{children}</h3>;
@@ -253,15 +271,6 @@ function InlineButton({ children, onClick, destructive }: { children: ReactNode;
   );
 }
 
-/** Read-only connection state: connected surfaces are green, absent ones gray. */
-function StatusPill({ on }: { on: boolean }) {
-  return (
-    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[0.75rem]/4 font-medium ${on ? "bg-[var(--selection-bg)] text-accent" : "bg-elev-2 text-tertiary"}`}>
-      {on ? "Connected" : "Not connected"}
-    </span>
-  );
-}
-
 function RootRow({ label, onOpen }: { label: string; onOpen: () => void }) {
   return (
     <button type="button" onClick={onOpen} className="flex min-h-[52px] w-full items-center justify-between px-4 text-left active:bg-elev-2">
@@ -283,12 +292,10 @@ export function SettingsSheet({
   onExport
 }: Props) {
   const [page, setPage] = useState<PageId>("root");
-  const [github, setGithub] = useState<{ connected: boolean; login: string | null; oauthAvailable: boolean; writesEnabled: boolean; scopes: string[] }>(
-    { connected: false, login: null, oauthAvailable: false, writesEnabled: false, scopes: [] }
-  );
   /* The OAuth callback returns here with a reason in the query string. Each one
-     gets a sentence — a raw code on screen is not an explanation. */
-  const [githubNotice, setGithubNotice] = useState("");
+     gets a sentence — a raw code on screen is not an explanation. The rows
+     themselves live in the Connectors sheet now; this is only the landing. */
+  const [oauthNotice, setOauthNotice] = useState("");
 
   /* Monthly spend on the one metered lane. Read here and nowhere else: it
      belongs on the account page, not in the middle of an answer. */
@@ -298,10 +305,6 @@ export function SettingsSheet({
 
   useEffect(() => {
     if (!open) return;
-    void fetch("/api/github/status", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => { if (data) setGithub(data); })
-      .catch(() => {});
     void fetch("/api/spend", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => { if (data) setSpend(data); })
@@ -309,36 +312,28 @@ export function SettingsSheet({
   }, [open]);
 
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get("github");
-    if (!code) return;
-    setGithubNotice({
-      connected: "GitHub connected.",
-      state: "That sign-in could not be verified. Start it again from this page.",
-      denied: "GitHub sign-in was cancelled.",
-      exchange: "GitHub did not complete the sign-in. Try again.",
-      unconfigured: "GitHub sign-in is not configured on this deployment."
+    const parameters = new URLSearchParams(window.location.search);
+    const provider = parameters.get("github") ? "GitHub" : parameters.get("google") ? "Google" : null;
+    const code = parameters.get("github") ?? parameters.get("google");
+    if (!provider || !code) return;
+    setOauthNotice({
+      connected: `${provider} connected.`,
+      state: "That sign-in could not be verified. Start it again from Connectors.",
+      denied: `${provider} sign-in was cancelled.`,
+      exchange: `${provider} did not complete the sign-in. Try again.`,
+      /* Distinct from a failed exchange: Google withholds the refresh token when
+         the account has authorized before and the consent screen was skipped.
+         The connection would look successful and stop working within the hour. */
+      norefresh: `${provider} did not return a lasting credential. Remove NaviOS from your Google account's third-party access, then connect again.`,
+      unconfigured: `${provider} is not configured on this deployment.`
     }[code] ?? "");
     /* Clear it from the URL so a reload does not replay the notice. */
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
 
-  const disconnectGithub = async () => {
-    haptic("impact-light", preferences.haptics);
-    await fetch("/api/github/status", { method: "DELETE" }).catch(() => {});
-    setGithub((current) => ({ ...current, connected: false, login: null, scopes: [] }));
-    setGithubNotice("GitHub disconnected.");
-  };
-
-  const githubDescription = githubNotice
-    || (github.connected
-      ? `Connected as ${github.login ?? "your account"}. NaviOS Code can read your repositories, pull requests, and CI logs.${github.writesEnabled ? " Writes are enabled: edits land on a working branch and ship as a pull request." : ""}`
-      : github.oauthAvailable
-        ? "Connect your GitHub account so NaviOS Code can read your repositories, pull requests, and CI logs."
-        : "Not connected. Add NAVI_GITHUB_TOKEN in Vercel, or configure GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET to let each user connect their own account.");
-
   const [evalState, setEvalState] = useState<{ phase: "idle" | "running" | "done" | "error"; message: string }>({
     phase: "idle",
-    message: "Scores NaviSol against a fixed task set. Takes a couple of minutes."
+    message: "Scores NaviSoul against a fixed task set. Takes a couple of minutes."
   });
 
   const runEvals = async () => {
@@ -366,8 +361,7 @@ export function SettingsSheet({
   };
 
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus>(DEFAULT_UPDATE_STATUS);
-  const [account, setAccount] = useState<{ email: string; canSignOut: boolean }>({ email: "", canSignOut: false });
-  const [devTools, setDevTools] = useState<{ github: boolean; vercel: boolean }>({ github: false, vercel: false });
+  const [account, setAccount] = useState<AccountState>({ email: "", signedIn: false, ready: false });
   const [playbookDraft, setPlaybookDraft] = useState("");
   const [playbookNotice, setPlaybookNotice] = useState<string | null>(null);
   const skillGroups = useMemo(
@@ -380,13 +374,6 @@ export function SettingsSheet({
   useEffect(() => {
     if (!open) return;
     setPage(initialSection ?? "root");
-    fetch("/api/models", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data: { devTools?: { github?: boolean; vercel?: boolean } }) => setDevTools({
-        github: data.devTools?.github === true,
-        vercel: data.devTools?.vercel === true
-      }))
-      .catch(() => setDevTools({ github: false, vercel: false }));
   }, [initialSection, open]);
 
   useEffect(() => {
@@ -398,15 +385,37 @@ export function SettingsSheet({
     return () => window.removeEventListener(PWA_UPDATE_STATUS_EVENT, receive);
   }, []);
 
-  /* Clerk exposes the signed-in user on window when it is configured; when it
-     is not, the Account page simply describes the local workspace. */
+  /* Clerk exposes the signed-in user on `window`, but it loads asynchronously
+     and this sheet can open first. Reading once left the row saying "Local
+     workspace" on a deployment that had an account perfectly well — the state
+     that prompted "why is there no sign in or sign out here". So poll briefly
+     until Clerk reports itself loaded, then stop.
+
+     Hooks are not an option: ClerkProvider only wraps the tree when the
+     deployment is configured, so `useUser` would throw on the deployments this
+     row most needs to describe. */
   useEffect(() => {
     if (!open) return;
-    const clerk = (window as unknown as { Clerk?: { user?: { primaryEmailAddress?: { emailAddress?: string } }; signOut?: () => Promise<void> } }).Clerk;
-    setAccount({
-      email: clerk?.user?.primaryEmailAddress?.emailAddress ?? "",
-      canSignOut: typeof clerk?.signOut === "function"
-    });
+    if (!CLERK_AVAILABLE) {
+      setAccount({ email: "", signedIn: false, ready: true });
+      return;
+    }
+    const read = () => {
+      const clerk = (window as unknown as { Clerk?: ClerkGlobal }).Clerk;
+      if (!clerk?.loaded) return false;
+      setAccount({
+        email: clerk.user?.primaryEmailAddress?.emailAddress ?? "",
+        signedIn: Boolean(clerk.user),
+        ready: true
+      });
+      return true;
+    };
+    if (read()) return;
+    const poll = window.setInterval(() => { if (read()) window.clearInterval(poll); }, 250);
+    /* Give up rather than spin forever: a Clerk that has not loaded in five
+       seconds is not going to, and the row says so instead of staying blank. */
+    const stop = window.setTimeout(() => { window.clearInterval(poll); setAccount((current) => ({ ...current, ready: true })); }, 5_000);
+    return () => { window.clearInterval(poll); window.clearTimeout(stop); };
   }, [open]);
 
   if (!open) return null;
@@ -430,12 +439,20 @@ export function SettingsSheet({
   const updateBusy = updateStatus.phase === "checking" || updateStatus.phase === "downloading" || updateStatus.phase === "restarting";
 
   async function signOut() {
-    const clerk = (window as unknown as { Clerk?: { signOut?: () => Promise<void> } }).Clerk;
+    const clerk = (window as unknown as { Clerk?: ClerkGlobal }).Clerk;
     try {
       await clerk?.signOut?.();
     } finally {
       window.location.href = "/sign-in";
     }
+  }
+
+  function signIn() {
+    haptic("impact-light", preferences.haptics);
+    /* A full navigation, not a router push: the sign-in page lives outside the
+       app shell and comes back through a redirect that has to re-establish the
+       session cookie. */
+    window.location.href = "/sign-in";
   }
 
   async function enableNotifications() {
@@ -491,14 +508,14 @@ export function SettingsSheet({
             <SectionHeader>Profile</SectionHeader>
             <Group>
               <Row label="Full name" control={<TextField label="Full name" value={preferences.profile.fullName} onChange={(fullName) => updateProfile({ fullName })} />} />
-              <Row label="What should NaviSol call you?" control={<TextField label="Display name" value={preferences.profile.displayName} onChange={(displayName) => updateProfile({ displayName })} />} />
+              <Row label="What should NaviSoul call you?" control={<TextField label="Display name" value={preferences.profile.displayName} onChange={(displayName) => updateProfile({ displayName })} />} />
               <Row label="What best describes your work?" control={<BareSelect label="Work" value={preferences.profile.work} options={WORK_OPTIONS} onChange={(work) => updateProfile({ work })} />} />
               <Row
-                label="Instructions for NaviSol"
-                description="NaviSol keeps these in mind across every chat on this device."
+                label="Instructions for NaviSoul"
+                description="NaviSoul keeps these in mind across every chat on this device."
                 fullWidthControl={
                   <textarea
-                    aria-label="Instructions for NaviSol"
+                    aria-label="Instructions for NaviSoul"
                     value={preferences.profile.instructions}
                     onChange={(event) => updateProfile({ instructions: event.target.value.slice(0, 4_000) })}
                     placeholder="e.g. keep explanations brief and to the point"
@@ -593,7 +610,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Response completions"
-                description="Get notified when NaviSol has finished a response. Useful for long-running tasks."
+                description="Get notified when NaviSoul has finished a response. Useful for long-running tasks."
                 control={<SettingsToggle label="Response completions" value={preferences.notifyOnComplete} onChange={() => void enableNotifications()} />}
               />
             </Group>
@@ -604,11 +621,30 @@ export function SettingsSheet({
           <>
             <SectionHeader>Account</SectionHeader>
             <Group>
-              <Row
-                label={account.email ? "Signed in" : "Local workspace"}
-                description={account.email || "This device only — no account is attached."}
-                control={account.canSignOut ? <InlineButton onClick={() => void signOut()}>Log out</InlineButton> : undefined}
-              />
+              {/* Three states, and the row used to render only one of them.
+                  Without a sign-in control the app looked like it had no
+                  account system at all — which is true of exactly one of
+                  these three cases. */}
+              {!CLERK_AVAILABLE ? (
+                <Row
+                  label="Local workspace"
+                  description="This device only. Sign-in is not configured on this deployment."
+                />
+              ) : !account.ready ? (
+                <Row label="Account" description="Checking…" />
+              ) : account.signedIn ? (
+                <Row
+                  label="Signed in"
+                  description={account.email || "Your account is active on this device."}
+                  control={<InlineButton onClick={() => void signOut()}>Log out</InlineButton>}
+                />
+              ) : (
+                <Row
+                  label="Signed out"
+                  description="Your chats stay on this device either way — an account is what lets NaviSoul answer."
+                  control={<InlineButton onClick={signIn}>Sign in</InlineButton>}
+                />
+              )}
               {/* Only shown when there is actually something to spend. An app
                   that is entirely free has no business displaying a budget. */}
               {spend.configured ? (
@@ -677,7 +713,7 @@ export function SettingsSheet({
               />
               <Row
                 label="Memory"
-                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages NaviSol actually uses are sent."
+                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages NaviSoul actually uses are sent."
                 control={<SettingsToggle label="Memory" value={preferences.memory} onChange={() => update({ memory: !preferences.memory })} />}
               />
             </Group>
@@ -698,7 +734,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Web search"
-                description="Let NaviSol search the web and read pages when a request needs live information."
+                description="Let NaviSoul search the web and read pages when a request needs live information."
                 control={<SettingsToggle label="Web search" value={preferences.tools.web} onChange={() => update({ tools: { ...preferences.tools, web: !preferences.tools.web } })} />}
               />
             </Group>
@@ -714,7 +750,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Code execution and file creation"
-                description="NaviSol runs JavaScript on this device to check its own work before answering, then fixes what fails. Nothing it runs can reach the network or your files."
+                description="NaviSoul runs JavaScript on this device to check its own work before answering, then fixes what fails. Nothing it runs can reach the network or your files."
                 control={<SettingsToggle label="Code execution" value={preferences.tools.code} onChange={() => update({ tools: { ...preferences.tools, code: !preferences.tools.code } })} />}
               />
             </Group>
@@ -722,7 +758,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Routing"
-                description="NaviSol reads each request and routes it to whichever engine leads at that job. Pin one only to diagnose a problem — it disables that routing entirely."
+                description="NaviSoul reads each request and routes it to whichever engine leads at that job. Pin one only to diagnose a problem — it disables that routing entirely."
                 control={
                   <BareSelect
                     label="Routing"
@@ -734,27 +770,19 @@ export function SettingsSheet({
               />
             </Group>
 
-            <SectionHeader>Developer</SectionHeader>
+            {/* Connecting an account happens in one place. This screen used to
+                carry its own GitHub and Vercel rows while the sheet called
+                Connectors listed only MCP servers, so a connected account was
+                invisible from the screen named after connecting things — and
+                an empty registry read as "nothing is connected" while two
+                accounts were. */}
+            <SectionHeader>Accounts</SectionHeader>
             <Group>
-              <Row
-                label="GitHub"
-                description={githubDescription}
-                control={github.connected
-                  ? <InlineButton destructive onClick={() => void disconnectGithub()}>Disconnect</InlineButton>
-                  : github.oauthAvailable
-                    /* A top-level navigation, not fetch: the OAuth redirect
-                       must leave the app, and an anchor needs no CSP change. */
-                    ? <a href="/api/github/oauth/start" className="flex min-h-9 items-center rounded-full bg-elev-3 px-3 text-[0.8125rem]/5 font-medium text-primary active:bg-elev-2">Connect</a>
-                    : <StatusPill on={devTools.github} />}
-              />
-              <Row
-                label="Vercel"
-                description={devTools.vercel
-                  ? "Connected. NaviOS Code can read your deployments and build logs."
-                  : "Not connected. Add a Vercel token as NAVI_VERCEL_TOKEN in Vercel to let NaviSol read deployments and build logs in Code mode."}
-                control={<StatusPill on={devTools.vercel} />}
-              />
+              <RootRow label="Connectors" onOpen={() => openPage("connectors")} />
             </Group>
+            <p className="px-4 pt-2 text-[0.75rem]/[1.125rem] text-tertiary">
+              {oauthNotice || "Google, GitHub, Vercel, and any connector servers this deployment offers."}
+            </p>
 
           </>
         ) : null}
@@ -762,7 +790,7 @@ export function SettingsSheet({
         {page === "playbooks" ? (
           <>
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
-              Playbooks are methods NaviSol applies when a request matches one — how to debug, how to review code,
+              Playbooks are methods NaviSoul applies when a request matches one — how to debug, how to review code,
               how to edit a document without disturbing it. They use Anthropic&apos;s SKILL.md format, so any skill
               published for Claude can be pasted in below and works here unchanged.
             </p>
@@ -778,7 +806,7 @@ export function SettingsSheet({
                       aria-label="Paste a SKILL.md file"
                       value={playbookDraft}
                       onChange={(event) => { setPlaybookDraft(event.target.value); setPlaybookNotice(null); }}
-                      placeholder={"---\nname: my-playbook\ndescription: When NaviSol should use this\n---\n\n# Instructions…"}
+                      placeholder={"---\nname: my-playbook\ndescription: When NaviSoul should use this\n---\n\n# Instructions…"}
                       rows={5}
                       className="min-h-[128px] w-full resize-y rounded-[12px] bg-elev-2 px-3.5 py-3 font-mono text-[0.8125rem]/[1.125rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
                     />

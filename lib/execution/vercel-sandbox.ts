@@ -70,7 +70,7 @@ export async function sandboxAllowed(): Promise<boolean> {
 
 async function recordCreation(): Promise<void> {
   await getSpendStore().add(creationsKey(), 1).catch((error) => {
-    console.error("NaviSol could not record a sandbox creation:", error);
+    console.error("NaviSoul could not record a sandbox creation:", error);
   });
 }
 
@@ -122,7 +122,7 @@ export async function runPython(source: string): Promise<SandboxResult> {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error("NaviSol sandbox run failed:", error);
+    console.error("NaviSoul sandbox run failed:", error);
     if (/timeout|timed out|deadline/i.test(message)) {
       return fail(`Execution was stopped after ${SANDBOX_TIMEOUT_MS}ms. The code did not finish — check for a loop that never ends.`, true);
     }

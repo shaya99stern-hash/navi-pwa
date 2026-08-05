@@ -94,12 +94,12 @@ check("clean writes pass both checks", guardWrite("src/index.ts", "export const 
 /* ── Branch naming ───────────────────────────────────────────────────────── */
 
 const branch = workingBranchName("Fix the composer inset on iOS");
-check("branches carry the app's prefix", branch.startsWith("navisol/"), true);
+check("branches carry the app's prefix", branch.startsWith("navisoul/"), true);
 check("the slug is readable", branch.includes("fix-the-composer-inset-on-ios"), true);
 check("a suffix makes collisions unlikely", workingBranchName("same") === workingBranchName("same"), false);
 check("git accepts the name", /^[A-Za-z0-9._\/-]+$/.test(branch), true);
-check("an empty intent still yields a branch", workingBranchName("").startsWith("navisol/change-"), true);
-check("punctuation does not leak in", /^navisol\/[a-z0-9-]+$/.test(workingBranchName("!!! ???")), true);
+check("an empty intent still yields a branch", workingBranchName("").startsWith("navisoul/change-"), true);
+check("punctuation does not leak in", /^navisoul\/[a-z0-9-]+$/.test(workingBranchName("!!! ???")), true);
 check("a long intent is bounded", workingBranchName("x".repeat(200)).length < 60, true);
 
 check("a write call is bounded", MAX_FILES_PER_WRITE, 20);

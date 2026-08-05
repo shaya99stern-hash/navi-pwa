@@ -591,7 +591,7 @@ export function ComposerDock({
               spellCheck
               disabled={blocked}
               placeholder={placeholder}
-              aria-label="Chat with NaviSol"
+              aria-label="Chat with NaviSoul"
               /* Stable hook for anything that needs to prefill the composer
                  from outside React — the artifact frame's edit button, for
                  one. Keying off the aria-label coupled that to copy, and the
@@ -674,7 +674,7 @@ export function ComposerDock({
             {footer ? (
               <span className={`block pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
             ) : hasMessages ? (
-              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">NaviSol is AI and can make mistakes. Double-check important answers.</span>
+              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">NaviSoul is AI and can make mistakes. Double-check important answers.</span>
             ) : null}
           </div>
 

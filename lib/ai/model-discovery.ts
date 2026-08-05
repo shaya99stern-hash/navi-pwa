@@ -183,7 +183,7 @@ export async function discoverFreeModels(signal: AbortSignal): Promise<Discovery
     writeCatalogCache(CACHE_KEY, models, numberEnvironment("NAVI_MODEL_CATALOG_TTL_MS", DEFAULT_TTL_MS, 60_000, 6 * 60 * 60_000));
     return { models, source: "live" };
   } catch (error) {
-    console.warn("NaviSol could not refresh the free model catalogue:", error);
+    console.warn("NaviSoul could not refresh the free model catalogue:", error);
     /* Expired beats invented: a catalogue from an hour ago describes models
        that existed an hour ago, which the hardcoded list cannot promise. */
     if (cached?.value.length) return { models: cached.value, source: "cache" };
@@ -211,7 +211,7 @@ function routeFor(model: DiscoveredModel, capability: keyof typeof CAPABILITY_PA
     model: model.id,
     /* Reaches the status stream, so it names the product and never the
        provider or the underlying model. */
-    label: "NaviSol",
+    label: "NaviSoul",
     capability
   };
 }

@@ -222,7 +222,7 @@ export async function recordSpend(usage: TokenUsage, tier: SpendTier): Promise<v
   await store.add(ledgerKey(), cost).catch((error) => {
     /* Losing a write means undercounting, which is the one direction that can
        overspend, so it is logged loudly rather than swallowed. */
-    console.error("NaviSol could not record spend against the monthly budget:", error);
+    console.error("NaviSoul could not record spend against the monthly budget:", error);
   });
 }
 

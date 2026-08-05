@@ -6,7 +6,7 @@ import type { UIMessage } from "ai";
 import { haptic } from "@/lib/ui/haptics";
 
 /**
- * What NaviSol did, as a line of plain English.
+ * What NaviSoul did, as a line of plain English.
  *
  * Tool activity used to surface as raw structured output — the argument object
  * and the result blob, rendered into the conversation. That reads as a debug

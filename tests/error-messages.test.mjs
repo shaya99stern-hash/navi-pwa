@@ -41,7 +41,7 @@ check('a 401 points at configuration', streamError(new Error('401 unauthorized a
 check('a timeout suggests lowering effort', streamError(new Error('request timeout')).includes('effort'), true);
 // One message, one voice.
 /* The spec's rule, replacing an earlier one of mine that required every error
-   to say "NaviSol". It does not need to: the user knows who they are talking
+   to say "NaviSoul". It does not need to: the user knows who they are talking
    to, and the words are better spent on the next step. What matters is that no
    error apologises — an apology is not information, and repeated it reads as
    evasion — and that every one of them says what to do. */

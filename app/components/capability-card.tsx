@@ -65,7 +65,7 @@ export function CapabilityCard({ playbook, installed, haptics, onInstall, onRemo
           <>
             <span className="flex flex-1 items-center gap-1.5 px-1 text-[0.8125rem]/5 font-medium text-accent">
               <Check size={15} strokeWidth={2.4} />
-              NaviSol will use this automatically
+              NaviSoul will use this automatically
             </span>
             <button
               type="button"

@@ -3,7 +3,7 @@ import type { UIMessage } from "ai";
 export type SwarmPreset = "navi-fable" | "navi-sol";
 
 /**
- * The product mode. One brain — NaviSol — and two ways to work with it.
+ * The product mode. One brain — NaviSoul — and two ways to work with it.
  *
  * The user switches mode, never model. Which free provider answers is an
  * implementation detail they neither see nor choose, so it does not belong in

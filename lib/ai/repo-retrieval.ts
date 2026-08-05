@@ -122,7 +122,7 @@ export async function fetchTree(options: {
     writeCatalogCache(key, paths, numberEnvironment("NAVI_TREE_TTL_MS", TREE_TTL_MS, 60_000, 60 * 60_000));
     return paths;
   } catch (error) {
-    console.warn("NaviSol could not read the repository tree:", error);
+    console.warn("NaviSoul could not read the repository tree:", error);
     /* An expired tree still describes the repository better than nothing. */
     return cached?.value ?? [];
   } finally {

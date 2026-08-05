@@ -205,7 +205,7 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
               <span className="block truncate text-[1rem]/5 font-semibold text-primary">{payload.title}</span>
               <span className="block text-[0.625rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">Interactive artifact</span>
             </span>
-            <button type="button" onClick={editWithNavi} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Edit artifact with NaviSol"><Pencil size={18} /></button>
+            <button type="button" onClick={editWithNavi} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Edit artifact with NaviSoul"><Pencil size={18} /></button>
             <button type="button" onClick={downloadArtifact} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Download artifact"><Download size={18} /></button>
             <button type="button" onClick={() => void shareArtifact()} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Share artifact"><Share2 size={18} /></button>
           </header>

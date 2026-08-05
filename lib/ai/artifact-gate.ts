@@ -28,9 +28,9 @@ function validateBlock(block: string): string {
   const inner = block.slice(FENCE.length, block.length - CLOSE.length);
   try {
     const validation = validateArtifactPayload(JSON.parse(inner.trim()));
-    return validation.ok ? block : `\n> NaviSol removed an invalid artifact payload: ${validation.error}\n`;
+    return validation.ok ? block : `\n> NaviSoul removed an invalid artifact payload: ${validation.error}\n`;
   } catch {
-    return "\n> NaviSol removed a malformed artifact payload.\n";
+    return "\n> NaviSoul removed a malformed artifact payload.\n";
   }
 }
 
@@ -77,7 +77,7 @@ export function createArtifactGate(): ArtifactGate {
       inFence = false;
       /* The stream ended mid-payload. Releasing it would render a broken card
          from JSON that was never validated, so it is dropped and said so. */
-      return "\n> NaviSol removed an incomplete artifact payload.\n";
+      return "\n> NaviSoul removed an incomplete artifact payload.\n";
     }
   };
 }

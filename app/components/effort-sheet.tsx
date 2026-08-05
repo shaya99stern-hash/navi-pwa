@@ -9,7 +9,7 @@ import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 /**
  * Effort, and nothing else.
  *
- * This replaced a model picker. There is one brain — NaviSol — so there was
+ * This replaced a model picker. There is one brain — NaviSoul — so there was
  * never a model to choose; the picker was offering an implementation detail as
  * though it were a product decision. Which free provider answers is chosen by
  * the router and named nowhere.

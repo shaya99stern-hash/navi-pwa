@@ -112,7 +112,7 @@ export function buildGitHubWriteTools({ token, onActivity }: WriteContext): Tool
       from: z.string().optional().describe("Branch to base on. Defaults to the repository's default branch.")
     }),
     execute: async ({ owner, repo, intent, from }) => {
-      /* Generated, not accepted. A consistent `navisol/` prefix makes every
+      /* Generated, not accepted. A consistent `navisoul/` prefix makes every
          branch this app created identifiable in GitHub's own branch list, and
          the random suffix means two attempts at the same fix do not collide. */
       const branch = workingBranchName(intent);

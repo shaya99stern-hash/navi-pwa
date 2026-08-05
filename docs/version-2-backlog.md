@@ -12,7 +12,7 @@ widening a task.
 
 ## Image generation is unavailable
 
-**Symptom.** Asking for a picture returns "NaviSol's image service is
+**Symptom.** Asking for a picture returns "NaviSoul's image service is
 unavailable right now. Try again shortly." The request routes correctly — the
 intent classifier in `app/api/chat/route.ts` identifies it, and
 `lib/ai/image-generation.ts` is reached — but no configured engine answers.

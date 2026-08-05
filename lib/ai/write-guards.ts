@@ -110,5 +110,5 @@ export function workingBranchName(intent: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 40) || "change";
   const suffix = Math.random().toString(36).slice(2, 8);
-  return `navisol/${slug}-${suffix}`;
+  return `navisoul/${slug}-${suffix}`;
 }

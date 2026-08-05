@@ -191,7 +191,7 @@ export function IntegrationsSheet({
         <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-3 pt-1">
           <div>
             <div className="text-[1.0625rem]/6 font-semibold text-primary">Integrations</div>
-            <div className="text-[0.75rem]/4 font-medium text-tertiary">What NaviSol can reach outside this app</div>
+            <div className="text-[0.75rem]/4 font-medium text-tertiary">What NaviSoul can reach outside this app</div>
           </div>
           <button
             type="button"
@@ -212,7 +212,7 @@ export function IntegrationsSheet({
               detail={
                 !known ? "Checking…"
                   : status.github
-                    ? "NaviSol can read your repositories, files, pull requests, and CI runs. Read-only — it cannot push or merge."
+                    ? "NaviSoul can read your repositories, files, pull requests, and CI runs. Read-only — it cannot push or merge."
                     : "Add NAVI_GITHUB_TOKEN in Vercel, then redeploy. A fine-grained token with Contents, Metadata, Pull requests, and Actions set to Read."
               }
               test={tests.github}
@@ -225,7 +225,7 @@ export function IntegrationsSheet({
               detail={
                 !known ? "Checking…"
                   : status.vercel
-                    ? "NaviSol can read your deployments and build logs. Read-only — it cannot deploy or change settings."
+                    ? "NaviSoul can read your deployments and build logs. Read-only — it cannot deploy or change settings."
                     : "Add NAVI_VERCEL_TOKEN in Vercel, then redeploy. Scope it to the team that owns this project."
               }
               test={tests.vercel}
@@ -249,7 +249,7 @@ export function IntegrationsSheet({
               detail={
                 connectorCount
                   ? `${connectorCount} connected · access is ${connectorAccessMode === "ask" ? "asked for each chat" : connectorAccessMode}`
-                  : "Connect a remote MCP server over HTTPS to give NaviSol access to your own tools and data."
+                  : "Connect a remote MCP server over HTTPS to give NaviSoul access to your own tools and data."
               }
               action="Manage"
               onAction={onOpenConnectors}
@@ -303,7 +303,7 @@ export function IntegrationsSheet({
           <p className="px-2 pt-3 text-[0.75rem]/[1.125rem] text-tertiary">
             A tick means a token is present. <span className="text-secondary">Test connection</span> is
             the stronger claim: it calls the service and names the account that answered, so an expired
-            or wrongly-scoped token cannot pass as working. Access is read-only by construction — NaviSol
+            or wrongly-scoped token cannot pass as working. Access is read-only by construction — NaviSoul
             can list, read, and search, but has no tool that writes. Adding a key takes effect on the
             next deploy; a running deployment does not pick it up.
           </p>

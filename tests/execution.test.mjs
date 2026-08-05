@@ -86,7 +86,7 @@ check("the model continues automatically", shell.includes("sendAutomaticallyWhen
 /* ── The capability is the app's, not the route's ────────────────────────── */
 
 /* The wiring moved into the registry, which is now the single place that
-   decides what NaviSol can do on a turn. */
+   decides what NaviSoul can do on a turn. */
 const registry = readFileSync(join(root, "lib/tools/registry.ts"), "utf8");
 check("the route builds its toolset from the registry", route.includes("buildToolset({"), true);
 check("execution is gated on the user's code switch", /name: "execution"[\s\S]{0,160}policy\.code/.test(registry), true);

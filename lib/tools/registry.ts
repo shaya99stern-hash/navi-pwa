@@ -2,12 +2,13 @@ import type { ToolSet } from "ai";
 import { buildDevTools } from "@/lib/ai/dev-tools";
 import { buildExecutionTools } from "@/lib/ai/execution-tools";
 import { buildGitHubWriteTools } from "@/lib/ai/github-write-tools";
+import { buildGoogleTools } from "@/lib/ai/google-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
 import { buildWebTools } from "@/lib/ai/web-tools";
 import type { NaviMode, ToolPolicy } from "@/lib/ai/types";
 
 /**
- * One place that decides what NaviSol can do this turn.
+ * One place that decides what NaviSoul can do this turn.
  *
  * Before this the answer was assembled inline in the chat route from five
  * separate builders, each with its own idea of when it applied. Nothing could
@@ -35,6 +36,8 @@ export type ToolsetContext = {
   policy: ToolPolicy;
   /** Per-user GitHub token from OAuth, when they have connected an account. */
   githubToken?: string;
+  /** A live Google access token, when they have connected that account. */
+  googleAccessToken?: string;
   /** Server-side writes are separately gated; see `github-write-tools`. */
   githubWritesEnabled?: boolean;
   signal: AbortSignal;
@@ -93,6 +96,16 @@ const GROUPS: Group[] = [
        them on. Chat mode never receives them, whatever the token allows. */
     tools: () => ({}),
     when: ({ mode, githubToken, githubWritesEnabled }) => mode === "code" && Boolean(githubToken) && Boolean(githubWritesEnabled)
+  },
+  {
+    /* Mail and calendar, in both modes. Unlike repositories these are not a
+       developer capability — "what did she say about Thursday" is an ordinary
+       question, and putting it behind Code mode would make the connector
+       useless to the person most likely to want it. Which of these tools exist
+       is decided inside the builder by what the grant actually covers. */
+    name: "google",
+    tools: () => ({}),
+    when: ({ googleAccessToken }) => Boolean(googleAccessToken)
   }
 ];
 
@@ -120,7 +133,7 @@ export function capToolset(tools: ToolSet, max = MAX_ACTIVE_TOOLS): ToolSet {
  * `when` predicates be read at a glance.
  */
 export function buildToolset(context: ToolsetContext): ToolSet {
-  const { policy, mode, githubToken, githubWritesEnabled, signal, origin, cookie, onActivity = () => {}, mcpTools = {} } = context;
+  const { policy, mode, githubToken, googleAccessToken, githubWritesEnabled, signal, origin, cookie, onActivity = () => {}, mcpTools = {} } = context;
 
   const active = (name: string) => GROUPS.find((group) => group.name === name)?.when(context) ?? false;
 
@@ -132,7 +145,8 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...buildDevTools(onActivity, { githubToken }),
     ...(active("repository-write") && githubToken
       ? buildGitHubWriteTools({ token: githubToken, onActivity })
-      : {})
+      : {}),
+    ...(active("google") ? buildGoogleTools(onActivity, { accessToken: googleAccessToken }) : {})
   };
 
   /* MCP last, so a connector can never displace a built-in capability when the

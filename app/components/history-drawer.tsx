@@ -195,7 +195,10 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
                       setOptimisticMode(entry.id);
                       onMode(entry.id);
                     }
-                    onClose();
+                    /* The drawer stays open. Closing it turned a segmented
+                       control into a one-way exit: you could not see the
+                       selection you had just made, and going back to check
+                       meant reopening the panel you were thrown out of. */
                   }}
                   aria-pressed={active}
                   className={`min-h-11 flex-1 rounded-[9px] px-2 text-[0.8125rem]/5 font-semibold transition-colors ${active ? "bg-elev-2 text-primary" : "text-tertiary active:bg-elev-2/60"}`}

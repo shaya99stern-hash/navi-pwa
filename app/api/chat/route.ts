@@ -16,6 +16,7 @@ import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } 
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { readUntilCommitted } from "@/lib/ai/lane-commit";
 import { githubWritesEnabled, readGithubToken } from "@/lib/github/oauth";
+import { googleAccessToken } from "@/lib/google/oauth";
 import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { buildToolset } from "@/lib/tools/registry";
@@ -280,10 +281,10 @@ const RESEARCH_REQUEST = /\b(search|research|investigate|look ?up|look into|find
 
 /** Named so the status line can say what was engaged, in Navi's own words. */
 const DISPATCH_LABEL: Record<Dispatch, string> = {
-  code: "NaviSol · code",
-  research: "NaviSol · research",
-  reasoning: "NaviSol · reasoning",
-  general: "NaviSol"
+  code: "NaviSoul · code",
+  research: "NaviSoul · research",
+  reasoning: "NaviSoul · reasoning",
+  general: "NaviSoul"
 };
 
 function dispatchFor(text: string, band: Effort, effort: EffortLevel): Dispatch {
@@ -443,7 +444,7 @@ function artifactInstruction(requested: boolean): string {
 /** The behavioural difference between the Chat and Code models lives here. */
 function codeModeInstruction(): string {
   return [
-    "You are NaviSol working in Code mode.",
+    "You are NaviSoul working in Code mode.",
     "Prefer working code over prose about code: give complete, runnable snippets with the imports they need, and state the language and file path when it matters.",
     "When debugging, reason from the actual error text and the code shown; name the root cause before proposing the fix, and keep the fix minimal.",
     "Match the conventions of any code the user shows you. Flag breaking changes, missing tests, and security problems even when unasked.",
@@ -580,7 +581,7 @@ function capabilityInstruction(): string {
  * reaching here is the end of the line rather than a first attempt.
  *
  * Three rules the copy follows. It names no provider, because the user talks
- * to NaviSol and NaviSol has no vendors. It does not apologise, because an
+ * to NaviSoul and NaviSoul has no vendors. It does not apologise, because an
  * apology is not information and reads as evasion when repeated. And it says
  * what to do next, because the only useful part of an error is the next step.
  *
@@ -588,12 +589,12 @@ function capabilityInstruction(): string {
  */
 function streamError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  console.error("NaviSol stream error:", error);
+  console.error("NaviSoul stream error:", error);
   const lower = message.toLowerCase();
   if (lower.includes("image providers") || lower.includes("image-generation provider")) return "Image generation is unavailable right now. Tap to retry in a moment.";
   if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "Too many requests just now. Tap to retry in a moment.";
   if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401") || lower.includes("403") || lower.includes("forbidden")) {
-    return "NaviSol has no working credential to answer with. Add one in Settings.";
+    return "NaviSoul has no working credential to answer with. Add one in Settings.";
   }
   if (lower.includes("timeout") || lower.includes("aborted")) return "That took too long. Tap to retry, or lower the effort.";
   return "That didn't go through. Tap to retry.";
@@ -650,10 +651,10 @@ async function meterSpend(result: { usage: PromiseLike<unknown>; providerMetadat
     const parsed = readUsage(merged);
     if (!parsed) return;
     const tier = /pro/i.test(model) ? "pro" : "flash";
-    console.info("NaviSol metered request", { model, ...parsed });
+    console.info("NaviSoul metered request", { model, ...parsed });
     await recordSpend(parsed, tier);
   } catch (error) {
-    console.error("NaviSol could not meter a request:", error);
+    console.error("NaviSoul could not meter a request:", error);
   }
 }
 
@@ -686,7 +687,7 @@ async function extractDocuments(messages: UIMessage[]): Promise<Array<{ name: st
         if (table.text) out.push({ name, block: documentBlock(name, table) });
       }
     } catch (error) {
-      console.warn("NaviSol could not read an attached document:", error);
+      console.warn("NaviSoul could not read an attached document:", error);
     }
   }
 
@@ -755,24 +756,29 @@ export async function POST(request: Request): Promise<Response> {
     const reason = await authorizationError.json().catch(() => null) as { error?: string } | null;
     return refuse(reason?.error === "Sign in to continue."
       ? "Your session expired. Reload the app to sign back in."
-      : reason?.error || "NaviSol could not authorize this request.");
+      : reason?.error || "NaviSoul could not authorize this request.");
   }
-  if (isRateLimited(clientIdentifier(request))) return refuse("You are sending messages faster than NaviSol can answer them. Wait a few seconds and try again.", { "Retry-After": "30" });
+  if (isRateLimited(clientIdentifier(request))) return refuse("You are sending messages faster than NaviSoul can answer them. Wait a few seconds and try again.", { "Retry-After": "30" });
 
   let body: ChatRequestBody;
   try {
     body = (await request.json()) as ChatRequestBody;
   } catch {
-    return refuse("NaviSol could not read that request. Reload the app and try again.");
+    return refuse("NaviSoul could not read that request. Reload the app and try again.");
   }
 
   /* Read inside the request scope. `cookies()` throws once the request closes,
      and the stream callback below runs after that — so resolving it lazily
      inside the callback would fail for every signed-in user. */
   const userGithubToken = await readGithubToken();
+  /* Same scope rule, and one extra reason: this trades the stored refresh token
+     for an access token over the network, so it must not be deferred into the
+     stream callback where a failure would surface as a dead tool rather than as
+     a disconnected account. */
+  const userGoogleToken = await googleAccessToken();
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) return refuse("There was no message to send.");
-  if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; NaviSol will still remember the important parts.`);
+  if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; NaviSoul will still remember the important parts.`);
   if (JSON.stringify(body.messages).length > MAX_SERIALIZED_CHARACTERS) return refuse("This conversation and its attachments are too large to send. Start a new chat, or remove an attachment.");
 
   const messages = body.messages.slice(-MAX_MESSAGES);
@@ -781,7 +787,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
   const lastUserText = textOf(lastUserMessage);
-  if (!lastUserText) return refuse("Add a short description of what you want NaviSol to do with this.");
+  if (!lastUserText) return refuse("Add a short description of what you want NaviSoul to do with this.");
 
   const currentImageAttachments = imageAttachments(lastUserMessage);
   const imageRequested = imageGenerationIntent(lastUserText, currentImageAttachments.length > 0);
@@ -910,7 +916,7 @@ export async function POST(request: Request): Promise<Response> {
         : ["", {} as Awaited<ReturnType<typeof buildMcpTools>>];
       // Clock and page reading need no configuration, so they are always on;
       // search joins them only when a provider key is present.
-      /* One registry decides what NaviSol can do this turn, rather than five
+      /* One registry decides what NaviSoul can do this turn, rather than five
          builders assembled here with five separate ideas of when they apply.
          It also enforces the ceiling on how many tools go out — past roughly a
          dozen, selection accuracy falls and every turn pays the schema cost of
@@ -919,6 +925,7 @@ export async function POST(request: Request): Promise<Response> {
         mode,
         policy: tools,
         githubToken: userGithubToken,
+        googleAccessToken: userGoogleToken ?? undefined,
         githubWritesEnabled: githubWritesEnabled(),
         signal: request.signal,
         /* Python runs on a Node route because the sandbox SDK cannot run on
@@ -1051,7 +1058,7 @@ export async function POST(request: Request): Promise<Response> {
         }) ?? generalRoute;
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
-      /* The plan, shown rather than only acted on. NaviSol has been making one
+      /* The plan, shown rather than only acted on. NaviSoul has been making one
          for a while, but it lived entirely inside the request — so the only
          moment the user could correct a misread of their intent was after the
          work was already done. Correcting a plan is far cheaper than
@@ -1111,7 +1118,7 @@ export async function POST(request: Request): Promise<Response> {
         timeout: { totalMs: 50_000, chunkMs: 14_000 },
         abortSignal: request.signal,
         experimental_transform: smoothStream({ delayInMs: 26, chunking: "word" }),
-        onError: ({ error }) => console.error("NaviSol provider stream failed:", error)
+        onError: ({ error }) => console.error("NaviSoul provider stream failed:", error)
       });
       /* Billed from what the response actually reported, not from an estimate.
          Cache hits and misses differ in price by roughly fifty times, so a
@@ -1136,7 +1143,7 @@ export async function POST(request: Request): Promise<Response> {
         const grounding = groundingFor({ retrieved: retrieval?.block });
         const shouldCritique = plan.needsReview && critiqueAllowed({ lane, grounding });
         if (plan.needsReview && !shouldCritique) {
-          console.info("NaviSol skipped the critique pass:", skipReason({ lane, grounding }));
+          console.info("NaviSoul skipped the critique pass:", skipReason({ lane, grounding }));
         }
         if (shouldCritique) {
           writer.write(statusChunk({ stage: "draft", detail: "Drafting the implementation." }));

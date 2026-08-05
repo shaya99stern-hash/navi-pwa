@@ -210,7 +210,7 @@ export function buildWebTools({ search, signal, onActivity = () => {} }: {
         }
 
         /* Then the ceiling. Past 90% of the month's allotment the tool stops
-           and NaviSol answers from its own knowledge. The refusal is written
+           and NaviSoul answers from its own knowledge. The refusal is written
            for the model, not the user: it says what happened so the answer can
            be honest about not having looked, without turning into a notice
            about quotas that nobody asked for. */

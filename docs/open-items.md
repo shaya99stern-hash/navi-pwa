@@ -33,7 +33,7 @@ Shipped but never exercised against the real thing.
 
 | What | Why it is unproven | How to prove it |
 |---|---|---|
-| Python execution | Needs Vercel credentials and a reachable sandbox API; neither exists in the build environment | Ask NaviSol to write and run a Python function |
+| Python execution | Needs Vercel credentials and a reachable sandbox API; neither exists in the build environment | Ask NaviSoul to write and run a Python function |
 | Preview sign-in | The proxy here blocks both the preview URL and production, so the fix could not be loaded | Open the preview URL and see whether it loads or redirects |
 | Free-model discovery | `openrouter.ai` is unreachable from the build environment, so the catalogue's field names were never checked against the live response | One request to `/api/v1/models` and a look at the JSON |
 | DeepSeek quality lane | No key configured | Set `DEEPSEEK_API_KEY` |
@@ -81,6 +81,15 @@ evaluates the real `headers()` output rather than grepping the source.
 Both sign-in pages set `oauthFlow="redirect"` deliberately. `Cross-Origin-Opener-Policy:
 same-origin` breaks the popup flow, so switching to popups needs that header
 relaxed too.
+
+## Gmail and Calendar
+
+Shipped and unproven — no Google credentials exist in the build environment, so
+no tool here has been run against a real mailbox. `docs/google-connector-setup.md`
+has the setup, including the one trap: Gmail's scopes are restricted, and adding
+them to the *published* project that serves sign-in would push that project into
+needing verification and a paid annual security assessment. Use a second project
+left in Testing.
 
 ## Environment variables
 

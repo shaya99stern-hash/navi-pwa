@@ -89,7 +89,7 @@ function compactSummary(messages: UIMessage[]): string {
   if (messages.length <= 14) return "";
   const lines = messages
     .slice(0, -12)
-    .map((message) => `${message.role === "user" ? "User" : "NaviSol"}: ${messageText(message).slice(0, 700)}`)
+    .map((message) => `${message.role === "user" ? "User" : "NaviSoul"}: ${messageText(message).slice(0, 700)}`)
     .filter((line) => !line.endsWith(": "));
   if (!lines.length) return "";
 
@@ -129,18 +129,14 @@ function stopSpeaking() {
 export type InitialSheet = "history" | "projects" | "artifacts" | "connectors" | "settings" | "customize";
 
 /**
- * Which mode is active, at a glance.
+ * What the app is called right now.
  *
- * Shown in both modes rather than only Code: an indicator that appears only
- * sometimes teaches the user nothing about where they are, and the whole point
- * is not having to open the drawer to check.
+ * The mode is the product, so it holds the header's dominant line in every
+ * state rather than riding along as a pill beside the chat title. A pill is
+ * read as decoration and was being missed; the name is read as the name.
  */
-function ModePill({ mode }: { mode: NaviMode }) {
-  return (
-    <span className="shrink-0 rounded-full bg-elev-2 px-2 py-0.5 text-[0.625rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">
-      {mode === "code" ? "Code" : "Chat"}
-    </span>
-  );
+function modeTitle(mode: NaviMode) {
+  return mode === "code" ? "NaviOS Code" : "NaviOS Chat";
 }
 
 export function AppShell({
@@ -271,7 +267,7 @@ export function AppShell({
         && "Notification" in window && Notification.permission === "granted") {
         void navigator.serviceWorker?.getRegistration("/")
           .then((registration) => registration?.showNotification("NaviOS", {
-            body: "NaviSol has finished a response.",
+            body: "NaviSoul has finished a response.",
             icon: "/pwa-icon-192-v5.png",
             badge: "/pwa-icon-192-v5.png",
             tag: "navi-response-complete"
@@ -280,7 +276,7 @@ export function AppShell({
       }
     },
     onError: (chatError) => {
-      console.error("NaviSol chat error:", chatError);
+      console.error("NaviSoul chat error:", chatError);
       setStreamStatus(null);
       haptic("error", preferences.haptics);
     }
@@ -295,7 +291,7 @@ export function AppShell({
   const activeMode = NAVI_MODES.find((item) => item.id === preferences.mode) ?? NAVI_MODES[0];
   const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
-  const statusText = streamStatus?.detail ?? (generating ? "NaviSol is working" : preferences.mode === "code" ? activeMode.label : "");
+  const statusText = streamStatus?.detail ?? (generating ? "NaviSoul is working" : preferences.mode === "code" ? activeMode.label : "");
 
   /* Recall runs against the question being asked, so it is computed at send
      time rather than folded into the memoised body. */
@@ -645,7 +641,7 @@ export function AppShell({
   async function shareActiveChat() {
     const current = chats.find((chat) => chat.id === activeId);
     const transcript = messages
-      .map((message) => `${message.role === "user" ? "You" : "NaviSol"}: ${messageText(message)}`)
+      .map((message) => `${message.role === "user" ? "You" : "NaviSoul"}: ${messageText(message)}`)
       .filter((line) => !line.endsWith(": "))
       .join("\n\n");
     if (!transcript) return;
@@ -939,15 +935,18 @@ export function AppShell({
         >
           <PanelLeft size={21} strokeWidth={1.8} />
         </button>
+        {/* The mode holds the top line in every state. What the chat is called
+            moves underneath it: a title is worth reading, but which product you
+            are talking to is worth reading first, and it was previously a pill
+            small enough to scan past. */}
         <div className="min-w-0 flex-1 text-center">
           {messages.length === 0 && !activeChat ? (
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">NaviOS</div>
-              <ModePill mode={preferences.mode} />
+            <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">
+              {modeTitle(preferences.mode)}
             </div>
           ) : (
-            /* The title is the chat's own menu: star, rename, share, delete.
-               The chevron is the affordance that says so. */
+            /* Still the chat's own menu: star, rename, share, delete. The
+               chevron is the affordance that says so. */
             <button
               type="button"
               onClick={() => { haptic("selection", preferences.haptics); setChatMenuOpen(true); }}
@@ -956,13 +955,12 @@ export function AppShell({
               aria-haspopup="menu"
             >
               <span className="min-w-0">
-                <span className="block truncate text-[1rem]/5 font-medium tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</span>
-                {activeProject ? (
-                  <span className="block truncate text-[0.6875rem]/[0.875rem] font-medium text-tertiary">{activeProject.name}</span>
-                ) : null}
+                <span className="block truncate text-[1rem]/5 font-semibold tracking-[-0.01em] text-primary">{modeTitle(preferences.mode)}</span>
+                <span className="block truncate text-[0.6875rem]/[0.875rem] font-medium text-tertiary">
+                  {activeProject ? `${activeProject.name} · ` : ""}{activeChat?.title ?? "New chat"}
+                </span>
               </span>
               <ChevronDown size={14} className="shrink-0 text-tertiary" />
-              <ModePill mode={preferences.mode} />
             </button>
           )}
         </div>
@@ -1008,7 +1006,7 @@ export function AppShell({
       ) : preferences.tools.web ? (
         <div className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[0.6875rem]/4 font-semibold text-accent" role="status">
           <Search size={14} />
-          Research mode on · NaviSol will use available web or connected sources
+          Research mode on · NaviSoul will use available web or connected sources
         </div>
       ) : preferences.connectedMcpServers.length ? (
         <button type="button" onClick={() => setConnectorsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-[var(--border-subtle)] bg-elev-2 px-4 text-center text-[0.6875rem]/4 font-semibold text-secondary active:bg-elev-3">
