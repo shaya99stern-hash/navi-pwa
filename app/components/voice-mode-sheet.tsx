@@ -3,8 +3,8 @@
 import { Check, Keyboard, Mic, Send, Square, Volume2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
+import { resolveVoiceLanguage, speechRecognitionAvailable, startSpeechRecognition, type SpeechSession } from "@/lib/ui/speech";
 
-const LANGUAGE_KEY = "navi.voice.language.v1";
 const LANGUAGES = [
   { id: "en-US", label: "English (US)" },
   { id: "en-GB", label: "English (UK)" },
@@ -18,6 +18,10 @@ type Props = {
   busy: boolean;
   online: boolean;
   haptics: boolean;
+  /** The one stored preference. This sheet used to keep its own copy in
+      localStorage, which Settings then had to mirror into on every change. */
+  voiceLanguage: string;
+  onVoiceLanguage: (language: string) => void;
   onClose: () => void;
   onUseTranscript: (text: string) => void;
   onSendTranscript: (text: string, speakReply: boolean) => void;
@@ -28,13 +32,15 @@ export function VoiceModeSheet({
   busy,
   online,
   haptics,
+  voiceLanguage,
+  onVoiceLanguage,
   onClose,
   onUseTranscript,
   onSendTranscript
 }: Props) {
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechSession | null>(null);
   const [supported, setSupported] = useState<boolean | null>(null);
-  const [language, setLanguage] = useState("en-US");
+  const language = resolveVoiceLanguage(voiceLanguage);
   const [transcript, setTranscript] = useState("");
   const [interim, setInterim] = useState("");
   const [listening, setListening] = useState(false);
@@ -48,15 +54,13 @@ export function VoiceModeSheet({
 
   useEffect(() => {
     if (!open) return;
-    const SpeechRecognition = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-    setSupported(Boolean(SpeechRecognition));
-    setLanguage(localStorage.getItem(LANGUAGE_KEY) || navigator.language || "en-US");
+    setSupported(speechRecognitionAvailable());
     setError(null);
   }, [open]);
 
   useEffect(() => {
     if (!open) {
-      recognitionRef.current?.abort?.();
+      recognitionRef.current?.abort();
       recognitionRef.current = null;
       setListening(false);
       setInterim("");
@@ -73,14 +77,12 @@ export function VoiceModeSheet({
   });
 
   function persistLanguage(next: string) {
-    setLanguage(next);
-    localStorage.setItem(LANGUAGE_KEY, next);
+    onVoiceLanguage(next);
     haptic("selection", haptics);
   }
 
   function start() {
-    const SpeechRecognition = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+    if (!speechRecognitionAvailable()) {
       setSupported(false);
       setError("Live speech recognition is not available in this browser.");
       haptic("warning", haptics);
@@ -88,57 +90,37 @@ export function VoiceModeSheet({
     }
     if (!online || busy) return;
 
-    recognitionRef.current?.abort?.();
-    const recognition = new SpeechRecognition();
-    recognition.lang = language;
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setListening(true);
-      setError(null);
-      setInterim("");
-      haptic("selection", haptics);
-    };
-    recognition.onresult = (event: any) => {
-      let finalChunk = "";
-      let interimChunk = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const value = event.results[index][0]?.transcript ?? "";
-        if (event.results[index].isFinal) finalChunk += value;
-        else interimChunk += value;
+    recognitionRef.current?.abort();
+    recognitionRef.current = startSpeechRecognition({
+      language: voiceLanguage,
+      onStart: () => {
+        setListening(true);
+        setError(null);
+        setInterim("");
+        haptic("selection", haptics);
+      },
+      onFinal: (text) => setTranscript((current) => `${current}${current.trim() ? " " : ""}${text}`),
+      onInterim: setInterim,
+      onError: (message) => {
+        setListening(false);
+        setInterim("");
+        setError(message);
+        haptic("error", haptics);
+      },
+      onEnd: () => {
+        setListening(false);
+        setInterim("");
       }
-      if (finalChunk.trim()) {
-        setTranscript((current) => `${current}${current.trim() ? " " : ""}${finalChunk.trim()}`);
-      }
-      setInterim(interimChunk.trim());
-    };
-    recognition.onerror = (event: any) => {
-      setListening(false);
-      setInterim("");
-      const reason = event?.error === "not-allowed"
-        ? "Microphone permission was denied. Enable microphone access in iPhone Settings or use keyboard dictation."
-        : "Voice input stopped before it could finish. Try again.";
-      setError(reason);
-      haptic("error", haptics);
-    };
-    recognition.onend = () => {
-      setListening(false);
-      setInterim("");
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
+    });
   }
 
   function stop() {
-    recognitionRef.current?.stop?.();
+    recognitionRef.current?.stop();
     haptic("impact-light", haptics);
   }
 
   function resetAndClose() {
-    recognitionRef.current?.abort?.();
+    recognitionRef.current?.abort();
     recognitionRef.current = null;
     setListening(false);
     setTranscript("");
@@ -163,7 +145,7 @@ export function VoiceModeSheet({
     if (!combined || busy || !online) return;
     const text = combined;
     haptic("impact-light", haptics);
-    recognitionRef.current?.abort?.();
+    recognitionRef.current?.abort();
     recognitionRef.current = null;
     setListening(false);
     setTranscript("");

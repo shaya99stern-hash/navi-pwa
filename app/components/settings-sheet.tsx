@@ -671,14 +671,11 @@ export function SettingsSheet({
                     label="Voice language"
                     value={preferences.voiceLanguage}
                     options={VOICE_LANGUAGES}
-                    onChange={(voiceLanguage) => {
-                      update({ voiceLanguage });
-                      // Voice mode still reads the legacy key.
-                      try {
-                        if (voiceLanguage === "auto") localStorage.removeItem("navi.voice.language.v1");
-                        else localStorage.setItem("navi.voice.language.v1", voiceLanguage);
-                      } catch { /* private browsing */ }
-                    }}
+                    /* The mirror into `navi.voice.language.v1` is gone with the
+                       private copy it fed. Voice mode reads this preference
+                       directly now, so there is one language and no write that
+                       has to remember to keep a second one in step. */
+                    onChange={(voiceLanguage) => update({ voiceLanguage })}
                   />
                 }
               />
