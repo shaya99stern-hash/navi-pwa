@@ -15,7 +15,6 @@ import {
   FolderKanban,
   Link2,
   Search,
-  SlidersHorizontal,
   Square,
   X
 } from "lucide-react";
@@ -778,11 +777,6 @@ export function ComposerDock({
               <button type="button" onClick={() => { setSourceMenuOpen(false); setIntegrationsOpen(true); }} className={menuRow}>
                 <Link2 size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
                 <span className="flex-1">Integrations</span>
-                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
-              </button>
-              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenTools(); }} className={menuRow}>
-                <SlidersHorizontal size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Capabilities</span>
                 <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
               </button>
 

@@ -682,3 +682,13 @@ aside .scroll-area {
 :is(input[type="checkbox"], input[type="radio"]) {
   font-size: inherit;
 }
+
+/* The settings header was translucent with no backdrop filter, so scrolled
+   content read straight through it and collided with the title. Same treatment
+   as `.navi-header`, which already gets this right — the blur is what makes a
+   translucent bar legible rather than merely see-through. */
+.navi-sheet-header {
+  background: color-mix(in srgb, var(--bg-app) 94%, transparent);
+  backdrop-filter: blur(22px) saturate(135%);
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+}

@@ -450,7 +450,7 @@ export function SettingsSheet({
 
   return (
     <div className="fixed inset-0 z-[95] flex flex-col bg-app" role="dialog" aria-modal="true" aria-label="Settings">
-      <header className="flex h-[52px] shrink-0 items-center gap-1 border-b border-[var(--border-subtle)] px-2 pt-[var(--safe-top)]">
+      <header className="navi-sheet-header sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1 border-b border-[var(--border-subtle)] px-2 pt-[var(--safe-top)]">
         {page === "root" ? (
           <div className="flex h-11 w-11 items-center justify-center" aria-hidden="true" />
         ) : (
@@ -756,10 +756,6 @@ export function SettingsSheet({
               />
             </Group>
 
-            <SectionHeader>Skills</SectionHeader>
-            <Group>
-              <RootRow label="Skills have moved to Customize" onOpen={() => openPage("skills")} />
-            </Group>
           </>
         ) : null}
 
