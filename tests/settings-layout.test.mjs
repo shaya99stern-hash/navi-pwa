@@ -51,6 +51,31 @@ check("the engine pin is gone from Capabilities", capabilities.includes("DIAGNOS
 const account = block("account");
 check("the quality check is gone from Account", account.includes("Run quality check"), false);
 
+/* ---- The memory list is on the page it belongs to -------------------- */
+
+/* It shipped on the wrong page. The insert was anchored on a "Preferences"
+   section header, which exists on both General and Privacy, and matched
+   General's first. The test that should have caught it only asserted the file
+   contained the section — which was true, on the wrong screen. Assert the page
+   it renders in, not its presence. */
+const privacy = block("privacy");
+const general = block("general");
+
+check("the memory list is on Privacy", privacy.includes("What NaviSoul remembers"), true);
+check("it is not on General", general.includes("What NaviSoul remembers"), false);
+check("Privacy can forget a fact", /forget\(item\.id\)/.test(privacy), true);
+check("Privacy states the not-configured case", privacy.includes("Not enabled"), true);
+check("Privacy states the empty case", privacy.includes("Nothing yet"), true);
+/* Forgetting is a privacy decision; showing it as done before the server
+   confirms is the one lie this control must not tell. */
+check("the row waits for the server", /if \(response\?\.ok\) setFacts/.test(body), true);
+
+/* A fixed height plus top padding leaves 52px minus the safe area for the
+   title, which on a notched iPhone is nearly nothing — the header rendered
+   clipped under the status bar. */
+check("the sheet header adds the safe area to its height", /h-\[calc\(52px\+var\(--safe-top\)\)\]/.test(body), true);
+check("the old fixed height is gone", /flex h-\[52px\] shrink-0 items-center gap-1 border-b/.test(body), false);
+
 /* ---- Two panes at 768px ---------------------------------------------- */
 
 check("the section list is a nav landmark", body.includes('aria-label="Settings sections"'), true);

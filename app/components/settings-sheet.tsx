@@ -543,7 +543,7 @@ export function SettingsSheet({
 
   return (
     <div className="fixed inset-0 z-[95] flex flex-col bg-app" role="dialog" aria-modal="true" aria-label="Settings">
-      <header className="navi-sheet-header sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1 border-b border-[var(--border-subtle)] px-2 pt-[var(--safe-top)]">
+      <header className="navi-sheet-header sticky top-0 z-10 flex h-[calc(52px+var(--safe-top))] shrink-0 items-center gap-1 border-b border-[var(--border-subtle)] px-2 pt-[var(--safe-top)]">
         {/* At two panes the list is always on screen, so a back button points
             at a page that is not hidden — it reads as an extra step to nowhere. */}
         {page === "root" ? (
@@ -630,36 +630,6 @@ export function SettingsSheet({
                 }
               />
             </Group>
-
-            <SectionHeader>What NaviSoul remembers</SectionHeader>
-            <Group>
-              {!facts.loaded ? (
-                <Row label="Loading…" />
-              ) : !facts.configured ? (
-                <Row
-                  label="Not enabled"
-                  description="Durable facts are not configured on this deployment, so nothing is remembered between conversations. Recall within this device still works."
-                />
-              ) : !facts.items.length ? (
-                <Row
-                  label="Nothing yet"
-                  description="Standing facts you mention — how you work, what you use, what you always want — are kept here so they do not have to be repeated. Passing details of a request are not."
-                />
-              ) : (
-                facts.items.map((item) => (
-                  <Row
-                    key={item.id}
-                    label={item.fact}
-                    control={<InlineButton destructive onClick={() => void forget(item.id)}>Forget</InlineButton>}
-                  />
-                ))
-              )}
-            </Group>
-            {facts.configured && facts.items.length ? (
-              <p className="px-4 pt-2 text-[0.75rem]/[1.125rem] text-tertiary">
-                Forgetting is immediate and cannot be undone. The memory switch below stops anything new being added.
-              </p>
-            ) : null}
 
             <SectionHeader>Preferences</SectionHeader>
             <Group>
@@ -819,6 +789,36 @@ export function SettingsSheet({
               NaviOS is local-first: conversations, projects, and preferences live in this browser&apos;s storage
               and leave the device only as requests to the AI providers you have configured.
             </p>
+            <SectionHeader>What NaviSoul remembers</SectionHeader>
+            <Group>
+              {!facts.loaded ? (
+                <Row label="Loading…" />
+              ) : !facts.configured ? (
+                <Row
+                  label="Not enabled"
+                  description="Durable facts are not configured on this deployment, so nothing is remembered between conversations. Recall within this device still works."
+                />
+              ) : !facts.items.length ? (
+                <Row
+                  label="Nothing yet"
+                  description="Standing facts you mention — how you work, what you use, what you always want — are kept here so they do not have to be repeated. Passing details of a request are not."
+                />
+              ) : (
+                facts.items.map((item) => (
+                  <Row
+                    key={item.id}
+                    label={item.fact}
+                    control={<InlineButton destructive onClick={() => void forget(item.id)}>Forget</InlineButton>}
+                  />
+                ))
+              )}
+            </Group>
+            {facts.configured && facts.items.length ? (
+              <p className="px-4 pt-2 text-[0.75rem]/[1.125rem] text-tertiary">
+                Forgetting is immediate and cannot be undone. The memory switch below stops anything new being added.
+              </p>
+            ) : null}
+
             <SectionHeader>Preferences</SectionHeader>
             <Group>
               <Row
