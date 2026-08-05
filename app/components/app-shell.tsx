@@ -973,7 +973,7 @@ export function AppShell({
             two or three on the right, so a `flex-1` middle centres inside what
             is left over — which put the title about half a button off centre.
             The max width keeps it clear of both clusters on a narrow phone. */}
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex max-w-[calc(100%-184px)] -translate-x-1/2 -translate-y-1/2 justify-center text-center [&>*]:pointer-events-auto">
+        <div className="pointer-events-none absolute bottom-0 left-1/2 top-[var(--safe-top)] z-10 flex max-w-[calc(100%-184px)] -translate-x-1/2 items-center justify-center text-center [&>*]:pointer-events-auto">
           {messages.length === 0 && !activeChat ? (
             <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">
               {modeTitle(preferences.mode)}

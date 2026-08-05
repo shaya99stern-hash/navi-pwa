@@ -21,7 +21,21 @@ for (const text of [
   "I prefer short replies",
   "remember that I bill hourly",
   "from now on skip the preamble",
-  "I never want emoji in code comments"
+  "I never want emoji in code comments",
+  /* Found by a real user, missed by the first version of this list. "like" was
+     not among the preference verbs and "save to memory" was not among the
+     instructions, so someone asking in as many words to have something
+     remembered was turned away before a model ever read it. */
+  "I like honesty can you save to memory",
+  "I like short answers",
+  "save this to memory",
+  "add that to your memory",
+  "note that I bill hourly",
+  "don't forget I work weekends",
+  "I value directness over politeness",
+  "I live in Toronto",
+  "I speak Hebrew at home",
+  "I need you to never use emoji"
 ]) check(`considered: ${text}`, looksDurable(text), true);
 
 /* Ordinary requests must not reach the model. These are the overwhelming
@@ -62,6 +76,26 @@ check("a two-word fact is dropped", parseFacts('["uses ts"]'), []);
 check("an essay is dropped", parseFacts(`["${"long ".repeat(60)}"]`), []);
 check("non-strings are dropped", parseFacts('["Works as a nurse", 42, null]'), ["Works as a nurse"]);
 check("at most three per turn", parseFacts('["Fact one here","Fact two here","Fact three here","Fact four here"]').length, 3);
+
+/* ---- The model has to know the memory exists -------------------------
+ * Rendering stored facts alone left it with no idea it had a memory: asked to
+ * "add that to your memory" it replied that it had no way to store anything
+ * across sessions — denying a capability it has — and a turn earlier claimed
+ * to have "noted" a preference, a save it could not make. It cannot describe a
+ * system nothing describes to it. */
+const { readFileSync } = require("node:fs") as typeof import("node:fs");
+const chatRoute = readFileSync("app/api/chat/route.ts", "utf8");
+
+check("the capability is stated, not just its output", chatRoute.includes("memoryCapability"), true);
+check("it is stated only when memory can be written", /mayRemember && factsConfigured\(\)\s*\n?\s*\?/.test(chatRoute), true);
+check("it precedes the facts themselves", chatRoute.indexOf("memoryCapability, rememberedBlock") > -1, true);
+/* The two failures, named so neither returns quietly. */
+check("it forbids denying the capability", /Never say you cannot store anything between conversations/.test(chatRoute), true);
+check("it forbids claiming a specific save", /never claim to have saved a specific item/.test(chatRoute), true);
+/* Extraction runs beside the answer, so the reply genuinely cannot know what
+   was stored — the instruction has to say why, not just what. */
+check("it explains why the result is unknown", /extraction happens outside this reply/.test(chatRoute), true);
+check("it points at where facts can be removed", /Settings → Privacy/.test(chatRoute), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
