@@ -19,6 +19,7 @@ import { githubWritesEnabled, readGithubToken } from "@/lib/github/oauth";
 import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { buildToolset } from "@/lib/tools/registry";
+import { detectRepo, retrieveFiles } from "@/lib/ai/repo-retrieval";
 import { runComposite } from "@/lib/ai/swarm";
 import {
   architectPlan,
@@ -468,10 +469,12 @@ function systemPrompt(options: {
   playbookContext?: string;
   /** The request asked Navi to learn something, so it may offer a capability. */
   capabilityRequested?: boolean;
+  /** Repository files fetched before generating, when the repo was knowable. */
+  retrieved?: string;
   /** The plan Soul made for this request, and what the answer must satisfy. */
   constraints?: string;
 }): string {
-  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, memoryContext, playbookContext, constraints, capabilityRequested = false, productMode } = options;
+  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, memoryContext, playbookContext, constraints, retrieved, capabilityRequested = false, productMode } = options;
   /* Ordered stable-first, volatile-last, and that ordering is load-bearing.
      The metered lane bills a cached prompt prefix at roughly one fiftieth of an
      uncached one, and the cache matches on an exact byte prefix — so a single
@@ -511,6 +514,11 @@ function systemPrompt(options: {
     tools.artifacts ? artifactInstruction(artifactRequested) : "",
     capabilityRequested ? capabilityInstruction() : "",
     memoryContext || "",
+    /* With the other per-request material, never above the stable prefix. File
+       contents are the most volatile thing in the prompt — they differ on every
+       question — so placing them early would invalidate the cached prefix for
+       the metered lane on every single turn. */
+    retrieved || "",
     threadSummary ? `Compact summary and active project context:\n${threadSummary.slice(0, 8_000)}` : "",
     mcpContext ? `Connected MCP resource metadata:\n${mcpContext}` : "",
     /* Last, because it is the most volatile thing here and the most recent
@@ -870,6 +878,25 @@ export async function POST(request: Request): Promise<Response> {
         onActivity: announce,
         mcpTools
       });
+      /* Retrieval before generation. A mid-tier model handed the exact three
+         relevant files beats a frontier model handed the wrong ones, and the
+         read tools alone do not close that gap — a weaker model answers from
+         the shape of the question rather than going to look.
+
+         Only when the repository is unambiguous. Guessing one and silently
+         loading the wrong codebase is far worse than not guessing: the tools
+         still work, and the model asks for what it needs. */
+      const repoRef = userGithubToken && mode === "code" ? detectRepo(lastUserText) : null;
+      const retrieval = repoRef
+        ? await retrieveFiles({ token: userGithubToken as string, repo: repoRef, request: lastUserText, signal: request.signal }).catch(() => null)
+        : null;
+      if (retrieval) {
+        writer.write(statusChunk({
+          stage: "gather",
+          detail: `Read ${retrieval.paths.length} file${retrieval.paths.length === 1 ? "" : "s"} from the repository.`
+        }));
+      }
+
       const modelMessages = await convertToModelMessages(redactGeneratedMedia(messages));
 
       if (resolvedPreset === "navi-fable" || resolvedPreset === "navi-sol") {
@@ -996,7 +1023,7 @@ export async function POST(request: Request): Promise<Response> {
         const metered = attempt.provider === "deepseek";
         const result = streamText({
         model: createProviderModel(attempt, origin),
-        system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
+        system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
         messages: modelMessages,
         ...(attemptToolNames.length
           ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
