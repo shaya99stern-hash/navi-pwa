@@ -32,6 +32,7 @@ import {
 import { suggest, type Skill } from "@/lib/skills";
 import type { ConnectorAccessMode } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
+import { startSpeechRecognition, type SpeechSession } from "@/lib/ui/speech";
 import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 import {
@@ -69,6 +70,8 @@ type Props = {
   /** The draft is a slash command, which runs on-device and needs no network. */
   offlineCommand: boolean;
   haptics: boolean;
+  /** The voice-language preference, so dictation matches the voice sheet. */
+  voiceLanguage: string;
   /** Lets the shell focus the composer synchronously from a tap handler. */
   inputRef?: RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
@@ -142,6 +145,7 @@ export function ComposerDock({
   research,
   offlineCommand,
   haptics,
+  voiceLanguage,
   inputRef,
   onChange,
   onSend,
@@ -162,7 +166,7 @@ export function ComposerDock({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechSession | null>(null);
   /** True between pointerdown and pointerup on the mic, so a tap is distinguishable from a hold. */
   const holdingMic = useRef(false);
   const [sending, setSending] = useState(false);
@@ -182,6 +186,11 @@ export function ComposerDock({
     loaded: false
   });
   const [touchKeyboard, setTouchKeyboard] = useState(false);
+  /* The draft as it stands right now. A recognition callback closes over the
+     `value` from the render that started listening, so appending through the
+     prop dropped anything typed while the microphone was open. */
+  const valueRef = useRef(value);
+  valueRef.current = value;
   const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
 
   /* 82 on-device commands are useless if nobody can find them, so typing a
@@ -262,7 +271,7 @@ export function ComposerDock({
       cancelled = true;
       document.removeEventListener("visibilitychange", recheck);
       window.removeEventListener("online", recheck);
-      recognitionRef.current?.abort?.();
+      recognitionRef.current?.abort();
     };
   }, []);
 
@@ -415,45 +424,42 @@ export function ComposerDock({
 
   function toggleVoice() {
     if (listening) {
-      recognitionRef.current?.stop?.();
+      recognitionRef.current?.stop();
       return;
     }
 
-    const SpeechRecognition = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setVoiceMessage("Voice dictation is not supported in this browser.");
-      haptic("warning", haptics);
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = navigator.language || "en-US";
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.onstart = () => {
-      setListening(true);
-      setVoiceMessage("Listening…");
-      haptic("selection", haptics);
-    };
-    recognition.onresult = (event: any) => {
-      let transcript = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        transcript += event.results[index][0]?.transcript ?? "";
+    recognitionRef.current = startSpeechRecognition({
+      /* The stored preference, not `navigator.language`. Dictation here used to
+         ignore the voice language chosen in Settings while the voice sheet
+         honoured it, so one surface followed the setting and the other did
+         not. */
+      language: voiceLanguage,
+      onStart: () => {
+        setListening(true);
+        setVoiceMessage("Listening…");
+        haptic("selection", haptics);
+      },
+      /* Finalised phrases only. Appending on every result event wrote interim
+         words into the draft and wrote them again once they were revised.
+         Read through the ref so a phrase is appended to the draft as it stands
+         now, not as it stood when listening began. */
+      onFinal: (text) => {
+        const current = valueRef.current;
+        onChange(`${current}${current.trim() ? " " : ""}${text}`);
+      },
+      onError: (message) => {
+        setVoiceMessage(message);
+        haptic("error", haptics);
+      },
+      onEnd: () => {
+        setListening(false);
+        /* An error message has to survive the end of the session — `onend`
+           fires after `onerror`, and clearing unconditionally erased the
+           explanation before it could be read. */
+        setVoiceMessage((current) => (current === "Listening…" ? null : current));
+        textareaRef.current?.focus();
       }
-      if (transcript.trim()) onChange(`${value}${value.trim() ? " " : ""}${transcript.trim()}`);
-    };
-    recognition.onerror = () => {
-      setListening(false);
-      setVoiceMessage("Voice input stopped. Try again.");
-      haptic("error", haptics);
-    };
-    recognition.onend = () => {
-      setListening(false);
-      setVoiceMessage(null);
-      textareaRef.current?.focus();
-    };
-    recognitionRef.current = recognition;
-    recognition.start();
+    });
   }
 
   return (

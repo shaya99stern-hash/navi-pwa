@@ -33,7 +33,7 @@ import { memoryBlock, recall } from "@/lib/memory";
 import { BUILT_IN_PLAYBOOKS, playbookBlock, selectPlaybook, type Playbook } from "@/lib/playbooks";
 import { instantAnswer, parseSlashCommand, runSlash } from "@/lib/skills";
 import { haptic } from "@/lib/ui/haptics";
-import { speak, whenVoicesReady } from "@/lib/ui/speech";
+import { resolveVoiceLanguage, speak, whenVoicesReady } from "@/lib/ui/speech";
 import { useEdgeSwipe } from "@/lib/ui/use-edge-swipe";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
 import { ComposerDock } from "./composer-dock";
@@ -521,13 +521,16 @@ export function AppShell({
     const text = messageText(latest).replace(/```[\s\S]*?```/g, " Code or generated content is available on screen. ").slice(0, 4_000);
     if (!text) return;
     stopSpeaking();
-    const language = localStorage.getItem("navi.voice.language.v1") || navigator.language || "en-US";
+    /* The same preference the recogniser uses. Reading the legacy key here
+       meant a reply could be spoken in a different language from the one the
+       question was dictated in. */
+    const language = resolveVoiceLanguage(preferences.voiceLanguage);
     // The voice list loads asynchronously and is usually empty on first use,
     // which is how apps end up always speaking in the default compact voice.
     whenVoicesReady(() => speak(text, language));
     priorAssistantId.current = latest.id;
     setSpeakNextReply(false);
-  }, [generating, messages, speakNextReply]);
+  }, [generating, messages, preferences.voiceLanguage, speakNextReply]);
 
   useEffect(() => () => stopSpeaking(), []);
 
@@ -1115,6 +1118,7 @@ export function AppShell({
       </div>
       <ComposerDock
         inputRef={composerRef}
+        voiceLanguage={preferences.voiceLanguage}
         offlineCommand={parseSlashCommand(draft) !== null}
         value={draft}
         generating={generating}
@@ -1214,6 +1218,8 @@ export function AppShell({
         busy={generating}
         online={online}
         haptics={preferences.haptics}
+        voiceLanguage={preferences.voiceLanguage}
+        onVoiceLanguage={(voiceLanguage) => updatePreferences({ ...preferences, voiceLanguage })}
         onClose={() => setVoiceOpen(false)}
         onUseTranscript={(text) => setDraft((current) => `${current}${current.trim() ? " " : ""}${text}`)}
         onSendTranscript={(text, speakReply) => void submitVoiceTranscript(text, speakReply)}

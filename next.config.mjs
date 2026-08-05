@@ -35,7 +35,7 @@ function clerkOrigins() {
     "https://*.clerk.accounts.dev"
   ];
 
-  const key = (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "").trim();
+  const key = (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY ?? "").trim();
   const encoded = key.replace(/^pk_(live|test)_/, "");
   if (!encoded || encoded === key) return known;
 
@@ -52,6 +52,17 @@ function clerkOrigins() {
 }
 
 const clerk = clerkOrigins().join(" ");
+
+/* Either name will do, and either verification credential will do — this has to
+   agree with `isClerkConfigured` in lib/auth/config.ts, which is what actually
+   gates sign-in at runtime. */
+clerkOrigins.configured = Boolean(
+  (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY ?? "").trim().startsWith("pk_")
+  && (
+    (process.env.CLERK_SECRET_KEY ?? process.env.CLERK_API_KEY ?? "").trim().startsWith("sk_")
+    || (process.env.CLERK_JWT_KEY ?? process.env.CLERK_PEM_PUBLIC_KEY ?? "").includes("BEGIN PUBLIC KEY")
+  )
+);
 
 /**
  * Where a social sign-in is allowed to hand off to.
@@ -99,7 +110,12 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_NAVI_VERSION: appVersion,
     NEXT_PUBLIC_NAVI_BUILD: buildRef,
-    NEXT_PUBLIC_NAVI_BUILT_AT: builtAt
+    NEXT_PUBLIC_NAVI_BUILT_AT: builtAt,
+    /* Whether this build has a sign-in system, decided here because only the
+       `NEXT_PUBLIC_` name reaches the browser on its own — a deployment that
+       used the server-side alias would otherwise leave the Account screen
+       reporting no account system on a build that has one. */
+    NEXT_PUBLIC_NAVI_AUTH: clerkOrigins.configured ? "on" : "off"
   },
   async headers() {
     return [

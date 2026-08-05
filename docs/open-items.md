@@ -91,6 +91,30 @@ them to the *published* project that serves sign-in would push that project into
 needing verification and a paid annual security assessment. Use a second project
 left in Testing.
 
+## Clerk credentials — what is actually required
+
+**A publishable key plus `CLERK_SECRET_KEY` is a complete setup.** The secret
+key lets Clerk's SDK fetch and cache the instance's JWKS itself. `CLERK_JWT_KEY`
+is an optimisation — signature checks with no network call — not a requirement.
+
+Requiring both was this app's own over-strict gate and it disabled sign-in
+entirely on a correctly configured deployment. Names are aliased now, so a
+dashboard that spells them differently still works:
+
+| Purpose | Accepted names |
+|---|---|
+| Publishable key | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_PUBLISHABLE_KEY` |
+| Secret key | `CLERK_SECRET_KEY`, `CLERK_API_KEY` |
+| PEM public key (optional) | `CLERK_JWT_KEY`, `CLERK_PEM_PUBLIC_KEY`, `CLERK_JWT_VERIFICATION_KEY` |
+
+**The trap:** Clerk's dashboard offers three things people call "the JWKS key" —
+a JWKS **URL**, the JWKS **JSON**, and a **PEM**. Only the PEM is a `jwtKey`;
+passing either of the others to `verifyToken` throws, which reads as an invalid
+session, so every request looks signed out and nothing says why. A non-PEM value
+is now rejected rather than trusted, verification falls back to the secret key,
+and the deployment log names the confusion specifically instead of calling a
+variable "missing" when it is plainly set.
+
 ## Environment variables
 
 | Variable | Effect | Required? |
@@ -137,13 +161,15 @@ different, smaller piece of work.
 | Task | State |
 |---|---|
 | 8 — Context compaction | **Done in the main path.** The earlier entry here said the module "exists and is used"; an audit found it imported by nothing but its own test, while the chat route carried a comment describing the compaction three lines above code handing `streamText` the raw conversation. Now wired per attempt, budgeted from each provider's own window. `runComposite` still receives the uncompacted conversation — the swarm routes separately and needs its own budget |
-| 10 — One voice mode | Not started. Flagged three times as possibly larger than it reads; worth scoping before committing to it |
-| 11 — Remove redundancy | Deletions done. The engine picker and "Run quality check" still live in Settings; the spec moves them to a hidden diagnostics page behind a five-tap gesture on the version string, which is a new surface rather than a removal |
-| 17 — Settings two-pane at ≥768px | Not started |
+| 10 — One voice mode | **Done.** One recogniser in `lib/ui/speech.ts`, used by the composer and the voice sheet. It was larger than it read, but not in the way expected: the work was not merging two similar things, it was that every difference between the copies was a defect — the composer ignored the voice-language preference, treated a blocked microphone as retryable, and appended interim words to the draft twice |
+| 11 — Remove redundancy | **Done.** The engine picker and "Run quality check" moved to a Diagnostics page behind five taps on the version string |
+| 17 — Settings two-pane at ≥768px | **Done.** One list, drill-down under 768px and a left column at or above it |
 
 Task 12 is absorbed by Phase D. Tasks 15 and 16 overlap Phase B and Phase C.
 
-Done: 1, 2, 3, 4, 5, 6, 7, 9, 13, 14, 18, and Parity 3.5 Phases A and B.
+Done: 1–11, 13, 14, 17, 18, and Parity 3.5 Phases A and B. Task 12 is absorbed by
+Phase D, which is the only handoff work still open and is a product decision
+rather than a build task.
 
 ---
 

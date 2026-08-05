@@ -1,0 +1,71 @@
+import { read, stripComments } from "./source.mjs";
+
+let pass = 0, fail = 0;
+const check = (n, a, e) => {
+  const ok = JSON.stringify(a) === JSON.stringify(e); ok ? pass++ : fail++;
+  console.log(`${ok ? "PASS" : "FAIL"}  ${n}${ok ? "" : `\n   got:  ${JSON.stringify(a)}\n   want: ${JSON.stringify(e)}`}`);
+};
+
+const { source, body } = read("app/components/settings-sheet.tsx");
+const code = stripComments(source);
+
+/* ---- Diagnostics are hidden, and stay hidden ------------------------- */
+
+check("a diagnostics page exists", body.includes('page === "diagnostics"'), true);
+check("it is reached by a gesture, not a row", /RootRow label="Diagnostics"/.test(code), false);
+check("five taps open it", body.includes("DIAGNOSTICS_TAPS = 5"), true);
+/* Without a window, four stray taps across a session leave the page one tap
+   from opening months later for someone who never intended it. */
+check("the taps must be consecutive in time", body.includes("DIAGNOSTICS_TAP_WINDOW_MS"), true);
+check("the window is checked, not just declared", /now - lastTapAt\.current > DIAGNOSTICS_TAP_WINDOW_MS/.test(body), true);
+
+/* `MenuSection` is what gets persisted as `lastMenuSection` and reopened next
+   time. A hidden page that reopens itself is not hidden. */
+check("diagnostics is not a persisted section", /"diagnostics"[\s\S]{0,80}\|\s*"general"/.test(read("lib/ai/types.ts").body), false);
+check("opening it does not persist a section", /setPage\("diagnostics"\)/.test(body), true);
+
+/* ---- What moved there ------------------------------------------------ */
+
+/* Anchored on the block opener, not on `page === "x"` alone. The section list
+   renders `active={page === "x"}` for every row, so the bare comparison first
+   matches a nav row hundreds of lines above the page it names — which sliced an
+   empty range and passed the absence checks below for the wrong reason. */
+const block = (name) => {
+  const start = body.indexOf(`{page === "${name}" ? (`);
+  if (start === -1) throw new Error(`no page block for ${name}`);
+  const next = body.indexOf("{page === \"", start + 10);
+  return body.slice(start, next === -1 ? undefined : next);
+};
+
+const diagnosticsPage = block("diagnostics");
+check("the engine pin moved here", diagnosticsPage.includes("DIAGNOSTIC_ROUTES"), true);
+check("the quality check moved here", diagnosticsPage.includes("Run quality check"), true);
+/* A pin disables automatic routing for every request and is invisible from
+   every other screen, so the page that sets it must also offer to clear it. */
+check("a pin can be cleared from the same page", /routeOverride: undefined/.test(diagnosticsPage), true);
+check("the page says a pin makes answers worse", /makes answers worse|will not improve/.test(diagnosticsPage), true);
+
+const capabilities = block("capabilities");
+check("the engine pin is gone from Capabilities", capabilities.includes("DIAGNOSTIC_ROUTES"), false);
+
+const account = block("account");
+check("the quality check is gone from Account", account.includes("Run quality check"), false);
+
+/* ---- Two panes at 768px ---------------------------------------------- */
+
+check("the section list is a nav landmark", body.includes('aria-label="Settings sections"'), true);
+check("it has a fixed column width at md", /md:w-\[264px\]/.test(body), true);
+check("the panes are divided", /md:border-r/.test(body), true);
+/* On a phone the list is the whole sheet and a section replaces it; the same
+   markup has to do both, so the hiding is conditional rather than absolute. */
+check("the list fills the sheet at root on mobile", /page === "root" \? "w-full" : "hidden"/.test(body), true);
+check("the pane is hidden at root on mobile only", /page === "root" \? "hidden md:block" : ""/.test(body), true);
+/* Back points at a list that is already on screen at two panes. */
+check("the back button is mobile-only", /aria-label="Back to Settings"[\s\S]{0,220}md:hidden/.test(body), true);
+/* A chevron promises a drill-down, which is not what happens at two panes. */
+check("the row chevron is mobile-only", /ChevronRight[^\n]*md:hidden/.test(body), true);
+check("the selected row is marked for assistive tech", body.includes('aria-current={active ? "page" : undefined}'), true);
+check("an empty pane says what it is for", body.includes("Choose a section."), true);
+
+console.log(`\n${pass}/${pass + fail} passed`);
+process.exit(fail ? 1 : 0);
