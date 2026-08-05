@@ -147,8 +147,16 @@ which is a stated product property rather than an accident.
   configured from deployment environment instead, which is why the Connectors
   sheet lists none until one is set. An earlier note here called the whole phase
   blocked, which overstated it.
-- **Phase D (memory)** wants a profile store and full-text search across past
-  conversations, which is also handoff Task 12.
+- **Phase D (memory)** — mostly **done, on device**. Cross-conversation recall
+  (`lib/memory.ts`), the switch that governs it, and full-text search across
+  every message all work without a server. What Supabase would add is
+  *cross-device* memory, which is a sync feature rather than a memory one.
+
+  Still open within Phase D: **durable extracted facts** — "I use TypeScript",
+  "my timezone is ET" — remembered as facts rather than found by searching the
+  conversation that mentioned them, and a screen showing what is remembered so
+  it can be corrected or forgotten. That needs no server either; it is simply
+  not built.
 
 Adding Supabase is a new service, a new dependency, and a change to what the
 app promises about where a person's data lives. That is a product decision, not

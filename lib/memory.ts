@@ -97,7 +97,7 @@ export function recall(question: string, chats: StoredChat[], currentChatId: str
       if (!asked) continue;
       const answered = messages[index + 1]?.role === "assistant" ? messageText(messages[index + 1]) : "";
       const text = answered
-        ? `You asked: ${asked.slice(0, MAX_PASSAGE_CHARS / 2)}\nNavi answered: ${answered.slice(0, MAX_PASSAGE_CHARS)}`
+        ? `You asked: ${asked.slice(0, MAX_PASSAGE_CHARS / 2)}\nNaviSoul answered: ${answered.slice(0, MAX_PASSAGE_CHARS)}`
         : `You asked: ${asked.slice(0, MAX_PASSAGE_CHARS)}`;
       candidates.push({
         passage: { chatId: chat.id, chatTitle: chat.title, updatedAt: chat.updatedAt, text },
@@ -136,6 +136,89 @@ export function recall(question: string, chats: StoredChat[], currentChatId: str
     if (chosen.length >= MAX_PASSAGES) break;
   }
   return chosen;
+}
+
+/* ------------------------------------------------------------------------
+ * Searching, as distinct from recalling.
+ *
+ * `recall` answers "what bears on this question", ranked, for the model.
+ * Search answers "where did I say that", for a person who already knows what
+ * they are looking for. Different jobs: recall may return a passage that never
+ * contains the words asked about, and search must never do that — a search box
+ * that returns something without the term in it reads as broken.
+ *
+ * The drawer's search matched only the title and a one-line preview, so
+ * anything said in the middle of a conversation was unfindable. Everything is
+ * already in IndexedDB; nothing needed to be stored to fix this, only read.
+ * --------------------------------------------------------------------- */
+
+export type ChatMatch = {
+  chat: StoredChat;
+  /** The text around the first hit, for showing under the title. */
+  snippet: string;
+  /** How many messages matched, so a thread about the topic outranks a mention. */
+  hits: number;
+  score: number;
+};
+
+/** Words either side of a hit in the snippet. */
+const SNIPPET_RADIUS = 60;
+
+function snippetAround(text: string, index: number, length: number): string {
+  const start = Math.max(0, index - SNIPPET_RADIUS);
+  const end = Math.min(text.length, index + length + SNIPPET_RADIUS);
+  const body = text.slice(start, end).replace(/\s+/g, " ").trim();
+  return `${start > 0 ? "…" : ""}${body}${end < text.length ? "…" : ""}`;
+}
+
+/**
+ * Find conversations containing a phrase, newest and most relevant first.
+ *
+ * Substring rather than token matching, because this is a search box: someone
+ * typing "redirect_uri" expects the thing they typed, not its stems, and a
+ * partial word should match while still being typed.
+ */
+export function searchConversations(query: string, chats: StoredChat[], limit = 40): ChatMatch[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+
+  const matches: ChatMatch[] = [];
+
+  for (const chat of chats) {
+    const title = chat.title.toLowerCase();
+    const titleHit = title.includes(needle);
+
+    let hits = 0;
+    let snippet = "";
+    for (const message of chat.messages) {
+      const text = messageText(message);
+      if (!text) continue;
+      const at = text.toLowerCase().indexOf(needle);
+      if (at < 0) continue;
+      hits += 1;
+      /* The first hit in the conversation, not the last: it is usually the
+         message that introduced the topic, which is what someone scanning a
+         list of results is trying to recognise. */
+      if (!snippet) snippet = snippetAround(text, at, needle.length);
+    }
+
+    if (!titleHit && !hits) continue;
+
+    /* A title match is a strong signal — it is the name someone gave the
+       conversation — but it must not bury a thread that discusses the term at
+       length. Both count, and recency only breaks ties. */
+    const score = (titleHit ? 8 : 0) + Math.min(hits, 12) + (chat.pinned ? 2 : 0);
+    matches.push({
+      chat,
+      snippet: snippet || chat.preview,
+      hits,
+      score
+    });
+  }
+
+  return matches
+    .sort((a, b) => b.score - a.score || b.chat.updatedAt - a.chat.updatedAt)
+    .slice(0, limit);
 }
 
 /** Render recalled passages for the prompt, bounded by the budget. */
