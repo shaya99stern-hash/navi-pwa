@@ -5,18 +5,64 @@ import "server-only";
  * without a publishable key plus Clerk's public JWT verification key continue
  * to run without an account wall during local development.
  */
+/** First non-empty value among these names. Dashboards disagree on naming. */
+function readEnv(names: string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
 export function getClerkPublishableKey() {
-  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+  const key = readEnv(["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "CLERK_PUBLISHABLE_KEY"]);
   return key?.startsWith("pk_") ? key : undefined;
 }
 
+/**
+ * The PEM public key, when one is set — and only when it really is a PEM.
+ *
+ * Clerk's dashboard offers three things that all get called "the JWKS key": a
+ * JWKS **URL**, the JWKS **JSON** at that URL, and a **PEM** public key. Only
+ * the last is a `jwtKey`. Passing either of the others to `verifyToken` throws,
+ * which the caller reads as an invalid session — so every request looks signed
+ * out and nothing says why.
+ *
+ * Hence a strict test rather than a permissive one. A value that is not a PEM
+ * is not coerced; verification falls back to the secret key, which is the path
+ * that works with any of the three.
+ */
 export function getClerkJwtKey() {
-  const key = process.env.CLERK_JWT_KEY?.trim();
+  const key = readEnv(["CLERK_JWT_KEY", "CLERK_PEM_PUBLIC_KEY", "CLERK_JWT_VERIFICATION_KEY"]);
   return key?.includes("BEGIN PUBLIC KEY") ? key : undefined;
 }
 
+/**
+ * The secret key, which is sufficient on its own.
+ *
+ * `verifyToken` given a secret key fetches and caches the instance's JWKS
+ * itself, so no PEM has to be pasted anywhere. This is the ordinary Clerk
+ * setup; requiring the PEM as well was an over-strict gate of this app's own
+ * making, and it disabled sign-in entirely on a deployment that was correctly
+ * configured by every other measure.
+ */
+export function getClerkSecretKey() {
+  const key = readEnv(["CLERK_SECRET_KEY", "CLERK_API_KEY"]);
+  return key?.startsWith("sk_") ? key : undefined;
+}
+
+/** True when something was supplied for the JWT key but it is not a PEM. */
+export function clerkJwtKeyIsMalformed(): boolean {
+  const raw = readEnv(["CLERK_JWT_KEY", "CLERK_PEM_PUBLIC_KEY", "CLERK_JWT_VERIFICATION_KEY"]);
+  return Boolean(raw) && !raw!.includes("BEGIN PUBLIC KEY");
+}
+
+/**
+ * Either verification route will do: a PEM to check signatures locally, or a
+ * secret key to let Clerk's SDK fetch the keys itself.
+ */
 export function isClerkConfigured() {
-  return Boolean(getClerkPublishableKey() && getClerkJwtKey());
+  return Boolean(getClerkPublishableKey() && (getClerkJwtKey() || getClerkSecretKey()));
 }
 
 /**
@@ -26,13 +72,25 @@ export function isClerkConfigured() {
  * which half is absent instead of leaving it to be guessed.
  */
 export function describeClerkConfigGap(): string | null {
-  const missing = [
-    getClerkPublishableKey() ? null : "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY (must start with pk_)",
-    getClerkJwtKey() ? null : "CLERK_JWT_KEY (the PEM public key from Clerk's JWKS settings)"
-  ].filter(Boolean);
-  if (!missing.length) return null;
-  if (missing.length === 2) return "Clerk is not configured; sign-in is disabled. Missing: " + missing.join(" and ") + ".";
-  return "Clerk is only half configured, so sign-in is disabled entirely. Missing: " + missing.join("") + ".";
+  if (isClerkConfigured()) return null;
+
+  const problems: string[] = [];
+  if (!getClerkPublishableKey()) {
+    problems.push("no publishable key (set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY; it must start with pk_)");
+  }
+  if (!getClerkJwtKey() && !getClerkSecretKey()) {
+    problems.push(
+      clerkJwtKeyIsMalformed()
+        /* The commonest way to arrive here, and the one worth naming exactly:
+           Clerk shows a JWKS URL, the JWKS JSON, and a PEM, and only the PEM is
+           a jwtKey. Saying "missing" about a variable that is plainly set sends
+           people to re-paste the same wrong value. */
+        ? "a JWT key is set but is not a PEM — it looks like a JWKS URL or the JWKS JSON. Use the PEM public key (it begins with -----BEGIN PUBLIC KEY-----), or just set CLERK_SECRET_KEY instead"
+        : "no way to verify sessions (set CLERK_SECRET_KEY, or CLERK_JWT_KEY with the PEM public key)"
+    );
+  }
+
+  return `Clerk is not fully configured, so sign-in is disabled: ${problems.join("; ")}.`;
 }
 
 function normalizeOrigin(value: string | undefined): string | undefined {

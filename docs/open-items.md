@@ -91,6 +91,30 @@ them to the *published* project that serves sign-in would push that project into
 needing verification and a paid annual security assessment. Use a second project
 left in Testing.
 
+## Clerk credentials — what is actually required
+
+**A publishable key plus `CLERK_SECRET_KEY` is a complete setup.** The secret
+key lets Clerk's SDK fetch and cache the instance's JWKS itself. `CLERK_JWT_KEY`
+is an optimisation — signature checks with no network call — not a requirement.
+
+Requiring both was this app's own over-strict gate and it disabled sign-in
+entirely on a correctly configured deployment. Names are aliased now, so a
+dashboard that spells them differently still works:
+
+| Purpose | Accepted names |
+|---|---|
+| Publishable key | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_PUBLISHABLE_KEY` |
+| Secret key | `CLERK_SECRET_KEY`, `CLERK_API_KEY` |
+| PEM public key (optional) | `CLERK_JWT_KEY`, `CLERK_PEM_PUBLIC_KEY`, `CLERK_JWT_VERIFICATION_KEY` |
+
+**The trap:** Clerk's dashboard offers three things people call "the JWKS key" —
+a JWKS **URL**, the JWKS **JSON**, and a **PEM**. Only the PEM is a `jwtKey`;
+passing either of the others to `verifyToken` throws, which reads as an invalid
+session, so every request looks signed out and nothing says why. A non-PEM value
+is now rejected rather than trusted, verification falls back to the secret key,
+and the deployment log names the confusion specifically instead of calling a
+variable "missing" when it is plainly set.
+
 ## Environment variables
 
 | Variable | Effect | Required? |

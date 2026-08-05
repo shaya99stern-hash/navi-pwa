@@ -2,7 +2,7 @@ import "server-only";
 
 import { verifyToken } from "@clerk/backend";
 
-import { getClerkAuthorizedParties, getClerkJwtKey } from "./config";
+import { getClerkAuthorizedParties, getClerkJwtKey, getClerkSecretKey } from "./config";
 
 export const CLERK_SESSION_COOKIE_NAME = "__session";
 /** Clerk's own marker for "this browser holds a live client session". */
@@ -21,9 +21,10 @@ export const CLERK_CLIENT_UAT_COOKIE_NAME = "__client_uat";
  * broken and empty, not merely logged out.
  *
  * Clerk's own middleware avoids this by handshaking with its Frontend API to
- * mint a fresh token, which requires a secret key this deployment deliberately
- * does not hold. Honouring a still-valid signature briefly past `exp` is the
- * equivalent available to a deployment holding only the public JWT key.
+ * mint a fresh token. Honouring a still-valid signature briefly past `exp` is
+ * the equivalent available without running that handshake on every request, and
+ * it applies whichever credential verified the token — a deployment holding
+ * only the public JWT key cannot handshake at all.
  */
 const STALE_SESSION_GRACE_MS = 7 * 24 * 60 * 60 * 1_000;
 
@@ -58,12 +59,17 @@ export async function verifyClerkSessionToken(
   requestOrigin?: string,
   clockSkewInMs?: number
 ): Promise<string | null> {
+  /* Either credential verifies a session. The PEM is checked locally and costs
+     nothing; the secret key makes Clerk's SDK fetch and cache the instance's
+     JWKS itself. Preferring the PEM keeps the networkless path when it is
+     available, without making it the price of admission. */
   const jwtKey = getClerkJwtKey();
-  if (!token || !jwtKey) return null;
+  const secretKey = jwtKey ? undefined : getClerkSecretKey();
+  if (!token || (!jwtKey && !secretKey)) return null;
 
   try {
     const payload = await verifyToken(token, {
-      jwtKey,
+      ...(jwtKey ? { jwtKey } : { secretKey: secretKey! }),
       authorizedParties: getClerkAuthorizedParties(requestOrigin),
       ...(clockSkewInMs === undefined ? {} : { clockSkewInMs })
     });

@@ -100,12 +100,17 @@ const DURABILITY_DETAIL: Record<StorageDurability, string> = {
 /**
  * Whether this build has a sign-in system at all.
  *
- * Inlined at build time, so it is the one thing the client can know without
- * waiting for Clerk's script. A deployment missing the key has no account to
- * offer and should say so plainly rather than showing a button that leads to a
- * page reading "sign-in is unavailable".
+ * Computed in next.config.mjs and inlined at build time, so it is the one thing
+ * the client can know without waiting for Clerk's script — and so it stays true
+ * when the deployment names its keys differently. Reading the publishable key
+ * directly here missed both the server-side alias and the case where a key is
+ * present but nothing can verify a session with it.
+ *
+ * A deployment without sign-in has no account to offer and should say so,
+ * rather than showing a button leading to a page reading "sign-in is
+ * unavailable".
  */
-const CLERK_AVAILABLE = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+const CLERK_AVAILABLE = process.env.NEXT_PUBLIC_NAVI_AUTH === "on";
 
 type ClerkGlobal = {
   loaded?: boolean;
