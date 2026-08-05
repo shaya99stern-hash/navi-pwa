@@ -49,5 +49,28 @@ const APOLOGY = /\b(sorry|apolog|unfortunately|regret)\b/i;
 check('no message apologises', cases.some((c) => APOLOGY.test(streamError(c))), false);
 check('every message says what to do next', cases.every((c) => /\b(retry|add one|lower the effort)\b/i.test(streamError(c))), true);
 
+/* A misconfigured deployment is a permanent state, not an outage. Calling it
+   "temporarily unavailable" cost a real debugging session: the chat card offers
+   a Try again button, the button cannot succeed, and the app reads as flaky
+   rather than as missing a credential. The wording has to say which it is. */
+const authApi = readFileSync('lib/auth/api.ts', 'utf8');
+const authMessages = [...authApi.matchAll(/error: "([^"]+)"/g)].map((match) => match[1]);
+check('the auth route has messages to check', authMessages.length > 0, true);
+check(
+  'a missing credential is not described as temporary',
+  authMessages.some((message) => /\b(temporarily|try again|for now|right now)\b/i.test(message)),
+  false
+);
+check(
+  'a missing credential names the deployment as the cause',
+  authMessages.some((message) => /not configured on this deployment/i.test(message)),
+  true
+);
+/* The server log has to name which half is absent — with both halves silently
+   optional, the difference between "no Clerk" and "half a Clerk" is otherwise
+   invisible from outside. */
+check('the gap is logged, not just returned', authApi.includes('describeClerkConfigGap()'), true);
+check('no message apologises there either', authMessages.some((m) => APOLOGY.test(m)), false);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
