@@ -33,13 +33,13 @@ Shipped but never exercised against the real thing.
 
 | What | Why it is unproven | How to prove it |
 |---|---|---|
-| Python execution | Needs Vercel credentials and a reachable sandbox API; neither exists in the build environment | Ask NaviSoul to write and run a Python function |
+| Python execution | **A real defect was found and fixed**: `Sandbox.create` was passed no credentials at all, leaving only the `VERCEL_OIDC_TOKEN` path, which is not enabled by default — it would have failed reporting an OIDC context error rather than a missing credential. Now passes token/team/project when all three are set. Still never run against the live sandbox | Set `NAVI_VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`, then ask NaviSoul to run a Python function |
 | Preview sign-in | The proxy here blocks both the preview URL and production, so the fix could not be loaded | Open the preview URL and see whether it loads or redirects |
 | Free-model discovery | `openrouter.ai` is unreachable from the build environment, so the catalogue's field names were never checked against the live response | One request to `/api/v1/models` and a look at the JSON |
 | DeepSeek quality lane | No key configured | Set `DEEPSEEK_API_KEY` |
 | Web search | No key configured | Set `TAVILY_API_KEY` |
-| PDF extraction | `unpdf` verified against its own exports, but no real PDF was run through it here | Attach a PDF and ask about its contents |
-| Repository retrieval | Needs a connected GitHub account and a real repository | Ask about a repo by `owner/name` in Code mode |
+| PDF extraction | **Proven.** `tests/pdf-live.test.ts` builds real PDFs and runs them through `extractPdfText`: text, figures, page count, and the null-to-vision fallback for a scan, a non-PDF, and an empty buffer | Done — attach a real-world PDF only to confirm messier files behave |
+| Repository retrieval | **Ranking verified** against this repository's real 304-file tree: `detectRepo` parses `owner/name`, and the top hit was correct for four of five questions. The fifth — "how are tools capped" — missed `lib/tools/registry.ts`, which is the inherent limit of scoring paths rather than contents. Retrieval is additive, so a miss costs context, never correctness. The live `fetchTree` call still needs a token | Ask about a repo by `owner/name` in Code mode |
 
 Discovery is default-deny and the sandbox fails closed, so being wrong about
 either costs a degraded answer rather than a bill. But neither is *confirmed*.
