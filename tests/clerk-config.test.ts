@@ -122,3 +122,8 @@ function main() {
 }
 
 main();
+
+/* A module, not a script. With only `require` and no import or export,
+   TypeScript scopes these declarations globally, so two such test files
+   collide on `pass`, `check`, and everything else. */
+export {};
