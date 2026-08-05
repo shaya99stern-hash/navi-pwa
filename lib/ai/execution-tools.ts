@@ -18,7 +18,8 @@ import { z } from "zod";
 /** Beyond this a model is thrashing, not debugging. */
 export const MAX_REPAIR_ROUNDS = 3;
 
-export function buildExecutionTools(): ToolSet {
+export function buildExecutionTools(options: { origin?: string; cookie?: string } = {}): ToolSet {
+  const { origin, cookie } = options;
   return {
     run_javascript: tool({
       description: [
@@ -32,7 +33,46 @@ export function buildExecutionTools(): ToolSet {
         code: z.string().min(1).max(20_000).describe("Self-contained JavaScript. No imports, no network calls."),
         purpose: z.string().max(140).optional().describe("A short note on what this run is checking, shown to the user.")
       })
-    })
+    }),
+
+    /* Python, unlike JavaScript, carries an `execute`. It runs in a virtual
+       machine on the server rather than in the browser, so the call goes over
+       HTTP to a Node route — the chat route is Edge and cannot import the
+       sandbox SDK at all. That boundary is the point, not an inconvenience. */
+    ...(origin ? {
+      run_python: tool({
+        description: [
+          "Run Python and get back its output and any error.",
+          "Use it for anything JavaScript is a poor fit for: data analysis, numeric work, text processing, and algorithms you would naturally write in Python.",
+          "It runs in an isolated virtual machine with no network access and a thirty-second limit.",
+          "Write a complete program with no third-party imports. Print what you want to see."
+        ].join(" "),
+        inputSchema: z.object({
+          source: z.string().min(1).max(50_000).describe("A complete Python program. Standard library only, no network."),
+          purpose: z.string().max(140).optional().describe("A short note on what this run is checking, shown to the user.")
+        }),
+        execute: async ({ source }) => {
+          try {
+            const response = await fetch(new URL("/api/tools/code", origin), {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                /* Forwarded so the Node route sees the same signed-in user the
+                   chat route did, rather than becoming an unauthenticated way
+                   to spend someone else's sandbox allowance. */
+                ...(cookie ? { Cookie: cookie } : {})
+              },
+              body: JSON.stringify({ language: "python", source })
+            });
+            if (!response.ok) return "The code failed.\n\nError:\nPython execution is unavailable right now.";
+            const result = await response.json() as { summary?: string };
+            return result.summary ?? "The code failed.\n\nError:\nNothing came back from the run.";
+          } catch {
+            return "The code failed.\n\nError:\nPython execution could not be reached.";
+          }
+        }
+      })
+    } : {})
   };
 }
 
@@ -56,6 +96,7 @@ export function executionInstruction(): string {
     `- If a run fails, read the actual error, fix the cause, and run again. Stop after ${MAX_REPAIR_ROUNDS} attempts.`,
     "- If the last run still failed, say so plainly and state the remaining error. Never present code that failed as though it worked, and never quietly drop the part that would not run.",
     "- Do not run code that needs the network, the file system, or a package. It will fail, and you will have spent an attempt learning that.",
-    "- UI components rendering to a DOM cannot be run here. Check their syntax by all means, but do not claim to have seen one render."
+    "- UI components rendering to a DOM cannot be run here. Check their syntax by all means, but do not claim to have seen one render.",
+    "- Use `run_python` when the work is naturally Python — data analysis, numeric work, text processing. It runs on the server and takes a few seconds to start, so prefer `run_javascript` for a quick check."
   ].join("\n");
 }

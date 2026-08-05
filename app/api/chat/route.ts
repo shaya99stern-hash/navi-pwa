@@ -862,6 +862,11 @@ export async function POST(request: Request): Promise<Response> {
         githubToken: userGithubToken,
         githubWritesEnabled: githubWritesEnabled(),
         signal: request.signal,
+        /* Python runs on a Node route because the sandbox SDK cannot run on
+           Edge. The origin lets the tool reach it; the cookie makes sure that
+           route sees the same signed-in user this one did. */
+        origin,
+        cookie: request.headers.get("cookie") ?? undefined,
         onActivity: announce,
         mcpTools
       });

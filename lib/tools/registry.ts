@@ -38,6 +38,10 @@ export type ToolsetContext = {
   /** Server-side writes are separately gated; see `github-write-tools`. */
   githubWritesEnabled?: boolean;
   signal: AbortSignal;
+  /** This deployment's own origin, so a tool can reach a sibling route. */
+  origin?: string;
+  /** The caller's cookies, forwarded so a sibling route sees the same user. */
+  cookie?: string;
   /** Reports what is being done, for the activity chips. */
   onActivity?: (label: string) => void;
   /** Tools contributed by connected MCP servers, already namespaced. */
@@ -116,13 +120,13 @@ export function capToolset(tools: ToolSet, max = MAX_ACTIVE_TOOLS): ToolSet {
  * `when` predicates be read at a glance.
  */
 export function buildToolset(context: ToolsetContext): ToolSet {
-  const { policy, mode, githubToken, githubWritesEnabled, signal, onActivity = () => {}, mcpTools = {} } = context;
+  const { policy, mode, githubToken, githubWritesEnabled, signal, origin, cookie, onActivity = () => {}, mcpTools = {} } = context;
 
   const active = (name: string) => GROUPS.find((group) => group.name === name)?.when(context) ?? false;
 
   const local: ToolSet = {
     ...buildSkillTools(onActivity),
-    ...(active("execution") ? buildExecutionTools() : {}),
+    ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity }),
     // Repository and deployment reads, present only when their tokens are.
     ...buildDevTools(onActivity, { githubToken }),
