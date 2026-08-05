@@ -9,6 +9,7 @@ import { speak, whenVoicesReady } from "@/lib/ui/speech";
 import { MarkdownRenderer, type CapabilityHandlers } from "./markdown-renderer";
 import { ExecutionTrace, executionRuns } from "./execution-trace";
 import { ToolActivityList, toolActivity } from "./tool-activity";
+import { PlanCard, planFor } from "./plan-card";
 
 function messageFiles(message: UIMessage): Array<{ filename?: string; mediaType?: string }> {
   return message.parts.filter((part) => part.type === "file").map((part) => part as unknown as { filename?: string; mediaType?: string });
@@ -126,6 +127,9 @@ export function MessageRow({ message, streaming, last, theme, chatFont, haptics,
               trace showing each repair attempt, and everything else gets the
               plain chip. `run_javascript` is filtered out of the generic list
               so a run never renders twice. */}
+          {/* The plan comes first: it is what the work was measured against,
+              and reading it before the answer is the point. */}
+          {(() => { const plan = planFor(message); return plan ? <PlanCard plan={plan} /> : null; })()}
           <ToolActivityList
             activities={toolActivity(message).filter((activity) => activity.name !== "run_javascript")}
             haptics={haptics}

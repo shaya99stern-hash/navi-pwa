@@ -20,6 +20,7 @@ import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { buildToolset } from "@/lib/tools/registry";
 import { detectRepo, retrieveFiles } from "@/lib/ai/repo-retrieval";
+import { critiqueAllowed, groundingFor, skipReason } from "@/lib/ai/grounding";
 import { runComposite } from "@/lib/ai/swarm";
 import {
   architectPlan,
@@ -984,6 +985,17 @@ export async function POST(request: Request): Promise<Response> {
         }) ?? generalRoute;
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
+      /* The plan, shown rather than only acted on. NaviSol has been making one
+         for a while, but it lived entirely inside the request — so the only
+         moment the user could correct a misread of their intent was after the
+         work was already done. Correcting a plan is far cheaper than
+         correcting an answer. */
+      if (plan.constraints.length > 1) {
+        writer.write({
+          type: "data-plan",
+          data: { summary: plan.summary, steps: plan.constraints.map((text) => ({ text, done: false })) }
+        } as never);
+      }
       writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : `${plan.summary}` }));
       /* Whether tools can be sent is a fact about the chosen model, and lives
          beside the route table that knows which model that is. Asking the
@@ -1048,7 +1060,19 @@ export async function POST(request: Request): Promise<Response> {
          objectively wrong. Code either runs or it does not; prose "improved"
          by a second model just comes back blander, and the round trip is not
          free. Status lines keep the pause explained rather than looking hung. */
-        if (plan.needsReview) {
+        /* The critique pass runs only when it has something real to check the
+           draft against. Asked to "review your answer" with nothing to compare
+           to, a model re-reads its own reasoning, finds it agreeable — it wrote
+           it — and returns a reworded version at the cost of a full round trip.
+           That is worse than no pass, because it spends the budget and adds a
+           step where an error can be introduced. Retrieval and code execution
+           are what finally make real grounding available. */
+        const grounding = groundingFor({ retrieved: retrieval?.block });
+        const shouldCritique = plan.needsReview && critiqueAllowed({ lane, grounding });
+        if (plan.needsReview && !shouldCritique) {
+          console.info("NaviSol skipped the critique pass:", skipReason({ lane, grounding }));
+        }
+        if (shouldCritique) {
           writer.write(statusChunk({ stage: "draft", detail: "Drafting the implementation." }));
           let draft: string;
           try {
