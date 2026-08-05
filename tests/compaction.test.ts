@@ -1,5 +1,6 @@
 import { estimateTokens } from "@/lib/ai/compaction";
 import type { ModelMessage } from "ai";
+import { read } from "./source.mjs";
 
 let pass = 0, fail = 0;
 const check = (n: string, a: unknown, e: unknown) => {
@@ -32,6 +33,35 @@ check("the split leaves the rest to summarise", cutoff(40), 34);
 // Too short to split is left alone rather than summarised into nothing.
 check("a 7-turn chat is not worth splitting", 7 <= VERBATIM_TURNS + 1, true);
 check("an 8-turn chat is", 8 <= VERBATIM_TURNS + 1, false);
+
+/* The bug this section exists for: `compactForBudget` was written, tested, and
+   imported by nothing but this file. The chat route even carried a comment
+   describing the compaction it was supposed to perform, three lines above code
+   that handed `streamText` the raw conversation. Every assertion above passed
+   the whole time, because a module can be perfectly correct and still never
+   run. So assert the wiring, not just the arithmetic. */
+const { body } = read("app/api/chat/route.ts");
+
+check("the route imports the compactor", body.includes("compactForBudget"), true);
+check("the compactor is called, not just imported", /compactForBudget\(\{/.test(body), true);
+
+/* Scoped to the streamText call rather than the whole file. `messages:
+   modelMessages` legitimately appears twice more — as the compactor's own
+   input, and in the swarm path, which routes separately — so a file-wide
+   absence check fails for a reason that is not the bug. That is the same
+   shape-instead-of-fact mistake these helpers exist to prevent. */
+const streamCall = body.slice(body.indexOf("const result = streamText({"));
+const streamArgs = streamCall.slice(0, streamCall.indexOf("\n      });"));
+check("the streamText call was located", streamArgs.length > 0 && streamArgs.length < 4_000, true);
+check("streamText is not handed the raw conversation", /messages:\s*modelMessages/.test(streamArgs), false);
+check("streamText receives the fitted conversation", /messages:\s*attemptMessages/.test(streamArgs), true);
+
+/* Budgeted per attempt, because the window is a property of the model. A
+   fallback lane can be far smaller than the primary, and compacting once to
+   the primary's budget hands the fallback an input it cannot take. */
+check("the budget comes from the attempt's own provider", /PROVIDERS\[attempt\.provider\]\.contextWindow/.test(body), true);
+check("the conversation is budgeted below the full window", body.includes("CONTEXT_INPUT_SHARE"), true);
+check("the compaction is memoised by budget", body.includes("compactionCache"), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

@@ -6,8 +6,11 @@ import {
   smoothStream,
   stepCountIs,
   streamText,
+  type ModelMessage,
   type UIMessage
 } from "ai";
+import { compactForBudget } from "@/lib/ai/compaction";
+import { PROVIDERS } from "@/lib/ai/provider-registry";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { createProviderModel, fallbackRoutes, getProviderAvailability, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
@@ -65,6 +68,16 @@ const REQUEST_BUDGET_MS = 52_000;
 const REVIEW_DELIVERY_RESERVE_MS = 2_000;
 /** Past this many turns a conversation is a context problem, not a hard one. */
 const LONG_CONTEXT_TURNS = 14;
+/**
+ * How much of a model's window the conversation may occupy.
+ *
+ * The rest is not slack: the system prompt, retrieved files, attached
+ * documents, tool schemas and the reply itself all come out of the same
+ * window, and none of them is counted by `estimateTokens`. Budgeting the
+ * conversation at the full context length is how a request that looks like it
+ * fits gets rejected for being over it.
+ */
+const CONTEXT_INPUT_SHARE = 0.6;
 
 type ChatRequestBody = {
   messages?: UIMessage[];
@@ -1087,9 +1100,37 @@ export async function POST(request: Request): Promise<Response> {
          The attempt only counts as recoverable while nothing has reached the
          screen. Once text is streaming, a failure is reported rather than
          retried: restarting mid-answer would replay a partial reply. */
-      /* Lane 3's window is small, so a long conversation is compacted rather
-         than routed away from the best engine — which is exactly when the best
-         engine is most wanted. Only for that lane: everything else has room. */
+      /* A long conversation is compacted rather than routed away from the best
+         engine — which is exactly when the best engine is most wanted.
+         Summarise the older turns, keep the recent ones verbatim.
+
+         Per attempt, because the budget is a property of the model: a fallback
+         lane can have a far smaller window than the primary, and compacting to
+         the primary's budget would hand the fallback an input it cannot take.
+         Results are memoised by budget so switching lanes does not pay for the
+         same summary twice.
+
+         `compactForBudget` returns the messages unchanged on any failure, so a
+         summariser that is down costs a longer prompt, never the request. */
+      const compactionCache = new Map<number, ModelMessage[]>();
+      const messagesFor = async (attempt: typeof route): Promise<ModelMessage[]> => {
+        const budget = Math.floor(PROVIDERS[attempt.provider].contextWindow * CONTEXT_INPUT_SHARE);
+        const cached = compactionCache.get(budget);
+        if (cached) return cached;
+        const { messages: fitted, compacted } = await compactForBudget({
+          messages: modelMessages,
+          maxInputTokens: budget,
+          availability,
+          origin,
+          abortSignal: request.signal
+        });
+        if (compacted) {
+          writer.write(statusChunk({ stage: "gather", detail: "Condensing earlier turns to keep the thread in context." }));
+        }
+        compactionCache.set(budget, fitted);
+        return fitted;
+      };
+
       const attempts = [
         route,
         ...fallbackRoutes({ primary: route, availability, complex: complexRoute })
@@ -1106,10 +1147,11 @@ export async function POST(request: Request): Promise<Response> {
            answer turns a recoverable failure into a guaranteed one. */
         const attemptToolNames = routeToolCallingSupport(attempt) === "custom" ? toolNames : [];
         const metered = attempt.provider === "deepseek";
+        const attemptMessages = await messagesFor(attempt);
         const result = streamText({
         model: createProviderModel(attempt, origin),
         system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
-        messages: modelMessages,
+        messages: attemptMessages,
         ...(attemptToolNames.length
           ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
           : {}),
