@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { NaviMode, StoredChat } from "@/lib/ai/types";
+import { searchConversations } from "@/lib/memory";
 import { NAVI_MODES } from "@/lib/chat";
 import { PWA_UPDATE_STATUS_EVENT, requestPwaUpdate, type PwaUpdateStatus } from "@/lib/pwa-update";
 import { haptic } from "@/lib/ui/haptics";
@@ -88,11 +89,17 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
   const dragging = dragProgress !== null;
   if (!open && !dragging) return null;
   const normalized = query.trim().toLowerCase();
-  const visible = normalized
-    ? chats.filter((chat) => `${chat.title} ${chat.preview}`.toLowerCase().includes(normalized))
-    : chats;
-  const pinned = visible.filter((chat) => chat.pinned);
-  const recents = visible.filter((chat) => !chat.pinned);
+  /* Search reads every message, not the title and preview it used to — anything
+     said mid-conversation was unfindable, which is most of what anyone comes
+     back looking for. Results are one flat ranked list rather than the usual
+     pinned/recent split: when you are searching, relevance is the ordering you
+     want, and a pinned chat that merely mentions the word should not sit above
+     the thread that is about it. */
+  const results = normalized ? searchConversations(query, chats) : [];
+  const snippets = new Map(results.map((match) => [match.chat.id, match.snippet]));
+  const visible = normalized ? results.map((match) => match.chat) : chats;
+  const pinned = normalized ? [] : visible.filter((chat) => chat.pinned);
+  const recents = normalized ? visible : visible.filter((chat) => !chat.pinned);
 
   function beginHold(chat: StoredChat, clientX?: number) {
     if (holdTimer.current) window.clearTimeout(holdTimer.current);
@@ -151,6 +158,11 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
       >
         <button type="button" onClick={() => onOpen(chat)} className="min-w-0 flex-1 px-3 py-2.5 text-left">
           <span className="block truncate text-[0.9375rem]/5 font-normal text-primary">{chat.title}</span>
+          {/* Where the term actually appears. A result list of titles alone
+              makes you open each one to find out which is the right thread. */}
+          {snippets.get(chat.id) ? (
+            <span className="mt-0.5 block truncate text-[0.75rem]/4 font-normal text-tertiary">{snippets.get(chat.id)}</span>
+          ) : null}
         </button>
       </div>
     );
@@ -262,7 +274,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
           ) : null}
           {!visible.length ? (
             <div className="px-5 py-10 text-center text-[0.8125rem]/[1.125rem] font-medium text-tertiary">
-              {query ? "No matching chats." : "Your chats will appear here."}
+              {query ? `Nothing found for “${query.trim()}”.` : "Your chats will appear here."}
             </div>
           ) : null}
         </div>
