@@ -92,7 +92,28 @@ check("the sandbox sdk is a dependency", Boolean(pkg.dependencies["@vercel/sandb
    failure would appear at runtime in a sandbox nobody is watching. */
 check("it is pinned exactly", /^\d+\.\d+\.\d+$/.test(pkg.dependencies["@vercel/sandbox"]), true);
 
+export {};
+
+/* ---- Credentials ------------------------------------------------------
+ * `Sandbox.create` accepts credentials one of exactly two ways: all three of
+ * token, teamId and projectId, or the VERCEL_OIDC_TOKEN variable Vercel
+ * injects at runtime. This module passed none, leaving only the OIDC path —
+ * and OIDC is not on by default, so Python execution would have failed on any
+ * project without it, reporting an OIDC context error rather than a missing
+ * credential. */
+const sandboxSource = readFileSync(join(process.cwd(), "lib/execution/vercel-sandbox.ts"), "utf8");
+
+check("credentials are passed to create", /\.\.\.\(sandboxCredentials\(\) \?\? \{\}\)/.test(sandboxSource), true);
+check("the token has aliases", sandboxSource.includes("NAVI_VERCEL_TOKEN"), true);
+check("the team is read", sandboxSource.includes("VERCEL_TEAM_ID"), true);
+check("the project is read", sandboxSource.includes("VERCEL_PROJECT_ID"), true);
+/* All three or none. The SDK throws on an incomplete set, and that throw would
+   be reported as the sandbox being unavailable rather than as a setup mistake. */
+check("a partial set yields nothing", /token && teamId && projectId \? \{ token, teamId, projectId \} : undefined/.test(sandboxSource), true);
+/* OIDC remains valid, so a project that has it keeps working unconfigured. */
+check("OIDC still counts as configured", /VERCEL_OIDC_TOKEN/.test(sandboxSource), true);
+check("the gap is named for the log", sandboxSource.includes("describeSandboxConfigGap"), true);
+check("the route logs the gap before trying", readFileSync(join(process.cwd(), "app/api/tools/code/route.ts"), "utf8").includes("describeSandboxConfigGap()"), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
-
-export {};

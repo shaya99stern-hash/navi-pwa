@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { describeSandboxResult, runPython } from "@/lib/execution/vercel-sandbox";
+import { describeSandboxConfigGap, describeSandboxResult, runPython } from "@/lib/execution/vercel-sandbox";
 
 /**
  * Python execution, on Node because the sandbox SDK cannot run anywhere else.
@@ -43,6 +43,12 @@ export async function POST(request: Request) {
   if (language !== "python" && language !== "py") {
     return NextResponse.json({ error: "This endpoint runs Python. JavaScript runs on the device." }, { status: 400 });
   }
+
+  /* Named before the attempt, not after it. A missing credential surfaces from
+     the SDK as an OIDC context error, which reads as a platform fault rather
+     than as something absent from this deployment's environment. */
+  const gap = describeSandboxConfigGap();
+  if (gap) console.error(gap);
 
   const result = await runPython(source);
   return NextResponse.json({ ...result, summary: describeSandboxResult(result) });

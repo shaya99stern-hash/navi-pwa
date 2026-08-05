@@ -35,6 +35,38 @@ export type SandboxResult = {
 
 /** Hard wall clock, per the spec. */
 export const SANDBOX_TIMEOUT_MS = 30_000;
+
+/**
+ * How this deployment proves it may create a sandbox.
+ *
+ * `Sandbox.create` takes credentials one of exactly two ways: all three of
+ * `token`, `teamId` and `projectId`, or the `VERCEL_OIDC_TOKEN` variable that
+ * Vercel injects at runtime. Passing none — which is what this did — leaves
+ * only the OIDC path, and OIDC is not on by default. Python execution would
+ * have failed on any project without it, with an error about an OIDC context
+ * rather than about a missing credential.
+ *
+ * Explicit credentials win when all three are present, which is the SDK's own
+ * documented precedence. Otherwise nothing is passed and OIDC is used, so a
+ * deployment that does have it keeps working with no configuration at all.
+ *
+ * Partial configuration deliberately yields nothing rather than two of three:
+ * the SDK throws on an incomplete set, and a throw here would be reported as
+ * the sandbox being unavailable rather than as a setup mistake.
+ */
+export function sandboxCredentials(): { token: string; teamId: string; projectId: string } | undefined {
+  const token = (process.env.NAVI_VERCEL_TOKEN ?? process.env.VERCEL_API_TOKEN ?? process.env.VERCEL_TOKEN ?? "").trim();
+  const teamId = (process.env.NAVI_VERCEL_TEAM_ID ?? process.env.VERCEL_TEAM_ID ?? "").trim();
+  const projectId = (process.env.NAVI_VERCEL_PROJECT_ID ?? process.env.VERCEL_PROJECT_ID ?? "").trim();
+  return token && teamId && projectId ? { token, teamId, projectId } : undefined;
+}
+
+/** Which half is missing, for the deployment log. */
+export function describeSandboxConfigGap(): string | null {
+  if (sandboxCredentials()) return null;
+  if (process.env.VERCEL_OIDC_TOKEN?.trim()) return null;
+  return "Python execution has no Vercel credentials. Set NAVI_VERCEL_TOKEN, VERCEL_TEAM_ID and VERCEL_PROJECT_ID, or enable OIDC for this project.";
+}
 /** Beyond this the output is noise in a conversation, not information. */
 const MAX_OUTPUT_CHARS = 6_000;
 /** The free tier's monthly sandbox creations. */
@@ -95,6 +127,9 @@ export async function runPython(source: string): Promise<SandboxResult> {
   try {
     await recordCreation();
     sandbox = await Sandbox.create({
+      /* Spread rather than passed conditionally per field: the SDK requires
+         all three together or none, and throws on two. */
+      ...(sandboxCredentials() ?? {}),
       runtime: "node24",
       /* Verified against the package's own types: the policy accepts the
          literal "deny-all". Executed code reaches nothing — no package index,
