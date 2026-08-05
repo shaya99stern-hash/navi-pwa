@@ -10,6 +10,7 @@ import { MarkdownRenderer, type CapabilityHandlers } from "./markdown-renderer";
 import { ExecutionTrace, executionRuns } from "./execution-trace";
 import { ToolActivityList, toolActivity } from "./tool-activity";
 import { PlanCard, planFor } from "./plan-card";
+import { ReasoningDisclosure, ReasoningTrace, hadReasoning, reasoningFor } from "./reasoning-disclosure";
 
 function messageFiles(message: UIMessage): Array<{ filename?: string; mediaType?: string }> {
   return message.parts.filter((part) => part.type === "file").map((part) => part as unknown as { filename?: string; mediaType?: string });
@@ -130,6 +131,14 @@ export function MessageRow({ message, streaming, last, theme, chatFont, haptics,
           {/* The plan comes first: it is what the work was measured against,
               and reading it before the answer is the point. */}
           {(() => { const plan = planFor(message); return plan ? <PlanCard plan={plan} /> : null; })()}
+          {/* Then the thinking. Live it carries its own text; after a reload
+              only the fact survives, because the trace is unsafe to replay to
+              a model and is therefore not kept. */}
+          {(() => {
+            const thought = reasoningFor(message);
+            if (thought) return <ReasoningDisclosure text={thought} streaming={streaming} haptics={haptics} />;
+            return !streaming && hadReasoning(message) ? <ReasoningTrace /> : null;
+          })()}
           <ToolActivityList
             activities={toolActivity(message).filter((activity) => activity.name !== "run_javascript")}
             haptics={haptics}

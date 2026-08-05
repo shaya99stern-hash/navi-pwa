@@ -1119,7 +1119,14 @@ export async function POST(request: Request): Promise<Response> {
         try {
           /* Not sent at all going forward: private deliberation the user was
            never meant to see, which the client then stores and replays. */
-        const stream = result.toUIMessageStream({ onError: streamError, sendReasoning: false });
+        /* Sent to the screen, and stripped from the replay by
+           `redactGeneratedMedia` before any model sees it again. Those are two
+           different problems that were being solved with one switch: the trace
+           is unsafe to *replay* — a provider that rejects `reasoning_content`
+           breaks the conversation permanently — but it was never unsafe to
+           show, and hiding it is most of why "thinking harder" felt like it
+           changed nothing. */
+        const stream = result.toUIMessageStream({ onError: streamError, sendReasoning: true });
           const reader = stream.getReader();
           const { committed, preamble, failure } = await readUntilCommitted(reader);
 

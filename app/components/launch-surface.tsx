@@ -43,12 +43,22 @@ function greetingForNow(now: Date): string {
   return lines[Math.floor(now.getTime() / 60_000) % lines.length];
 }
 
-export function LaunchSurface({ online, children }: { online: boolean; children?: ReactNode }) {
+export function LaunchSurface({ online, name, children }: { online: boolean; name?: string; children?: ReactNode }) {
   const [greeting, setGreeting] = useState("Good evening");
 
   useEffect(() => {
+    /* A name turns the line into an address, so the bare time-of-day form is
+       the only one that reads correctly beside it — "Where should we begin
+       today?, Sam" is not a sentence. With no name the rotation stands; a
+       placeholder would be worse than the variety it replaced. */
+    if (name) {
+      const hour = new Date().getHours();
+      const part = hour < 5 ? "Late night" : hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
+      setGreeting(`${part}, ${name}`);
+      return;
+    }
     setGreeting(greetingForNow(new Date()));
-  }, []);
+  }, [name]);
 
   return (
     <div className="navi-launch launch-surface flex min-h-full flex-col px-gutter pb-28 pt-6">

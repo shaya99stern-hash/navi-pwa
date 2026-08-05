@@ -1050,7 +1050,7 @@ export function AppShell({
             </div>
           </div>
         ) : messages.length === 0 ? (
-          <LaunchSurface online={online}>
+          <LaunchSurface online={online} name={preferences.profile.displayName || undefined}>
             <ProviderSetupNotice haptics={preferences.haptics} />
           </LaunchSurface>
         ) : (
