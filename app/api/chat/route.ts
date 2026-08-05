@@ -939,6 +939,9 @@ export async function POST(request: Request): Promise<Response> {
         policy: tools,
         githubToken: userGithubToken,
         googleAccessToken: userGoogleToken ?? undefined,
+        /* Lets the repository group be offered when the turn is about repos or
+           deployments, rather than being trimmed off the end of the cap. */
+        request: lastUserText,
         githubWritesEnabled: githubWritesEnabled(),
         signal: request.signal,
         /* Python runs on a Node route because the sandbox SDK cannot run on
@@ -1076,10 +1079,14 @@ export async function POST(request: Request): Promise<Response> {
          moment the user could correct a misread of their intent was after the
          work was already done. Correcting a plan is far cheaper than
          correcting an answer. */
-      if (plan.constraints.length > 1) {
+      /* `plan.steps`, not `plan.constraints`. The latter also carries this
+         app's fixed build rules, which are instructions to a model rather than
+         a plan — on screen they told someone who asked to list their
+         repositories that the reply would be deployable to Vercel as-is. */
+      if (plan.steps.length > 1) {
         writer.write({
           type: "data-plan",
-          data: { summary: plan.summary, steps: plan.constraints.map((text) => ({ text, done: false })) }
+          data: { summary: plan.summary, steps: plan.steps.map((text) => ({ text, done: false })) }
         } as never);
       }
       writer.write(statusChunk({ stage: "stream", detail: artifactRequested ? "Building the interactive artifact." : `${plan.summary}` }));

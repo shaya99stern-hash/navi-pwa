@@ -38,6 +38,18 @@ export type ExecutionPlan = {
   summary: string;
   /** What the answer has to satisfy. Fed to the writer and to the evaluator. */
   constraints: string[];
+  /**
+   * The subset worth showing the user, and the only part the plan card renders.
+   *
+   * `constraints` also carries this app's fixed build rules — that it is a
+   * mobile PWA, that touch targets are 44px, that credentials are named
+   * exactly. Those shape the answer and belong in the writer's prompt, but they
+   * are instructions to a model, not a plan: rendered on screen they told
+   * someone who asked to list their repositories that the reply would be
+   * deployable to Vercel as-is. Only the planner's own request-specific
+   * requirements go here.
+   */
+  steps: string[];
   /** Whether the output is worth a review pass before it is shown. */
   needsReview: boolean;
   /** How the lane was chosen, so a bad route can be diagnosed rather than guessed at. */
@@ -132,10 +144,10 @@ export function heuristicPlan(options: {
   const { text, hasFiles, imageRequested, audioRequested, tools, effort } = options;
 
   if (imageRequested) {
-    return { lane: "image", summary: "Generating an image.", constraints: IMAGE_CONSTRAINTS, needsReview: false, source: "heuristic" };
+    return { lane: "image", summary: "Generating an image.", constraints: IMAGE_CONSTRAINTS, steps: [], needsReview: false, source: "heuristic" };
   }
   if (audioRequested) {
-    return { lane: "audio", summary: "Generating audio.", constraints: [], needsReview: false, source: "heuristic" };
+    return { lane: "audio", summary: "Generating audio.", constraints: [], steps: [], needsReview: false, source: "heuristic" };
   }
 
   const code = CODE_SIGNAL.test(text);
@@ -155,6 +167,9 @@ export function heuristicPlan(options: {
     lane,
     summary: LANE_SUMMARY[lane],
     constraints: constraintsFor(lane),
+    /* A heuristic plan has no planner-authored steps, so it shows no card —
+       the fixed build rules are exactly what must not appear. */
+    steps: [],
     // Reviewing prose costs a round trip and rarely changes it. Code is
     // different: it either runs or it does not.
     needsReview: lane === "code" && effort !== "low",
@@ -312,6 +327,7 @@ export async function architectPlan(options: {
          added to them rather than replacing them. A model cannot decide that
          this stops being a mobile PWA. */
       constraints: [...constraintsFor(lane), ...extra],
+      steps: extra,
       needsReview: lane === "code" && options.effort !== "low",
       source: "architect"
     };
