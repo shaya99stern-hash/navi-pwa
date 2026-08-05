@@ -312,6 +312,11 @@ export function AppShell({
     effort: preferences.effort,
     tools: preferences.tools,
     memory: question ? recalledContext(question) : "",
+    /* Whether this turn may *add* to memory, as opposed to read from it. The
+       server cannot infer it: an empty `memory` string means nothing was
+       recalled, which is not the same as memory being switched off, and
+       incognito is a client-side state entirely. */
+    remember: !incognito && preferences.memory,
     playbook: question ? playbookBlock(selectPlaybook(question, playbooks)) : "",
     threadSummary: activeChat?.summary ?? compactSummary(messages),
     connectedMcpServers: preferences.connectedMcpServers,
