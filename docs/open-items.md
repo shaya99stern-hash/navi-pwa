@@ -117,8 +117,12 @@ Both are specified on Supabase. This app has no database and no server-side
 storage of user data at all — conversations live in IndexedDB on the device,
 which is a stated product property rather than an accident.
 
-- **Phase C (MCP client)** wants a server registry table for connector
-  configuration and encrypted tokens.
+- **Phase C (MCP client)** — the client itself is **done**: `lib/ai/mcp-tools.ts`
+  builds namespaced tools, and the chat route wires both those and the resource
+  metadata. What is absent is only the *database-backed registry*; servers are
+  configured from deployment environment instead, which is why the Connectors
+  sheet lists none until one is set. An earlier note here called the whole phase
+  blocked, which overstated it.
 - **Phase D (memory)** wants a profile store and full-text search across past
   conversations, which is also handoff Task 12.
 
@@ -132,7 +136,7 @@ different, smaller piece of work.
 
 | Task | State |
 |---|---|
-| 8 — Context compaction | Partly done. `lib/ai/compaction.ts` exists and is used; the `prepareStep` hook the spec names is not wired |
+| 8 — Context compaction | **Done in the main path.** The earlier entry here said the module "exists and is used"; an audit found it imported by nothing but its own test, while the chat route carried a comment describing the compaction three lines above code handing `streamText` the raw conversation. Now wired per attempt, budgeted from each provider's own window. `runComposite` still receives the uncompacted conversation — the swarm routes separately and needs its own budget |
 | 10 — One voice mode | Not started. Flagged three times as possibly larger than it reads; worth scoping before committing to it |
 | 11 — Remove redundancy | Deletions done. The engine picker and "Run quality check" still live in Settings; the spec moves them to a hidden diagnostics page behind a five-tap gesture on the version string, which is a new surface rather than a removal |
 | 17 — Settings two-pane at ≥768px | Not started |
