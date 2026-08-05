@@ -93,7 +93,16 @@ const planAt = route.indexOf('type: "data-plan"');
 const streamAt = route.indexOf('Building the interactive artifact.');
 check("the plan is emitted before the answer streams", planAt > -1 && planAt < streamAt, true);
 check("the plan precedes the model call", planAt < route.indexOf("const result = streamText({"), true);
-check("a one-step plan is not shown as a checklist", route.includes("plan.constraints.length > 1"), true);
+check("a one-step plan is not shown as a checklist", route.includes("plan.steps.length > 1"), true);
+/* The card renders `steps`, never `constraints`. The latter also carries this
+   app's fixed build rules — that it is a mobile PWA, that touch targets are
+   44px — which are instructions to a model, not a plan. On screen they told
+   someone who asked to list their repositories that the reply would be
+   deployable to Vercel as-is. */
+check("the card is not fed the build rules", /data: \{ summary: plan\.summary, steps: plan\.constraints/.test(route), false);
+check("the card is fed the planner's own steps", /steps: plan\.steps\.map/.test(route), true);
+/* The writer still receives all of them; only the screen is filtered. */
+check("the writer still gets every constraint", route.includes("constraints: constraintBlock(plan)"), true);
 /* "0 of 4" on a plan that has not started reads as a stall, not as progress. */
 check("progress appears only once there is some", card.includes("done > 0"), true);
 

@@ -36,6 +36,11 @@ type AccountConnector = {
   /** Absent for accounts the deployment configures with a token rather than OAuth. */
   connectPath?: string;
   statusPath?: string;
+  /** What is missing, when this cannot be connected from the phone. */
+  setup?: string;
+  /** What the connection permits, stated rather than left to be guessed. */
+  reads: string;
+  writes?: string;
 };
 
 const ACCOUNTS: AccountConnector[] = [
@@ -44,19 +49,32 @@ const ACCOUNTS: AccountConnector[] = [
     name: "Google",
     detail: "Gmail and Calendar",
     connectPath: "/api/google/oauth/start",
-    statusPath: "/api/google/status"
+    statusPath: "/api/google/status",
+    /* "Not configured" with no way forward is a dead end. Connecting needs
+       credentials that only exist in the deployment, so say which ones. */
+    setup: "Needs GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in Vercel. See docs/google-connector-setup.md.",
+    reads: "Read your mail and calendar",
+    writes: "Send mail and create events"
   },
   {
     id: "github",
     name: "GitHub",
     detail: "Repositories, pull requests, and CI logs",
     connectPath: "/api/github/oauth/start",
-    statusPath: "/api/github/status"
+    statusPath: "/api/github/status",
+    setup: "Needs GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET in Vercel.",
+    reads: "Read repositories, pull requests, and CI logs",
+    writes: "Commit to a working branch and open pull requests"
   },
   {
     id: "vercel",
     name: "Vercel",
-    detail: "Deployments and build logs"
+    detail: "Deployments and build logs",
+    /* No status route and no Connect button: this one is configured with a
+       deployment-wide token rather than per user, so there is nothing for an
+       individual to authorize. Saying so beats an inert row. */
+    setup: "Configured for the whole deployment with NAVI_VERCEL_TOKEN, not per person.",
+    reads: "Read deployments and build logs"
   }
 ];
 
@@ -240,13 +258,23 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                       <Link2 size={18} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[0.875rem]/5 font-semibold text-primary">{account.name}</span>
-                      <span className="block truncate text-[0.6875rem]/4 font-medium text-tertiary">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate text-[0.875rem]/5 font-semibold text-primary">{account.name}</span>
+                        {connected ? (
+                          <span className="shrink-0 rounded-full bg-[var(--selection-bg)] px-2 py-0.5 text-[0.625rem]/4 font-semibold uppercase tracking-[0.06em] text-accent">
+                            {status?.writesEnabled ? "Read and write" : "Read only"}
+                          </span>
+                        ) : null}
+                      </span>
+                      {/* What it can do, plainly. A connected account that only
+                          says "GitHub" leaves the one question worth answering
+                          — what did I just allow — unanswered. */}
+                      <span className="mt-0.5 block text-[0.6875rem]/4 font-medium text-tertiary">
                         {connected
-                          ? `${status?.label ? `${status.label} · ` : ""}${account.detail}${status?.writesEnabled ? "" : " · read-only"}`
-                          : configurable && status?.oauthAvailable === false
-                            ? "Not configured on this deployment"
-                            : account.detail}
+                          ? `${status?.label ? `${status.label} · ` : ""}${status?.writesEnabled && account.writes ? `${account.reads}. ${account.writes}.` : `${account.reads}.`}`
+                          : status?.oauthAvailable === false || !configurable
+                            ? account.setup ?? account.detail
+                            : `${account.reads}.`}
                       </span>
                     </span>
                     {!configurable ? null : connected ? (
@@ -282,7 +310,18 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                   </div>
                 );
               })}
-              {!loading && !servers.length ? <div className="py-10 text-center text-[0.8125rem]/5 font-medium text-tertiary">No connector servers are configured in Vercel.</div> : null}
+              {/* There is deliberately no Add button: a connector server carries
+                  credentials, so it is registered in the deployment rather than
+                  typed into a phone. An empty panel with no explanation reads as
+                  a missing feature, so name the thing that adds one. */}
+              {!loading && !servers.length ? (
+                <div className="py-8 text-center">
+                  <p className="text-[0.8125rem]/5 font-medium text-secondary">No connector servers yet.</p>
+                  <p className="mx-auto mt-1 max-w-[46ch] text-[0.6875rem]/4 font-medium text-tertiary">
+                    These are added by the deployment, not from this device, so their credentials never reach the browser. Set <span className="font-mono text-secondary">MCP_SERVER_REGISTRY_JSON</span> in Vercel and redeploy.
+                  </p>
+                </div>
+              ) : null}
             </div>
           </section>
 

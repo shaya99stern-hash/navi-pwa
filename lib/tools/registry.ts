@@ -38,6 +38,8 @@ export type ToolsetContext = {
   githubToken?: string;
   /** A live Google access token, when they have connected that account. */
   googleAccessToken?: string;
+  /** The user's last message, so a group can be offered when it is wanted. */
+  request?: string;
   /** Server-side writes are separately gated; see `github-write-tools`. */
   githubWritesEnabled?: boolean;
   signal: AbortSignal;
@@ -86,9 +88,13 @@ const GROUPS: Group[] = [
     when: () => true
   },
   {
+    /* Repository and deployment reads. In both modes — "which of my repos has
+       failing CI" is not a Code-mode question — but only when the request is
+       about them, because ten tools cannot sit in a twelve-slot budget on
+       every turn without displacing everything else. */
     name: "repository",
     tools: () => ({}),
-    when: ({ mode, githubToken }) => mode === "code" && Boolean(githubToken)
+    when: ({ mode, githubToken, request }) => Boolean(githubToken) && (mode === "code" || wantsAccountTools(request))
   },
   {
     name: "repository-write",
@@ -125,6 +131,32 @@ export function capToolset(tools: ToolSet, max = MAX_ACTIVE_TOOLS): ToolSet {
 }
 
 /**
+ * Does this request plausibly concern a connected account?
+ *
+ * The cap trims from the end, and the built-in capabilities alone — six skill
+ * tools, two execution tools, three web tools — fill eleven of twelve slots.
+ * That left exactly one for the ten GitHub and Vercel tools, so a user with
+ * both accounts connected asked to list their repositories and was told the
+ * app had no access to them. Nothing was broken; the tools had simply been
+ * trimmed off the end before the model ever saw them.
+ *
+ * Offering them on every turn is not the answer either — that is what the cap
+ * exists to prevent. So they are offered when the request is about them, which
+ * is also the only time they are worth their schema cost.
+ *
+ * Deliberately generous, for the same reason `needsAppKnowledge` is: a false
+ * positive costs a few hundred tokens on one turn, a false negative tells
+ * someone their connected account is not connected.
+ */
+const MENTIONS_REPOSITORY = /\b(repo|repos|repositor\w*|github|git|pull request|pr|commit|branch|merge|ci|workflow|action|build log|codebase|source code)\b/i;
+const MENTIONS_DEPLOYMENT = /\b(vercel|deploy\w*|build|preview|production|hosting|domain)\b/i;
+
+export function wantsAccountTools(request: string | undefined): boolean {
+  if (!request) return false;
+  return MENTIONS_REPOSITORY.test(request) || MENTIONS_DEPLOYMENT.test(request);
+}
+
+/**
  * The tools valid for this mode and this user, as one flat set.
  *
  * Builders that need request-scoped arguments are called here rather than in
@@ -141,8 +173,9 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...buildSkillTools(onActivity),
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity }),
-    // Repository and deployment reads, present only when their tokens are.
-    ...buildDevTools(onActivity, { githubToken }),
+    // Repository and deployment reads, present only when their tokens are —
+    // and only when this turn is plausibly about them; see `wantsAccountTools`.
+    ...(active("repository") || mode === "code" ? buildDevTools(onActivity, { githubToken }) : {}),
     ...(active("repository-write") && githubToken
       ? buildGitHubWriteTools({ token: githubToken, onActivity })
       : {}),
