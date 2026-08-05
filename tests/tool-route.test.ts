@@ -2,8 +2,8 @@ import { ROUTES, routeToolCallingSupport, selectDirectRoute } from "@/lib/ai/pro
 import type { ProviderAvailability } from "@/lib/ai/providers";
 
 const all: ProviderAvailability = {
-  githubmodels: false,
-  gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true
+
+  gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true, deepseek: true
 };
 const research = { web: true, code: false, artifacts: true };
 const none = { web: false, code: false, artifacts: true };

@@ -1,3 +1,4 @@
+import { numberEnvironment, timeoutSignal } from "./catalog";
 import type { ProviderAvailability } from "./providers";
 import { getHuggingFaceToken, ROUTES } from "./providers";
 import type { ProviderRoute, ToolPolicy } from "./types";
@@ -89,11 +90,6 @@ const TASK_MODEL_TERMS: Record<SwarmTask, Array<[RegExp, number]>> = {
   general: [[/deepseek|gpt-oss|glm|qwen|kimi|minimax|inkling/i, 6]]
 };
 
-function numberEnvironment(name: string, fallback: number, minimum: number, maximum: number): number {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, Math.round(value))) : fallback;
-}
-
 function routingPolicy(profile: SwarmProfile): "fastest" | "cheapest" | "preferred" {
   const specific = profile === "navi-sol" ? process.env.HF_SOL_ROUTING_POLICY : process.env.HF_FABLE_ROUTING_POLICY;
   const shared = process.env.HF_ROUTING_POLICY;
@@ -111,23 +107,8 @@ function hfRoute(model: string, profile: SwarmProfile, index: number): ProviderR
     model: `${model}:${routingPolicy(profile)}`,
     /* Surfaces in the status stream, so it carries the product name and
        never a provider or a retired brand. */
-    label: `NaviSol · analysis ${index + 1}`,
+    label: `NaviSoul · analysis ${index + 1}`,
     capability: "balanced"
-  };
-}
-
-function timeoutSignal(parent: AbortSignal, timeoutMs: number): { signal: AbortSignal; dispose: () => void } {
-  const controller = new AbortController();
-  const abortParent = () => controller.abort(parent.reason);
-  if (parent.aborted) controller.abort(parent.reason);
-  else parent.addEventListener("abort", abortParent, { once: true });
-  const timer = setTimeout(() => controller.abort(new Error("Hugging Face model discovery timed out.")), timeoutMs);
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timer);
-      parent.removeEventListener("abort", abortParent);
-    }
   };
 }
 
@@ -163,7 +144,7 @@ async function discoverRouterModels(signal: AbortSignal): Promise<RouterModel[]>
   const fallback = FALLBACK_MODELS.map((id) => ({ id, metadata: id.toLowerCase(), contextLength: 0, toolCapable: false, structured: false }));
   if (!token) return fallback;
 
-  const timed = timeoutSignal(signal, 4_500);
+  const timed = timeoutSignal(signal, 4_500, "Hugging Face model discovery timed out.");
   try {
     const response = await fetch("https://router.huggingface.co/v1/models", {
       headers: { Authorization: `Bearer ${token}` },

@@ -15,7 +15,6 @@ import {
   FolderKanban,
   Link2,
   Search,
-  SlidersHorizontal,
   Square,
   X
 } from "lucide-react";
@@ -592,7 +591,12 @@ export function ComposerDock({
               spellCheck
               disabled={blocked}
               placeholder={placeholder}
-              aria-label="Chat with Navi"
+              aria-label="Chat with NaviSoul"
+              /* Stable hook for anything that needs to prefill the composer
+                 from outside React — the artifact frame's edit button, for
+                 one. Keying off the aria-label coupled that to copy, and the
+                 copy changed. */
+              data-navi-composer=""
               className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[1rem]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
@@ -670,7 +674,7 @@ export function ComposerDock({
             {footer ? (
               <span className={`block pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
             ) : hasMessages ? (
-              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">NaviSol is AI and can make mistakes. Double-check important answers.</span>
+              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">NaviSoul is AI and can make mistakes. Double-check important answers.</span>
             ) : null}
           </div>
 
@@ -773,11 +777,6 @@ export function ComposerDock({
               <button type="button" onClick={() => { setSourceMenuOpen(false); setIntegrationsOpen(true); }} className={menuRow}>
                 <Link2 size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
                 <span className="flex-1">Integrations</span>
-                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
-              </button>
-              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenTools(); }} className={menuRow}>
-                <SlidersHorizontal size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Capabilities</span>
                 <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
               </button>
 

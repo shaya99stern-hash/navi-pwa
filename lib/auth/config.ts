@@ -50,7 +50,23 @@ function normalizeOrigin(value: string | undefined): string | undefined {
   }
 }
 
+/**
+ * The one origin sign-in is allowed to happen on, or nothing.
+ *
+ * The redirect exists so a Clerk session issued on the canonical domain is not
+ * split across several hostnames that all serve the same deployment. That is
+ * right in production and wrong everywhere else: a preview deployment is served
+ * from its own generated hostname, and sending that hostname to production
+ * makes the preview unreachable — so no change can be looked at before it
+ * merges, which is exactly backwards. The build being previewed is the one
+ * nobody has verified yet; it is the build most in need of being opened.
+ *
+ * Absent `VERCEL_ENV` this is a local or self-hosted run, where the configured
+ * origin is honoured as before.
+ */
 export function getNaviAuthCanonicalOrigin(): string | undefined {
+  const deployment = process.env.VERCEL_ENV;
+  if (deployment && deployment !== "production") return undefined;
   return normalizeOrigin(process.env.NAVI_AUTH_CANONICAL_ORIGIN?.trim());
 }
 

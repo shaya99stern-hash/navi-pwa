@@ -7,6 +7,10 @@ import { messageText } from "@/lib/chat";
 import { haptic } from "@/lib/ui/haptics";
 import { speak, whenVoicesReady } from "@/lib/ui/speech";
 import { MarkdownRenderer, type CapabilityHandlers } from "./markdown-renderer";
+import { ExecutionTrace, executionRuns } from "./execution-trace";
+import { ToolActivityList, toolActivity } from "./tool-activity";
+import { PlanCard, planFor } from "./plan-card";
+import { ReasoningDisclosure, ReasoningTrace, hadReasoning, reasoningFor } from "./reasoning-disclosure";
 
 function messageFiles(message: UIMessage): Array<{ filename?: string; mediaType?: string }> {
   return message.parts.filter((part) => part.type === "file").map((part) => part as unknown as { filename?: string; mediaType?: string });
@@ -117,6 +121,29 @@ export function MessageRow({ message, streaming, last, theme, chatFont, haptics,
           {/* Answers read in the display serif by default — the strongest
               single typographic signal of the target design — switchable to
               the system face in Settings → General → Chat font. */}
+          {/* Above the answer, because it is what the answer rests on: the
+              user sees the work was done before reading the claim.
+
+              Two components rather than one: code execution has its own richer
+              trace showing each repair attempt, and everything else gets the
+              plain chip. `run_javascript` is filtered out of the generic list
+              so a run never renders twice. */}
+          {/* The plan comes first: it is what the work was measured against,
+              and reading it before the answer is the point. */}
+          {(() => { const plan = planFor(message); return plan ? <PlanCard plan={plan} /> : null; })()}
+          {/* Then the thinking. Live it carries its own text; after a reload
+              only the fact survives, because the trace is unsafe to replay to
+              a model and is therefore not kept. */}
+          {(() => {
+            const thought = reasoningFor(message);
+            if (thought) return <ReasoningDisclosure text={thought} streaming={streaming} haptics={haptics} />;
+            return !streaming && hadReasoning(message) ? <ReasoningTrace /> : null;
+          })()}
+          <ToolActivityList
+            activities={toolActivity(message).filter((activity) => activity.name !== "run_javascript")}
+            haptics={haptics}
+          />
+          <ExecutionTrace runs={executionRuns(message)} haptics={haptics} />
           <div className={`navi-markdown text-[1rem]/[1.625rem] font-normal ${chatFont === "serif" ? "navi-chat-serif" : ""} ${streaming ? "streaming-cursor" : ""}`}>
             {text ? <MarkdownRenderer text={text} theme={theme} haptics={haptics} capabilities={capabilities} /> : null}
           </div>

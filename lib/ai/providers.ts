@@ -1,152 +1,17 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { PROVIDER_IDS, PROVIDERS, providerApiKey, type ProviderAdapter } from "./provider-registry";
 import type { ModelPreset, ProviderName, ProviderRoute, ToolCallingSupport, ToolPolicy } from "./types";
-import { createGithubModelsProvider } from "./github-models";
 
 export type ProviderAvailability = Record<ProviderName, boolean>;
 
-function usableSecret(value: string | undefined): string | undefined {
-  const secret = value?.trim();
-  if (!secret || /^(?:undefined|null|none|changeme|your[_ -]?key)$/i.test(secret)) return undefined;
-  return secret;
-}
-
-function firstSecret(values: Array<string | undefined>): string | undefined {
-  for (const value of values) {
-    const secret = usableSecret(value);
-    if (secret) return secret;
-  }
-  return undefined;
-}
-
-function normalizedEnvironmentKey(key: string): string {
-  return key.toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
-
-function environmentSecret(options: {
-  keyMatches: (normalizedKey: string) => boolean;
-  valuePrefixes: string[];
-}): string | undefined {
-  for (const [key, rawValue] of Object.entries(process.env)) {
-    const value = usableSecret(rawValue);
-    if (!value) continue;
-    if (options.keyMatches(normalizedEnvironmentKey(key))) return value;
-  }
-
-  for (const rawValue of Object.values(process.env)) {
-    const value = usableSecret(rawValue);
-    if (value && options.valuePrefixes.some((prefix) => value.startsWith(prefix))) return value;
-  }
-
-  return undefined;
-}
-
-function geminiApiKey(): string | undefined {
-  return firstSecret([
-    process.env.GEMINI_API_KEY,
-    process.env.GEMINI_KEY,
-    process.env.GOOGLE_GEMINI_API_KEY,
-    process.env.GOOGLE_AI_API_KEY,
-    process.env.GOOGLE_API_KEY
-  ]) ?? environmentSecret({
-    keyMatches: (key) => key.includes("GEMINI") && (key.includes("KEY") || key.includes("TOKEN")),
-    valuePrefixes: ["AIza"]
-  });
-}
-
-function groqApiKey(): string | undefined {
-  return firstSecret([
-    process.env.GROQ_API_KEY,
-    process.env.GROQ_API,
-    process.env.GROQ_KEY,
-    process.env.GROQ_TOKEN,
-    process.env.GROQ_API_TOKEN,
-    process.env.GROQ_SECRET_KEY
-  ]) ?? environmentSecret({
-    keyMatches: (key) => key.includes("GROQ") && (key.includes("KEY") || key.includes("TOKEN") || key.includes("SECRET")),
-    valuePrefixes: ["gsk_"]
-  });
-}
-
-function huggingFaceToken(): string | undefined {
-  return firstSecret([
-    process.env.HF_TOKEN,
-    process.env.HUGGING_FACE_FINE_GRAINED_API,
-    process.env.fable_read_Hugging_face,
-    process.env.HUGGING_FACE_API_Write,
-    process.env.HF_API_TOKEN,
-    process.env.HF_API_KEY,
-    process.env.HF_ACCESS_TOKEN,
-    process.env.HUGGINGFACE_API_KEY,
-    process.env.HUGGING_FACE_API_KEY,
-    process.env.HUGGINGFACE_TOKEN,
-    process.env.HUGGING_FACE_TOKEN,
-    process.env.HUGGINGFACE_HUB_TOKEN,
-    process.env.HUGGING_FACE_HUB_TOKEN,
-    process.env.HUGGINGFACE_ACCESS_TOKEN,
-    process.env.HUGGING_FACE_ACCESS_TOKEN
-  ]) ?? environmentSecret({
-    keyMatches: (key) => {
-      const namedHuggingFace = key.includes("HUGGINGFACE") && (key.includes("KEY") || key.includes("TOKEN") || key.includes("SECRET"));
-      const namedHf = key.startsWith("HF") && (key.includes("KEY") || key.includes("TOKEN") || key.includes("SECRET"));
-      return namedHuggingFace || namedHf;
-    },
-    valuePrefixes: ["hf_"]
-  });
-}
-
 export function getHuggingFaceToken(): string | undefined {
-  return huggingFaceToken();
-}
-
-/* Three optional free tiers. Each is additive: absent, nothing changes;
-   present, it joins the routing pool without any further configuration. */
-
-function cerebrasApiKey(): string | undefined {
-  return firstSecret([
-    process.env.CEREBRAS_API_KEY,
-    process.env.CEREBRAS_KEY,
-    process.env.CEREBRAS_API_TOKEN
-  ]) ?? environmentSecret({
-    keyMatches: (key) => key.includes("CEREBRAS") && (key.includes("KEY") || key.includes("TOKEN")),
-    valuePrefixes: ["csk-"]
-  });
-}
-
-function openRouterApiKey(): string | undefined {
-  return firstSecret([
-    process.env.OPENROUTER_API_KEY,
-    process.env.OPEN_ROUTER_API_KEY,
-    process.env.OPENROUTER_KEY,
-    process.env.OPENROUTER_TOKEN
-  ]) ?? environmentSecret({
-    keyMatches: (key) => key.includes("OPENROUTER") && (key.includes("KEY") || key.includes("TOKEN")),
-    valuePrefixes: ["sk-or-"]
-  });
-}
-
-function mistralApiKey(): string | undefined {
-  return firstSecret([
-    process.env.MISTRAL_API_KEY,
-    process.env.MISTRAL_KEY,
-    process.env.MISTRAL_API_TOKEN
-  ]) ?? environmentSecret({
-    keyMatches: (key) => key.includes("MISTRAL") && (key.includes("KEY") || key.includes("TOKEN")),
-    valuePrefixes: []
-  });
+  return providerApiKey(PROVIDERS.huggingface);
 }
 
 export function getProviderAvailability(): ProviderAvailability {
-  return {
-    /* Lane 3 is keyed on a per-request token, so availability is decided in the
-       route rather than here. Reported false so nothing else routes to it. */
-    githubmodels: false,
-    gemini: Boolean(geminiApiKey()),
-    groq: Boolean(groqApiKey()),
-    huggingface: Boolean(huggingFaceToken()),
-    cerebras: Boolean(cerebrasApiKey()),
-    openrouter: Boolean(openRouterApiKey()),
-    mistral: Boolean(mistralApiKey())
-  };
+  const availability = {} as ProviderAvailability;
+  for (const id of PROVIDER_IDS) availability[id] = Boolean(providerApiKey(PROVIDERS[id]));
+  return availability;
 }
 
 /**
@@ -181,106 +46,35 @@ export function getProviderStackStatus() {
  * a diagnostic surface can report a status without ever holding a credential.
  */
 export function providerProbes(): Array<{ provider: ProviderName; label: string; url: string; headers: Record<string, string> }> {
-  const bearer = (key: string) => ({ Authorization: `Bearer ${key}` });
   const probes: Array<{ provider: ProviderName; label: string; url: string; headers: Record<string, string> }> = [];
-  const gemini = geminiApiKey();
-  if (gemini) probes.push({ provider: "gemini", label: "Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai/models", headers: bearer(gemini) });
-  const groq = groqApiKey();
-  if (groq) probes.push({ provider: "groq", label: "Groq", url: "https://api.groq.com/openai/v1/models", headers: bearer(groq) });
-  const hf = huggingFaceToken();
-  if (hf) probes.push({ provider: "huggingface", label: "Hugging Face", url: "https://router.huggingface.co/v1/models", headers: bearer(hf) });
-  const cerebras = cerebrasApiKey();
-  if (cerebras) probes.push({ provider: "cerebras", label: "Cerebras", url: "https://api.cerebras.ai/v1/models", headers: bearer(cerebras) });
-  const openrouter = openRouterApiKey();
-  if (openrouter) probes.push({ provider: "openrouter", label: "OpenRouter", url: "https://openrouter.ai/api/v1/models", headers: bearer(openrouter) });
-  const mistral = mistralApiKey();
-  if (mistral) probes.push({ provider: "mistral", label: "Mistral", url: "https://api.mistral.ai/v1/models", headers: bearer(mistral) });
+  for (const id of PROVIDER_IDS) {
+    const adapter = PROVIDERS[id];
+    const key = providerApiKey(adapter);
+    if (!key) continue;
+    probes.push({ provider: id, label: adapter.label, url: adapter.modelsUrl, headers: { Authorization: `Bearer ${key}` } });
+  }
   return probes;
 }
 
-export function createProviderModel(route: ProviderRoute, origin: string, githubToken?: string): any {
-  if (route.provider === "githubmodels") {
-    /* Lane 3 authenticates as the *user*, not the install, so the token
-       arrives from the request scope rather than from process.env. */
-    if (!githubToken) throw new Error("GitHub Models needs a GitHub token.");
-    return createGithubModelsProvider(githubToken, origin).chatModel(route.model);
-  }
+/**
+ * One factory for every provider, because every provider speaks the same
+ * protocol. What differs is a base URL, a credential, and sometimes an
+ * attribution header — all three of which are rows in the registry.
+ */
+export function createProviderModel(route: ProviderRoute, origin: string): any {
+  const adapter: ProviderAdapter = PROVIDERS[route.provider];
+  const apiKey = providerApiKey(adapter);
+  /* Names the provider on purpose: this is a server log and a developer's
+     first clue, and the chat route maps every failure to a generic message
+     before it can reach anyone. */
+  if (!apiKey) throw new Error(`A ${adapter.label} API credential is not configured.`);
 
-  if (route.provider === "gemini") {
-    const apiKey = geminiApiKey();
-    if (!apiKey) throw new Error("A Gemini API credential is not configured.");
-    const provider = createOpenAICompatible({
-      name: "gemini",
-      apiKey,
-      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-      includeUsage: true
-    });
-    return provider.chatModel(route.model);
-  }
-
-  if (route.provider === "groq") {
-    const apiKey = groqApiKey();
-    if (!apiKey) throw new Error("A Groq API credential is not configured.");
-    const provider = createOpenAICompatible({
-      name: "groq",
-      apiKey,
-      baseURL: "https://api.groq.com/openai/v1",
-      includeUsage: true
-    });
-    return provider.chatModel(route.model);
-  }
-
-  /* All three optional tiers speak the OpenAI-compatible protocol, so they
-     need a base URL and a key and nothing else. */
-  if (route.provider === "cerebras") {
-    const apiKey = cerebrasApiKey();
-    if (!apiKey) throw new Error("A Cerebras API credential is not configured.");
-    const provider = createOpenAICompatible({
-      name: "cerebras",
-      apiKey,
-      baseURL: "https://api.cerebras.ai/v1",
-      includeUsage: true
-    });
-    return provider.chatModel(route.model);
-  }
-
-  if (route.provider === "openrouter") {
-    const apiKey = openRouterApiKey();
-    if (!apiKey) throw new Error("An OpenRouter API credential is not configured.");
-    const provider = createOpenAICompatible({
-      name: "openrouter",
-      apiKey,
-      baseURL: "https://openrouter.ai/api/v1",
-      includeUsage: true,
-      // OpenRouter attributes free-tier usage by referer and title.
-      headers: { "HTTP-Referer": origin, "X-Title": "NaviOS" }
-    });
-    return provider.chatModel(route.model);
-  }
-
-  if (route.provider === "mistral") {
-    const apiKey = mistralApiKey();
-    if (!apiKey) throw new Error("A Mistral API credential is not configured.");
-    const provider = createOpenAICompatible({
-      name: "mistral",
-      apiKey,
-      baseURL: "https://api.mistral.ai/v1",
-      includeUsage: true
-    });
-    return provider.chatModel(route.model);
-  }
-
-  const apiKey = huggingFaceToken();
-  if (!apiKey) throw new Error("A Hugging Face API credential is not configured.");
   const provider = createOpenAICompatible({
-    name: "huggingface",
+    name: adapter.id,
     apiKey,
-    baseURL: "https://router.huggingface.co/v1",
+    baseURL: adapter.baseURL,
     includeUsage: true,
-    headers: {
-      "HTTP-Referer": origin,
-      "X-Title": "Navi"
-    }
+    ...(adapter.headers ? { headers: adapter.headers(origin) } : {})
   });
   return provider.chatModel(route.model);
 }
@@ -356,6 +150,26 @@ export const ROUTES = {
     label: "OpenRouter coding",
     capability: "coding"
   },
+  /**
+   * The metered quality lane.
+   *
+   * The provider's `deepseek-chat` and `deepseek-reasoner` aliases are
+   * deprecated and point at whatever the vendor decides they point at, which is
+   * exactly how a model id turns into a surprise. These name the model
+   * explicitly, and an operator can still repoint them without a deploy.
+   */
+  deepseekFlash: {
+    provider: "deepseek",
+    model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
+    label: "NaviSoul quality",
+    capability: "reasoning"
+  },
+  deepseekPro: {
+    provider: "deepseek",
+    model: process.env.DEEPSEEK_PRO_MODEL ?? "deepseek-v4-pro",
+    label: "NaviSoul quality",
+    capability: "reasoning"
+  },
   mistralBalanced: {
     provider: "mistral",
     model: process.env.MISTRAL_MODEL ?? "mistral-large-latest",
@@ -382,14 +196,6 @@ export const ROUTES = {
 } satisfies Record<string, ProviderRoute>;
 
 /**
- * These providers handle tool calling reliably. The Hugging Face router fronts
- * many open models, plenty of which reject a tools parameter outright, so
- * sending one there would break routes that work today — it is the one
- * provider deliberately left out.
- */
-const TOOL_CAPABLE_PROVIDERS: ProviderName[] = ["githubmodels", "gemini", "groq", "cerebras", "openrouter", "mistral"];
-
-/**
  * Models that reject a `tools` parameter even though their provider accepts
  * one. Groq's compound systems are agentic in their own right — they search
  * and run code internally — and answer an incoming tools array with a hard
@@ -401,7 +207,8 @@ const TOOL_CAPABLE_PROVIDERS: ProviderName[] = ["githubmodels", "gemini", "groq"
 const TOOL_INCAPABLE_MODELS = [/^groq\/compound/i];
 
 export function routeToolCallingSupport(route: ProviderRoute): ToolCallingSupport {
-  if (!TOOL_CAPABLE_PROVIDERS.includes(route.provider)) return "none";
+  /* The provider sets the ceiling; the model still has the final say. */
+  if (!PROVIDERS[route.provider].supportsTools) return "none";
   if (TOOL_INCAPABLE_MODELS.some((pattern) => pattern.test(route.model))) return "none";
   return "custom";
 }
@@ -412,7 +219,7 @@ function configuredHfRoutes(): ProviderRoute[] {
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, 24)
-    .map((model, index) => hf(model, `NaviSol · analysis ${index + 1}`, "balanced"));
+    .map((model, index) => hf(model, `NaviSoul · analysis ${index + 1}`, "balanced"));
   if (custom?.length) return custom;
 
   /* Capability-ordered so a council of any size still spans reasoning,
@@ -481,6 +288,80 @@ export function selectLane(options: {
   if (mode === "code") return complex ? 3 : 4;
   if (effort === "low") return 1;
   return complex ? 3 : 2;
+}
+
+/**
+ * The route a lane resolves to, or null when nothing configured can serve it.
+ *
+ * Null is the useful answer here: the caller falls back to the general route
+ * selector, so a lane with no provider degrades to the old behaviour instead of
+ * failing. Lanes describe *intent* — how much engine this request deserves —
+ * and the general selector remains the authority on hard constraints like
+ * attachments, pinned diagnostic routes, and tool support.
+ *
+ * Lane 0 (the local skills) never reaches here: it is answered on-device with
+ * no model and no network, which is the whole point of it.
+ */
+export function routeForLane(options: {
+  lane: Lane;
+  availability: ProviderAvailability;
+  tools: ToolPolicy;
+  hasFiles: boolean;
+  /** The best free coding model discovery found, if the cache was warm. */
+  discovered?: ProviderRoute | null;
+  /**
+   * Whether the metered lane may spend right now. Resolved by the caller from
+   * the spend ledger, because this function is synchronous and reading a
+   * budget is not — and because a routing table is the wrong place to decide
+   * whether the account can afford something.
+   */
+  meteredAllowed?: boolean;
+}): ProviderRoute | null {
+  const { lane, availability, tools, hasFiles, discovered, meteredAllowed } = options;
+
+  /* A request that needs tools needs a model that accepts them, whatever the
+     lane would have preferred. Capability beats tier. */
+  if (tools.web || tools.code) {
+    if (availability.groq) return ROUTES.groqTools;
+    if (availability.gemini) return ROUTES.geminiSynthesis;
+    if (availability.cerebras) return ROUTES.cerebrasLarge;
+  }
+
+  if (hasFiles) return availability.gemini ? ROUTES.geminiVision : availability.huggingface ? ROUTES.hfQwen : null;
+
+  if (lane === 1) {
+    if (availability.groq) return ROUTES.groqFast;
+    if (availability.cerebras) return ROUTES.cerebrasFast;
+    return null;
+  }
+
+  if (lane === 2) {
+    if (availability.gemini) return ROUTES.geminiSynthesis;
+    if (availability.mistral) return ROUTES.mistralBalanced;
+    return null;
+  }
+
+  /* Lane 3 is the only lane that may spend, and only when the ledger says so.
+     When the budget is exhausted it falls through to the free routes below
+     without a word — the user asked for a good answer, not for a lecture about
+     billing, and the free routes still give them one. */
+  if (lane === 3) {
+    if (availability.deepseek && meteredAllowed) return ROUTES.deepseekFlash;
+    if (availability.cerebras) return ROUTES.cerebrasLarge;
+    if (availability.openrouter) return ROUTES.openRouterReasoning;
+    if (availability.huggingface) return ROUTES.hfGptOss;
+    if (availability.groq) return ROUTES.groqReasoning;
+    return null;
+  }
+
+  /* Lane 4 is the one discovery serves: whole-repository reads want the best
+     free coding model currently offered, not the best one offered whenever
+     this list was last edited. */
+  if (discovered && availability.openrouter) return discovered;
+  if (availability.openrouter) return ROUTES.openRouterCoding;
+  if (availability.huggingface) return ROUTES.hfKimi;
+  if (availability.cerebras) return ROUTES.cerebrasLarge;
+  return null;
 }
 
 export function selectDirectRoute(options: {

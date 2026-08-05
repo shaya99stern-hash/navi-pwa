@@ -17,12 +17,14 @@ export function GET() {
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: 56 }}>
           <div style={{ fontFamily: "Georgia", fontSize: 56, lineHeight: 1.05, color: "#211914" }}>Work across models, files, and tools.</div>
-          <div style={{ marginTop: 22, maxWidth: 760, fontSize: 24, lineHeight: 1.45, color: "#5D5148" }}>Navi combines private multi-provider reasoning with image generation, file analysis, and secure interactive artifacts.</div>
+          <div style={{ marginTop: 22, maxWidth: 760, fontSize: 24, lineHeight: 1.45, color: "#5D5148" }}>NaviOS combines private reasoning with image generation, file analysis, and secure interactive artifacts.</div>
           <div style={{ display: "flex", gap: 22, marginTop: 48 }}>
+            {/* Two modes, no model names and no provider names — an install
+                screenshot is a user-visible surface like any other. */}
             {[
-              ["Navi 5", "64-role long-horizon swarm"],
-              ["Navi Sol 5.6", "96-role flagship reasoning"],
-              ["3-provider stack", "Gemini · Groq · Hugging Face"]
+              ["Chat mode", "Everyday thinking, writing, and answers"],
+              ["Code mode", "Repositories, builds, and deployments"],
+              ["Private by default", "History stays on your device"]
             ].map(([title, detail]) => (
               <div key={title} style={{ flex: 1, minHeight: 190, display: "flex", flexDirection: "column", justifyContent: "space-between", padding: 28, borderRadius: 28, background: "#FFFDFC", border: "2px solid rgba(33,25,20,.08)" }}>
                 <div style={{ fontSize: 25, fontWeight: 700, color: "#211914" }}>{title}</div>
@@ -30,7 +32,7 @@ export function GET() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop: "auto", minHeight: 92, display: "flex", alignItems: "center", padding: "18px 26px", borderRadius: 32, background: "#FFFDFC", border: "2px solid rgba(33,25,20,.14)", color: "#80736A", fontSize: 23 }}>Message Navi</div>
+          <div style={{ marginTop: "auto", minHeight: 92, display: "flex", alignItems: "center", padding: "18px 26px", borderRadius: 32, background: "#FFFDFC", border: "2px solid rgba(33,25,20,.14)", color: "#80736A", fontSize: 23 }}>Message NaviSoul</div>
         </div>
       </div>
     </div>,

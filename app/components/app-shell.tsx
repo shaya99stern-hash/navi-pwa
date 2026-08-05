@@ -1,7 +1,9 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
+import { describeResult, runInSandbox } from "@/lib/execution/sandbox";
+import { MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type FileUIPart, type UIMessage } from "ai";
 import { ChevronDown, Ellipsis, FolderKanban, Ghost, Link2, PanelLeft, Search, SquarePen, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -11,7 +13,7 @@ import {
   useRef,
   useState
 } from "react";
-import type { AttachmentMeta, MenuSection, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
+import type { AttachmentMeta, MenuSection, NaviMode, NaviPreferences, NaviProject, NaviStreamStatus, StoredChat } from "@/lib/ai/types";
 import {
   ATTACHMENT_BUDGET,
   MAX_ATTACHMENTS,
@@ -87,7 +89,7 @@ function compactSummary(messages: UIMessage[]): string {
   if (messages.length <= 14) return "";
   const lines = messages
     .slice(0, -12)
-    .map((message) => `${message.role === "user" ? "User" : "Navi"}: ${messageText(message).slice(0, 700)}`)
+    .map((message) => `${message.role === "user" ? "User" : "NaviSoul"}: ${messageText(message).slice(0, 700)}`)
     .filter((line) => !line.endsWith(": "));
   if (!lines.length) return "";
 
@@ -125,6 +127,17 @@ function stopSpeaking() {
 
 /** Which layer a deep link should open over the chat, rather than navigating. */
 export type InitialSheet = "history" | "projects" | "artifacts" | "connectors" | "settings" | "customize";
+
+/**
+ * What the app is called right now.
+ *
+ * The mode is the product, so it holds the header's dominant line in every
+ * state rather than riding along as a pill beside the chat title. A pill is
+ * read as decoration and was being missed; the name is read as the name.
+ */
+function modeTitle(mode: NaviMode) {
+  return mode === "code" ? "NaviOS Code" : "NaviOS Chat";
+}
 
 export function AppShell({
   initialChatId,
@@ -184,6 +197,10 @@ export function AppShell({
   const edgeSwipe = useEdgeSwipe({ disabled: historyOpen, haptics: preferences.haptics, onOpen: openHistory });
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
+  /* Counted per user turn, not per conversation: three attempts at this
+     problem, then three fresh ones at the next. Reset on send below. */
+  const repairRounds = useRef(0);
+
   const {
     messages,
     sendMessage,
@@ -192,10 +209,42 @@ export function AppShell({
     status,
     error,
     clearError,
-    setMessages
+    setMessages,
+    addToolResult
   } = useChat({
     transport,
     experimental_throttle: 32,
+    /* Submit the tool result and let the model continue on its own. Without
+       this the run happens, the result sits there, and the conversation stops
+       one step short of the model ever reading its own error. */
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    onToolCall: async ({ toolCall }) => {
+      if (toolCall.toolName !== "run_javascript") return;
+      const input = toolCall.input as { code?: string };
+      const code = typeof input?.code === "string" ? input.code : "";
+
+      if (!code.trim()) {
+        addToolResult({ tool: "run_javascript", toolCallId: toolCall.toolCallId, output: "No code was supplied to run." });
+        return;
+      }
+
+      /* The cap lives here because this is the only place that can count. The
+         model is asked to stop after three attempts and mostly will; a model
+         that does not would otherwise loop on the device until the request
+         budget ran out. */
+      repairRounds.current += 1;
+      if (repairRounds.current > MAX_REPAIR_ROUNDS) {
+        addToolResult({
+          tool: "run_javascript",
+          toolCallId: toolCall.toolCallId,
+          output: `This code has already been run ${MAX_REPAIR_ROUNDS} times without succeeding. Stop repairing it. Present your best attempt and state plainly what is still failing.`
+        });
+        return;
+      }
+
+      const result = await runInSandbox(code);
+      addToolResult({ tool: "run_javascript", toolCallId: toolCall.toolCallId, output: describeResult(result) });
+    },
     onData: (part) => {
       if (part.type === "data-status") setStreamStatus(part.data as NaviStreamStatus);
     },
@@ -205,7 +254,9 @@ export function AppShell({
         return;
       }
       if (isError) {
-        setStreamStatus({ stage: "error", detail: "Navi could not finish the response." });
+        /* The stream renders its own error card, so a second status line is a
+           duplicate of the same failure. Clear it instead. */
+        setStreamStatus(null);
         return;
       }
       setStreamStatus({ stage: "complete", detail: "Response complete." });
@@ -216,7 +267,7 @@ export function AppShell({
         && "Notification" in window && Notification.permission === "granted") {
         void navigator.serviceWorker?.getRegistration("/")
           .then((registration) => registration?.showNotification("NaviOS", {
-            body: "Navi has finished a response.",
+            body: "NaviSoul has finished a response.",
             icon: "/pwa-icon-192-v5.png",
             badge: "/pwa-icon-192-v5.png",
             tag: "navi-response-complete"
@@ -225,8 +276,8 @@ export function AppShell({
       }
     },
     onError: (chatError) => {
-      console.error("Navi chat error:", chatError);
-      setStreamStatus({ stage: "error", detail: chatError.message || "Navi could not finish the response." });
+      console.error("NaviSoul chat error:", chatError);
+      setStreamStatus(null);
       haptic("error", preferences.haptics);
     }
   });
@@ -240,7 +291,7 @@ export function AppShell({
   const activeMode = NAVI_MODES.find((item) => item.id === preferences.mode) ?? NAVI_MODES[0];
   const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
-  const statusText = streamStatus?.detail ?? (generating ? "NaviSol is working" : preferences.mode === "code" ? activeMode.label : "");
+  const statusText = streamStatus?.detail ?? (generating ? "NaviSoul is working" : preferences.mode === "code" ? activeMode.label : "");
 
   /* Recall runs against the question being asked, so it is computed at send
      time rather than folded into the memoised body. */
@@ -307,7 +358,7 @@ export function AppShell({
           setMessages([]);
         }
       })
-      .catch((storageError) => console.error("Navi local-state restore failed:", storageError))
+      .catch((storageError) => console.error("NaviOS local-state restore failed:", storageError))
       .finally(() => {
         if (!cancelled) setHydrated(true);
       });
@@ -590,13 +641,13 @@ export function AppShell({
   async function shareActiveChat() {
     const current = chats.find((chat) => chat.id === activeId);
     const transcript = messages
-      .map((message) => `${message.role === "user" ? "You" : "Navi"}: ${messageText(message)}`)
+      .map((message) => `${message.role === "user" ? "You" : "NaviSoul"}: ${messageText(message)}`)
       .filter((line) => !line.endsWith(": "))
       .join("\n\n");
     if (!transcript) return;
     if (navigator.share) {
       try {
-        await navigator.share({ title: current?.title ?? "Navi chat", text: transcript });
+        await navigator.share({ title: current?.title ?? "NaviOS chat", text: transcript });
       } catch {
         // Cancelled by the user.
       }
@@ -729,6 +780,7 @@ export function AppShell({
             : current;
         });
       }
+      repairRounds.current = 0;
       await sendMessage({ text, files }, { body: requestBody(text) });
     } catch (submitError) {
       setAttachmentError(submitError instanceof Error ? submitError.message : "Could not prepare attachments.");
@@ -749,6 +801,7 @@ export function AppShell({
     priorAssistantId.current = latestAssistant?.id ?? null;
     setSpeakNextReply(speakReply);
     try {
+      repairRounds.current = 0;
       await sendMessage({ text: text.trim() }, { body: requestBody(text) });
     } catch (voiceError) {
       setSpeakNextReply(false);
@@ -882,12 +935,18 @@ export function AppShell({
         >
           <PanelLeft size={21} strokeWidth={1.8} />
         </button>
+        {/* The mode holds the top line in every state. What the chat is called
+            moves underneath it: a title is worth reading, but which product you
+            are talking to is worth reading first, and it was previously a pill
+            small enough to scan past. */}
         <div className="min-w-0 flex-1 text-center">
           {messages.length === 0 && !activeChat ? (
-            <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">NaviOS</div>
+            <div className="font-display truncate text-[1.1875rem]/6 tracking-[-0.01em] text-primary">
+              {modeTitle(preferences.mode)}
+            </div>
           ) : (
-            /* The title is the chat's own menu: star, rename, share, delete.
-               The chevron is the affordance that says so. */
+            /* Still the chat's own menu: star, rename, share, delete. The
+               chevron is the affordance that says so. */
             <button
               type="button"
               onClick={() => { haptic("selection", preferences.haptics); setChatMenuOpen(true); }}
@@ -896,10 +955,10 @@ export function AppShell({
               aria-haspopup="menu"
             >
               <span className="min-w-0">
-                <span className="block truncate text-[1rem]/5 font-medium tracking-[-0.01em] text-primary">{activeChat?.title ?? "New chat"}</span>
-                {activeProject ? (
-                  <span className="block truncate text-[0.6875rem]/[0.875rem] font-medium text-tertiary">{activeProject.name}</span>
-                ) : null}
+                <span className="block truncate text-[1rem]/5 font-semibold tracking-[-0.01em] text-primary">{modeTitle(preferences.mode)}</span>
+                <span className="block truncate text-[0.6875rem]/[0.875rem] font-medium text-tertiary">
+                  {activeProject ? `${activeProject.name} · ` : ""}{activeChat?.title ?? "New chat"}
+                </span>
               </span>
               <ChevronDown size={14} className="shrink-0 text-tertiary" />
             </button>
@@ -947,7 +1006,7 @@ export function AppShell({
       ) : preferences.tools.web ? (
         <div className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[0.6875rem]/4 font-semibold text-accent" role="status">
           <Search size={14} />
-          Research mode on · Navi will use available web or connected sources
+          Research mode on · NaviSoul will use available web or connected sources
         </div>
       ) : preferences.connectedMcpServers.length ? (
         <button type="button" onClick={() => setConnectorsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-[var(--border-subtle)] bg-elev-2 px-4 text-center text-[0.6875rem]/4 font-semibold text-secondary active:bg-elev-3">
@@ -989,7 +1048,7 @@ export function AppShell({
             </div>
           </div>
         ) : messages.length === 0 ? (
-          <LaunchSurface online={online}>
+          <LaunchSurface online={online} name={preferences.profile.displayName || undefined}>
             <ProviderSetupNotice haptics={preferences.haptics} />
           </LaunchSurface>
         ) : (
@@ -1020,7 +1079,7 @@ export function AppShell({
             />
             {error ? (
               <div className="mt-4 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
-                <p className="text-[0.8125rem]/[1.125rem] font-medium text-primary">{error.message || "Navi could not complete that response."}</p>
+                <p className="text-[0.8125rem]/[1.125rem] font-medium text-primary">{error.message || "That didn't go through. Tap to retry."}</p>
                 <div className="mt-3 flex gap-2">
                   <button type="button" onClick={retry} className="min-h-11 rounded-xl bg-accent px-4 text-[0.8125rem]/[1.125rem] font-semibold text-white active:bg-accent-pressed">Try again</button>
                   <button type="button" onClick={clearError} className="min-h-11 rounded-xl px-4 text-[0.8125rem]/[1.125rem] font-semibold text-secondary active:bg-elev-3">Dismiss</button>

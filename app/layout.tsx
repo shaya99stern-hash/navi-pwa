@@ -43,7 +43,7 @@ async function buildMetadata(): Promise<Metadata> {
   description: "A private, local-first AI workspace for conversations, files, images, interactive tools, and long-running projects.",
   manifest: "/manifest.webmanifest",
   alternates: { canonical: "/" },
-  keywords: ["NaviOS", "Navi", "NaviOS", "AI workspace", "AI assistant", "private AI", "PWA"],
+  keywords: ["NaviOS", "NaviSoul", "AI workspace", "AI assistant", "private AI", "PWA"],
   formatDetection: { telephone: false, address: false, email: false },
   /* iOS reads this once at launch and ignores later mutation, so it has to be
      rendered per request. black-translucent draws white glyphs, which vanish
@@ -87,6 +87,14 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  /* Chromium shrinks the layout viewport instead of overlaying the keyboard,
+     so the fixed shell lands above it with no scripting. iOS ignores this
+     today — visualViewport in ViewportMetrics covers iOS — but declaring it
+     costs nothing and fixes Android outright.
+     Deliberately no maximum-scale or user-scalable: iOS ignores both and they
+     break pinch-zoom for low-vision users. The 16px floor in globals.css is
+     the real zoom fix. */
+  interactiveWidget: "resizes-content",
   colorScheme: "dark light",
   themeColor: [
     { media: "(prefers-color-scheme: dark)", color: "#262624" },

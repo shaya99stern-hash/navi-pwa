@@ -12,24 +12,82 @@ const buildRef = (process.env.VERCEL_GIT_COMMIT_SHA ?? "").slice(0, 7);
 const builtAt = new Date().toISOString().slice(0, 10);
 const developmentEval = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
 
+/**
+ * The origins the sign-in chain actually uses, derived rather than hardcoded.
+ *
+ * A Clerk publishable key encodes its own Frontend API domain: everything after
+ * `pk_live_` / `pk_test_` is base64 of that host. Reading it here means the
+ * policy always matches the instance the app is actually configured against.
+ *
+ * That matters because getting this wrong has a distinctive failure: the sign-in
+ * button appears to do nothing, with only a CSP violation in the console. A
+ * hardcoded list is one dashboard change away from that, and nothing in the
+ * build would notice.
+ *
+ * The literals stay as a fallback so a build without the key still produces a
+ * working policy for the known deployment.
+ */
+function clerkOrigins() {
+  const known = [
+    "https://clerk.navikeep.org",
+    "https://accounts.navikeep.org",
+    // Development instances are always on this domain.
+    "https://*.clerk.accounts.dev"
+  ];
+
+  const key = (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "").trim();
+  const encoded = key.replace(/^pk_(live|test)_/, "");
+  if (!encoded || encoded === key) return known;
+
+  try {
+    const host = Buffer.from(encoded, "base64").toString("utf8").replace(/\$$/, "");
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)) return known;
+    /* The hosted account portal sits beside the Frontend API on the same root:
+       `clerk.example.com` implies `accounts.example.com`. */
+    const portal = host.replace(/^clerk\./, "accounts.");
+    return Array.from(new Set([...known, `https://${host}`, `https://${portal}`]));
+  } catch {
+    return known;
+  }
+}
+
+const clerk = clerkOrigins().join(" ");
+
+/**
+ * Where a social sign-in is allowed to hand off to.
+ *
+ * Clerk submits a form to its Frontend API, which then redirects on to the
+ * provider's own authorization page. `form-action` is enforced across that
+ * redirect, so an origin missing here does not fail loudly — the button appears
+ * to do nothing and only a CSP violation reaches the console. That is a
+ * per-provider failure: enabling a new connection in the Clerk dashboard is a
+ * change nothing in this repository can see.
+ *
+ * So the list is a list, not a literal appended each time. Adding a provider in
+ * Clerk means adding its authorization host here.
+ */
+const oauthProviders = [
+  "https://accounts.google.com",
+  "https://github.com"
+].join(" ");
+
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${developmentEval} https://clerk.navikeep.org https://*.clerk.accounts.dev`,
+  `script-src 'self' 'unsafe-inline'${developmentEval} ${clerk}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://clerk.navikeep.org https://accounts.navikeep.org https://*.clerk.accounts.dev https://api.clerk.com",
+  `connect-src 'self' ${clerk} https://api.clerk.com`,
   "worker-src 'self' blob:",
-  "frame-src 'self' data: blob: https://clerk.navikeep.org https://accounts.navikeep.org https://*.clerk.accounts.dev https://accounts.google.com",
+  `frame-src 'self' data: blob: ${clerk} ${oauthProviders}`,
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
-  /* Signing in with a social provider submits a form to Clerk's Frontend API,
-     which then redirects on to the provider. Both hops are cross-origin, so
-     `form-action 'self'` blocked the submission outright — the button appeared
-     to do nothing, with only a CSP violation in the console to show for it.
-     Every origin in the sign-in chain has to be listed here. */
-  "form-action 'self' https://clerk.navikeep.org https://accounts.navikeep.org https://*.clerk.accounts.dev https://accounts.google.com",
+  /* Both hops of a social sign-in are cross-origin, so `form-action 'self'`
+     blocked the submission outright. Every origin in the chain — Clerk's, and
+     each provider's — has to be listed. `/api/github/oauth/start` redirects to
+     github.com too, though as a navigation rather than a form submission. */
+  `form-action 'self' ${clerk} ${oauthProviders}`,
   "upgrade-insecure-requests"
 ].join("; ");
 

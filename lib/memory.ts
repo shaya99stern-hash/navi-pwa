@@ -40,7 +40,14 @@ const STOPWORDS = new Set([
   "thanks", "thank", "ok", "okay", "yes", "yeah", "know", "think", "see", "use", "using"
 ]);
 
-function terms(text: string): string[] {
+/**
+ * Split text into the words that actually discriminate.
+ *
+ * Exported so repository retrieval scores file paths with the same tokenizer
+ * that scores past conversations. Two tokenizers would drift, and the second
+ * one would be written from memory of the first.
+ */
+export function terms(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s'-]/gu, " ")
@@ -49,7 +56,7 @@ function terms(text: string): string[] {
 }
 
 /** Rarer words say more about a topic than common ones. */
-function inverseFrequency(documents: string[][]): Map<string, number> {
+export function inverseFrequency(documents: string[][]): Map<string, number> {
   const seen = new Map<string, number>();
   for (const document of documents) {
     for (const word of new Set(document)) seen.set(word, (seen.get(word) ?? 0) + 1);
