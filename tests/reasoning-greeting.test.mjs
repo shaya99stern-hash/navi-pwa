@@ -56,7 +56,31 @@ check("both sit above the answer", body.indexOf("<PlanCard") < body.indexOf("<Ma
 /* ── The greeting addresses the user ─────────────────────────────────────── */
 
 check("the name is accepted", /name\?: string/.test(launch), true);
-check("the shell passes the display name", shell.includes("name={preferences.profile.displayName || undefined}"), true);
+
+/* ── Both were reported as visibly off-centre ────────────────────────── */
+
+/* An inline flex row centres as a block, so the spark to the left of the words
+   pushed them right of the screen's centre. */
+check("the greeting row spans the full width", /flex w-full items-center justify-center/.test(launch), true);
+check("the greeting is no longer 2rem", launch.includes("text-[2rem]/[2.375rem]"), false);
+
+/* One button sits left of the title and two or three right of it, so a flex-1
+   middle centres inside the leftover space — about half a button off. */
+check("the header title is absolutely centred", /absolute left-1\/2 top-1\/2[\s\S]{0,120}-translate-x-1\/2/.test(shell), true);
+check("it cannot overlap the buttons", /max-w-\[calc\(100%-184px\)\]/.test(shell), true);
+/* Absolute positioning lifts it out of flow, so the clusters need a spacer to
+   stay at the edges, and the title still has to be tappable. */
+check("a spacer keeps the clusters apart", shell.includes('<div className="flex-1" aria-hidden="true" />'), true);
+check("the centred title stays clickable", shell.includes("[&>*]:pointer-events-auto"), true);
+check("the shell passes the display name", shell.includes("preferences.profile.displayName || accountName"), true);
+/* Someone signed in has already told the app who they are. Making them type it
+   again to be greeted by name asks twice for the same thing — so Clerk's name
+   is the fallback, and the profile still wins when it is set. */
+check("a signed-in name is the fallback", /displayName \|\| accountName \|\| undefined/.test(shell), true);
+check("the profile still takes precedence", shell.indexOf("preferences.profile.displayName ||") < shell.indexOf("accountName || undefined"), true);
+/* Clerk loads asynchronously and the launch screen is the first thing drawn,
+   so a single read runs too early to see a user. */
+check("it waits for Clerk to load", /if \(read\(\)\) return;[\s\S]{0,200}setInterval/.test(shell), true);
 /* A name turns the line into an address, so the bare time-of-day form is the
    only one that reads correctly beside it. */
 check("a name yields the plain form", /\$\{part\}, \$\{name\}/.test(launch), true);
