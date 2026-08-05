@@ -12,15 +12,56 @@ const buildRef = (process.env.VERCEL_GIT_COMMIT_SHA ?? "").slice(0, 7);
 const builtAt = new Date().toISOString().slice(0, 10);
 const developmentEval = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
 
+/**
+ * The origins the sign-in chain actually uses, derived rather than hardcoded.
+ *
+ * A Clerk publishable key encodes its own Frontend API domain: everything after
+ * `pk_live_` / `pk_test_` is base64 of that host. Reading it here means the
+ * policy always matches the instance the app is actually configured against.
+ *
+ * That matters because getting this wrong has a distinctive failure: the sign-in
+ * button appears to do nothing, with only a CSP violation in the console. A
+ * hardcoded list is one dashboard change away from that, and nothing in the
+ * build would notice.
+ *
+ * The literals stay as a fallback so a build without the key still produces a
+ * working policy for the known deployment.
+ */
+function clerkOrigins() {
+  const known = [
+    "https://clerk.navikeep.org",
+    "https://accounts.navikeep.org",
+    // Development instances are always on this domain.
+    "https://*.clerk.accounts.dev"
+  ];
+
+  const key = (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "").trim();
+  const encoded = key.replace(/^pk_(live|test)_/, "");
+  if (!encoded || encoded === key) return known;
+
+  try {
+    const host = Buffer.from(encoded, "base64").toString("utf8").replace(/\$$/, "");
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)) return known;
+    /* The hosted account portal sits beside the Frontend API on the same root:
+       `clerk.example.com` implies `accounts.example.com`. */
+    const portal = host.replace(/^clerk\./, "accounts.");
+    return Array.from(new Set([...known, `https://${host}`, `https://${portal}`]));
+  } catch {
+    return known;
+  }
+}
+
+const clerk = clerkOrigins().join(" ");
+
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${developmentEval} https://clerk.navikeep.org https://*.clerk.accounts.dev`,
+  `script-src 'self' 'unsafe-inline'${developmentEval} ${clerk}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://clerk.navikeep.org https://accounts.navikeep.org https://*.clerk.accounts.dev https://api.clerk.com",
+  `connect-src 'self' ${clerk} https://api.clerk.com`,
   "worker-src 'self' blob:",
-  "frame-src 'self' data: blob: https://clerk.navikeep.org https://accounts.navikeep.org https://*.clerk.accounts.dev https://accounts.google.com",
+  `frame-src 'self' data: blob: ${clerk} https://accounts.google.com`,
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
@@ -29,7 +70,7 @@ const contentSecurityPolicy = [
      `form-action 'self'` blocked the submission outright — the button appeared
      to do nothing, with only a CSP violation in the console to show for it.
      Every origin in the sign-in chain has to be listed here. */
-  "form-action 'self' https://clerk.navikeep.org https://accounts.navikeep.org https://*.clerk.accounts.dev https://accounts.google.com",
+  `form-action 'self' ${clerk} https://accounts.google.com`,
   "upgrade-insecure-requests"
 ].join("; ");
 
