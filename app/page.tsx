@@ -37,7 +37,20 @@ export default function Home() {
   return (
     <main style={{ padding: "20px", maxWidth: "600px", margin: "0 auto" }}>
       <h1 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "16px" }}>Navi OS</h1>
+      <p style={{ color: "#9CA3AF", marginBottom: "16px" }}>Welcome back to your mobile command center.</p>
+      
+      {/* Your research toggle component */}
       <ResearchToggleComponent />
+
+      {/* Add back links or your other dashboard elements here */}
+      <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
+        <a 
+          href="/settings/Developer" 
+          style={{ padding: "12px", backgroundColor: "#1F2937", color: "#fff", borderRadius: "8px", textDecoration: "none", textAlign: "center", fontWeight: "600" }}
+        >
+          Open Developer Settings Engine
+        </a>
+      </div>
     </main>
   );
 }
