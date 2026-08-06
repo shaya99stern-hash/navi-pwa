@@ -1,9 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 
 export default function DeveloperSettings() {
   const [path, setPath] = useState("");
@@ -30,28 +27,36 @@ export default function DeveloperSettings() {
   };
 
   return (
-    <div className="p-4 space-y-4 max-w-md mx-auto">
-      <h2 className="text-lg font-bold">PWA Self-Update Engine</h2>
-      <Input
+    <div style={{ padding: "16px", maxWidth: "400px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "12px" }}>
+      <h2 style={{ fontSize: "18px", fontWeight: "bold" }}>PWA Self-Update Engine</h2>
+      <input
+        type="text"
         placeholder="File path (e.g., app/page.tsx)"
         value={path}
         onChange={(e) => setPath(e.target.value)}
+        style={{ padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
       />
-      <Textarea
+      <textarea
         placeholder="Paste updated code content here..."
         value={content}
         onChange={(e) => setContent(e.target.value)}
         rows={6}
+        style={{ padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
       />
-      <Input
+      <input
+        type="text"
         placeholder="Commit message"
         value={commitMessage}
         onChange={(e) => setCommitMessage(e.target.value)}
+        style={{ padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
       />
-      <Button onClick={handleDeploy} className="w-full">
+      <button 
+        onClick={handleDeploy} 
+        style={{ padding: "10px", backgroundColor: "#000", color: "#fff", borderRadius: "4px", fontWeight: "bold", cursor: "pointer" }}
+      >
         Push Update to GitHub & Vercel
-      </Button>
-      {status && <p className="text-sm mt-2">{status}</p>}
+      </button>
+      {status && <p style={{ fontSize: "14px", marginTop: "8px" }}>{status}</p>}
     </div>
   );
 }
