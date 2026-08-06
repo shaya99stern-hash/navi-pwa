@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export default function ResearchToggleComponent() {
+function ResearchToggleComponent() {
   const [isResearchMode, setIsResearchMode] = useState(false);
 
   return (
@@ -30,5 +30,14 @@ export default function ResearchToggleComponent() {
         </p>
       )}
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <main style={{ padding: "20px", maxWidth: "600px", margin: "0 auto" }}>
+      <h1 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "16px" }}>Navi OS</h1>
+      <ResearchToggleComponent />
+    </main>
   );
 }
