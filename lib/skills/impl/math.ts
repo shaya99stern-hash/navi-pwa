@@ -227,8 +227,21 @@ export const randomNumber: Executor = async (input) => {
 
   let values: number[];
   if (input.float) {
-    const picks = crypto.getRandomValues(new Uint32Array(count));
-    values = [...picks].map((n) => min + (n / 2 ** 32) * (max - min));
+    const scale = 1_000_000;
+    const stepRange = Math.floor((max - min) * scale) + 1;
+    const limit = Math.floor(2 ** 32 / stepRange) * stepRange;
+    const steps: number[] = [];
+
+    while (steps.length < count) {
+      const picks = crypto.getRandomValues(new Uint32Array(count - steps.length));
+      for (const n of picks) {
+        if (n >= limit) continue;
+        steps.push(n % stepRange);
+        if (steps.length === count) break;
+      }
+    }
+
+    values = steps.map((s) => min + s / scale);
   } else {
     const lower = Math.ceil(min);
     const upper = Math.floor(max);
