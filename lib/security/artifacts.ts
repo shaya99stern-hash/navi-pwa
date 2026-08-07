@@ -38,7 +38,7 @@ export function sanitizeSvgText(svg: string): string {
   do {
     previous = attrSanitized;
     attrSanitized = attrSanitized
-      .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/(\s)on[a-z0-9_-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+)/gi, "$1")
       .replace(/\s(?:href|xlink:href)\s*=\s*("|')\s*(?:https?:|javascript:|data:text\/html)[\s\S]*?\1/gi, "");
   } while (attrSanitized !== previous);
 
