@@ -13,9 +13,14 @@ export type PublicMcpServer = Omit<McpRegistryEntry, "authorization" | "writeToo
 
 /** Shared with the web tools: any outbound URL a model can influence needs this. */
 export function isPrivateHostname(hostname: string): boolean {
-  const lower = hostname.toLowerCase();
-  if (lower === "localhost" || lower === "::1" || lower.endsWith(".local")) return true;
-  if (/^127\./.test(lower) || /^10\./.test(lower) || /^192\.168\./.test(lower) || /^169\.254\./.test(lower)) return true;
+  const lower = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (lower === "localhost" || lower.endsWith(".localhost") || lower.endsWith(".local") || lower.endsWith(".internal")) return true;
+  // IPv6 loopback, unspecified, unique-local (fc00::/7), and link-local (fe80::/10).
+  if (lower === "::1" || lower === "::" || /^f[cd][0-9a-f]{2}:/.test(lower) || /^fe[89ab][0-9a-f]:/.test(lower)) return true;
+  // IPv4 loopback, RFC1918, link-local/metadata, unspecified, and CGNAT (100.64/10).
+  if (/^127\./.test(lower) || /^10\./.test(lower) || /^192\.168\./.test(lower) || /^169\.254\./.test(lower) || /^0\./.test(lower)) return true;
+  const cgnat = lower.match(/^100\.(\d{1,3})\./);
+  if (cgnat && Number(cgnat[1]) >= 64 && Number(cgnat[1]) <= 127) return true;
   const match = lower.match(/^172\.(\d{1,3})\./);
   return Boolean(match && Number(match[1]) >= 16 && Number(match[1]) <= 31);
 }

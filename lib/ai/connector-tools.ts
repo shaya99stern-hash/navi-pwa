@@ -25,13 +25,23 @@ function clip(text: string): string {
   return text.length > MAX_RESULT_CHARS ? `${text.slice(0, MAX_RESULT_CHARS)}\n[Truncated.]` : text;
 }
 
+/**
+ * Fetch a connector endpoint with the SSRF posture stated in one place.
+ *
+ * The URL is re-validated here — https only, no private or link-local host —
+ * even though callers build it from an already-validated base, so no future
+ * call site can skip the check. Redirects are refused outright: a public
+ * host that answers 302 toward an internal address is the classic way past
+ * a hostname guard, and no connector API needs a redirect to work.
+ */
 async function timedFetch(url: string, init: RequestInit, outer?: AbortSignal): Promise<Response> {
+  const target = assertFetchableUrl(url);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const forward = () => controller.abort();
   outer?.addEventListener("abort", forward);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(target.toString(), { ...init, redirect: "error", signal: controller.signal });
   } finally {
     clearTimeout(timer);
     outer?.removeEventListener("abort", forward);

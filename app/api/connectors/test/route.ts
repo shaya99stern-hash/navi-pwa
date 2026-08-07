@@ -49,7 +49,9 @@ export async function POST(request: Request) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(probe.url, { headers: probe.headers, cache: "no-store", signal: controller.signal });
+    /* Redirects refused for the same reason as in connector-tools: a 302
+       toward an internal address is the classic way past a hostname guard. */
+    const response = await fetch(assertFetchableUrl(probe.url).toString(), { headers: probe.headers, cache: "no-store", redirect: "error", signal: controller.signal });
     if (response.status === 401 || response.status === 403) {
       return NextResponse.json({ ok: false, error: "The endpoint answered but rejected the key. Check the credential." });
     }
