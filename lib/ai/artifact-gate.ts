@@ -1,4 +1,4 @@
-import { validateArtifactPayload } from "../security/artifacts";
+import { recoverArtifactPayload, validateArtifactPayload } from "../security/artifacts";
 
 /**
  * Hold back artifact payloads while the rest of an answer streams.
@@ -25,13 +25,26 @@ export type ArtifactGate = {
 };
 
 function validateBlock(block: string): string {
-  const inner = block.slice(FENCE.length, block.length - CLOSE.length);
+  const inner = block.slice(FENCE.length, block.length - CLOSE.length).trim();
+
+  /* Exactly right already: pass the block through byte-for-byte. */
   try {
-    const validation = validateArtifactPayload(JSON.parse(inner.trim()));
-    return validation.ok ? block : `\n> NaviSoul removed an invalid artifact payload: ${validation.error}\n`;
-  } catch {
-    return "\n> NaviSoul removed a malformed artifact payload.\n";
-  }
+    if (validateArtifactPayload(JSON.parse(inner)).ok) return block;
+  } catch { /* fall through to salvage */ }
+
+  /* Not exactly right: salvage what the model meant — sloppy JSON, aliased
+     kinds, raw markup — and re-emit it as a canonical fence. Only when there
+     is genuinely nothing renderable does the reader see a notice instead. */
+  const recovered = recoverArtifactPayload(inner);
+  if (recovered.ok) return `\`\`\`navi-artifact\n${JSON.stringify(recovered.payload)}\n\`\`\``;
+  return tolerantlyParsed(inner)
+    ? `\n> NaviSoul removed an invalid artifact payload: ${recovered.error}\n`
+    : "\n> NaviSoul removed a malformed artifact payload.\n";
+}
+
+/** Whether the fence at least contained JSON, for the honesty of the notice. */
+function tolerantlyParsed(inner: string): boolean {
+  try { JSON.parse(inner.slice(inner.indexOf("{"), inner.lastIndexOf("}") + 1)); return true; } catch { return false; }
 }
 
 export function createArtifactGate(): ArtifactGate {

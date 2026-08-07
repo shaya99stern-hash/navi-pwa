@@ -449,6 +449,7 @@ function artifactInstruction(requested: boolean): string {
   const contract = [
     "NaviOS artifacts are real interactive documents rendered in an isolated browser sandbox.",
     "Emit them as a fenced navi-artifact JSON block containing id, title, kind, html or svg, and height.",
+    "For documents, reports, and printable pages (including anything the user wants as a PDF), use kind html with a complete styled document in the html field; the viewer offers export from there.",
     "For interactive HTML, include all markup, CSS, and JavaScript inside the html field. Buttons, inputs, forms, tabs, counters, calculators, and other controls must actually work.",
     "Use inline script with addEventListener. Do not use onclick or other on* attributes because those are removed by the sanitizer.",
     "Do not use remote scripts, external stylesheets, network requests, external images, navigation, secrets, or parent-window access.",
