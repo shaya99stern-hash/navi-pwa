@@ -26,8 +26,8 @@ export function validateArtifactPayload(value: unknown): { ok: true; payload: Ar
 
 export function sanitizeSvgText(svg: string): string {
   return svg
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<foreignObject\b[^>]*>[\s\S]*?<\/foreignObject>/gi, "")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, "")
+    .replace(/<foreignObject\b[^>]*>[\s\S]*?<\/foreignObject\b[^>]*>/gi, "")
     .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
     .replace(/\s(?:href|xlink:href)\s*=\s*("|')\s*(?:https?:|javascript:|data:text\/html)[\s\S]*?\1/gi, "");
 }
