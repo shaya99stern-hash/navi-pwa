@@ -34,7 +34,13 @@ export function sanitizeSvgText(svg: string): string {
 
 export function sanitizeArtifactHtml(html: string): string {
   const inlineScripts: string[] = [];
-  const withoutExternalScripts = html.replace(/<script\b[^>]*\bsrc\s*=\s*("|')[^"']+\1[^>]*>[\s\S]*?<\/script>/gi, "");
+  const externalScriptPattern = /<script\b[^>]*\bsrc\s*=\s*("|')[^"']+\1[^>]*>[\s\S]*?<\/script>/gi;
+  let withoutExternalScripts = html;
+  let previous: string;
+  do {
+    previous = withoutExternalScripts;
+    withoutExternalScripts = withoutExternalScripts.replace(externalScriptPattern, "");
+  } while (withoutExternalScripts !== previous);
   const protectedHtml = withoutExternalScripts.replace(/<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi, (_full, script: string) => {
     const index = inlineScripts.push(script) - 1;
     return `__NAVI_INLINE_SCRIPT_${index}__`;
