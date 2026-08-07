@@ -90,9 +90,19 @@ export const passwordGenerate: Executor = async (input) => {
   let alphabet = SETS.lower + SETS.upper;
   if (input.digits !== false) alphabet += SETS.digits;
   if (input.symbols !== false) alphabet += SETS.symbols;
+  const randomIndex = (max: number) => {
+    const range = 0x100000000;
+    const limit = Math.floor(range / max) * max;
+    let value: number;
+    do {
+      value = crypto.getRandomValues(new Uint32Array(1))[0];
+    } while (value >= limit);
+    return value % max;
+  };
   const make = () => {
-    const picks = crypto.getRandomValues(new Uint32Array(length));
-    return [...picks].map((n) => alphabet[n % alphabet.length]).join("");
+    let out = "";
+    for (let i = 0; i < length; i++) out += alphabet[randomIndex(alphabet.length)];
+    return out;
   };
   const entropy = Math.round(length * Math.log2(alphabet.length));
   return ok(`${Array.from({ length: count }, make).join("\n")}\n\n— about ${entropy} bits of entropy each`);
