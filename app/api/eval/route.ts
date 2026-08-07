@@ -44,6 +44,26 @@ function grade(task: Task, answer: string): boolean {
 }
 
 /** Drain a UI message stream down to just the assistant's text. */
+function getTrustedAppOrigin(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL;
+  if (!configured) {
+    throw new Error("Missing NEXT_PUBLIC_APP_URL for eval origin.");
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(configured);
+  } catch {
+    throw new Error("Invalid NEXT_PUBLIC_APP_URL.");
+  }
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error("NEXT_PUBLIC_APP_URL must use http or https.");
+  }
+
+  return parsed.origin;
+}
+
 async function readStream(response: Response): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) return "";
@@ -147,7 +167,7 @@ export async function POST(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const withTools = url.searchParams.get("tools") !== "off";
   const preset = url.searchParams.get("preset") === "navi-code" ? "navi-code" : "navi-soul";
-  const origin = url.origin;
+  const origin = getTrustedAppOrigin();
   /* The run calls the app as itself, so it needs the caller's session — the
      chat route would otherwise refuse every task as unauthenticated. */
   const cookie = request.headers.get("cookie") ?? "";
