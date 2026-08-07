@@ -99,10 +99,10 @@ async function runSearch(query: string, signal?: AbortSignal): Promise<SearchHit
 /** Crude but dependency-free: models read prose fine, they just cannot read markup. */
 export function htmlToText(html: string): string {
   return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<script\b[\s\S]*?<\/script\b[^>]*>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style\b[^>]*>/gi, " ")
+    .replace(/<noscript\b[\s\S]*?<\/noscript\b[^>]*>/gi, " ")
+    .replace(/<!--[\s\S]*?--!?>/g, " ")
     .replace(/<\/(?:p|div|section|article|li|h[1-6]|tr)>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
