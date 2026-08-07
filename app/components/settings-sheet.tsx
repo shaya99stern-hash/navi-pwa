@@ -737,13 +737,13 @@ export function SettingsSheet({
               ) : account.signedIn ? (
                 <Row
                   label="Signed in"
-                  description={account.email || "Your account is active on this device."}
+                  description={`${account.email ? `${account.email} · ` : ""}Chats and settings sync to your private cloud memory.`}
                   control={<InlineButton onClick={() => void signOut()}>Log out</InlineButton>}
                 />
               ) : (
                 <Row
                   label="Signed out"
-                  description="Your chats stay on this device either way — an account is what lets NaviSoul answer."
+                  description="Chats stay on this device while signed out. Signing in lets NaviSoul answer and syncs your history to your private cloud memory."
                   control={<InlineButton onClick={signIn}>Sign in</InlineButton>}
                 />
               )}
@@ -786,8 +786,9 @@ export function SettingsSheet({
         {page === "privacy" ? (
           <>
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
-              NaviOS is local-first: conversations, projects, and preferences live in this browser&apos;s storage
-              and leave the device only as requests to the AI providers you have configured.
+              NaviOS is local-first: conversations, projects, and preferences live in this browser&apos;s storage,
+              and while you are signed in they also sync to your own private Supabase cloud memory, readable by
+              your account alone. Requests reach the AI providers you have configured and nowhere else.
             </p>
             <SectionHeader>What NaviSoul remembers</SectionHeader>
             <Group>

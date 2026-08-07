@@ -29,6 +29,14 @@ import {
   type StorageDurability
 } from "@/lib/storage/indexeddb";
 import { memoryBlock, recall } from "@/lib/memory";
+import {
+  mergeCloudChats,
+  pullCloudMemory,
+  pushChatDeletion,
+  queueChatPush,
+  queuePreferencesPush,
+  setCloudSyncEnabled
+} from "@/lib/memory/cloud-sync";
 import { BUILT_IN_PLAYBOOKS, playbookBlock, selectPlaybook, type Playbook } from "@/lib/playbooks";
 import { instantAnswer, parseSlashCommand, runSlash } from "@/lib/skills";
 import { haptic } from "@/lib/ui/haptics";
@@ -387,10 +395,28 @@ export function AppShell({
       .finally(() => {
         if (!cancelled) setHydrated(true);
       });
+    /* The cloud mirror arrives after local state so the UI never waits on the
+       network. Newer copy wins per chat; local-only chats always survive. */
+    void pullCloudMemory().then((cloud) => {
+      if (cancelled || !cloud) return;
+      if (cloud.chats.length) {
+        setChats((current) => {
+          const merged = sortChats(mergeCloudChats(current, cloud.chats));
+          void setLocalValue("chats", merged);
+          return merged;
+        });
+      }
+    });
     return () => {
       cancelled = true;
     };
   }, [initialChatId, initialDraft, setMessages]);
+
+  /* Sync mirrors history only when the user keeps history at all, and never
+     from an incognito conversation. */
+  useEffect(() => {
+    setCloudSyncEnabled(hydrated && !incognito && preferences.saveHistory);
+  }, [hydrated, incognito, preferences.saveHistory]);
 
   useEffect(() => {
     const apply = () => {
@@ -424,7 +450,10 @@ export function AppShell({
 
   useEffect(() => {
     if (!hydrated) return;
-    const timer = window.setTimeout(() => void setLocalValue("preferences", preferences), 180);
+    const timer = window.setTimeout(() => {
+      void setLocalValue("preferences", preferences);
+      queuePreferencesPush(preferences);
+    }, 180);
     return () => window.clearTimeout(timer);
   }, [hydrated, preferences]);
 
@@ -470,6 +499,7 @@ export function AppShell({
         };
         const next = sortChats([nextChat, ...current.filter((chat) => chat.id !== activeId)]).slice(0, MAX_CHATS);
         void setLocalValue("chats", next);
+        queueChatPush(nextChat);
         return next;
       });
     }, delay);
@@ -628,24 +658,29 @@ export function AppShell({
     router.push(`/chat/${encodeURIComponent(chat.id)}`);
   }, [clearError, generating, router, setMessages, stop]);
 
-  function mutateChats(mutator: (current: StoredChat[]) => StoredChat[]) {
+  function mutateChats(mutator: (current: StoredChat[]) => StoredChat[], syncIds: string[] = []) {
     setChats((current) => {
       const next = sortChats(mutator(current));
       void setLocalValue("chats", next);
+      for (const id of syncIds) {
+        const changed = next.find((chat) => chat.id === id);
+        if (changed) queueChatPush(changed);
+      }
       return next;
     });
   }
 
   function renameChat(id: string, title: string) {
-    mutateChats((current) => current.map((chat) => chat.id === id ? { ...chat, title } : chat));
+    mutateChats((current) => current.map((chat) => chat.id === id ? { ...chat, title } : chat), [id]);
   }
 
   function pinChat(id: string, pinned: boolean) {
-    mutateChats((current) => current.map((chat) => chat.id === id ? { ...chat, pinned } : chat));
+    mutateChats((current) => current.map((chat) => chat.id === id ? { ...chat, pinned } : chat), [id]);
   }
 
   function deleteChat(id: string) {
     mutateChats((current) => current.filter((chat) => chat.id !== id));
+    pushChatDeletion(id);
     if (activeId === id) newChat();
   }
 
