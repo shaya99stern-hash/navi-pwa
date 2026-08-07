@@ -228,6 +228,17 @@ function mergePreferences(value?: PreferenceInput): NaviPreferences {
     },
     tools: { ...DEFAULT_PREFERENCES.tools, ...(value?.tools ?? {}) },
     connectedMcpServers: Array.isArray(value?.connectedMcpServers) ? value.connectedMcpServers : [],
+    customConnectors: Array.isArray(stored?.customConnectors)
+      ? stored.customConnectors
+        .filter((entry): entry is NaviPreferences["customConnectors"][number] =>
+          Boolean(entry && typeof entry === "object"
+            && typeof entry.id === "string"
+            && typeof entry.name === "string"
+            && typeof entry.baseUrl === "string"
+            && typeof entry.apiKey === "string"
+            && ["openai", "anthropic", "supabase", "mcp"].includes(entry.kind)))
+        .slice(0, 12)
+      : [],
     connectorAccessMode: normalizeConnectorMode(value?.connectorAccessMode),
     // Old section names ("models", "system", …) no longer exist.
     lastMenuSection: MENU_SECTIONS.includes(stored?.lastMenuSection as (typeof MENU_SECTIONS)[number])

@@ -65,6 +65,7 @@ export const DEFAULT_PREFERENCES: NaviPreferences = {
   profile: { fullName: "", displayName: "", work: "", instructions: "" },
   tools: { web: false, code: false, artifacts: true },
   connectedMcpServers: [],
+  customConnectors: [],
   connectorAccessMode: "ask",
   lastMenuSection: "general"
 };

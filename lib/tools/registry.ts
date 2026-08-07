@@ -3,10 +3,11 @@ import { buildDevTools } from "@/lib/ai/dev-tools";
 import { buildExecutionTools } from "@/lib/ai/execution-tools";
 import { buildGitHubWriteTools } from "@/lib/ai/github-write-tools";
 import { buildGoogleTools } from "@/lib/ai/google-tools";
+import { buildConnectorTools } from "@/lib/ai/connector-tools";
 import { buildLearningTools } from "@/lib/ai/learning-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
 import { buildWebTools } from "@/lib/ai/web-tools";
-import type { NaviMode, ToolPolicy } from "@/lib/ai/types";
+import type { CustomConnector, NaviMode, ToolPolicy } from "@/lib/ai/types";
 
 /**
  * One place that decides what NaviSoul can do this turn.
@@ -55,6 +56,8 @@ export type ToolsetContext = {
   onActivity?: (label: string) => void;
   /** Tools contributed by connected MCP servers, already namespaced. */
   mcpTools?: ToolSet;
+  /** Connectors the user added from the Connectors screen on this device. */
+  customConnectors?: CustomConnector[];
 };
 
 /**
@@ -97,6 +100,12 @@ const GROUPS: Group[] = [
     name: "learning",
     tools: () => ({}),
     when: ({ clerkToken, clerkUserId }) => Boolean(clerkToken && clerkUserId)
+  },
+  {
+    /* The connectors the user typed in themselves. One tool for all of them. */
+    name: "custom-connectors",
+    tools: () => ({}),
+    when: ({ customConnectors }) => Boolean(customConnectors?.some((connector) => connector.kind !== "mcp"))
   },
   {
     /* Repository and deployment reads. In both modes — "which of my repos has
@@ -176,7 +185,7 @@ export function wantsAccountTools(request: string | undefined): boolean {
  * `when` predicates be read at a glance.
  */
 export function buildToolset(context: ToolsetContext): ToolSet {
-  const { policy, mode, githubToken, googleAccessToken, githubWritesEnabled, clerkToken, clerkUserId, signal, origin, cookie, onActivity = () => {}, mcpTools = {} } = context;
+  const { policy, mode, githubToken, googleAccessToken, githubWritesEnabled, clerkToken, clerkUserId, customConnectors = [], signal, origin, cookie, onActivity = () => {}, mcpTools = {} } = context;
 
   const active = (name: string) => GROUPS.find((group) => group.name === name)?.when(context) ?? false;
 
@@ -185,6 +194,7 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity }),
     ...(active("learning") ? buildLearningTools({ clerkToken, clerkUserId, onActivity }) : {}),
+    ...(active("custom-connectors") ? buildConnectorTools({ connectors: customConnectors, signal, onActivity }) : {}),
     // Repository and deployment reads, present only when their tokens are —
     // and only when this turn is plausibly about them; see `wantsAccountTools`.
     ...(active("repository") || mode === "code" ? buildDevTools(onActivity, { githubToken }) : {}),

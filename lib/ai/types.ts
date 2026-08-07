@@ -109,8 +109,28 @@ export type NaviPreferences = {
   profile: NaviProfile;
   tools: ToolPolicy;
   connectedMcpServers: string[];
+  /** Connectors the user added themselves from the Connectors screen. */
+  customConnectors: CustomConnector[];
   connectorAccessMode: ConnectorAccessMode;
   lastMenuSection: MenuSection;
+};
+
+export type CustomConnectorKind = "openai" | "anthropic" | "supabase" | "mcp";
+
+/**
+ * A connector typed in on the device rather than configured in the deployment.
+ * It lives in preferences — on the device and, signed in, in the user's own
+ * row-level-secured cloud memory — and its key is sent per request, never
+ * stored server-side.
+ */
+export type CustomConnector = {
+  id: string;
+  kind: CustomConnectorKind;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  /** Default model for AI-API kinds; ignored by the rest. */
+  model?: string;
 };
 
 export type MenuSection =

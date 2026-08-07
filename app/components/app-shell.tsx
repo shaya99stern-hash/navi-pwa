@@ -348,6 +348,7 @@ export function AppShell({
     playbook: question ? playbookBlock(selectPlaybook(question, playbooks)) : "",
     threadSummary: activeChat?.summary ?? compactSummary(messages),
     connectedMcpServers: preferences.connectedMcpServers,
+    customConnectors: preferences.customConnectors,
     connectorAccessMode: activeChat?.connectorAccessMode ?? preferences.connectorAccessMode,
     // Standing profile: name, work, and the user's own instructions travel
     // with every request so each chat starts already knowing them.

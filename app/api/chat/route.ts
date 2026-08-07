@@ -38,7 +38,7 @@ import {
   shouldConsultArchitect,
   type ExecutionPlan
 } from "@/lib/ai/architect";
-import type { ConnectorAccessMode, EffortLevel, ModelPreset, NaviMode, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
+import type { ConnectorAccessMode, CustomConnector, EffortLevel, ModelPreset, NaviMode, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
 import { APP_KNOWLEDGE } from "@/lib/ai/app-knowledge";
@@ -99,6 +99,7 @@ type ChatRequestBody = {
   remember?: boolean;
   playbook?: string;
   connectedMcpServers?: string[];
+  customConnectors?: unknown;
   connectorAccessMode?: unknown;
   projectContext?: unknown;
   userContext?: unknown;
@@ -186,6 +187,22 @@ function normalizePreset(value: unknown): ModelPreset {
 
 function normalizeConnectorAccessMode(value: unknown): ConnectorAccessMode {
   return value === "auto" || value === "always" ? value : "ask";
+}
+
+/** Connectors typed in on the device. Anything malformed is dropped, not fixed. */
+function parseCustomConnectors(value: unknown): CustomConnector[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is CustomConnector => {
+      if (!entry || typeof entry !== "object") return false;
+      const connector = entry as Partial<CustomConnector>;
+      return typeof connector.id === "string"
+        && typeof connector.name === "string" && connector.name.trim().length > 0 && connector.name.length <= 60
+        && typeof connector.baseUrl === "string" && connector.baseUrl.startsWith("https://")
+        && typeof connector.apiKey === "string" && connector.apiKey.length > 0 && connector.apiKey.length <= 500
+        && (connector.kind === "openai" || connector.kind === "anthropic" || connector.kind === "supabase" || connector.kind === "mcp");
+    })
+    .slice(0, 12);
 }
 
 function projectContextSummary(value: unknown): string {
@@ -992,6 +1009,9 @@ export async function POST(request: Request): Promise<Response> {
         /* Lets learn_skill exist when there is a signed-in person to learn for. */
         clerkToken: mayRemember ? clerkToken : undefined,
         clerkUserId: mayRemember ? clerkUserId ?? undefined : undefined,
+        /* Connectors the user typed in on the device. Access mode governs them
+           exactly as it governs registry MCP servers. */
+        customConnectors: connectorAccessMode === "ask" ? [] : parseCustomConnectors(body.customConnectors),
         signal: request.signal,
         /* Python runs on a Node route because the sandbox SDK cannot run on
            Edge. The origin lets the tool reach it; the cookie makes sure that
