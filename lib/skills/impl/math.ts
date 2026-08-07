@@ -224,10 +224,29 @@ export const randomNumber: Executor = async (input) => {
   const max = Number.isFinite(Number(input.max)) ? Number(input.max) : 100;
   const count = Math.min(1000, Math.max(1, Number(input.count) || 1));
   if (min > max) return fail("`min` must not exceed `max`.");
-  const picks = crypto.getRandomValues(new Uint32Array(count));
-  const values = [...picks].map((n) => input.float
-    ? min + (n / 2 ** 32) * (max - min)
-    : min + (n % (Math.floor(max) - Math.ceil(min) + 1)));
+
+  let values: number[];
+  if (input.float) {
+    const picks = crypto.getRandomValues(new Uint32Array(count));
+    values = [...picks].map((n) => min + (n / 2 ** 32) * (max - min));
+  } else {
+    const lower = Math.ceil(min);
+    const upper = Math.floor(max);
+    const range = upper - lower + 1;
+    const limit = Math.floor(2 ** 32 / range) * range;
+    const ints: number[] = [];
+
+    while (ints.length < count) {
+      const picks = crypto.getRandomValues(new Uint32Array(count - ints.length));
+      for (const n of picks) {
+        if (n >= limit) continue;
+        ints.push(lower + (n % range));
+        if (ints.length === count) break;
+      }
+    }
+    values = ints;
+  }
+
   return ok(values.map((v) => (input.float ? Math.round(v * 1e6) / 1e6 : v)).join(", "));
 };
 
