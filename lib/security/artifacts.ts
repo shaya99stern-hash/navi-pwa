@@ -59,12 +59,17 @@ export function sanitizeArtifactHtml(html: string): string {
     return `__NAVI_INLINE_SCRIPT_${index}__`;
   });
 
-  const sanitizedMarkup = protectedHtml
-    .replace(/<\/?(?:iframe|object|embed|base|link)\b[^>]*>/gi, "")
-    .replace(/<meta\b[^>]*http-equiv\s*=\s*("|')?refresh\1?[^>]*>/gi, "")
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-    .replace(/\s(?:action|formaction|target)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-    .replace(/\s(?:href|src)\s*=\s*("|')\s*(?:https?:|javascript:|data:text\/html)[\s\S]*?\1/gi, "");
+  let sanitizedMarkup = protectedHtml;
+  let markupPrevious: string;
+  do {
+    markupPrevious = sanitizedMarkup;
+    sanitizedMarkup = sanitizedMarkup
+      .replace(/<\/?(?:iframe|object|embed|base|link)\b[^>]*>/gi, "")
+      .replace(/<meta\b[^>]*http-equiv\s*=\s*("|')?refresh\1?[^>]*>/gi, "")
+      .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/\s(?:action|formaction|target)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/\s(?:href|src)\s*=\s*("|')\s*(?:https?:|javascript:|data:text\/html)[\s\S]*?\1/gi, "");
+  } while (sanitizedMarkup !== markupPrevious);
 
   return sanitizedMarkup.replace(/__NAVI_INLINE_SCRIPT_(\d+)__/g, (_token, rawIndex: string) => {
     const script = inlineScripts[Number(rawIndex)] ?? "";
