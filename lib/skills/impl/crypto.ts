@@ -45,9 +45,24 @@ const NANO_ALPHABET = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqv
 export const nanoId: Executor = async (input) => {
   const size = Math.min(64, Math.max(4, Number(input.size) || 21));
   const count = Math.min(100, Math.max(1, Number(input.count) || 1));
-  const ids = Array.from({ length: count }, () =>
-    [...crypto.getRandomValues(new Uint8Array(size))]
-      .map((b) => NANO_ALPHABET[b % NANO_ALPHABET.length]).join(""));
+  const alphabetLen = NANO_ALPHABET.length;
+  const mask = (2 << Math.floor(Math.log2(alphabetLen - 1))) - 1;
+  const step = Math.ceil((1.6 * mask * size) / alphabetLen);
+  const makeId = () => {
+    let id = "";
+    while (id.length < size) {
+      const bytes = crypto.getRandomValues(new Uint8Array(step));
+      for (const byte of bytes) {
+        const index = byte & mask;
+        if (index < alphabetLen) {
+          id += NANO_ALPHABET[index];
+          if (id.length === size) break;
+        }
+      }
+    }
+    return id;
+  };
+  const ids = Array.from({ length: count }, () => makeId());
   return ok(ids.join("\n"));
 };
 
