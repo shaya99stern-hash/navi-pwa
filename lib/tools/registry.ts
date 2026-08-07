@@ -3,6 +3,7 @@ import { buildDevTools } from "@/lib/ai/dev-tools";
 import { buildExecutionTools } from "@/lib/ai/execution-tools";
 import { buildGitHubWriteTools } from "@/lib/ai/github-write-tools";
 import { buildGoogleTools } from "@/lib/ai/google-tools";
+import { buildLearningTools } from "@/lib/ai/learning-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
 import { buildWebTools } from "@/lib/ai/web-tools";
 import type { NaviMode, ToolPolicy } from "@/lib/ai/types";
@@ -42,6 +43,9 @@ export type ToolsetContext = {
   request?: string;
   /** Server-side writes are separately gated; see `github-write-tools`. */
   githubWritesEnabled?: boolean;
+  /** The caller's Clerk session, which is what learned-skill storage keys on. */
+  clerkToken?: string;
+  clerkUserId?: string;
   signal: AbortSignal;
   /** This deployment's own origin, so a tool can reach a sibling route. */
   origin?: string;
@@ -86,6 +90,13 @@ const GROUPS: Group[] = [
     name: "web",
     tools: () => ({}),
     when: () => true
+  },
+  {
+    /* Permanent learning. Only when signed in and storage is configured, so
+       the model is never offered a promise it cannot keep. */
+    name: "learning",
+    tools: () => ({}),
+    when: ({ clerkToken, clerkUserId }) => Boolean(clerkToken && clerkUserId)
   },
   {
     /* Repository and deployment reads. In both modes — "which of my repos has
@@ -165,7 +176,7 @@ export function wantsAccountTools(request: string | undefined): boolean {
  * `when` predicates be read at a glance.
  */
 export function buildToolset(context: ToolsetContext): ToolSet {
-  const { policy, mode, githubToken, googleAccessToken, githubWritesEnabled, signal, origin, cookie, onActivity = () => {}, mcpTools = {} } = context;
+  const { policy, mode, githubToken, googleAccessToken, githubWritesEnabled, clerkToken, clerkUserId, signal, origin, cookie, onActivity = () => {}, mcpTools = {} } = context;
 
   const active = (name: string) => GROUPS.find((group) => group.name === name)?.when(context) ?? false;
 
@@ -173,6 +184,7 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...buildSkillTools(onActivity),
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity }),
+    ...(active("learning") ? buildLearningTools({ clerkToken, clerkUserId, onActivity }) : {}),
     // Repository and deployment reads, present only when their tokens are —
     // and only when this turn is plausibly about them; see `wantsAccountTools`.
     ...(active("repository") || mode === "code" ? buildDevTools(onActivity, { githubToken }) : {}),

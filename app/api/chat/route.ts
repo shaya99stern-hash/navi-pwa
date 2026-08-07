@@ -22,6 +22,7 @@ import { readUntilCommitted } from "@/lib/ai/lane-commit";
 import { githubWritesEnabled, readGithubToken } from "@/lib/github/oauth";
 import { googleAccessToken } from "@/lib/google/oauth";
 import { factsBlock, factsConfigured, listFacts, rememberFact } from "@/lib/memory/facts";
+import { learnedSkillsBlock, learnedSkillsConfigured, listLearnedSkills } from "@/lib/memory/learned-skills";
 import { extractFacts, looksDurable } from "@/lib/memory/extract";
 import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
@@ -846,8 +847,14 @@ export async function POST(request: Request): Promise<Response> {
      evidence that something was once said, while a fact is a standing
      statement about the person. Read server-side because that is where the
      credential lives — the client never sees the store. */
-  const storedFacts = mayRemember && clerkToken && factsConfigured() ? await listFacts(clerkToken) : [];
+  /* Facts and learned skills are independent reads of the same store; one
+     request each, in parallel, and either failing costs only its own block. */
+  const [storedFacts, storedSkills] = await Promise.all([
+    mayRemember && clerkToken && factsConfigured() ? listFacts(clerkToken) : Promise.resolve([]),
+    mayRemember && clerkToken && learnedSkillsConfigured() ? listLearnedSkills(clerkToken) : Promise.resolve([])
+  ]);
   const rememberedBlock = factsBlock(storedFacts);
+  const skillsContext = learnedSkillsBlock(storedSkills);
   /* Told the mechanism exists, not just handed its output.
    *
    * Rendering facts alone left the model with no idea it had a memory at all:
@@ -858,11 +865,12 @@ export async function POST(request: Request): Promise<Response> {
   const memoryCapability = mayRemember && factsConfigured()
     ? [
       "You have a durable memory. Standing facts about this user — how they work, what they use, what they always want — are extracted and stored automatically, and are listed under Settings → Privacy where the user can remove any of them.",
-      "So: if asked to remember something durable, confirm plainly that you will. Never say you cannot store anything between conversations, and never claim to have saved a specific item, since the extraction happens outside this reply and you cannot see its result."
+      "So: if asked to remember something durable, confirm plainly that you will. Never say you cannot store anything between conversations, and never claim to have saved a specific item, since the extraction happens outside this reply and you cannot see its result.",
+      "The exception is skills: when the learn_skill tool is available and the user asks you to learn or keep a technique, workflow, or the contents of a link, call it — its result tells you whether the save really happened, and only then may you confirm it."
     ].join("\n")
     : "";
 
-  const memoryContext = [memoryCapability, rememberedBlock, recalledContext].filter(Boolean).join("\n\n");
+  const memoryContext = [memoryCapability, rememberedBlock, skillsContext, recalledContext].filter(Boolean).join("\n\n");
   const playbookContext = typeof body.playbook === "string" ? body.playbook.trim().slice(0, 4_500) : "";
   const threadSummary = [
     typeof body.threadSummary === "string" ? body.threadSummary.trim().slice(0, 5_000) : "",
@@ -981,6 +989,9 @@ export async function POST(request: Request): Promise<Response> {
            deployments, rather than being trimmed off the end of the cap. */
         request: lastUserText,
         githubWritesEnabled: githubWritesEnabled(),
+        /* Lets learn_skill exist when there is a signed-in person to learn for. */
+        clerkToken: mayRemember ? clerkToken : undefined,
+        clerkUserId: mayRemember ? clerkUserId ?? undefined : undefined,
         signal: request.signal,
         /* Python runs on a Node route because the sandbox SDK cannot run on
            Edge. The origin lets the tool reach it; the cookie makes sure that
