@@ -14,6 +14,7 @@ import { PROVIDERS } from "@/lib/ai/provider-registry";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { createProviderModel, fallbackRoutes, getProviderAvailability, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
+import { markProviderFailure, markProviderSuccess, orderRoutesByHealth } from "@/lib/ai/provider-health";
 import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
@@ -1220,10 +1221,13 @@ export async function POST(request: Request): Promise<Response> {
         return fitted;
       };
 
-      const attempts = [
+      /* Health-ordered: a provider that has been failing across recent
+         requests goes to the back of the line instead of charging every turn
+         its timeout. Deprioritized, never dropped. */
+      const attempts = orderRoutesByHealth([
         route,
         ...fallbackRoutes({ primary: route, availability, complex: complexRoute })
-      ];
+      ]);
       let lastFailure: unknown = null;
 
       for (const [index, attempt] of attempts.entries()) {
@@ -1281,8 +1285,10 @@ export async function POST(request: Request): Promise<Response> {
           let draft: string;
           try {
             draft = await result.text;
+            markProviderSuccess(attempt.provider);
           } catch (error) {
             /* Nothing was shown, so another provider may still answer. */
+            markProviderFailure(attempt.provider);
             lastFailure = error;
             continue;
           }
@@ -1335,15 +1341,18 @@ export async function POST(request: Request): Promise<Response> {
           const { committed, preamble, failure } = await readUntilCommitted(reader);
 
           if (!committed) {
+            markProviderFailure(attempt.provider);
             lastFailure = failure ?? new Error("The provider produced no content.");
             continue;
           }
 
+          markProviderSuccess(attempt.provider);
           reader.releaseLock();
           for (const chunk of preamble) writer.write(chunk as never);
           writer.merge(stream);
           return;
         } catch (error) {
+          markProviderFailure(attempt.provider);
           lastFailure = error;
           continue;
         }
