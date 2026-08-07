@@ -43,8 +43,18 @@ const MAX_TREE_ENTRIES = 12_000;
 const NOISE = /(^|\/)(node_modules|\.next|dist|build|out|coverage|vendor|\.git)\//i;
 const NOISE_FILE = /\.(lock|map|min\.js|min\.css|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|eot|mp[34]|zip|pdf)$/i;
 const LOCKFILE = /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb)$/i;
+const GITHUB_OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const GITHUB_REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 
 export type RepoRef = { owner: string; repo: string };
+
+function normalizeRepoRef(repo: RepoRef): RepoRef | null {
+  const owner = repo.owner.trim();
+  const normalizedRepo = repo.repo.trim().replace(/\.git$/i, "");
+  if (!GITHUB_OWNER_RE.test(owner)) return null;
+  if (!GITHUB_REPO_RE.test(normalizedRepo)) return null;
+  return { owner, repo: normalizedRepo };
+}
 
 /**
  * Which repository this request is about, if it says.
@@ -179,7 +189,7 @@ export function rankFiles(paths: string[], request: string, limit = MAX_FILES): 
 async function fetchFile(token: string, repo: RepoRef, path: string, signal: AbortSignal): Promise<string | null> {
   try {
     const response = await fetch(
-      `https://api.github.com/repos/${repo.owner}/${repo.repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
+      `https://api.github.com/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
       {
         headers: {
           Accept: "application/vnd.github.raw",
@@ -215,8 +225,10 @@ export async function retrieveFiles(options: {
   signal: AbortSignal;
 }): Promise<Retrieval | null> {
   const { token, repo, request, signal } = options;
+  const normalizedRepo = normalizeRepoRef(repo);
+  if (!normalizedRepo) return null;
 
-  const paths = await fetchTree({ token, repo, signal });
+  const paths = await fetchTree({ token, repo: normalizedRepo, signal });
   if (!paths.length) return null;
 
   const ranked = rankFiles(paths, request);
@@ -225,7 +237,7 @@ export async function retrieveFiles(options: {
   const timed = timeoutSignal(signal, FETCH_TIMEOUT_MS, "Repository file read timed out.");
   try {
     const files = await Promise.all(
-      ranked.map(async (entry) => ({ path: entry.path, content: await fetchFile(token, repo, entry.path, timed.signal) }))
+      ranked.map(async (entry) => ({ path: entry.path, content: await fetchFile(token, normalizedRepo, entry.path, timed.signal) }))
     );
     const found = files.filter((file): file is { path: string; content: string } => Boolean(file.content));
     if (!found.length) return null;
@@ -233,7 +245,7 @@ export async function retrieveFiles(options: {
     return {
       paths: found.map((file) => file.path),
       block: [
-        `## Files read from ${repo.owner}/${repo.repo}`,
+        `## Files read from ${normalizedRepo.owner}/${normalizedRepo.repo}`,
         "",
         "These are the current contents. Reason from them rather than from memory, and do not describe code that is not here.",
         "Before answering, say in one line which files you read.",
