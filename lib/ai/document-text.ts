@@ -76,7 +76,12 @@ export function csvToMarkdown(source: string): ExtractedDocument {
   const kept = rows.slice(0, MAX_CSV_ROWS);
   const truncated = rows.length > MAX_CSV_ROWS || rows.some((row) => row.length > width);
 
-  const cell = (value: string) => value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
+  const cell = (value: string) =>
+    value
+      .replace(/\\/g, "\\\\")
+      .replace(/\|/g, "\\|")
+      .replace(/\r?\n/g, " ")
+      .trim();
   const line = (row: string[]) => `| ${Array.from({ length: width }, (_, index) => cell(row[index] ?? "")).join(" | ")} |`;
 
   const body = [
