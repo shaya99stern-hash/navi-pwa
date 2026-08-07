@@ -66,7 +66,7 @@ export const globToRegex: Executor = async (input) => {
     else if (char === "{") out += "(";
     else if (char === "}") out += ")";
     else if (char === ",") out += "|";
-    else out += char.replace(/[.+^${}()|[\]\\]/, "\\$&");
+    else out += char.replace(/[.+^${}()|[\]\\]/g, "\\$&");
   }
   return ok(`^${out}$`);
 };
