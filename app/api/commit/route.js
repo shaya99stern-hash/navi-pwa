@@ -8,6 +8,26 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Missing path or content' }, { status: 400 });
     }
 
+    if (typeof path !== 'string') {
+      return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+    }
+
+    const trimmedPath = path.trim();
+    const pathSegments = trimmedPath.split('/');
+    const hasInvalidPath =
+      trimmedPath.length === 0 ||
+      trimmedPath.startsWith('/') ||
+      trimmedPath.includes('\\') ||
+      trimmedPath.includes('..') ||
+      pathSegments.some((segment) => segment.length === 0) ||
+      pathSegments.some((segment) => !/^[A-Za-z0-9._-]+$/.test(segment));
+
+    if (hasInvalidPath) {
+      return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+    }
+
+    const safePath = pathSegments.map((segment) => encodeURIComponent(segment)).join('/');
+
     const token = process.env.GITHUB_PAT;
     
     // Automatically uses your username and repo name
@@ -18,7 +38,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Server misconfiguration: GITHUB_PAT missing' }, { status: 500 });
     }
 
-    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${safePath}`;
     const encodedContent = Buffer.from(content).toString('base64');
 
     // 1. Check if the file exists to get its SHA
