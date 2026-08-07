@@ -34,9 +34,15 @@ export function sanitizeSvgText(svg: string): string {
       .replace(/<foreignObject\b[^>]*>[\s\S]*?<\/foreignObject\b[^>]*>/gi, "");
   } while (sanitized !== previous);
 
-  return sanitized
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-    .replace(/\s(?:href|xlink:href)\s*=\s*("|')\s*(?:https?:|javascript:|data:text\/html)[\s\S]*?\1/gi, "");
+  let attrSanitized = sanitized;
+  do {
+    previous = attrSanitized;
+    attrSanitized = attrSanitized
+      .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/\s(?:href|xlink:href)\s*=\s*("|')\s*(?:https?:|javascript:|data:text\/html)[\s\S]*?\1/gi, "");
+  } while (attrSanitized !== previous);
+
+  return attrSanitized;
 }
 
 export function sanitizeArtifactHtml(html: string): string {
