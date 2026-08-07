@@ -1,8 +1,9 @@
 "use client";
 
-import { AlertTriangle, Check, Link2, LoaderCircle, LockKeyhole, RefreshCw, ShieldCheck, UserRoundCheck, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Link2, LoaderCircle, LockKeyhole, Plus, RefreshCw, ShieldCheck, Trash2, UserRoundCheck, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { ConnectorAccessMode, NaviPreferences } from "@/lib/ai/types";
+import type { ConnectorAccessMode, CustomConnector, CustomConnectorKind, NaviPreferences } from "@/lib/ai/types";
+import { createId } from "@/lib/chat";
 import type { PublicMcpServer } from "@/lib/mcp";
 import { haptic } from "@/lib/ui/haptics";
 
@@ -85,6 +86,17 @@ type AccountStatus = {
   writesEnabled: boolean;
 };
 
+/**
+ * The custom-connector types, presented as a drop-down rather than a wall of
+ * icons: the list will grow, and a select scales where an icon grid does not.
+ */
+const CONNECTOR_KINDS: Array<{ id: CustomConnectorKind; label: string; urlHint: string; needsModel: boolean }> = [
+  { id: "openai", label: "OpenAI-compatible API", urlHint: "https://api.example.com/v1", needsModel: true },
+  { id: "anthropic", label: "Anthropic-compatible API", urlHint: "https://api.anthropic.com", needsModel: true },
+  { id: "supabase", label: "Supabase project", urlHint: "https://xyz.supabase.co", needsModel: false },
+  { id: "mcp", label: "MCP server (HTTPS)", urlHint: "https://mcp.example.com", needsModel: false }
+];
+
 function Switch({ value, label, onChange }: { value: boolean; label: string; onChange: () => void }) {
   return (
     <button type="button" role="switch" aria-checked={value} aria-label={label} onClick={onChange} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${value ? "bg-accent" : "bg-elev-3"}`}>
@@ -99,6 +111,13 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
   const [connecting, setConnecting] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [accounts, setAccounts] = useState<Record<string, AccountStatus>>({});
+  const [addOpen, setAddOpen] = useState(false);
+  const [draftKind, setDraftKind] = useState<CustomConnectorKind>("openai");
+  const [draftName, setDraftName] = useState("");
+  const [draftUrl, setDraftUrl] = useState("");
+  const [draftKey, setDraftKey] = useState("");
+  const [draftModel, setDraftModel] = useState("");
+  const [addState, setAddState] = useState<{ phase: "idle" | "testing" | "error"; message?: string }>({ phase: "idle" });
 
   async function refreshAccounts() {
     const entries = await Promise.all(ACCOUNTS.map(async (account) => {
@@ -135,8 +154,9 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
 
   const connectedCount = useMemo(
     () => servers.filter((server) => preferences.connectedMcpServers.includes(server.id)).length
-      + Object.values(accounts).filter((status) => status.connected).length,
-    [accounts, preferences.connectedMcpServers, servers]
+      + Object.values(accounts).filter((status) => status.connected).length
+      + preferences.customConnectors.length,
+    [accounts, preferences.connectedMcpServers, preferences.customConnectors.length, servers]
   );
 
   async function refresh() {
@@ -163,6 +183,64 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
 
   function update(patch: Partial<NaviPreferences>) {
     onPreferences({ ...preferences, ...patch });
+  }
+
+  async function addCustomConnector() {
+    const name = draftName.trim();
+    const baseUrl = draftUrl.trim();
+    if (!name || !baseUrl) {
+      setAddState({ phase: "error", message: "A name and base URL are required." });
+      return;
+    }
+    if (!baseUrl.startsWith("https://")) {
+      setAddState({ phase: "error", message: "The base URL must start with https://." });
+      return;
+    }
+    if (preferences.customConnectors.some((entry) => entry.name.toLowerCase() === name.toLowerCase())) {
+      setAddState({ phase: "error", message: "A connector with that name already exists." });
+      return;
+    }
+
+    setAddState({ phase: "testing" });
+    try {
+      const response = await fetch("/api/connectors/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: draftKind, baseUrl, apiKey: draftKey.trim() })
+      });
+      const result = (await response.json()) as { ok?: boolean; error?: string };
+      if (!result.ok) {
+        setAddState({ phase: "error", message: result.error || "The connector did not answer." });
+        haptic("error", haptics);
+        return;
+      }
+    } catch {
+      setAddState({ phase: "error", message: "The connection test could not run." });
+      haptic("error", haptics);
+      return;
+    }
+
+    const connector: CustomConnector = {
+      id: createId("connector"),
+      kind: draftKind,
+      name,
+      baseUrl,
+      apiKey: draftKey.trim(),
+      model: draftModel.trim() || undefined
+    };
+    update({ customConnectors: [...preferences.customConnectors, connector] });
+    setDraftName("");
+    setDraftUrl("");
+    setDraftKey("");
+    setDraftModel("");
+    setAddOpen(false);
+    setAddState({ phase: "idle" });
+    haptic("success", haptics);
+  }
+
+  function removeCustomConnector(id: string) {
+    update({ customConnectors: preferences.customConnectors.filter((entry) => entry.id !== id) });
+    haptic("selection", haptics);
   }
 
   async function disconnectAccount(account: AccountConnector) {
@@ -286,6 +364,70 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                 );
               })}
             </div>
+          </section>
+
+          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elev-2 text-secondary"><Plus size={21} /></span>
+              <span className="min-w-0 flex-1">
+                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Your connectors</h2>
+                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">APIs you add yourself, chosen from the drop-down. Keys live in your own private account memory, readable by your account alone, and travel only with your requests.</p>
+              </span>
+            </div>
+
+            {preferences.customConnectors.length ? (
+              <div className="mt-3 divide-y divide-[var(--border-subtle)]">
+                {preferences.customConnectors.map((connector) => (
+                  <div key={connector.id} className="flex min-h-14 items-center gap-3 py-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--selection-bg)] text-accent"><Link2 size={18} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[0.875rem]/5 font-semibold text-primary">{connector.name}</span>
+                      <span className="block truncate text-[0.6875rem]/4 font-medium text-tertiary">
+                        {CONNECTOR_KINDS.find((kind) => kind.id === connector.kind)?.label ?? connector.kind} · {new URL(connector.baseUrl).hostname}{connector.model ? ` · ${connector.model}` : ""}
+                      </span>
+                    </span>
+                    <button type="button" onClick={() => removeCustomConnector(connector.id)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-danger active:bg-elev-3" aria-label={`Remove ${connector.name}`}><Trash2 size={18} /></button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {addOpen ? (
+              <div className="mt-3 space-y-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 p-3">
+                <label className="block">
+                  <span className="mb-1 block text-[0.6875rem]/4 font-semibold uppercase tracking-[0.06em] text-tertiary">Connector type</span>
+                  <span className="relative block">
+                    <select
+                      value={draftKind}
+                      onChange={(event) => { setDraftKind(event.target.value as CustomConnectorKind); setAddState({ phase: "idle" }); }}
+                      className="min-h-11 w-full appearance-none rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 pr-10 text-[0.875rem]/5 font-medium text-primary outline-none focus:border-accent"
+                    >
+                      {CONNECTOR_KINDS.map((kind) => <option key={kind.id} value={kind.id}>{kind.label}</option>)}
+                    </select>
+                    <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary" />
+                  </span>
+                </label>
+                <input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Name, e.g. My DeepSeek key" className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent" />
+                <input value={draftUrl} onChange={(event) => setDraftUrl(event.target.value)} placeholder={CONNECTOR_KINDS.find((kind) => kind.id === draftKind)?.urlHint} inputMode="url" autoCapitalize="none" className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent" />
+                <input value={draftKey} onChange={(event) => setDraftKey(event.target.value)} placeholder={draftKind === "supabase" ? "Anon key" : "API key"} type="password" autoComplete="off" className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent" />
+                {CONNECTOR_KINDS.find((kind) => kind.id === draftKind)?.needsModel ? (
+                  <input value={draftModel} onChange={(event) => setDraftModel(event.target.value)} placeholder="Default model (optional)" autoCapitalize="none" className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent" />
+                ) : null}
+                {addState.phase === "error" ? (
+                  <div className="flex gap-1.5 text-[0.6875rem]/4 font-medium text-danger"><AlertTriangle size={14} className="shrink-0" />{addState.message}</div>
+                ) : null}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => void addCustomConnector()} disabled={addState.phase === "testing"} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed disabled:opacity-60">
+                    {addState.phase === "testing" ? <><LoaderCircle size={16} className="animate-spin" />Testing…</> : "Test and add"}
+                  </button>
+                  <button type="button" onClick={() => { setAddOpen(false); setAddState({ phase: "idle" }); }} className="min-h-11 rounded-xl px-4 text-[0.8125rem]/5 font-semibold text-secondary active:bg-elev-3">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" onClick={() => { setAddOpen(true); haptic("selection", haptics); }} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-2">
+                <Plus size={16} />Add custom connector
+              </button>
+            )}
           </section>
 
           <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">

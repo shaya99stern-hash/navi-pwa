@@ -14,6 +14,7 @@ import { PROVIDERS } from "@/lib/ai/provider-registry";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { createProviderModel, fallbackRoutes, getProviderAvailability, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
+import { markProviderFailure, markProviderSuccess, orderRoutesByHealth } from "@/lib/ai/provider-health";
 import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
@@ -22,6 +23,7 @@ import { readUntilCommitted } from "@/lib/ai/lane-commit";
 import { githubWritesEnabled, readGithubToken } from "@/lib/github/oauth";
 import { googleAccessToken } from "@/lib/google/oauth";
 import { factsBlock, factsConfigured, listFacts, rememberFact } from "@/lib/memory/facts";
+import { learnedSkillsBlock, learnedSkillsConfigured, listLearnedSkills } from "@/lib/memory/learned-skills";
 import { extractFacts, looksDurable } from "@/lib/memory/extract";
 import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
@@ -37,7 +39,7 @@ import {
   shouldConsultArchitect,
   type ExecutionPlan
 } from "@/lib/ai/architect";
-import type { ConnectorAccessMode, EffortLevel, ModelPreset, NaviMode, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
+import type { ConnectorAccessMode, CustomConnector, EffortLevel, ModelPreset, NaviMode, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
 import { APP_KNOWLEDGE } from "@/lib/ai/app-knowledge";
@@ -98,6 +100,7 @@ type ChatRequestBody = {
   remember?: boolean;
   playbook?: string;
   connectedMcpServers?: string[];
+  customConnectors?: unknown;
   connectorAccessMode?: unknown;
   projectContext?: unknown;
   userContext?: unknown;
@@ -185,6 +188,22 @@ function normalizePreset(value: unknown): ModelPreset {
 
 function normalizeConnectorAccessMode(value: unknown): ConnectorAccessMode {
   return value === "auto" || value === "always" ? value : "ask";
+}
+
+/** Connectors typed in on the device. Anything malformed is dropped, not fixed. */
+function parseCustomConnectors(value: unknown): CustomConnector[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is CustomConnector => {
+      if (!entry || typeof entry !== "object") return false;
+      const connector = entry as Partial<CustomConnector>;
+      return typeof connector.id === "string"
+        && typeof connector.name === "string" && connector.name.trim().length > 0 && connector.name.length <= 60
+        && typeof connector.baseUrl === "string" && connector.baseUrl.startsWith("https://")
+        && typeof connector.apiKey === "string" && connector.apiKey.length > 0 && connector.apiKey.length <= 500
+        && (connector.kind === "openai" || connector.kind === "anthropic" || connector.kind === "supabase" || connector.kind === "mcp");
+    })
+    .slice(0, 12);
 }
 
 function projectContextSummary(value: unknown): string {
@@ -449,6 +468,7 @@ function artifactInstruction(requested: boolean): string {
   const contract = [
     "NaviOS artifacts are real interactive documents rendered in an isolated browser sandbox.",
     "Emit them as a fenced navi-artifact JSON block containing id, title, kind, html or svg, and height.",
+    "For documents, reports, and printable pages (including anything the user wants as a PDF), use kind html with a complete styled document in the html field; the viewer offers export from there.",
     "For interactive HTML, include all markup, CSS, and JavaScript inside the html field. Buttons, inputs, forms, tabs, counters, calculators, and other controls must actually work.",
     "Use inline script with addEventListener. Do not use onclick or other on* attributes because those are removed by the sanitizer.",
     "Do not use remote scripts, external stylesheets, network requests, external images, navigation, secrets, or parent-window access.",
@@ -845,8 +865,14 @@ export async function POST(request: Request): Promise<Response> {
      evidence that something was once said, while a fact is a standing
      statement about the person. Read server-side because that is where the
      credential lives — the client never sees the store. */
-  const storedFacts = mayRemember && clerkToken && factsConfigured() ? await listFacts(clerkToken) : [];
+  /* Facts and learned skills are independent reads of the same store; one
+     request each, in parallel, and either failing costs only its own block. */
+  const [storedFacts, storedSkills] = await Promise.all([
+    mayRemember && clerkToken && factsConfigured() ? listFacts(clerkToken) : Promise.resolve([]),
+    mayRemember && clerkToken && learnedSkillsConfigured() ? listLearnedSkills(clerkToken) : Promise.resolve([])
+  ]);
   const rememberedBlock = factsBlock(storedFacts);
+  const skillsContext = learnedSkillsBlock(storedSkills);
   /* Told the mechanism exists, not just handed its output.
    *
    * Rendering facts alone left the model with no idea it had a memory at all:
@@ -857,11 +883,12 @@ export async function POST(request: Request): Promise<Response> {
   const memoryCapability = mayRemember && factsConfigured()
     ? [
       "You have a durable memory. Standing facts about this user — how they work, what they use, what they always want — are extracted and stored automatically, and are listed under Settings → Privacy where the user can remove any of them.",
-      "So: if asked to remember something durable, confirm plainly that you will. Never say you cannot store anything between conversations, and never claim to have saved a specific item, since the extraction happens outside this reply and you cannot see its result."
+      "So: if asked to remember something durable, confirm plainly that you will. Never say you cannot store anything between conversations, and never claim to have saved a specific item, since the extraction happens outside this reply and you cannot see its result.",
+      "The exception is skills: when the learn_skill tool is available and the user asks you to learn or keep a technique, workflow, or the contents of a link, call it — its result tells you whether the save really happened, and only then may you confirm it."
     ].join("\n")
     : "";
 
-  const memoryContext = [memoryCapability, rememberedBlock, recalledContext].filter(Boolean).join("\n\n");
+  const memoryContext = [memoryCapability, rememberedBlock, skillsContext, recalledContext].filter(Boolean).join("\n\n");
   const playbookContext = typeof body.playbook === "string" ? body.playbook.trim().slice(0, 4_500) : "";
   const threadSummary = [
     typeof body.threadSummary === "string" ? body.threadSummary.trim().slice(0, 5_000) : "",
@@ -980,6 +1007,12 @@ export async function POST(request: Request): Promise<Response> {
            deployments, rather than being trimmed off the end of the cap. */
         request: lastUserText,
         githubWritesEnabled: githubWritesEnabled(),
+        /* Lets learn_skill exist when there is a signed-in person to learn for. */
+        clerkToken: mayRemember ? clerkToken : undefined,
+        clerkUserId: mayRemember ? clerkUserId ?? undefined : undefined,
+        /* Connectors the user typed in on the device. Access mode governs them
+           exactly as it governs registry MCP servers. */
+        customConnectors: connectorAccessMode === "ask" ? [] : parseCustomConnectors(body.customConnectors),
         signal: request.signal,
         /* Python runs on a Node route because the sandbox SDK cannot run on
            Edge. The origin lets the tool reach it; the cookie makes sure that
@@ -1188,10 +1221,13 @@ export async function POST(request: Request): Promise<Response> {
         return fitted;
       };
 
-      const attempts = [
+      /* Health-ordered: a provider that has been failing across recent
+         requests goes to the back of the line instead of charging every turn
+         its timeout. Deprioritized, never dropped. */
+      const attempts = orderRoutesByHealth([
         route,
         ...fallbackRoutes({ primary: route, availability, complex: complexRoute })
-      ];
+      ]);
       let lastFailure: unknown = null;
 
       for (const [index, attempt] of attempts.entries()) {
@@ -1249,8 +1285,10 @@ export async function POST(request: Request): Promise<Response> {
           let draft: string;
           try {
             draft = await result.text;
+            markProviderSuccess(attempt.provider);
           } catch (error) {
             /* Nothing was shown, so another provider may still answer. */
+            markProviderFailure(attempt.provider);
             lastFailure = error;
             continue;
           }
@@ -1303,15 +1341,18 @@ export async function POST(request: Request): Promise<Response> {
           const { committed, preamble, failure } = await readUntilCommitted(reader);
 
           if (!committed) {
+            markProviderFailure(attempt.provider);
             lastFailure = failure ?? new Error("The provider produced no content.");
             continue;
           }
 
+          markProviderSuccess(attempt.provider);
           reader.releaseLock();
           for (const chunk of preamble) writer.write(chunk as never);
           writer.merge(stream);
           return;
         } catch (error) {
+          markProviderFailure(attempt.provider);
           lastFailure = error;
           continue;
         }

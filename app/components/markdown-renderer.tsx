@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import type { ArtifactPayload } from "@/lib/ai/types";
 import { validateGeneratedImagePayload } from "@/lib/security/generated-images";
 import { validateGeneratedAudioPayload } from "@/lib/security/generated-audio";
-import { validateArtifactPayload } from "@/lib/security/artifacts";
+import { recoverArtifactPayload } from "@/lib/security/artifacts";
 import { ArtifactFrame } from "./artifact-frame";
 import { CodeBlock } from "./code-block";
 import { parseSkillMarkdown, type Playbook } from "@/lib/playbooks";
@@ -90,13 +90,12 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, ha
           }
 
           if (language === "navi-artifact") {
-            try {
-              const validation = validateArtifactPayload(JSON.parse(value.trim()));
-              if (validation.ok) return <ArtifactFrame payload={validation.payload} theme={theme} haptics={haptics} />;
-              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Invalid artifact: {validation.error}</div>;
-            } catch {
-              return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">Malformed artifact payload.</div>;
-            }
+            /* Salvage-first: strict validation, then repair of sloppy JSON,
+               aliased kinds, and raw markup. Saved history full of older
+               near-miss payloads renders too, instead of erroring forever. */
+            const recovered = recoverArtifactPayload(value.trim());
+            if (recovered.ok) return <ArtifactFrame payload={recovered.payload} theme={theme} haptics={haptics} />;
+            return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">This artifact could not be rendered: {recovered.error}</div>;
           }
 
           if (language === "navi-svg") {

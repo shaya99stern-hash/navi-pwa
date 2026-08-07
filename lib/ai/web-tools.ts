@@ -5,9 +5,11 @@ import { cacheSearch, readCachedSearch, recordSearch, searchAllowed } from "./se
 
 /** Enough context to answer from, without swamping the prompt. */
 const MAX_RESULTS = 6;
-const MAX_PAGE_CHARS = 12_000;
+const MAX_PAGE_CHARS = 20_000;
 const MAX_SNIPPET_CHARS = 1_200;
 const REQUEST_TIMEOUT_MS = 12_000;
+/** Transcripts and PDFs are the thing being asked about, so they get more room. */
+const MAX_DOCUMENT_FETCH_CHARS = 32_000;
 
 type SearchHit = { title: string; url: string; snippet: string };
 
@@ -117,6 +119,62 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+/** The video id, when a URL is a YouTube watch page in any of its shapes. */
+export function youTubeVideoId(url: URL): string | null {
+  const host = url.hostname.replace(/^www\.|^m\./, "");
+  if (host === "youtube.com" || host === "youtube-nocookie.com") {
+    if (url.pathname === "/watch") return url.searchParams.get("v");
+    const path = /^\/(?:shorts|embed|live|v)\/([\w-]{6,20})/.exec(url.pathname);
+    return path ? path[1] : null;
+  }
+  if (host === "youtu.be") return url.pathname.slice(1).split("/")[0] || null;
+  return null;
+}
+
+/**
+ * A video's transcript, straight from YouTube's own caption tracks.
+ *
+ * Sending a model the watch-page HTML answers nothing — the content of a video
+ * is what is said in it. The caption track list is embedded in the page as
+ * JSON; a human-written track is preferred over the auto-generated one, and
+ * English over other languages, falling back gracefully. Null when the video
+ * has no captions at all, which the caller reports rather than hides.
+ */
+async function fetchYouTubeTranscript(videoId: string, signal: AbortSignal): Promise<string | null> {
+  const page = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`, {
+    headers: { "Accept-Language": "en", "User-Agent": "Mozilla/5.0 (compatible; NaviOSHub/1.0)" },
+    signal
+  });
+  if (!page.ok) return null;
+  const html = await page.text();
+  const title = /<title>([^<]*)<\/title>/.exec(html)?.[1]?.replace(/ - YouTube$/, "").trim() ?? "";
+
+  const tracksMatch = /"captionTracks":(\[.*?\])/.exec(html);
+  if (!tracksMatch) return null;
+  let tracks: Array<{ baseUrl?: string; languageCode?: string; kind?: string }>;
+  try { tracks = JSON.parse(tracksMatch[1]); } catch { return null; }
+  const track = tracks.find((entry) => entry.languageCode?.startsWith("en") && entry.kind !== "asr")
+    ?? tracks.find((entry) => entry.languageCode?.startsWith("en"))
+    ?? tracks.find((entry) => entry.kind !== "asr")
+    ?? tracks[0];
+  if (!track?.baseUrl) return null;
+
+  const response = await fetch(`${track.baseUrl}&fmt=json3`, { signal });
+  if (!response.ok) return null;
+  const data = (await response.json()) as { events?: Array<{ segs?: Array<{ utf8?: string }> }> };
+  const text = (data.events ?? [])
+    .flatMap((event) => (event.segs ?? []).map((seg) => seg.utf8 ?? ""))
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return null;
+
+  const clipped = text.length > MAX_DOCUMENT_FETCH_CHARS
+    ? `${text.slice(0, MAX_DOCUMENT_FETCH_CHARS)}\n\n[Transcript truncated at ${MAX_DOCUMENT_FETCH_CHARS} characters.]`
+    : text;
+  return `Transcript of YouTube video${title ? ` “${title}”` : ""} (${videoId}):\n\n${clipped}`;
+}
+
 /** A model-supplied URL is untrusted input aimed at our own network. */
 export function assertFetchableUrl(raw: string): URL {
   let url: URL;
@@ -166,20 +224,39 @@ export function buildWebTools({ search, signal, onActivity = () => {} }: {
     }),
 
     fetch_url: tool({
-      description: "Fetch an https page and return its readable text. Use it to read a search result, or any link the user gives you, rather than guessing at its contents.",
+      description: "Fetch an https link and return its readable content. Handles web pages, plain text, JSON, PDFs (text is extracted), and YouTube links (the video's transcript is returned). Use it to read a search result or any link the user gives you, rather than guessing at its contents.",
       inputSchema: z.object({ url: z.string().describe("The full https URL to read.") }),
       execute: async ({ url }) => {
         try {
           const target = assertFetchableUrl(url);
+
+          const videoId = youTubeVideoId(target);
+          if (videoId) {
+            onActivity("Reading the video transcript");
+            const transcript = await withTimeout((inner) => fetchYouTubeTranscript(videoId, inner), signal);
+            return transcript ?? "That video has no caption track, so there is no transcript to read. Say so rather than guessing at its contents.";
+          }
+
           onActivity(`Reading ${target.hostname}`);
           return await withTimeout(async (inner) => {
             const response = await fetch(target, {
-              headers: { Accept: "text/html,text/plain,application/json;q=0.9", "User-Agent": "NaviOSHub/1.0" },
+              headers: { Accept: "text/html,application/pdf,text/plain,application/json;q=0.9", "User-Agent": "NaviOSHub/1.0" },
               redirect: "follow",
               signal: inner
             });
             if (!response.ok) return `That page returned ${response.status}.`;
             const type = response.headers.get("content-type") ?? "";
+
+            if (/application\/pdf/i.test(type) || /\.pdf$/i.test(target.pathname)) {
+              const { extractPdfText } = await import("./document-text");
+              const extracted = await extractPdfText(new Uint8Array(await response.arrayBuffer()));
+              if (!extracted) return "That PDF has no text layer to extract — it is likely a scan.";
+              const clipped = extracted.text.length > MAX_DOCUMENT_FETCH_CHARS
+                ? `${extracted.text.slice(0, MAX_DOCUMENT_FETCH_CHARS)}\n\n[Truncated at ${MAX_DOCUMENT_FETCH_CHARS} characters.]`
+                : extracted.text;
+              return `PDF${extracted.pages ? ` (${extracted.pages} pages)` : ""}:\n\n${clipped}`;
+            }
+
             if (!/text\/|json|xml/i.test(type)) return `That URL is ${type || "a binary file"}, which cannot be read as text.`;
             const body = await response.text();
             const text = /html/i.test(type) ? htmlToText(body) : body.trim();
