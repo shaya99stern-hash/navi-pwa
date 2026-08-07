@@ -116,11 +116,25 @@ const WORDS = ("able acid army atom aunt band bank barn beam bell belt bird blue
   + "oven palm park pearl pine pond pool port quilt raft rain reed reef ridge rock root rope rose sage salt "
   + "sand seed ship silk snow soil star stem stone surf swan tide tile tone tree tusk vine wave wind wing wolf").split(/\s+/);
 
+const secureIndex = (maxExclusive: number): number => {
+  if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
+    throw new Error("maxExclusive must be a positive integer");
+  }
+  const maxUint32 = 0x100000000; // 2^32
+  const limit = Math.floor(maxUint32 / maxExclusive) * maxExclusive;
+  const buf = new Uint32Array(1);
+  let n: number;
+  do {
+    crypto.getRandomValues(buf);
+    n = buf[0]!;
+  } while (n >= limit);
+  return n % maxExclusive;
+};
+
 export const passphraseGenerate: Executor = async (input) => {
   const words = Math.min(12, Math.max(3, Number(input.words) || 5));
   const separator = String(input.separator ?? "-");
-  const picks = crypto.getRandomValues(new Uint32Array(words));
-  const phrase = [...picks].map((n) => WORDS[n % WORDS.length]).join(separator);
+  const phrase = Array.from({ length: words }, () => WORDS[secureIndex(WORDS.length)]).join(separator);
   const entropy = Math.round(words * Math.log2(WORDS.length));
   return ok(`${phrase}\n\n— about ${entropy} bits of entropy from a ${WORDS.length}-word list`);
 };
