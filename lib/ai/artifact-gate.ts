@@ -17,6 +17,42 @@ import { recoverArtifactPayload, validateArtifactPayload } from "../security/art
 const FENCE = "```navi-artifact";
 const CLOSE = "```";
 
+/**
+ * The aliased fences models actually emit, held and normalised like the real
+ * one. Without this an `artifact`-labelled payload streamed to the reader as
+ * raw JSON and was only converted to a card once the message was re-rendered
+ * from storage — so the answer looked broken exactly while it was arriving.
+ *
+ * Longest first: the scanner takes the earliest match, and `artifact` is a
+ * suffix of `navi-artifact`.
+ */
+const ALIAS_FENCES = [
+  "```navi-artifact",
+  "```react-component",
+  "```react_component",
+  "```html-artifact",
+  "```naviartifact",
+  "```navi-html",
+  "```artifacts",
+  "```artifact"
+];
+
+/** The earliest alias fence in the buffer, and which one it was. */
+function findFence(buffer: string): { index: number; fence: string } | null {
+  let best: { index: number; fence: string } | null = null;
+  for (const fence of ALIAS_FENCES) {
+    const index = buffer.indexOf(fence);
+    if (index === -1) continue;
+    if (!best || index < best.index || (index === best.index && fence.length > best.fence.length)) {
+      best = { index, fence };
+    }
+  }
+  return best;
+}
+
+/** The longest alias, for deciding how much tail to hold across deltas. */
+const MAX_FENCE_LENGTH = Math.max(...ALIAS_FENCES.map((fence) => fence.length));
+
 export type ArtifactGate = {
   /** Text from this delta that is safe to show now. May be empty. */
   push: (delta: string) => string;
@@ -24,12 +60,14 @@ export type ArtifactGate = {
   flush: () => string;
 };
 
-function validateBlock(block: string): string {
-  const inner = block.slice(FENCE.length, block.length - CLOSE.length).trim();
+function validateBlock(block: string, fence: string): string {
+  const inner = block.slice(fence.length, block.length - CLOSE.length).trim();
 
-  /* Exactly right already: pass the block through byte-for-byte. */
+  /* Exactly right already, and already the canonical fence: pass it through
+     byte-for-byte. An alias is always rewritten, even when its payload is
+     perfect, because only the canonical fence renders as a card. */
   try {
-    if (validateArtifactPayload(JSON.parse(inner)).ok) return block;
+    if (validateArtifactPayload(JSON.parse(inner)).ok && fence === FENCE) return block;
   } catch { /* fall through to salvage */ }
 
   /* Not exactly right: salvage what the model meant — sloppy JSON, aliased
@@ -49,7 +87,7 @@ function tolerantlyParsed(inner: string): boolean {
 
 export function createArtifactGate(): ArtifactGate {
   let buffer = "";
-  let inFence = false;
+  let openFence: string | null = null;
 
   return {
     push(delta) {
@@ -57,37 +95,37 @@ export function createArtifactGate(): ArtifactGate {
       let out = "";
 
       for (;;) {
-        if (!inFence) {
-          const start = buffer.indexOf(FENCE);
-          if (start === -1) {
+        if (!openFence) {
+          const found = findFence(buffer);
+          if (!found) {
             /* The fence marker can straddle two deltas, so the tail is held
                back until enough has arrived to rule one out. Without this a
                fence split across chunks is never recognised. */
-            const keep = Math.max(0, buffer.length - (FENCE.length - 1));
+            const keep = Math.max(0, buffer.length - (MAX_FENCE_LENGTH - 1));
             out += buffer.slice(0, keep);
             buffer = buffer.slice(keep);
             return out;
           }
-          out += buffer.slice(0, start);
-          buffer = buffer.slice(start);
-          inFence = true;
+          out += buffer.slice(0, found.index);
+          buffer = buffer.slice(found.index);
+          openFence = found.fence;
         }
 
-        const end = buffer.indexOf(CLOSE, FENCE.length);
+        const end = buffer.indexOf(CLOSE, openFence.length);
         // Still open: hold everything until the payload can be validated.
         if (end === -1) return out;
 
-        out += validateBlock(buffer.slice(0, end + CLOSE.length));
+        out += validateBlock(buffer.slice(0, end + CLOSE.length), openFence);
         buffer = buffer.slice(end + CLOSE.length);
-        inFence = false;
+        openFence = null;
       }
     },
 
     flush() {
       const held = buffer;
       buffer = "";
-      if (!inFence) return held;
-      inFence = false;
+      if (!openFence) return held;
+      openFence = null;
       /* The stream ended mid-payload. Releasing it would render a broken card
          from JSON that was never validated, so it is dropped and said so. */
       return "\n> NaviSoul removed an incomplete artifact payload.\n";

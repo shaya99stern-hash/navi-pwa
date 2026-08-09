@@ -3,28 +3,35 @@
 import { FileText, Shapes, X } from "lucide-react";
 import type { StoredChat } from "@/lib/ai/types";
 import { messageText } from "@/lib/chat";
+import { isArtifactFenceLanguage, looksLikeArtifactFence, recoverArtifactPayload } from "@/lib/security/artifacts";
 import { haptic } from "@/lib/ui/haptics";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 type Artifact = { key: string; title: string; kind: string; chat: StoredChat };
 
-/** Artifacts are embedded in replies as fenced navi-artifact payloads. */
+/**
+ * Artifacts are embedded in replies as fenced payloads.
+ *
+ * This must recognise exactly what the chat renders, or the library
+ * contradicts the conversation — an artifact visible in a message but absent
+ * from this list reads as it having been lost. So it accepts the same fence
+ * aliases and runs the same salvage, rather than a stricter parse of its own.
+ */
 function collectArtifacts(chats: StoredChat[]): Artifact[] {
   return chats.flatMap((chat) =>
     chat.messages.flatMap((message) =>
-      [...messageText(message).matchAll(/```navi-artifact\s*([\s\S]*?)```/gi)].flatMap((match, index) => {
-        try {
-          const value = JSON.parse(match[1]) as { id?: string; title?: string; kind?: string };
-          if (typeof value.title !== "string") return [];
-          return [{
-            key: `${chat.id}-${value.id ?? index}`,
-            title: value.title,
-            kind: value.kind || "artifact",
-            chat
-          }];
-        } catch {
-          return [];
-        }
+      [...messageText(message).matchAll(/```([\w-]*)\s*\n([\s\S]*?)```/g)].flatMap((match, index) => {
+        const [, language = "", body = ""] = match;
+        if (!isArtifactFenceLanguage(language)) return [];
+        if (language.toLowerCase() !== "navi-artifact" && !looksLikeArtifactFence(body)) return [];
+        const recovered = recoverArtifactPayload(body);
+        if (!recovered.ok) return [];
+        return [{
+          key: `${chat.id}-${recovered.payload.id || index}`,
+          title: recovered.payload.title,
+          kind: recovered.payload.kind,
+          chat
+        }];
       })
     )
   );
