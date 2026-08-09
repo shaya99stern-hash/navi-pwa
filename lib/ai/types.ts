@@ -150,6 +150,12 @@ export type ProviderName =
   | "cerebras"
   | "openrouter"
   | "mistral"
+  /* Free tiers that widen the council. Each is OpenAI-compatible, so adding
+     one is a row in the registry and a key in Vercel — no code path of its
+     own. Absent keys simply mean the provider is not in the rotation. */
+  | "together"
+  | "nvidia"
+  | "sambanova"
   /** The one metered provider. Guarded by the spend ceiling in `spend.ts`. */
   | "deepseek";
 

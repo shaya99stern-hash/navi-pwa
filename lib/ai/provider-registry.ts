@@ -179,6 +179,50 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     supportsVision: false,
     contextWindow: 128_000,
     costPerMTok: 0
+  },
+  /* Three more free tiers. Every one speaks the OpenAI protocol, so each is a
+     row here and a key in Vercel rather than an integration — which is the
+     whole reason the registry has this shape. A council is only as good as
+     the spread of independent models in it, and these widen that spread
+     without widening the bill. */
+  together: {
+    id: "together",
+    label: "Together",
+    baseURL: "https://api.together.xyz/v1",
+    modelsUrl: "https://api.together.xyz/v1/models",
+    envKeys: ["TOGETHER_API_KEY", "TOGETHER_KEY", "TOGETHER_API_TOKEN"],
+    envHint: "TOGETHER",
+    keyPrefixes: [],
+    supportsTools: true,
+    supportsVision: true,
+    contextWindow: 131_072,
+    costPerMTok: 0
+  },
+  nvidia: {
+    id: "nvidia",
+    label: "NVIDIA NIM",
+    baseURL: "https://integrate.api.nvidia.com/v1",
+    modelsUrl: "https://integrate.api.nvidia.com/v1/models",
+    envKeys: ["NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY", "NIM_API_KEY"],
+    envHint: "NVIDIA",
+    keyPrefixes: ["nvapi-"],
+    supportsTools: true,
+    supportsVision: false,
+    contextWindow: 131_072,
+    costPerMTok: 0
+  },
+  sambanova: {
+    id: "sambanova",
+    label: "SambaNova",
+    baseURL: "https://api.sambanova.ai/v1",
+    modelsUrl: "https://api.sambanova.ai/v1/models",
+    envKeys: ["SAMBANOVA_API_KEY", "SAMBANOVA_KEY"],
+    envHint: "SAMBANOVA",
+    keyPrefixes: [],
+    supportsTools: true,
+    supportsVision: false,
+    contextWindow: 131_072,
+    costPerMTok: 0
   }
 };
 

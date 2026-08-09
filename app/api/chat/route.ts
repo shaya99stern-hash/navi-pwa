@@ -43,6 +43,7 @@ import type { ConnectorAccessMode, CustomConnector, EffortLevel, ModelPreset, Na
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
 import { APP_KNOWLEDGE } from "@/lib/ai/app-knowledge";
+import { NAVI_MISSION, needsMission } from "@/lib/ai/mission";
 import { needsAppKnowledge, stablePrefix } from "@/lib/ai/prompt/base";
 import { csvToMarkdown, documentBlock, extractPdfText } from "@/lib/ai/document-text";
 
@@ -540,6 +541,10 @@ function systemPrompt(options: {
     /* Loaded when the request is actually about the product. It is the single
        largest block available and answers exactly one kind of question. */
     needsAppKnowledge(request) ? APP_KNOWLEDGE : "",
+    /* The standing brief: what this project is for, the bar for an answer,
+       and the specific mistakes already made that must not recur. Carried
+       whenever the turn touches the project, its memory, or its tools. */
+    needsMission(request) ? NAVI_MISSION : "",
     mode === "code" ? codeModeInstruction() : "",
     playbookContext || "",
     effortInstruction(effort),
