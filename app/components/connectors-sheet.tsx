@@ -42,6 +42,8 @@ type AccountConnector = {
   /** What the connection permits, stated rather than left to be guessed. */
   reads: string;
   writes?: string;
+  /** How to turn writes on, shown when connected but read-only. */
+  unlockWrites?: string;
 };
 
 const ACCOUNTS: AccountConnector[] = [
@@ -65,7 +67,10 @@ const ACCOUNTS: AccountConnector[] = [
     statusPath: "/api/github/status",
     setup: "Needs GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET in Vercel.",
     reads: "Read repositories, pull requests, and CI logs",
-    writes: "Commit to a working branch and open pull requests"
+    writes: "Commit to a working branch and open pull requests",
+    /* "Read only" with no way forward is the dead end this screen kept
+       hitting: writes are a separate deliberate opt-in, so name the switch. */
+    unlockWrites: "Writes are off. Set NAVI_GITHUB_ALLOW_WRITES=true in Vercel and reconnect to let NaviSoul commit and open pull requests."
   },
   {
     id: "vercel",
@@ -331,7 +336,8 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                    a statement rather than a control. */
                 const configurable = Boolean(account.connectPath);
                 return (
-                  <div key={account.id} className="flex min-h-14 items-center gap-3 py-3">
+                  <div key={account.id}>
+                    <div className="flex min-h-14 items-center gap-3 py-3">
                     <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${connected ? "bg-[var(--selection-bg)] text-accent" : "bg-elev-2 text-secondary"}`}>
                       <Link2 size={18} />
                     </span>
@@ -361,6 +367,13 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                       <a href={account.connectPath} className="flex min-h-11 shrink-0 items-center rounded-xl bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed">Connect</a>
                     )}
                   </div>
+                  {/* Connected but read-only is the state that looks broken:
+                      the account is linked and NaviSoul still refuses to
+                      commit. Name the switch instead of leaving a badge. */}
+                  {connected && !status?.writesEnabled && account.unlockWrites ? (
+                    <p className="ml-[52px] pb-3 text-[0.6875rem]/4 font-medium text-tertiary">{account.unlockWrites}</p>
+                  ) : null}
+                </div>
                 );
               })}
             </div>

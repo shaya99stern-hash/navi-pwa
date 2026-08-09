@@ -24,7 +24,11 @@ for (let index = 0; index < 30; index += 1) many[`tool_${index}`] = {} as never;
 check("a crowded toolset is trimmed", Object.keys(capToolset(many)).length, MAX_ACTIVE_TOOLS);
 check("a small toolset is untouched", Object.keys(capToolset({ a: {} as never, b: {} as never })).length, 2);
 check("trimming keeps the earliest entries", Object.keys(capToolset(many, 3)), ["tool_0", "tool_1", "tool_2"]);
-check("the ceiling is a dozen", MAX_ACTIVE_TOOLS, 12);
+/* Raised from twelve when self-editing landed: read, list, and commit are
+   three tools that must coexist with the built-ins, and starving them
+   reproduces exactly the bug they fix — NaviSoul insisting it cannot reach
+   the repository. Sixteen is still a ceiling, not an invitation. */
+check("the ceiling is sixteen", MAX_ACTIVE_TOOLS, 16);
 
 /* Past roughly a dozen the model picks worse tools and every turn pays the
    schema cost of the ones it will not call — a failure that is invisible
