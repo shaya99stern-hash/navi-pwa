@@ -5,6 +5,7 @@ import { buildGitHubWriteTools } from "@/lib/ai/github-write-tools";
 import { buildGoogleTools } from "@/lib/ai/google-tools";
 import { buildConnectorTools } from "@/lib/ai/connector-tools";
 import { buildLearningTools } from "@/lib/ai/learning-tools";
+import { buildSelfUpdateTools, selfUpdateToken } from "@/lib/ai/self-update-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
 import { buildWebTools } from "@/lib/ai/web-tools";
 import type { CustomConnector, NaviMode, ToolPolicy } from "@/lib/ai/types";
@@ -29,7 +30,7 @@ import type { CustomConnector, NaviMode, ToolPolicy } from "@/lib/ai/types";
  * rather than advised, because the failure it prevents is silent: more tools
  * still *works*, it just quietly picks worse ones.
  */
-export const MAX_ACTIVE_TOOLS = 12;
+export const MAX_ACTIVE_TOOLS = 16;
 
 export type ToolsetContext = {
   /** The product mode. Chat never receives repository write tools. */
@@ -100,6 +101,13 @@ const GROUPS: Group[] = [
     name: "learning",
     tools: () => ({}),
     when: ({ clerkToken, clerkUserId }) => Boolean(clerkToken && clerkUserId)
+  },
+  {
+    /* Editing NaviOS itself. Code mode only, and only when the deployment
+       carries the token that exists for exactly this purpose. */
+    name: "self-update",
+    tools: () => ({}),
+    when: ({ mode, request }) => Boolean(selfUpdateToken()) && (mode === "code" || wantsSelfUpdate(request))
   },
   {
     /* The connectors the user typed in themselves. One tool for all of them. */
@@ -177,6 +185,19 @@ export function wantsAccountTools(request: string | undefined): boolean {
 }
 
 /**
+ * Is this turn about changing NaviOS itself?
+ *
+ * Chat mode gets these too when the request is plainly about the app, because
+ * "add a button to the composer" is not a Code-mode-only sentence and being
+ * told to switch modes first is not an answer.
+ */
+const MENTIONS_SELF_UPDATE = /\b(your own code|your code|this app|the app|navios|navi-pwa|self.?update|edit yourself|your source|your repo|commit|deploy)\b/i;
+
+export function wantsSelfUpdate(request: string | undefined): boolean {
+  return Boolean(request) && MENTIONS_SELF_UPDATE.test(request as string);
+}
+
+/**
  * The tools valid for this mode and this user, as one flat set.
  *
  * Builders that need request-scoped arguments are called here rather than in
@@ -194,6 +215,7 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity }),
     ...(active("learning") ? buildLearningTools({ clerkToken, clerkUserId, onActivity }) : {}),
+    ...(active("self-update") ? buildSelfUpdateTools({ signal, onActivity }) : {}),
     ...(active("custom-connectors") ? buildConnectorTools({ connectors: customConnectors, signal, onActivity }) : {}),
     // Repository and deployment reads, present only when their tokens are —
     // and only when this turn is plausibly about them; see `wantsAccountTools`.

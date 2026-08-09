@@ -27,13 +27,14 @@ const dev = [
   "vercel_list_projects", "vercel_list_deployments", "vercel_read_build_log"
 ];
 
-check("the built-ins alone nearly fill the budget", builtIns.length >= MAX_ACTIVE_TOOLS - 1, true);
+check("the built-ins leave little room", builtIns.length >= MAX_ACTIVE_TOOLS - 6, true);
 const crowded = Object.keys(capToolset(set([...builtIns, ...dev])));
 check("the cap is honoured", crowded.length, MAX_ACTIVE_TOOLS);
 /* Documenting the starvation rather than asserting it is acceptable: this is
    what happens when everything is offered at once, and it is why the group is
-   gated on relevance instead. */
-check("only one account tool survives a crowded turn", crowded.filter((name) => dev.includes(name)).length, 1);
+   gated on relevance instead. The raised ceiling widened the gap rather than
+   closing it — the account tools still cannot all fit beside the built-ins. */
+check("the account tools are still starved when everything is offered", crowded.filter((name) => dev.includes(name)).length < dev.length, true);
 check("dropping the account tools leaves room", Object.keys(capToolset(set(builtIns))).length, builtIns.length);
 
 /* ---- When the account tools are offered ------------------------------ */

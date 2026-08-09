@@ -88,8 +88,8 @@ check("no credential yields undefined", providerApiKey({ ...PROVIDERS.mistral, e
 
 /* The paid lane is switched on in this fixture on purpose: the assertions
    below prove the free paths never reach for it. */
-const all: ProviderAvailability = { gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true, deepseek: true };
-const nothing: ProviderAvailability = { gemini: false, groq: false, huggingface: false, cerebras: false, openrouter: false, mistral: false, deepseek: false };
+const all: ProviderAvailability = { gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true, deepseek: true, together: true, nvidia: true, sambanova: true };
+const nothing: ProviderAvailability = { gemini: false, groq: false, huggingface: false, cerebras: false, openrouter: false, mistral: false, deepseek: false, together: false, nvidia: false, sambanova: false };
 const noTools = { web: false, code: false, artifacts: true };
 const withTools = { web: true, code: false, artifacts: true };
 

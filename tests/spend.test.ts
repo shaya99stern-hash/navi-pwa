@@ -82,7 +82,7 @@ check("a fresh month reads as zero", formatSpend({ spent: 0, budget: 10, state: 
 
 /* ── The paid lane is never reached by accident ──────────────────────────── */
 
-const all: ProviderAvailability = { gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true, deepseek: true };
+const all: ProviderAvailability = { gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true, deepseek: true, together: true, nvidia: true, sambanova: true };
 const noTools = { web: false, code: false, artifacts: true };
 
 check("exactly one provider is metered", Object.values(PROVIDERS).filter((adapter) => adapter.costPerMTok > 0).length, 1);
@@ -103,7 +103,7 @@ for (const lane of [1, 2, 4] as const) {
 check("lane 3 spends when allowed", routeForLane({ lane: 3, availability: all, tools: noTools, hasFiles: false, meteredAllowed: true })?.provider, "deepseek");
 check("lane 3 falls back to free when the budget is gone", routeForLane({ lane: 3, availability: all, tools: noTools, hasFiles: false, meteredAllowed: false })?.provider === "deepseek", false);
 check("lane 3 still answers when the budget is gone", Boolean(routeForLane({ lane: 3, availability: all, tools: noTools, hasFiles: false, meteredAllowed: false })?.model), true);
-check("lane 3 does not spend when the key is absent", routeForLane({ lane: 3, availability: { ...all, deepseek: false }, tools: noTools, hasFiles: false, meteredAllowed: true })?.provider === "deepseek", false);
+check("lane 3 does not spend when the key is absent", routeForLane({ lane: 3, availability: { ...all, deepseek: false, together: false, nvidia: false, sambanova: false }, tools: noTools, hasFiles: false, meteredAllowed: true })?.provider === "deepseek", false);
 
 /* The deprecated `deepseek-chat` and `deepseek-reasoner` aliases point at
    whatever the vendor decides they point at, which is how a model id turns

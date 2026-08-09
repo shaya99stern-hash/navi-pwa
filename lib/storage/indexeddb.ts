@@ -192,7 +192,7 @@ function normalizeConnectorMode(value: unknown): ConnectorAccessMode {
   return value === "auto" || value === "always" ? value : "ask";
 }
 
-const MENU_SECTIONS = ["general", "account", "privacy", "capabilities", "connectors", "skills", "playbooks"] as const;
+const MENU_SECTIONS = ["general", "account", "privacy", "capabilities", "connectors", "skills", "playbooks", "developer"] as const;
 const EFFORTS = ["low", "medium", "high"] as const;
 /** The scale was briefly five levels; fold the retired top two into High. */
 const RETIRED_EFFORTS: Record<string, NaviPreferences["effort"]> = { extra: "high", max: "high" };

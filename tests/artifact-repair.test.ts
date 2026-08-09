@@ -1,5 +1,5 @@
 import { createArtifactGate } from "@/lib/ai/artifact-gate";
-import { markdownToArtifactHtml, recoverArtifactPayload, repairArtifactPayload, tolerantParseJson } from "@/lib/security/artifacts";
+import { buildArtifactDocument, isArtifactFenceLanguage, looksLikeArtifactFence, markdownToArtifactHtml, recoverArtifactPayload, repairArtifactPayload, tolerantParseJson } from "@/lib/security/artifacts";
 
 let pass = 0, fail = 0;
 const check = (n: string, a: unknown, e: unknown) => {
@@ -85,6 +85,44 @@ check("truly hopeless payloads still get the notice", stillBroken.includes("malf
 
 const rawSvgFence = streamThrough(["```navi-artifact\n<svg viewBox='0 0 8 8'><rect/></svg>\n```"]);
 check("raw svg in the fence is salvaged", rawSvgFence.includes('"kind":"svg"'), true);
+
+
+/* ── Aliased fences ──────────────────────────────────────────────────────────
+   Models emit ```artifact and ```react-component constantly. Nothing rendered
+   those, so a complete working payload arrived as a wall of raw JSON. */
+
+check("the canonical fence is recognised", isArtifactFenceLanguage("navi-artifact"), true);
+check("a bare artifact fence is recognised", isArtifactFenceLanguage("artifact"), true);
+check("react-component is recognised", isArtifactFenceLanguage("react-component"), true);
+check("case does not matter", isArtifactFenceLanguage("Artifact"), true);
+check("a real language is not an artifact fence", isArtifactFenceLanguage("ts"), false);
+check("html is not an artifact fence", isArtifactFenceLanguage("html"), false);
+
+const realPayload = JSON.stringify({ id: "counter", title: "Counter", kind: "html", html: "<p>hi</p>" });
+check("a payload body is detected", looksLikeArtifactFence(realPayload), true);
+check("ordinary code is not a payload", looksLikeArtifactFence("const a = 1;"), false);
+/* An object with no content field is config, not an artifact. */
+check("a config object is not a payload", looksLikeArtifactFence('{"id":"x","title":"y"}'), false);
+check("content without any identity is not a payload", looksLikeArtifactFence('{"html":"<p>x</p>"}'), false);
+
+const aliasStream = streamThrough([`\`\`\`artifact\n${JSON.stringify({ id: "omni", title: "Omni", kind: "react-component", html: "<p>x</p>" })}\n\`\`\``]);
+check("an aliased fence is normalised to the canonical one", aliasStream.includes("```navi-artifact"), true);
+check("the alias label does not survive", /```artifact\b/.test(aliasStream), false);
+check("the aliased payload becomes html", aliasStream.includes('"kind":"html"'), true);
+
+/* The scanner must not mistake the alias for the canonical fence's suffix. */
+const canonicalStream = streamThrough([`\`\`\`navi-artifact\n${realPayload}\n\`\`\``]);
+check("the canonical fence still passes through", canonicalStream.includes("```navi-artifact"), true);
+check("no stray notice on a valid payload", canonicalStream.includes("removed"), false);
+
+/* ── Dark-mode repair for model-authored light designs ──────────────────── */
+
+const darkDocument = buildArtifactDocument({ id: "a", title: "A", kind: "html", html: '<div style="background:#fff">x</div>' }, "dark");
+check("dark artifacts carry the repair rule", darkDocument.includes("--navi-surface"), true);
+check("theme variables are exposed to the artifact", darkDocument.includes("--navi-accent"), true);
+const lightDocument = buildArtifactDocument({ id: "a", title: "A", kind: "html", html: "<p>x</p>" }, "light");
+check("light artifacts are left alone", lightDocument.includes("!important"), false);
+check("light artifacts still get the variables", lightDocument.includes("--navi-fg"), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

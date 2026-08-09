@@ -43,6 +43,7 @@ import type { ConnectorAccessMode, CustomConnector, EffortLevel, ModelPreset, Na
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
 import { APP_KNOWLEDGE } from "@/lib/ai/app-knowledge";
+import { NAVI_MISSION, needsMission } from "@/lib/ai/mission";
 import { needsAppKnowledge, stablePrefix } from "@/lib/ai/prompt/base";
 import { csvToMarkdown, documentBlock, extractPdfText } from "@/lib/ai/document-text";
 
@@ -471,6 +472,8 @@ function artifactInstruction(requested: boolean): string {
     "For documents, reports, and printable pages (including anything the user wants as a PDF), use kind html with a complete styled document in the html field; the viewer offers export from there.",
     "For interactive HTML, include all markup, CSS, and JavaScript inside the html field. Buttons, inputs, forms, tabs, counters, calculators, and other controls must actually work.",
     "Use inline script with addEventListener. Do not use onclick or other on* attributes because those are removed by the sanitizer.",
+    "Never hardcode a page background or text colour. The sandbox already sets one that matches the user's theme, and a white background renders as a glaring slab in dark mode. Where you need colours, use the supplied variables: var(--navi-bg), var(--navi-fg), var(--navi-muted), var(--navi-border), var(--navi-surface), var(--navi-accent).",
+    "Always use the canonical fence exactly: three backticks followed by navi-artifact. Fences labelled artifact, react-component, or anything else are not the contract.",
     "Do not use remote scripts, external stylesheets, network requests, external images, navigation, secrets, or parent-window access.",
     "The sandbox supports local state, DOM updates, validation, calculations, and clipboard actions."
   ].join(" ");
@@ -538,6 +541,10 @@ function systemPrompt(options: {
     /* Loaded when the request is actually about the product. It is the single
        largest block available and answers exactly one kind of question. */
     needsAppKnowledge(request) ? APP_KNOWLEDGE : "",
+    /* The standing brief: what this project is for, the bar for an answer,
+       and the specific mistakes already made that must not recur. Carried
+       whenever the turn touches the project, its memory, or its tools. */
+    needsMission(request) ? NAVI_MISSION : "",
     mode === "code" ? codeModeInstruction() : "",
     playbookContext || "",
     effortInstruction(effort),

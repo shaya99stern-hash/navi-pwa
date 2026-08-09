@@ -92,5 +92,22 @@ check("the row chevron is mobile-only", /ChevronRight[^\n]*md:hidden/.test(body)
 check("the selected row is marked for assistive tech", body.includes('aria-current={active ? "page" : undefined}'), true);
 check("an empty pane says what it is for", body.includes("Choose a section."), true);
 
+/* ---- Every surface is reachable from the list ------------------------ */
+
+/* The defect this guards: `/settings/Developer` shipped with no row leading
+   to it, so the app looked like it had no developer surface — and asked
+   where it was, the assistant invented a menu path that did not exist.
+   A screen nothing navigates to is a screen that does not exist. */
+check("a Developer row exists", /RootRow label="Developer"/.test(code), true);
+check("it navigates to the real route", body.includes('router.push("/settings/Developer")'), true);
+check("developer is a known section", read("lib/ai/types.ts").body.includes('| "developer"'), true);
+/* Persisted sections are reopened on the next visit. Developer is a route,
+   not a pane, so persisting it would reopen Settings onto a blank pane. */
+check("opening Developer does not persist a pane", /next === "developer"[\s\S]{0,200}router\.push/.test(body), true);
+check("the stored-section allow-list accepts it", read("lib/storage/indexeddb.ts").body.includes('"developer"'), true);
+
+/* Connectors is the other route-not-a-pane row; it must keep working. */
+check("Connectors still opens its own sheet", body.includes("onOpenConnectors()"), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

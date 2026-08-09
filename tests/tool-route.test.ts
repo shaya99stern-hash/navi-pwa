@@ -3,7 +3,7 @@ import type { ProviderAvailability } from "@/lib/ai/providers";
 
 const all: ProviderAvailability = {
 
-  gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true, deepseek: true
+  gemini: true, groq: true, huggingface: true, cerebras: true, openrouter: true, mistral: true, deepseek: true, together: true, nvidia: true, sambanova: true
 };
 const research = { web: true, code: false, artifacts: true };
 const none = { web: false, code: false, artifacts: true };

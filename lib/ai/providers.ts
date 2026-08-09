@@ -192,7 +192,28 @@ export const ROUTES = {
   hfQwenCoder: hf("Qwen/Qwen2.5-Coder-32B-Instruct", "HF Qwen2.5 Coder 32B", "coding"),
   hfQwen72b: hf("Qwen/Qwen2.5-72B-Instruct", "HF Qwen2.5 72B", "long-context"),
   hfMistralSmall: hf("mistralai/Mistral-Small-24B-Instruct-2501", "HF Mistral Small 24B", "fast"),
-  hfGptOssFast: hf("openai/gpt-oss-20b", "HF GPT-OSS 20B", "fast")
+  hfGptOssFast: hf("openai/gpt-oss-20b", "HF GPT-OSS 20B", "fast"),
+
+  /* The added free tiers. Model ids are overridable so an operator can follow
+     a provider's catalogue without waiting for a deploy. */
+  togetherReasoning: {
+    provider: "together",
+    model: process.env.TOGETHER_MODEL ?? "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free",
+    label: "Together reasoning",
+    capability: "reasoning"
+  },
+  nvidiaReasoning: {
+    provider: "nvidia",
+    model: process.env.NVIDIA_MODEL ?? "deepseek-ai/deepseek-r1",
+    label: "NVIDIA reasoning",
+    capability: "reasoning"
+  },
+  sambanovaFast: {
+    provider: "sambanova",
+    model: process.env.SAMBANOVA_MODEL ?? "Meta-Llama-3.3-70B-Instruct",
+    label: "SambaNova fast",
+    capability: "fast"
+  }
 } satisfies Record<string, ProviderRoute>;
 
 /**
@@ -253,10 +274,13 @@ export function availableSwarmRoutes(availability: ProviderAvailability, tools: 
   if (availability.openrouter) routes.push(ROUTES.openRouterReasoning);
   if (availability.groq) routes.push(tools.web || tools.code ? ROUTES.groqTools : ROUTES.groqReasoning);
   if (hfRoutes[1]) routes.push(hfRoutes[1]);
+  if (availability.together) routes.push(ROUTES.togetherReasoning);
   if (availability.mistral) routes.push(ROUTES.mistralBalanced);
+  if (availability.nvidia) routes.push(ROUTES.nvidiaReasoning);
   if (availability.groq) routes.push(ROUTES.groqFast);
   if (availability.openrouter) routes.push(ROUTES.openRouterCoding);
   if (hfRoutes[2]) routes.push(hfRoutes[2]);
+  if (availability.sambanova) routes.push(ROUTES.sambanovaFast);
   if (availability.cerebras) routes.push(ROUTES.cerebrasFast);
   routes.push(...hfRoutes.slice(3));
   return routes;
@@ -449,6 +473,9 @@ export function fallbackRoutes(options: {
   if (availability.cerebras) candidates.push(complex ? ROUTES.cerebrasLarge : ROUTES.cerebrasFast);
   if (availability.mistral) candidates.push(ROUTES.mistralBalanced);
   if (availability.openrouter) candidates.push(ROUTES.openRouterReasoning);
+  if (availability.together) candidates.push(ROUTES.togetherReasoning);
+  if (availability.nvidia) candidates.push(ROUTES.nvidiaReasoning);
+  if (availability.sambanova) candidates.push(ROUTES.sambanovaFast);
   if (availability.huggingface) candidates.push(complex ? ROUTES.hfGptOss : ROUTES.hfQwen);
 
   const seen = new Set<ProviderName>([primary.provider]);

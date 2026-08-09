@@ -10,6 +10,7 @@ import {
   Sun,
   X
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, NaviPreferences } from "@/lib/ai/types";
 import { categories, isImplemented, type Skill } from "@/lib/skills";
@@ -100,7 +101,8 @@ const PAGE_TITLES: Record<Exclude<PageId, "root">, string> = {
   capabilities: "Capabilities",
   connectors: "Connectors",
   skills: "Skills",
-  playbooks: "Playbooks"
+  playbooks: "Playbooks",
+  developer: "Developer"
 };
 
 const DURABILITY_DETAIL: Record<StorageDurability, string> = {
@@ -316,6 +318,7 @@ export function SettingsSheet({
   onClearData,
   onExport
 }: Props) {
+  const router = useRouter();
   const [page, setPage] = useState<PageId>("root");
   /* The OAuth callback returns here with a reason in the query string. Each one
      gets a sentence — a raw code on screen is not an explanation. The rows
@@ -328,6 +331,12 @@ export function SettingsSheet({
   const [facts, setFacts] = useState<{ loaded: boolean; configured: boolean; items: Array<{ id: string; fact: string }> }>(
     { loaded: false, configured: false, items: [] }
   );
+  /* What is actually in durable memory, counted from the store. Loaded on the
+     Privacy page only, for the same reason facts are: it is a network read. */
+  const [memoryStatus, setMemoryStatus] = useState<{
+    loaded: boolean; configured: boolean; signedIn: boolean;
+    chats: number; facts: number; skills: number; skillNames: string[];
+  }>({ loaded: false, configured: false, signedIn: false, chats: 0, facts: 0, skills: 0, skillNames: [] });
   const lastTapAt = useRef(0);
 
   /* Monthly spend on the one metered lane. Read here and nowhere else: it
@@ -419,6 +428,21 @@ export function SettingsSheet({
       /* Unreachable storage is not "nothing remembered" — saying so would
          invite someone to conclude the feature is off when it is merely down. */
       .catch(() => setFacts((current) => ({ ...current, loaded: true })));
+
+    void fetch("/api/memory/status", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { configured?: boolean; signedIn?: boolean; chats?: number; facts?: number; skills?: number; skillNames?: string[] } | null) => {
+        setMemoryStatus({
+          loaded: true,
+          configured: data?.configured === true,
+          signedIn: data?.signedIn === true,
+          chats: data?.chats ?? 0,
+          facts: data?.facts ?? 0,
+          skills: data?.skills ?? 0,
+          skillNames: Array.isArray(data?.skillNames) ? data.skillNames : []
+        });
+      })
+      .catch(() => setMemoryStatus((current) => ({ ...current, loaded: true })));
   }, [open, page]);
 
   useEffect(() => {
@@ -476,6 +500,14 @@ export function SettingsSheet({
     if (next === "connectors") {
       onClose();
       onOpenConnectors();
+      return;
+    }
+    /* Developer is a route rather than a pane: it is a working surface with
+       its own editor and commit state, which a sheet that closes on a stray
+       swipe is the wrong container for. */
+    if (next === "developer") {
+      onClose();
+      router.push("/settings/Developer");
       return;
     }
     setPage(next);
@@ -583,6 +615,10 @@ export function SettingsSheet({
             <RootRow label="Skills" active={page === "skills"} onOpen={() => openPage("skills")} />
             <RootRow label="Playbooks" active={page === "playbooks"} onOpen={() => openPage("playbooks")} />
             <RootRow label="Connectors" onOpen={() => openPage("connectors")} />
+            {/* The self-update engine. It was reachable only by typing the URL,
+                so the app looked like it had no developer surface at all — and
+                the assistant, asked where it was, invented a menu path. */}
+            <RootRow label="Developer" onOpen={() => openPage("developer")} />
           </Group>
           {/* Diagnostics live behind this. They are for proving a suspicion
               about the app, not for using it, and a routing override left on
@@ -833,6 +869,41 @@ export function SettingsSheet({
                 control={<SettingsToggle label="Memory" value={preferences.memory} onChange={() => update({ memory: !preferences.memory })} />}
               />
             </Group>
+            {/* Counted, not promised. "Saved" with nothing to check it against
+                is exactly the claim that stopped being believable — so this
+                reads the store and shows what is in it, by name. */}
+            <SectionHeader>Storage and memory</SectionHeader>
+            <Group>
+              {!memoryStatus.loaded ? (
+                <Row label="Reading your memory…" />
+              ) : !memoryStatus.configured ? (
+                <Row
+                  label="Cloud memory is off"
+                  description="Chats and skills stay on this device. Configure Supabase on the deployment to sync them across devices."
+                />
+              ) : !memoryStatus.signedIn ? (
+                <Row
+                  label="Signed out"
+                  description="Everything is on this device only. Sign in to sync chats, facts, and skills to your private cloud memory."
+                />
+              ) : (
+                <>
+                  <Row label="Conversations synced" description="Stored in your private cloud memory and restored on any device you sign in to." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.chats}</span>} />
+                  <Row label="Facts remembered" description="Standing facts about you, listed above." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.facts}</span>} />
+                  <Row label="Skills learned" description="Applied in every conversation, not only when a request happens to match." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.skills}</span>} />
+                </>
+              )}
+              <Row label="On this device" description={DURABILITY_DETAIL[durability]} />
+            </Group>
+            {memoryStatus.skillNames.length ? (
+              <>
+                <p className="px-4 pt-3 text-[0.75rem]/[1.125rem] text-tertiary">What NaviSoul has learned:</p>
+                <Group>
+                  {memoryStatus.skillNames.map((name) => <Row key={name} label={name} />)}
+                </Group>
+              </>
+            ) : null}
+
             <SectionHeader>Your data</SectionHeader>
             <Group>
               <Row

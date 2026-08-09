@@ -603,6 +603,21 @@ export function AppShell({
         playbook
       ].slice(-40)
     }));
+    /* Also into durable memory, which is the difference between a capability
+       that exists and one NaviSoul actually has. A playbook reaches the prompt
+       only when the request happens to match it; a learned skill is carried
+       into every conversation. Installing one used to do only the first, which
+       is why "save this skill" felt like it did nothing. Best-effort: signed
+       out or storage unconfigured, the local copy still works. */
+    void fetch("/api/memory/skills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: playbook.name,
+        description: playbook.description,
+        instructions: playbook.instructions
+      })
+    }).catch(() => {});
     haptic("impact-medium", preferences.haptics);
   }, [preferences.haptics]);
 

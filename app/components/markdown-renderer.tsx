@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import type { ArtifactPayload } from "@/lib/ai/types";
 import { validateGeneratedImagePayload } from "@/lib/security/generated-images";
 import { validateGeneratedAudioPayload } from "@/lib/security/generated-audio";
-import { recoverArtifactPayload } from "@/lib/security/artifacts";
+import { isArtifactFenceLanguage, looksLikeArtifactFence, recoverArtifactPayload } from "@/lib/security/artifacts";
 import { ArtifactFrame } from "./artifact-frame";
 import { CodeBlock } from "./code-block";
 import { parseSkillMarkdown, type Playbook } from "@/lib/playbooks";
@@ -89,7 +89,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, ha
             }
           }
 
-          if (language === "navi-artifact") {
+          /* The canonical fence always renders. An aliased fence — `artifact`,
+             `react-component` — renders only when its body really is a
+             payload, so a snippet someone labelled that way stays code. */
+          if (language === "navi-artifact" || (isArtifactFenceLanguage(language) && looksLikeArtifactFence(value))) {
             /* Salvage-first: strict validation, then repair of sloppy JSON,
                aliased kinds, and raw markup. Saved history full of older
                near-miss payloads renders too, instead of erroring forever. */
