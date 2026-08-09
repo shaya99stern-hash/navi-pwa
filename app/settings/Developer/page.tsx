@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Check, CloudUpload, FileCode2, GitBranch, LoaderCircle, Rocket, ShieldCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * The self-update engine, as a first-class screen.
@@ -25,12 +25,27 @@ type Status =
   | { phase: "error"; message: string }
   | { phase: "done"; message: string; url?: string };
 
+type Capability = { id: string; name: string; ready: boolean; detail: string };
+
 export default function DeveloperSettings() {
   const [path, setPath] = useState("");
   const [content, setContent] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
   const [loaded, setLoaded] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({ phase: "idle" });
+  /* What is actually switched on in this deployment. NaviSoul has told this
+     user it has no code sandbox, invented a SHOW_DEVELOPER flag, and named
+     credentials that do not exist — all answerable from here. */
+  const [capabilities, setCapabilities] = useState<{ loaded: boolean; items: Capability[] }>({ loaded: false, items: [] });
+
+  useEffect(() => {
+    void fetch("/api/system/status", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { capabilities?: Capability[] } | null) => {
+        setCapabilities({ loaded: true, items: Array.isArray(data?.capabilities) ? data.capabilities : [] });
+      })
+      .catch(() => setCapabilities({ loaded: true, items: [] }));
+  }, []);
 
   async function loadFile() {
     const target = path.trim();
@@ -101,6 +116,35 @@ export default function DeveloperSettings() {
                   NaviSoul in Code mode: with GitHub connected it reads, edits, and commits the codebase itself.
                 </p>
               </span>
+            </div>
+          </section>
+
+          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elev-2 text-secondary"><ShieldCheck size={21} /></span>
+              <span className="min-w-0 flex-1">
+                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Engine capabilities</h2>
+                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
+                  What is switched on in this deployment, read from the server. Each row names the variable it needs — never its value.
+                </p>
+              </span>
+            </div>
+            <div className="mt-3 divide-y divide-[var(--border-subtle)]">
+              {!capabilities.loaded ? (
+                <p className="py-4 text-[0.8125rem]/5 font-medium text-secondary">Checking…</p>
+              ) : !capabilities.items.length ? (
+                <p className="py-4 text-[0.8125rem]/5 font-medium text-secondary">Capability status could not be read.</p>
+              ) : capabilities.items.map((capability) => (
+                <div key={capability.id} className="flex gap-3 py-3">
+                  <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${capability.ready ? "bg-[var(--selection-bg)] text-accent" : "bg-elev-2 text-tertiary"}`}>
+                    {capability.ready ? <Check size={14} /> : <TriangleAlert size={13} />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[0.875rem]/5 font-semibold text-primary">{capability.name}</span>
+                    <span className="block text-[0.6875rem]/[1rem] font-medium text-tertiary">{capability.detail}</span>
+                  </span>
+                </div>
+              ))}
             </div>
           </section>
 
