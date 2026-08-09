@@ -186,7 +186,29 @@ export type SpeechOptions = {
 };
 
 /**
+ * Errors that mean listening is over for good, rather than for this utterance.
+ *
+ * Restarting after these produces an infinite retry loop against a permission
+ * the user has refused or a microphone that is not there — the mic button
+ * flickers and nothing is ever transcribed.
+ */
+const FATAL_SPEECH_ERRORS = new Set(["not-allowed", "service-not-allowed", "audio-capture", "language-not-supported"]);
+
+/**
  * Start listening, or return null having already explained why not.
+ *
+ * ## Why this restarts itself
+ *
+ * `continuous` is deliberately off: on iOS it holds the microphone open across
+ * an app switch, and the platform eventually kills that without telling the
+ * page, leaving a lit mic button with nothing behind it.
+ *
+ * But a single utterance ends at the first pause, so dictation stopped every
+ * time the speaker drew breath — "it barely works", exactly as reported. The
+ * answer is neither: recognition restarts itself when it ends on its own,
+ * until the caller stops it, the page is hidden, or an error arrives that
+ * restarting cannot fix. The microphone is therefore never held across an app
+ * switch, and a thinking pause no longer ends the recording.
  */
 export function startSpeechRecognition(options: SpeechOptions): SpeechSession | null {
   const Recognition = recognitionConstructor();
@@ -198,13 +220,44 @@ export function startSpeechRecognition(options: SpeechOptions): SpeechSession | 
   const recognition = new Recognition();
   recognition.lang = resolveVoiceLanguage(options.language);
   recognition.interimResults = true;
-  /* Single utterance. Continuous listening on iOS holds the microphone open
-     across an app switch, which the platform eventually kills without telling
-     the page — leaving a lit mic button with nothing behind it. */
   recognition.continuous = false;
   recognition.maxAlternatives = 1;
 
-  recognition.onstart = () => options.onStart?.();
+  /** Set once the caller stops, the page hides, or a fatal error arrives. */
+  let finished = false;
+  /* Restarts inside this window are treated as one continuous session, so the
+     caller sees a single start and a single end rather than one per phrase. */
+  let announcedStart = false;
+
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    detach();
+    options.onEnd?.();
+  };
+
+  const stopOnHide = () => {
+    if (document.visibilityState === "hidden") {
+      finished = true;
+      detach();
+      try { recognition.abort?.(); } catch { /* already gone */ }
+      options.onEnd?.();
+    }
+  };
+
+  const detach = () => {
+    document.removeEventListener("visibilitychange", stopOnHide);
+    window.removeEventListener("pagehide", finish);
+  };
+
+  document.addEventListener("visibilitychange", stopOnHide);
+  window.addEventListener("pagehide", finish);
+
+  recognition.onstart = () => {
+    if (announcedStart) return;
+    announcedStart = true;
+    options.onStart?.();
+  };
 
   recognition.onresult = (event) => {
     let final = "";
@@ -220,15 +273,30 @@ export function startSpeechRecognition(options: SpeechOptions): SpeechSession | 
   };
 
   recognition.onerror = (event) => {
+    /* "no-speech" and "aborted" end an utterance, not a session: a pause long
+       enough to trip the former is exactly what this is here to survive, so
+       neither is reported while the session is still going. Saying "nothing
+       was heard" every time someone stops to think is worse than silence. */
+    if (event?.error === "no-speech" || event?.error === "aborted") return;
+    if (event?.error && FATAL_SPEECH_ERRORS.has(event.error)) finished = true;
     const message = speechErrorMessage(event?.error);
     if (message) options.onError?.(message);
   };
 
-  recognition.onend = () => options.onEnd?.();
+  recognition.onend = () => {
+    if (finished) { detach(); options.onEnd?.(); return; }
+    try {
+      recognition.start();
+    } catch {
+      /* Already starting, or the platform refused. Either way this session is
+         over, and reporting it beats a mic button that stays lit. */
+      finish();
+    }
+  };
 
   recognition.start();
   return {
-    stop: () => recognition.stop?.(),
-    abort: () => recognition.abort?.()
+    stop: () => { finished = true; recognition.stop?.(); },
+    abort: () => { finished = true; detach(); recognition.abort?.(); }
   };
 }

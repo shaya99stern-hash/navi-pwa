@@ -12,11 +12,39 @@
  * it rather than being refused.
  */
 const EDGE_BODY_LIMIT = 4_000_000;
+/**
+ * What the rest of the request costs when nothing unusual is in it: the
+ * system prompt, memory, learned skills, and a short history.
+ *
+ * This used to be the whole story, and it was wrong in the one case that
+ * matters. A conversation that already contains photos re-sends them on every
+ * turn as data URLs, so the real overhead can be megabytes — and a new image
+ * resized to "fit" the fixed budget still overran the cap. The user saw
+ * "Image resized to fit the request limit" immediately followed by "That
+ * didn't go through", which reads as the app contradicting itself.
+ *
+ * Callers that know the conversation's real size pass it, and the budget is
+ * computed against that instead.
+ */
 const CONVERSATION_RESERVE = 400_000;
 const BASE64_OVERHEAD = 4 / 3;
 
-/** Total raw attachment bytes that survive base64 expansion inside the cap. */
+/** Raw attachment bytes that survive base64 expansion inside the cap. */
 export const ATTACHMENT_BUDGET = Math.floor((EDGE_BODY_LIMIT - CONVERSATION_RESERVE) / BASE64_OVERHEAD);
+
+/**
+ * The budget once the conversation already in the request is accounted for.
+ *
+ * Never returns less than a floor: at some point the honest answer is that
+ * the conversation itself is too big, and that is a clearer message than
+ * compressing a photo into unusable mud trying to make room.
+ */
+const MIN_IMAGE_BUDGET = 250_000;
+
+export function attachmentBudgetFor(conversationBytes: number): number {
+  const overhead = Math.max(CONVERSATION_RESERVE, conversationBytes);
+  return Math.max(MIN_IMAGE_BUDGET, Math.floor((EDGE_BODY_LIMIT - overhead) / BASE64_OVERHEAD));
+}
 
 export const MAX_ATTACHMENTS = 6;
 /** Images are resized, so the input limit only needs to bound decode cost. */
@@ -109,20 +137,26 @@ function describe(bytes: number): string {
  * Throws with a user-facing message when files that cannot be resized still do
  * not fit, since silently dropping an attachment would be worse.
  */
-export async function prepareAttachments(files: File[], preserveDetail = false): Promise<PreparedAttachments> {
+export async function prepareAttachments(
+  files: File[],
+  preserveDetail = false,
+  /** Bytes the conversation itself will occupy in this request, when known. */
+  conversationBytes = 0
+): Promise<PreparedAttachments> {
   if (!files.length) return { files, notice: null };
 
+  const budget = attachmentBudgetFor(conversationBytes);
   const fixed = files.filter((file) => !isResizableImage(file));
   const images = files.filter(isResizableImage);
   const fixedBytes = fixed.reduce((sum, file) => sum + file.size, 0);
 
-  if (fixedBytes > ATTACHMENT_BUDGET) {
+  if (fixedBytes > budget) {
     throw new Error(
-      `Documents total ${describe(fixedBytes)}, over the ${describe(ATTACHMENT_BUDGET)} request limit. Remove one and try again.`
+      `Documents total ${describe(fixedBytes)}, over the ${describe(budget)} left in this request. Remove one, or start a new chat.`
     );
   }
 
-  const imageBudget = ATTACHMENT_BUDGET - fixedBytes;
+  const imageBudget = budget - fixedBytes;
   if (!images.length) return { files, notice: null };
   if (imageBudget <= 0) {
     throw new Error(`The attached documents leave no room for images. Send them in separate messages.`);
@@ -133,9 +167,14 @@ export async function prepareAttachments(files: File[], preserveDetail = false):
   const shrunk = resized.filter((file, index) => file !== images[index]);
 
   const total = fixedBytes + resized.reduce((sum, file) => sum + file.size, 0);
-  if (total > ATTACHMENT_BUDGET) {
+  if (total > budget) {
+    /* Naming the real cause matters here: after several photos the
+       conversation, not the new image, is what is out of room, and "resize a
+       smaller one" is advice that cannot work. */
     throw new Error(
-      `Attachments total ${describe(total)} after resizing, over the ${describe(ATTACHMENT_BUDGET)} request limit.`
+      conversationBytes > CONVERSATION_RESERVE
+        ? `This conversation is too large to attach more to. Start a new chat and attach it there.`
+        : `Attachments total ${describe(total)} after resizing, over the ${describe(budget)} request limit.`
     );
   }
 

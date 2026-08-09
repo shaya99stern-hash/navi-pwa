@@ -397,8 +397,45 @@ function artifactIntent(text: string): boolean {
  * costs the request budget and eventually exceeds it outright — the model
  * gains nothing from re-reading bytes it cannot listen to or look at.
  */
+/**
+ * How many recent messages keep their attachments in full.
+ *
+ * Uploaded files travel as base64 data URLs and were replayed on every
+ * subsequent turn, forever. A chat with three photos in it re-sent all three
+ * with every message — several megabytes of body per turn, which is both the
+ * "that didn't go through" failure and a large part of why the app felt slow,
+ * since those bytes are uploaded from a phone before a single token can be
+ * generated.
+ *
+ * A window rather than only-the-latest, because "what about the top-left
+ * corner?" is a normal follow-up and must still see the picture. Beyond it,
+ * the attachment becomes a note: the model is told what was there rather than
+ * being left to infer that a file it cannot see never existed.
+ */
+const ATTACHMENT_REPLAY_WINDOW = 4;
+
+function redactStaleAttachments(messages: UIMessage[]): UIMessage[] {
+  const cutoff = messages.length - ATTACHMENT_REPLAY_WINDOW;
+  if (cutoff <= 0) return messages;
+
+  return messages.map((message, index) => {
+    if (index >= cutoff) return message;
+    const parts = message.parts as Array<Record<string, unknown>>;
+    if (!parts?.some((part) => part.type === "file")) return message;
+    return {
+      ...message,
+      parts: parts.map((part) => {
+        if (part.type !== "file") return part;
+        const name = typeof part.filename === "string" ? part.filename : "a file";
+        const kind = typeof part.mediaType === "string" && part.mediaType.startsWith("image/") ? "image" : "document";
+        return { type: "text", text: `[An ${kind} (${name}) was attached earlier in this conversation. Ask the user to re-attach it if you need to look at it again.]` };
+      })
+    };
+  }) as UIMessage[];
+}
+
 function redactGeneratedMedia(messages: UIMessage[]): UIMessage[] {
-  return messages.map((message) => ({
+  return redactStaleAttachments(messages).map((message) => ({
     ...message,
     parts: message.parts
       /* Reasoning traces are provider-specific and not portable. An assistant
@@ -482,6 +519,24 @@ function artifactInstruction(requested: boolean): string {
     : contract;
 }
 
+/**
+ * Chat mode, stated rather than left as the absence of Code mode.
+ *
+ * Chat used to be defined by what it was not, so the two modes differed only
+ * in routing — invisible from the outside. Saying what Chat is for makes the
+ * segmented control mean something on every turn, not only on the turns the
+ * dispatcher happens to label.
+ */
+function chatModeInstruction(): string {
+  return [
+    "You are NaviSoul working in NaviOS Chat.",
+    "Answer in prose. Explain in plain language first, and reach for a code block only when the user asked for code or when nothing else can express the answer.",
+    "Prefer the shortest complete answer. Where a question has a short answer and a long one, give the short one and offer to go further.",
+    "Engage with what was actually asked rather than the general topic around it, and pick up the thread of the conversation instead of restarting it each turn.",
+    "When a request would be better served in Code mode — a repository, a stack trace, a build — say so in one line and answer anyway."
+  ].join(" ");
+}
+
 /** The behavioural difference between the Chat and Code models lives here. */
 function codeModeInstruction(): string {
   return [
@@ -545,7 +600,13 @@ function systemPrompt(options: {
        and the specific mistakes already made that must not recur. Carried
        whenever the turn touches the project, its memory, or its tools. */
     needsMission(request) ? NAVI_MISSION : "",
-    mode === "code" ? codeModeInstruction() : "",
+    /* Keyed to the mode the user actually chose, not to how the dispatcher
+       classified this message. Keying it to dispatch meant that picking Code
+       and then asking something the classifier read as ordinary produced a
+       reply identical to Chat's — which is precisely the "switching modes
+       doesn't feel different" complaint. The switch is an instruction from
+       the user; it applies until they move it back. */
+    productMode === "code" ? codeModeInstruction() : chatModeInstruction(),
     playbookContext || "",
     effortInstruction(effort),
     userContext || "",
