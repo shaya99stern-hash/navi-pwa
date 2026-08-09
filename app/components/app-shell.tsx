@@ -835,7 +835,13 @@ export function AppShell({
       const preserveDetail = /\b(document|paper|form|receipt|invoice|statement|spreadsheet|table|label|sign|menu|page|letter|contract|report|ticket|screenshot|text|number|numbers|digit|digits|amount|date|total|handwriting|handwritten)\b/i.test(draft)
         || /\b(?:do\s?n[o']?t|don't|never)\s+(?:change|alter|modify|touch)\b/i.test(draft)
         || /\bkeep\s+.{1,40}?\s+(?:the\s+same|unchanged|as\s+is|intact)\b/i.test(draft);
-      const { files: outgoing, notice } = await prepareAttachments(pendingFiles, preserveDetail);
+      /* What the conversation itself will cost in this request. A chat that
+         already contains photos re-sends them as data URLs, so the room left
+         for a new one can be far smaller than the nominal budget — sizing
+         against a fixed reserve is what produced "resized to fit" followed
+         immediately by "that didn't go through". */
+      const conversationBytes = JSON.stringify(messages).length;
+      const { files: outgoing, notice } = await prepareAttachments(pendingFiles, preserveDetail, conversationBytes);
       if (notice) setAttachmentError(notice);
       const files = outgoing.length ? await Promise.all(outgoing.map(fileToPart)) : undefined;
       const text = draft.trim() || "Please review the attached file or image.";
