@@ -140,7 +140,8 @@ export type MenuSection =
   | "capabilities"
   | "connectors"
   | "skills"
-  | "playbooks";
+  | "playbooks"
+  | "developer";
 
 export type ProviderName =
   | "gemini"

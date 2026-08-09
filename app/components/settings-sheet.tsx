@@ -10,6 +10,7 @@ import {
   Sun,
   X
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, NaviPreferences } from "@/lib/ai/types";
 import { categories, isImplemented, type Skill } from "@/lib/skills";
@@ -100,7 +101,8 @@ const PAGE_TITLES: Record<Exclude<PageId, "root">, string> = {
   capabilities: "Capabilities",
   connectors: "Connectors",
   skills: "Skills",
-  playbooks: "Playbooks"
+  playbooks: "Playbooks",
+  developer: "Developer"
 };
 
 const DURABILITY_DETAIL: Record<StorageDurability, string> = {
@@ -316,6 +318,7 @@ export function SettingsSheet({
   onClearData,
   onExport
 }: Props) {
+  const router = useRouter();
   const [page, setPage] = useState<PageId>("root");
   /* The OAuth callback returns here with a reason in the query string. Each one
      gets a sentence — a raw code on screen is not an explanation. The rows
@@ -478,6 +481,14 @@ export function SettingsSheet({
       onOpenConnectors();
       return;
     }
+    /* Developer is a route rather than a pane: it is a working surface with
+       its own editor and commit state, which a sheet that closes on a stray
+       swipe is the wrong container for. */
+    if (next === "developer") {
+      onClose();
+      router.push("/settings/Developer");
+      return;
+    }
     setPage(next);
     update({ lastMenuSection: next });
   };
@@ -583,6 +594,10 @@ export function SettingsSheet({
             <RootRow label="Skills" active={page === "skills"} onOpen={() => openPage("skills")} />
             <RootRow label="Playbooks" active={page === "playbooks"} onOpen={() => openPage("playbooks")} />
             <RootRow label="Connectors" onOpen={() => openPage("connectors")} />
+            {/* The self-update engine. It was reachable only by typing the URL,
+                so the app looked like it had no developer surface at all — and
+                the assistant, asked where it was, invented a menu path. */}
+            <RootRow label="Developer" onOpen={() => openPage("developer")} />
           </Group>
           {/* Diagnostics live behind this. They are for proving a suspicion
               about the app, not for using it, and a routing override left on
