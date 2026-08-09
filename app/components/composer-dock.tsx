@@ -168,7 +168,8 @@ export function ComposerDock({
   const documentInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechSession | null>(null);
   /** True between pointerdown and pointerup on the mic, so a tap is distinguishable from a hold. */
-  const holdingMic = useRef(false);
+  /** Seconds recorded, so the composer shows progress rather than a lit icon. */
+  const [recordedSeconds, setRecordedSeconds] = useState(0);
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -292,7 +293,10 @@ export function ComposerDock({
 
   /* Idle status is deliberately empty: the thinking indicator in the thread
      already reports progress while generating. */
-  const footer = voiceMessage
+  const footer = (listening
+    ? `Listening · ${Math.floor(recordedSeconds / 60)}:${String(recordedSeconds % 60).padStart(2, "0")} · tap the mic to stop`
+    : null)
+    ?? voiceMessage
     ?? attachmentMessage
     ?? (!online && !offlineCommand
       ? "Offline · your draft is saved locally"
@@ -302,7 +306,21 @@ export function ComposerDock({
           ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready`
           : null);
 
-  const footerTone = !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
+  /* Recording is a live state, not a warning: it gets the accent, so the
+     composer reads as working rather than as complaining. */
+  const footerTone = listening
+    ? "text-accent"
+    : !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
+
+  /* A ticking timer while recording. A lit button says "something is on";
+     a running clock says "you are being heard", which is the difference
+     between trusting dictation and tapping it twice to check. */
+  useEffect(() => {
+    if (!listening) { setRecordedSeconds(0); return; }
+    const started = Date.now();
+    const timer = window.setInterval(() => setRecordedSeconds(Math.floor((Date.now() - started) / 1000)), 250);
+    return () => window.clearInterval(timer);
+  }, [listening]);
 
   function send() {
     // Deliberately not gated on the provider probe: if it is wrong or stale the
@@ -630,6 +648,26 @@ export function ComposerDock({
                 <ChevronDown size={13} className="shrink-0 text-tertiary" />
               </button>
 
+              {/* Research, in the composer where it is decided.
+                  It lived one level down inside the plus menu, so turning
+                  search on for the next question meant opening a sheet to
+                  find a checkbox — for the control most likely to change
+                  between one message and the next. It sits beside effort
+                  because they are the same kind of choice: how this message
+                  should be answered. */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={research}
+                onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
+                disabled={blocked || generating}
+                className={`flex min-h-9 shrink-0 items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2 ${research ? "bg-[var(--selection-bg)]" : ""}`}
+                aria-label={research ? "Research is on. Turn it off" : "Research is off. Turn it on"}
+              >
+                <Search size={16} strokeWidth={1.8} className={`shrink-0 ${research ? "text-accent" : "text-secondary"}`} />
+                <span className={`font-semibold ${research ? "text-accent" : "text-secondary"}`}>Research</span>
+              </button>
+
               <span className="min-w-0 flex-1" />
 
               {/* Mic and voice mode stay put while typing — the send button
@@ -637,16 +675,20 @@ export function ComposerDock({
                   finger disappears mid-thought. Both are icon-weight peers. */}
               <button
                 type="button"
-                /* Press and hold to record, release to stop — the gesture a
-                   phone user expects from a microphone. Tap still toggles, so
-                   a keyboard or assistive tap is not locked out. */
-                onPointerDown={() => { holdingMic.current = true; if (!listening) toggleVoice(); }}
-                onPointerUp={() => { if (holdingMic.current && listening) toggleVoice(); holdingMic.current = false; }}
-                onPointerCancel={() => { if (holdingMic.current && listening) toggleVoice(); holdingMic.current = false; }}
-                onClick={(event) => { if (event.detail === 0) toggleVoice(); }}
+                /* Tap to start, tap to stop.
+                 *
+                 * This was press-and-hold: pointerdown started recording and
+                 * pointerup stopped it. A normal tap is a pointerdown and a
+                 * pointerup a few milliseconds apart, so tapping the mic
+                 * started and instantly stopped it — the button did nothing at
+                 * all unless you held it perfectly still for the whole
+                 * sentence, and any scroll or permission prompt cancelled the
+                 * gesture. Toggling is also what a phone user actually expects
+                 * from a dictation button, and it leaves the hand free. */
+                onClick={toggleVoice}
                 disabled={blocked || generating}
                 className={`composer-action ${listening ? "!bg-accent !text-[var(--accent-on-primary)]" : ""}`}
-                aria-label={listening ? "Release to stop recording" : "Press and hold to record"}
+                aria-label={listening ? "Stop recording" : "Record a message"}
                 aria-pressed={listening}
               >
                 <Mic size={19} strokeWidth={1.8} />
