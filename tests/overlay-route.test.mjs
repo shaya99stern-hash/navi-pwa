@@ -1,0 +1,92 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+let pass = 0, fail = 0;
+const check = (n, a, e) => {
+  const ok = JSON.stringify(a) === JSON.stringify(e); ok ? pass++ : fail++;
+  console.log(`${ok ? "PASS" : "FAIL"}  ${n}${ok ? "" : `\n   got:  ${JSON.stringify(a)}\n   want: ${JSON.stringify(e)}`}`);
+};
+
+const root = process.cwd();
+const stripComments = (source) => source
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+const module_ = readFileSync(join(root, "lib/ui/overlay-route.ts"), "utf8");
+const shell = stripComments(readFileSync(join(root, "app/components/app-shell.tsx"), "utf8"));
+const composer = stripComments(readFileSync(join(root, "app/components/composer-dock.tsx"), "utf8"));
+
+/* ── Every overlay is dismissable by the gesture people actually use ─────── */
+
+/* On a phone, back is how you dismiss the thing in front of you. These were
+   plain booleans, so back skipped the sheet entirely and navigated the chat
+   underneath — or left the app when the chat was the first thing opened. An
+   overlay added later without a route would reintroduce exactly that, silently,
+   which is why this counts them rather than spot-checking. */
+const SHELL_OVERLAYS = [
+  "historyOpen", "settingsOpen", "connectorsOpen", "projectsOpen",
+  "artifactsOpen", "voiceOpen", "chatMenuOpen", "effortSheetOpen"
+];
+for (const name of SHELL_OVERLAYS) {
+  check(`${name} is dismissable by back`, new RegExp(`useOverlayRoute\\(\\{\\s*open:\\s*${name}\\b`).test(shell), true);
+}
+check("the message action sheet is dismissable by back", /useOverlayRoute\(\{\s*open:\s*contextMessage !== null/.test(shell), true);
+check("the attachment menu is dismissable by back", /useOverlayRoute\(\{\s*open:\s*sourceMenuOpen\b/.test(composer), true);
+check("the integrations sheet is dismissable by back", /useOverlayRoute\(\{\s*open:\s*integrationsOpen\b/.test(composer), true);
+
+/* Every boolean the shell opens an overlay with should be accounted for. A new
+   `somethingOpen` that never reaches this module is the regression. */
+const declared = [...shell.matchAll(/const \[(\w+Open), set\w+\] = useState/g)].map((m) => m[1]);
+const routed = new Set([...shell.matchAll(/useOverlayRoute\(\{\s*open:\s*(\w+)/g)].map((m) => m[1]));
+const unrouted = declared.filter((name) => !routed.has(name));
+check("no shell overlay is left out", unrouted, []);
+
+/* ── The address follows the screen ─────────────────────────────────────── */
+
+/* `/settings` opens the settings sheet, so closing it used to leave the URL
+   naming a screen that was no longer showing — reload and it sprang open
+   again. Each overlay with a route of its own now carries it. */
+for (const [state, path] of [
+  ["historyOpen", "/recents"], ["settingsOpen", "/settings"], ["connectorsOpen", "/connectors"],
+  ["projectsOpen", "/projects"], ["artifactsOpen", "/artifacts"], ["voiceOpen", "/voice"]
+]) {
+  const block = shell.slice(shell.indexOf(`open: ${state}`));
+  check(`${state} carries ${path}`, block.slice(0, 260).includes(`path: "${path}"`), true);
+}
+
+/* A link straight to a sheet has nothing behind it, so closing must not walk
+   off the end of the history and out of the app. */
+check("a linked sheet closes to somewhere in the app", /restore: restorePath/.test(shell), true);
+check("the restore target is a chat that exists", /chats\.some\(\(chat\) => chat\.id === activeId\)/.test(shell), true);
+
+/* ── The race that driving the app uncovered ─────────────────────────────── */
+
+/* `history.back()` lands a tick later, and one sheet replacing another does
+   both halves in a single render — Settings closes and Connectors opens from
+   the same tap. Pushing before the back arrived unwound the entry that had
+   just been added, dropping straight to the conversation. */
+check("a push waits behind an outstanding back", module_.includes("function afterPending"), true);
+check("the push actually goes through it", /afterPending\(\(\) => window\.history\.pushState/.test(module_), true);
+check("popstate is what releases it, not a timer", /awaitingPop\.shift\(\);\s*\n\s*drain\(\);/.test(module_), true);
+check("no timer is involved", /setTimeout|requestAnimationFrame/.test(module_), false);
+
+/* Our own pops must not run a close handler that has already run, and pops we
+   did not cause — moving between chats — must not close anything. */
+check("an expected pop skips the close handler", /if \(awaitingPop\.length\) \{[\s\S]{0,120}return;/.test(module_), true);
+check("an unrelated pop closes nothing", module_.includes("if (!frame) return;"), true);
+check("a closed frame cannot be closed twice", module_.includes("frame.live = false"), true);
+
+/* An overlay open on the first render arrived by route, so the navigation that
+   brought us here is already its history entry. Pushing another would need two
+   backs to leave one sheet. */
+check("a route-opened overlay does not push a second entry", module_.includes("owned: !first"), true);
+check("and it corrects the address in place instead", /if \(!frame\.owned\) \{[\s\S]{0,400}replaceState/.test(module_), true);
+
+/* ── The keyboard equivalent ─────────────────────────────────────────────── */
+
+check("escape closes the innermost overlay", /event\.key !== "Escape"/.test(module_), true);
+check("escape respects a handler that already acted", module_.includes("event.defaultPrevented"), true);
+check("escape closes one, not all", /const frame = stack\[stack\.length - 1\]/.test(module_), true);
+
+console.log(`\n${pass}/${pass + fail} passed`);
+if (fail) process.exit(1);

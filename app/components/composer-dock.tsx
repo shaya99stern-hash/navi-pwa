@@ -35,6 +35,7 @@ import { haptic } from "@/lib/ui/haptics";
 import { startRecording, type RecordingSession } from "@/lib/ui/recorder";
 import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
+import { useOverlayRoute } from "@/lib/ui/overlay-route";
 import {
   ATTACHMENT_BUDGET,
   MAX_ATTACHMENTS,
@@ -202,6 +203,13 @@ export function ComposerDock({
   const valueRef = useRef(value);
   valueRef.current = value;
   const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
+
+  /* Back dismisses whatever is in front of you. These two are the composer's
+     own overlays, and leaving them out would have made the gesture work
+     everywhere except the sheet a thumb opens most often. Neither takes an
+     address: a menu is not a destination worth linking to. */
+  useOverlayRoute({ open: sourceMenuOpen, onClose: () => setSourceMenuOpen(false) });
+  useOverlayRoute({ open: integrationsOpen, onClose: () => setIntegrationsOpen(false) });
 
   /* 82 on-device commands are useless if nobody can find them, so typing a
      slash lists what it could still become. Ranking is a synchronous map
