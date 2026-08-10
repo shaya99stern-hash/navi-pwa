@@ -171,7 +171,6 @@ export function ComposerDock({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<RecordingSession | null>(null);
-  /** True between pointerdown and pointerup on the mic, so a tap is distinguishable from a hold. */
   /** Seconds recorded, so the composer shows progress rather than a lit icon. */
   const [recordedSeconds, setRecordedSeconds] = useState(0);
   const [sending, setSending] = useState(false);
@@ -197,9 +196,9 @@ export function ComposerDock({
     loaded: false
   });
   const [touchKeyboard, setTouchKeyboard] = useState(false);
-  /* The draft as it stands right now. A recognition callback closes over the
-     `value` from the render that started listening, so appending through the
-     prop dropped anything typed while the microphone was open. */
+  /* The draft as it stands right now. The transcription callback closes over
+     the `value` from the render that started recording, so appending through
+     the prop dropped anything typed while the microphone was open. */
   const valueRef = useRef(value);
   valueRef.current = value;
   const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
@@ -664,6 +663,11 @@ export function ComposerDock({
             />
 
             <div className="mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
+              {/* Recording takes the whole row. Leaving the other controls in
+                  place squeezed the waveform into a sliver competing with a
+                  flex spacer, and none of them is reachable one-handed while
+                  the other hand is holding the phone up to speak. */}
+              {listening ? null : (
               <button
                 type="button"
                 onClick={openSourceMenu}
@@ -674,7 +678,9 @@ export function ComposerDock({
               >
                 <Plus size={22} strokeWidth={1.8} />
               </button>
+              )}
 
+              {listening ? null : (
               <button
                 type="button"
                 onClick={onOpenEffort}
@@ -686,6 +692,7 @@ export function ComposerDock({
                 <span className="truncate font-semibold text-primary">{effortLabel}</span>
                 <ChevronDown size={13} className="shrink-0 text-tertiary" />
               </button>
+              )}
 
               {/* Research, in the composer where it is decided.
                   It lived one level down inside the plus menu, so turning
@@ -694,6 +701,7 @@ export function ComposerDock({
                   between one message and the next. It sits beside effort
                   because they are the same kind of choice: how this message
                   should be answered. */}
+              {listening ? null : (
               <button
                 type="button"
                 role="switch"
@@ -706,8 +714,9 @@ export function ComposerDock({
                 <Search size={16} strokeWidth={1.8} className={`shrink-0 ${research ? "text-accent" : "text-secondary"}`} />
                 <span className={`font-semibold ${research ? "text-accent" : "text-secondary"}`}>Research</span>
               </button>
+              )}
 
-              <span className="min-w-0 flex-1" />
+              {listening ? null : <span className="min-w-0 flex-1" />}
 
               {/* Mic and voice mode stay put while typing — the send button
                   joins them instead of replacing them, so nothing under a

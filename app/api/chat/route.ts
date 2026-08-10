@@ -46,6 +46,7 @@ import { APP_KNOWLEDGE } from "@/lib/ai/app-knowledge";
 import { NAVI_MISSION, needsMission } from "@/lib/ai/mission";
 import { ORCHESTRATION_KNOWLEDGE, needsOrchestrationKnowledge } from "@/lib/ai/orchestration-knowledge";
 import { ENGINEERING_DISCIPLINE, needsEngineeringDiscipline } from "@/lib/ai/engineering-discipline";
+import { CODE_CRAFT, needsCodeCraft } from "@/lib/ai/code-craft";
 import { needsAppKnowledge, stablePrefix } from "@/lib/ai/prompt/base";
 import { csvToMarkdown, documentBlock, extractPdfText } from "@/lib/ai/document-text";
 
@@ -612,6 +613,11 @@ function systemPrompt(options: {
        change code without breaking what surrounds it, and how to report the
        result honestly all matter more on these turns than the tokens do. */
     needsEngineeringDiscipline(toolNames.includes("commit_own_source")) ? ENGINEERING_DISCIPLINE : "",
+    /* Conduct is not competence. The brief above says how to behave when
+       editing this app; this teaches the craft itself — the type system, React
+       state and effects, the two runtimes, and the bug shapes that have
+       actually shipped here. */
+    needsCodeCraft(toolNames.includes("commit_own_source")) ? CODE_CRAFT : "",
     /* Keyed to the mode the user actually chose, not to how the dispatcher
        classified this message. Keying it to dispatch meant that picking Code
        and then asking something the classifier read as ordinary produced a

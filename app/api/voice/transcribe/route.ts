@@ -50,7 +50,12 @@ export async function POST(request: Request) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(`https://api-inference.huggingface.co/models/${transcriptionModel()}`, {
+    /* The router host, matching image and audio generation. The legacy
+       api-inference.huggingface.co host is retired and answers 404, which
+       would have made every transcription fail while looking like a bad
+       recording. Model ids contain a slash, so each segment is encoded. */
+    const encodedModel = transcriptionModel().split("/").map(encodeURIComponent).join("/");
+    const response = await fetch(`https://router.huggingface.co/hf-inference/models/${encodedModel}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
