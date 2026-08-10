@@ -3,7 +3,7 @@ import { buildDevTools } from "@/lib/ai/dev-tools";
 import { buildExecutionTools } from "@/lib/ai/execution-tools";
 import { buildGitHubWriteTools } from "@/lib/ai/github-write-tools";
 import { buildGoogleTools } from "@/lib/ai/google-tools";
-import { buildConnectorTools } from "@/lib/ai/connector-tools";
+import { buildConnectorTools, buildProvisioningTools } from "@/lib/ai/connector-tools";
 import { buildLearningTools } from "@/lib/ai/learning-tools";
 import { buildSelfUpdateTools, selfUpdateToken } from "@/lib/ai/self-update-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
@@ -110,6 +110,14 @@ const GROUPS: Group[] = [
     when: ({ mode, request }) => Boolean(selfUpdateToken()) && (mode === "code" || wantsSelfUpdate(request))
   },
   {
+    /* Connecting NaviOS to a service by name, and writing the key into its own
+       configuration. Offered when the turn is about connecting something, or
+       in Code mode where configuration is the subject anyway. */
+    name: "provisioning",
+    tools: () => ({}),
+    when: ({ mode, request }) => mode === "code" || wantsProvisioning(request)
+  },
+  {
     /* The connectors the user typed in themselves. One tool for all of them. */
     name: "custom-connectors",
     tools: () => ({}),
@@ -193,6 +201,19 @@ export function wantsAccountTools(request: string | undefined): boolean {
  */
 const MENTIONS_SELF_UPDATE = /\b(your own code|your code|this app|the app|navios|navi-pwa|self.?update|edit yourself|your source|your repo|commit|deploy)\b/i;
 
+/**
+ * Is this turn about connecting NaviOS to something?
+ *
+ * Generous on purpose, like its siblings: a false positive costs two tool
+ * schemas on one turn, a false negative sends someone to the Vercel dashboard
+ * on a phone to do by hand what the app can do for them.
+ */
+const MENTIONS_PROVISIONING = /\b(connect|connector|api key|apikey|token|add (?:a |an |my )?(?:key|api|provider|model|service)|hook (?:it |this )?up|set up|configure|integrat\w+|groq|gemini|tavily|exa|openrouter|together|cerebras|sambanova|nvidia|mistral|supabase|hugging\s?face|anthropic|openai)\b/i;
+
+export function wantsProvisioning(request: string | undefined): boolean {
+  return Boolean(request) && MENTIONS_PROVISIONING.test(request as string);
+}
+
 export function wantsSelfUpdate(request: string | undefined): boolean {
   return Boolean(request) && MENTIONS_SELF_UPDATE.test(request as string);
 }
@@ -216,6 +237,7 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...buildWebTools({ search: policy.web, signal, onActivity }),
     ...(active("learning") ? buildLearningTools({ clerkToken, clerkUserId, onActivity }) : {}),
     ...(active("self-update") ? buildSelfUpdateTools({ signal, onActivity }) : {}),
+    ...(active("provisioning") ? buildProvisioningTools({ origin, cookie, onActivity }) : {}),
     ...(active("custom-connectors") ? buildConnectorTools({ connectors: customConnectors, signal, onActivity }) : {}),
     // Repository and deployment reads, present only when their tokens are —
     // and only when this turn is plausibly about them; see `wantsAccountTools`.

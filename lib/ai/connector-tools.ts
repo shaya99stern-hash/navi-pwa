@@ -94,6 +94,89 @@ async function querySupabaseConnector(connector: CustomConnector, table: string,
   return clip(await response.text());
 }
 
+/**
+ * Tools for connecting NaviOS to a service by name.
+ *
+ * "Add Groq, here is the key" is a complete instruction: the base URL, the
+ * environment variable, and where a key comes from are all facts about Groq.
+ * Making the user supply them — in the Vercel dashboard, on a phone — is why
+ * keys went unset for weeks while features looked broken.
+ *
+ * Present whenever the deployment can write its own configuration, which is
+ * the honest precondition: without it the answer is "here is where to paste
+ * it", and pretending otherwise would be another promise with nothing behind
+ * it.
+ */
+export function buildProvisioningTools({ origin, cookie, onActivity = () => {} }: {
+  origin?: string;
+  cookie?: string;
+  onActivity?: (label: string) => void;
+}): ToolSet {
+  if (!origin) return {};
+
+  return {
+    list_connectable_services: tool({
+      description:
+        "List every service NaviOS knows how to connect itself to — model providers, web search, database, and deployment — showing which are already configured and where a key comes from. Call this when the user asks what can be connected, what is missing, or how to add something.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        onActivity("Checking what can be connected");
+        try {
+          const response = await fetch(new URL("/api/connectors/provision", origin), {
+            headers: cookie ? { cookie } : {},
+            cache: "no-store"
+          });
+          if (!response.ok) return "The connector catalogue could not be read.";
+          const data = (await response.json()) as {
+            selfConfigurable?: boolean;
+            setupHint?: string | null;
+            providers?: Array<{ label: string; envKey: string; keyUrl: string; free: boolean; configured: boolean; detail: string }>;
+          };
+          const rows = (data.providers ?? [])
+            .map((entry) => `${entry.configured ? "[connected]" : "[not set]"} ${entry.label} — ${entry.detail} Key: ${entry.keyUrl} (${entry.free ? "free tier" : "paid"}). Variable: ${entry.envKey}`)
+            .join("\n");
+          const header = data.selfConfigurable
+            ? "NaviOS can set any of these itself — ask the user for the key and call connect_service."
+            : `NaviOS cannot write its own configuration yet. ${data.setupHint ?? ""} Until then, tell the user which variable to add in Vercel.`;
+          return `${header}\n\n${rows}`;
+        } catch {
+          return "The connector catalogue could not be reached.";
+        }
+      }
+    }),
+
+    connect_service: tool({
+      description:
+        "Connect NaviOS to a service by name using a key the user has given you in this conversation. This writes the key into the deployment's own configuration and starts a redeploy — it genuinely connects the service. Never invent or guess a key: call this only with one the user actually provided. Confirm what happened using the result, and tell them it takes a couple of minutes to take effect.",
+      inputSchema: z.object({
+        provider: z.string().describe("The service name as the user said it, e.g. 'Groq', 'Tavily', 'Hugging Face'."),
+        key: z.string().describe("The API key or value the user supplied.")
+      }),
+      execute: async ({ provider, key }) => {
+        onActivity(`Connecting ${provider}`);
+        try {
+          const response = await fetch(new URL("/api/connectors/provision", origin), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              /* Same-origin POST from the server needs the caller's cookies to
+                 be the same user, and an Origin the mutation guard accepts. */
+              origin,
+              ...(cookie ? { cookie } : {})
+            },
+            body: JSON.stringify({ provider, value: key })
+          });
+          const data = (await response.json().catch(() => null)) as { note?: string; error?: string } | null;
+          if (!response.ok) return `That did not connect: ${data?.error ?? response.status}. Say so plainly rather than claiming it worked.`;
+          return data?.note ?? "The key was saved.";
+        } catch {
+          return "The connection could not be completed. Say so rather than claiming it worked.";
+        }
+      }
+    })
+  };
+}
+
 export function buildConnectorTools({ connectors, signal, onActivity = () => {} }: {
   connectors: CustomConnector[];
   signal?: AbortSignal;

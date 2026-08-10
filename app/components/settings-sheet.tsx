@@ -97,7 +97,7 @@ const PAGE_TITLES: Record<Exclude<PageId, "root">, string> = {
   diagnostics: "Diagnostics",
   general: "General",
   account: "Account",
-  privacy: "Privacy",
+  privacy: "Memory and storage",
   capabilities: "Capabilities",
   connectors: "Connectors",
   skills: "Skills",
@@ -607,7 +607,10 @@ export function SettingsSheet({
           <Group>
             <RootRow label="General" active={page === "general"} onOpen={() => openPage("general")} />
             <RootRow label="Account" active={page === "account"} onOpen={() => openPage("account")} />
-            <RootRow label="Privacy" active={page === "privacy"} onOpen={() => openPage("privacy")} />
+            {/* Named for what people look for. "Storage and memory" lives on
+                the Privacy page, and someone hunting for their memory does not
+                think of it as a privacy question — so the row says so. */}
+            <RootRow label="Memory and storage" active={page === "privacy"} onOpen={() => openPage("privacy")} />
             <RootRow label="Capabilities" active={page === "capabilities"} onOpen={() => openPage("capabilities")} />
           </Group>
           <p className="mt-8 px-4 text-[0.6875rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">Customize</p>
