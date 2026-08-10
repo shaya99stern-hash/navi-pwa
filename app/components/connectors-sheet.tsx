@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Check, ChevronDown, Link2, LoaderCircle, LockKeyhole, Plus, RefreshCw, ShieldCheck, Trash2, UserRoundCheck, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Link2, LoaderCircle, LockKeyhole, Plus, RefreshCw, ShieldCheck, Sparkles, Trash2, UserRoundCheck, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ConnectorAccessMode, CustomConnector, CustomConnectorKind, NaviPreferences } from "@/lib/ai/types";
 import { createId } from "@/lib/chat";
@@ -123,6 +123,56 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
   const [draftKey, setDraftKey] = useState("");
   const [draftModel, setDraftModel] = useState("");
   const [addState, setAddState] = useState<{ phase: "idle" | "testing" | "error"; message?: string }>({ phase: "idle" });
+  /* The services NaviOS knows how to connect itself to, and which are set.
+     Presence only — a value is never sent to the browser. */
+  type CatalogProvider = { id: string; label: string; envKey: string; keyUrl: string; free: boolean; detail: string; configured: boolean };
+  const [catalog, setCatalog] = useState<{ selfConfigurable: boolean; setupHint: string | null; providers: CatalogProvider[] }>(
+    { selfConfigurable: false, setupHint: null, providers: [] }
+  );
+  const [keyDraftFor, setKeyDraftFor] = useState<string | null>(null);
+  const [keyDraft, setKeyDraft] = useState("");
+  const [provisioning, setProvisioning] = useState<string | null>(null);
+
+  async function refreshCatalog() {
+    try {
+      const response = await fetch("/api/connectors/provision", { cache: "no-store" });
+      if (!response.ok) return;
+      const data = (await response.json()) as { selfConfigurable?: boolean; setupHint?: string | null; providers?: CatalogProvider[] };
+      setCatalog({
+        selfConfigurable: data.selfConfigurable === true,
+        setupHint: data.setupHint ?? null,
+        providers: Array.isArray(data.providers) ? data.providers : []
+      });
+    } catch {
+      /* A catalogue that cannot be read leaves the section saying "Loading",
+         which is better than claiming nothing can be connected. */
+    }
+  }
+
+  async function provision(provider: CatalogProvider) {
+    const value = keyDraft.trim();
+    if (!value) return;
+    setProvisioning(provider.id);
+    setErrors((current) => ({ ...current, [provider.id]: "" }));
+    try {
+      const response = await fetch("/api/connectors/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: provider.id, value })
+      });
+      const data = (await response.json()) as { note?: string; error?: string };
+      if (!response.ok) throw new Error(data.error || "That key could not be saved.");
+      setKeyDraft("");
+      setKeyDraftFor(null);
+      haptic("success", haptics);
+      await refreshCatalog();
+    } catch (error) {
+      setErrors((current) => ({ ...current, [provider.id]: error instanceof Error ? error.message : "That key could not be saved." }));
+      haptic("error", haptics);
+    } finally {
+      setProvisioning(null);
+    }
+  }
 
   async function refreshAccounts() {
     const entries = await Promise.all(ACCOUNTS.map(async (account) => {
@@ -182,6 +232,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
     if (!open) return;
     void refresh();
     void refreshAccounts();
+    void refreshCatalog();
   }, [open]);
 
   if (!open) return null;
@@ -376,6 +427,84 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                 </div>
                 );
               })}
+            </div>
+          </section>
+
+          {/* Naming a service is enough. Everything else — the base URL, the
+              variable, where a key comes from — is a fact about that service,
+              not a decision for whoever is holding the phone. Pasting the key
+              here writes it into the deployment and redeploys, so nobody has
+              to find the Vercel dashboard on a phone. */}
+          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--selection-bg)] text-accent"><Sparkles size={21} /></span>
+              <span className="min-w-0 flex-1">
+                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Services NaviOS can connect</h2>
+                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
+                  {catalog.selfConfigurable
+                    ? "Pick one, paste the key, and NaviOS sets it up and redeploys itself. You can also just ask NaviSoul in chat."
+                    : catalog.setupHint ?? "Loading…"}
+                </p>
+              </span>
+            </div>
+
+            <div className="mt-3 divide-y divide-[var(--border-subtle)]">
+              {catalog.providers.map((provider) => (
+                <div key={provider.id} className="py-3">
+                  <div className="flex min-h-12 items-center gap-3">
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${provider.configured ? "bg-[var(--selection-bg)] text-accent" : "bg-elev-2 text-secondary"}`}>
+                      {provider.configured ? <Check size={17} /> : <Plus size={17} />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate text-[0.875rem]/5 font-semibold text-primary">{provider.label}</span>
+                        {provider.free ? <span className="shrink-0 rounded-full bg-elev-2 px-1.5 py-0.5 text-[0.5625rem]/3 font-semibold uppercase tracking-[0.06em] text-tertiary">Free</span> : null}
+                      </span>
+                      <span className="block text-[0.6875rem]/4 font-medium text-tertiary">{provider.detail}</span>
+                    </span>
+                    {provisioning === provider.id ? (
+                      <LoaderCircle size={18} className="shrink-0 animate-spin text-accent" />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setKeyDraftFor(keyDraftFor === provider.id ? null : provider.id); setKeyDraft(""); haptic("selection", haptics); }}
+                        className="min-h-10 shrink-0 rounded-xl px-3 text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-3"
+                      >
+                        {provider.configured ? "Replace" : "Add"}
+                      </button>
+                    )}
+                  </div>
+
+                  {keyDraftFor === provider.id ? (
+                    <div className="mt-2 space-y-2 pl-12">
+                      <input
+                        value={keyDraft}
+                        onChange={(event) => setKeyDraft(event.target.value)}
+                        placeholder={`Paste your ${provider.label} key`}
+                        type="password"
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-2 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void provision(provider)}
+                          disabled={!keyDraft.trim() || !catalog.selfConfigurable}
+                          className="flex min-h-11 flex-1 items-center justify-center rounded-xl bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed disabled:opacity-60"
+                        >
+                          Connect and deploy
+                        </button>
+                        <a href={provider.keyUrl} target="_blank" rel="noreferrer noopener" className="min-h-11 shrink-0 rounded-xl px-3 py-3 text-[0.8125rem]/5 font-semibold text-secondary active:bg-elev-3">Get a key</a>
+                      </div>
+                      {errors[provider.id] ? (
+                        <p className="flex gap-1.5 text-[0.6875rem]/4 font-medium text-danger"><AlertTriangle size={13} className="shrink-0" />{errors[provider.id]}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {!catalog.providers.length ? <p className="py-6 text-center text-[0.8125rem]/5 font-medium text-secondary">Loading services…</p> : null}
             </div>
           </section>
 
