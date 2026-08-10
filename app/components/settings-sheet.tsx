@@ -163,6 +163,11 @@ function Group({ children }: { children: ReactNode }) {
   return <div className="divide-y divide-[var(--border-subtle)]">{children}</div>;
 }
 
+/** A number in the control slot. Tabular so a column of them stays aligned. */
+function Count({ value }: { value: number }) {
+  return <span className="text-[0.9375rem]/[1.375rem] tabular-nums text-secondary">{value}</span>;
+}
+
 /** C6 — toggle. The accent stays reserved for marks; the ON track is light. */
 export function SettingsToggle({ value, onChange, label }: { value: boolean; onChange: () => void; label: string }) {
   return (
@@ -826,12 +831,68 @@ export function SettingsSheet({
 
         {page === "privacy" ? (
           <>
+            {/* One subject, read top to bottom: the switches that govern
+                memory, then everything memory currently holds.
+
+                It used to be four sections in a different order — a paragraph,
+                the facts list, the switches, then counts that referred to
+                "the list above" across an intervening section, with the
+                storage-durability sentence printed twice. Every part worked;
+                the page was just assembled in the order the features were
+                built rather than the order anyone reads them. */}
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
-              NaviOS is local-first: conversations, projects, and preferences live in this browser&apos;s storage,
-              and while you are signed in they also sync to your own private Supabase cloud memory, readable by
-              your account alone. Requests reach the AI providers you have configured and nowhere else.
+              Conversations, projects, and preferences live in this browser. Signed in, they also sync to your own
+              private cloud memory, readable by your account alone.
             </p>
-            <SectionHeader>What NaviSoul remembers</SectionHeader>
+
+            <SectionHeader>Memory</SectionHeader>
+            <Group>
+              <Row
+                label="Local history"
+                description={DURABILITY_DETAIL[durability]}
+                control={<SettingsToggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />}
+              />
+              <Row
+                label="Memory"
+                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages NaviSoul actually uses are sent."
+                control={<SettingsToggle label="Memory" value={preferences.memory} onChange={() => update({ memory: !preferences.memory })} />}
+              />
+            </Group>
+
+            {/* Counted, not promised. "Saved" with nothing to check it against
+                is exactly the claim that stopped being believable — so this
+                reads the store and shows what is in it, by name. */}
+            <SectionHeader>What is stored</SectionHeader>
+            <Group>
+              {!memoryStatus.loaded ? (
+                <Row label="Reading your memory…" />
+              ) : !memoryStatus.configured ? (
+                <Row
+                  label="Cloud memory is off"
+                  description="Chats and skills stay on this device. Configure Supabase on the deployment to sync them across devices."
+                />
+              ) : !memoryStatus.signedIn ? (
+                <Row
+                  label="Signed out"
+                  description="Everything is on this device only. Sign in to sync chats, facts, and skills to your private cloud memory."
+                />
+              ) : (
+                <>
+                  <Row label="Conversations" description="Restored on any device you sign in to." control={<Count value={memoryStatus.chats} />} />
+                  <Row label="Facts about you" description="Listed below, and removable one by one." control={<Count value={memoryStatus.facts} />} />
+                  <Row label="Skills you taught it" description="Applied in every conversation, not only when a request happens to match." control={<Count value={memoryStatus.skills} />} />
+                  {/* Separate from the count above on purpose. These are
+                      conclusions NaviSoul drew on its own, so seeing them
+                      counted — and named below — is the only way to notice one
+                      that is wrong before it quietly shapes every answer. */}
+                  <Row label="Lessons it worked out" description="Conclusions NaviSoul drew from experience and carries forward on its own." control={<Count value={memoryStatus.lessons} />} />
+                </>
+              )}
+            </Group>
+
+            {/* Directly under the count it belongs to, rather than a section
+                away from it. */}
+            <p className="px-4 pt-4 text-[0.75rem]/[1.125rem] text-tertiary">Facts about you</p>
             <Group>
               {!facts.loaded ? (
                 <Row label="Loading…" />
@@ -857,57 +918,13 @@ export function SettingsSheet({
             </Group>
             {facts.configured && facts.items.length ? (
               <p className="px-4 pt-2 text-[0.75rem]/[1.125rem] text-tertiary">
-                Forgetting is immediate and cannot be undone. The memory switch below stops anything new being added.
+                Forgetting is immediate and cannot be undone. The Memory switch above stops anything new being added.
               </p>
             ) : null}
 
-            <SectionHeader>Preferences</SectionHeader>
-            <Group>
-              <Row
-                label="Local history"
-                description={DURABILITY_DETAIL[durability]}
-                control={<SettingsToggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />}
-              />
-              <Row
-                label="Memory"
-                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages NaviSoul actually uses are sent."
-                control={<SettingsToggle label="Memory" value={preferences.memory} onChange={() => update({ memory: !preferences.memory })} />}
-              />
-            </Group>
-            {/* Counted, not promised. "Saved" with nothing to check it against
-                is exactly the claim that stopped being believable — so this
-                reads the store and shows what is in it, by name. */}
-            <SectionHeader>Storage and memory</SectionHeader>
-            <Group>
-              {!memoryStatus.loaded ? (
-                <Row label="Reading your memory…" />
-              ) : !memoryStatus.configured ? (
-                <Row
-                  label="Cloud memory is off"
-                  description="Chats and skills stay on this device. Configure Supabase on the deployment to sync them across devices."
-                />
-              ) : !memoryStatus.signedIn ? (
-                <Row
-                  label="Signed out"
-                  description="Everything is on this device only. Sign in to sync chats, facts, and skills to your private cloud memory."
-                />
-              ) : (
-                <>
-                  <Row label="Conversations synced" description="Stored in your private cloud memory and restored on any device you sign in to." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.chats}</span>} />
-                  <Row label="Facts remembered" description="Standing facts about you, listed above." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.facts}</span>} />
-                  <Row label="Skills you taught it" description="Applied in every conversation, not only when a request happens to match." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.skills}</span>} />
-                  {/* Separate from the count above on purpose. These are
-                      conclusions NaviSoul drew on its own, so seeing them
-                      counted — and named below — is the only way to notice one
-                      that is wrong before it quietly shapes every answer. */}
-                  <Row label="Lessons it worked out" description="Things NaviSoul concluded from experience and carries forward on its own." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.lessons}</span>} />
-                </>
-              )}
-              <Row label="On this device" description={DURABILITY_DETAIL[durability]} />
-            </Group>
             {memoryStatus.skillNames.length ? (
               <>
-                <p className="px-4 pt-3 text-[0.75rem]/[1.125rem] text-tertiary">What you have taught NaviSoul:</p>
+                <p className="px-4 pt-4 text-[0.75rem]/[1.125rem] text-tertiary">Skills you taught it</p>
                 <Group>
                   {memoryStatus.skillNames.map((name) => <Row key={name} label={name} />)}
                 </Group>
@@ -915,7 +932,7 @@ export function SettingsSheet({
             ) : null}
             {memoryStatus.lessonNames.length ? (
               <>
-                <p className="px-4 pt-3 text-[0.75rem]/[1.125rem] text-tertiary">What NaviSoul worked out for itself:</p>
+                <p className="px-4 pt-4 text-[0.75rem]/[1.125rem] text-tertiary">Lessons it worked out</p>
                 <Group>
                   {memoryStatus.lessonNames.map((name) => <Row key={name} label={name} />)}
                 </Group>
