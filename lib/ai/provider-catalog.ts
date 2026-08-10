@@ -1,3 +1,6 @@
+import { PROVIDERS, providerApiKey } from "./provider-registry";
+import type { ProviderName } from "./types";
+
 /**
  * Every service NaviOS knows how to connect itself to.
  *
@@ -176,4 +179,52 @@ export function findProvider(query: string): CatalogEntry | null {
 /** Every environment variable the catalog can set, for validation. */
 export function catalogEnvKeys(): Set<string> {
   return new Set(PROVIDER_CATALOG.map((entry) => entry.envKey));
+}
+
+/**
+ * Catalog rows that correspond to a model provider the app already resolves.
+ *
+ * Those adapters accept many spellings — HF_TOKEN, HF_API_KEY, and several
+ * custom names this deployment actually uses — and fall back to matching any
+ * variable whose name carries the provider's hint, or whose value has the
+ * provider's key prefix. Checking only the canonical name here reported a
+ * token as missing when the app was using it perfectly well, which sends
+ * someone to re-add a key they already have.
+ */
+const ADAPTER_FOR_ENTRY: Record<string, ProviderName> = {
+  groq: "groq",
+  gemini: "gemini",
+  huggingface: "huggingface",
+  cerebras: "cerebras",
+  openrouter: "openrouter",
+  together: "together",
+  nvidia: "nvidia",
+  sambanova: "sambanova",
+  mistral: "mistral",
+  deepseek: "deepseek"
+};
+
+/** Alternative spellings for the rows with no model adapter behind them. */
+const ENV_ALIASES: Record<string, string[]> = {
+  TAVILY_API_KEY: ["TAVILY_KEY", "TAVILY_TOKEN"],
+  EXA_API_KEY: ["EXA_KEY", "EXA_TOKEN"],
+  NEXT_PUBLIC_SUPABASE_URL: ["SUPABASE_URL"],
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ["SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_PUBLISHABLE_KEY"],
+  GITHUB_PAT: ["NAVI_GITHUB_TOKEN", "GITHUB_TOKEN"],
+  NAVI_VERCEL_TOKEN: ["VERCEL_API_TOKEN", "VERCEL_TOKEN"]
+};
+
+/**
+ * Whether this service is already configured, judged the way the app judges
+ * it rather than by an exact variable name.
+ *
+ * Server-only: it reads the environment. The result is a boolean, so nothing
+ * about the value ever leaves this process.
+ */
+export function isEntryConfigured(entry: CatalogEntry): boolean {
+  const adapter = ADAPTER_FOR_ENTRY[entry.id];
+  if (adapter) return Boolean(providerApiKey(PROVIDERS[adapter]));
+
+  const candidates = [entry.envKey, ...(ENV_ALIASES[entry.envKey] ?? [])];
+  return candidates.some((name) => (process.env[name] ?? "").trim().length > 0);
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authorizeApiMutation, authorizeApiRead } from "@/lib/auth/api";
-import { PROVIDER_CATALOG, catalogEnvKeys, findProvider } from "@/lib/ai/provider-catalog";
+import { PROVIDER_CATALOG, catalogEnvKeys, findProvider, isEntryConfigured } from "@/lib/ai/provider-catalog";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -74,8 +74,11 @@ export async function GET(request: Request) {
       keyUrl: entry.keyUrl,
       free: entry.free,
       detail: entry.detail,
-      /* Presence only. The value is never sent to the browser. */
-      configured: Boolean(process.env[entry.envKey]?.trim())
+      /* Judged the way the app judges it — many spellings, and a value-prefix
+         fallback — not by one exact name. Checking only the canonical name
+         reported tokens as missing that the app was already using. Presence
+         only; the value never leaves the server. */
+      configured: isEntryConfigured(entry)
     }))
   }, { headers: { "Cache-Control": "no-store" } });
 }
