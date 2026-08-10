@@ -1,9 +1,28 @@
 "use client";
 
-import { Check, Keyboard, Mic, Send, Square, Volume2, X } from "lucide-react";
+import { Check, Keyboard, LoaderCircle, Mic, Send, Square, Volume2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
-import { resolveVoiceLanguage, speechRecognitionAvailable, startSpeechRecognition, type SpeechSession } from "@/lib/ui/speech";
+import { resolveVoiceLanguage } from "@/lib/ui/speech";
+import { recordingSupported, startRecording, type RecordingSession } from "@/lib/ui/recorder";
+import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
+
+/**
+ * Voice mode records and has the audio transcribed, the same as the composer.
+ *
+ * It was the last thing still calling `webkitSpeechRecognition` — the API that
+ * was removed from the composer precisely because it does not work here. In an
+ * installed iOS PWA it is frequently absent with no error and no event, it
+ * plays a system chime the page cannot suppress, and it ends sessions in ways
+ * nothing can observe. Fixing the composer and leaving this behind meant the
+ * microphone worked or did not depending on which button was pressed, which is
+ * worse than either answer on its own.
+ *
+ * One consequence is visible and worth stating: recognition streamed words as
+ * you spoke, and recording cannot. The transcript arrives when you stop. So the
+ * waiting is shown rather than hidden — an empty panel between speaking and
+ * text reads as the recording having been thrown away.
+ */
 
 const LANGUAGES = [
   { id: "en-US", label: "English (US)" },
@@ -12,6 +31,10 @@ const LANGUAGES = [
   { id: "es-ES", label: "Spanish" },
   { id: "fr-FR", label: "French" }
 ] as const;
+
+/* Fixed per-bar weights. The height comes from the live microphone level; these
+   only vary the shape so the row reads as a waveform rather than a block. */
+const VOICE_BARS = [0.55, 0.8, 1, 0.7, 1, 0.85, 0.6];
 
 type Props = {
   open: boolean;
@@ -38,34 +61,47 @@ export function VoiceModeSheet({
   onUseTranscript,
   onSendTranscript
 }: Props) {
-  const recognitionRef = useRef<SpeechSession | null>(null);
+  const recorderRef = useRef<RecordingSession | null>(null);
   const [supported, setSupported] = useState<boolean | null>(null);
   const language = resolveVoiceLanguage(voiceLanguage);
   const [transcript, setTranscript] = useState("");
-  const [interim, setInterim] = useState("");
+  /** Between stopping and the words arriving. Its own state, because it is its
+      own thing to look at — not a variety of idle. */
+  const [transcribing, setTranscribing] = useState(false);
   const [listening, setListening] = useState(false);
+  /** Live microphone level, so the bars respond to the voice rather than a timer. */
+  const [level, setLevel] = useState(0);
   const [speakReply, setSpeakReply] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const combined = useMemo(
-    () => [transcript.trim(), interim.trim()].filter(Boolean).join(" ").trim(),
-    [interim, transcript]
-  );
+  const combined = useMemo(() => transcript.trim(), [transcript]);
+
+  /* Swipe down to dismiss, like every other bottom sheet in the app.
+     This one was the exception — same shape, same position, and the gesture
+     that closed the others did nothing here. An affordance that works
+     everywhere except one place is worse than one that works nowhere, because
+     nothing tells you which place you are in. */
+  const sheet = useSheetDrag({ open, onDismiss: () => resetAndClose(), haptics });
 
   useEffect(() => {
     if (!open) return;
-    setSupported(speechRecognitionAvailable());
+    setSupported(recordingSupported());
     setError(null);
   }, [open]);
 
   useEffect(() => {
     if (!open) {
-      recognitionRef.current?.abort();
-      recognitionRef.current = null;
+      recorderRef.current?.cancel();
+      recorderRef.current = null;
       setListening(false);
-      setInterim("");
+      setTranscribing(false);
+      setLevel(0);
     }
   }, [open]);
+
+  /* A recording left running when the sheet unmounts holds the microphone open
+     and keeps the browser's recording indicator lit. */
+  useEffect(() => () => recorderRef.current?.cancel(), []);
 
   useEffect(() => {
     if (!open) return;
@@ -81,50 +117,63 @@ export function VoiceModeSheet({
     haptic("selection", haptics);
   }
 
-  function start() {
-    if (!speechRecognitionAvailable()) {
+  async function start() {
+    if (!recordingSupported()) {
       setSupported(false);
-      setError("Live speech recognition is not available in this browser.");
+      setError("This browser cannot record audio.");
       haptic("warning", haptics);
       return;
     }
-    if (!online || busy) return;
+    if (!online || busy || listening || transcribing) return;
 
-    recognitionRef.current?.abort();
-    recognitionRef.current = startSpeechRecognition({
-      language: voiceLanguage,
-      onStart: () => {
-        setListening(true);
-        setError(null);
-        setInterim("");
-        haptic("selection", haptics);
-      },
-      onFinal: (text) => setTranscript((current) => `${current}${current.trim() ? " " : ""}${text}`),
-      onInterim: setInterim,
-      onError: (message) => {
-        setListening(false);
-        setInterim("");
-        setError(message);
-        haptic("error", haptics);
-      },
-      onEnd: () => {
-        setListening(false);
-        setInterim("");
-      }
-    });
+    setError(null);
+    try {
+      recorderRef.current = await startRecording({
+        onLevel: setLevel,
+        onError: (message) => setError(message),
+        /* The picker above now reaches the transcriber. It always stored a
+           value and never sent it anywhere. */
+        language: voiceLanguage
+      });
+      setListening(true);
+      haptic("selection", haptics);
+    } catch (caught) {
+      /* Refused and unavailable are different problems with different
+         remedies, and the recorder already distinguishes them. */
+      setError(caught instanceof Error ? caught.message : "Recording could not start.");
+      haptic("error", haptics);
+    }
   }
 
-  function stop() {
-    recognitionRef.current?.stop();
+  /* Appends rather than replaces: Start / Stop / Start again is how a long
+     thought gets spoken, and each pass should add to the turn. */
+  async function stop() {
+    const session = recorderRef.current;
+    if (!session) return;
+    recorderRef.current = null;
     haptic("impact-light", haptics);
+    setListening(false);
+    setLevel(0);
+    setTranscribing(true);
+    try {
+      const text = (await session.stop()).trim();
+      if (text) setTranscript((current) => `${current}${current.trim() ? " " : ""}${text}`);
+      else setError("Nothing was picked up. Try again a little closer to the microphone.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That could not be transcribed.");
+      haptic("error", haptics);
+    } finally {
+      setTranscribing(false);
+    }
   }
 
   function resetAndClose() {
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
     setListening(false);
+    setTranscribing(false);
+    setLevel(0);
     setTranscript("");
-    setInterim("");
     setError(null);
     onClose();
   }
@@ -145,11 +194,12 @@ export function VoiceModeSheet({
     if (!combined || busy || !online) return;
     const text = combined;
     haptic("impact-light", haptics);
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
     setListening(false);
+    setTranscribing(false);
+    setLevel(0);
     setTranscript("");
-    setInterim("");
     setError(null);
     onSendTranscript(text, speakReply);
     onClose();
@@ -165,13 +215,24 @@ export function VoiceModeSheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-end justify-center bg-overlay backdrop-blur-[5px] md:items-center md:p-4">
+    <div className="fixed inset-0 z-[110] flex items-end justify-center md:items-center md:p-4">
+      <button
+        type="button"
+        aria-label="Dismiss voice mode"
+        onClick={cancel}
+        {...sheet.scrimProps}
+        className="absolute inset-0 bg-overlay backdrop-blur-[5px]"
+      />
       <section
+        {...sheet.sheetProps}
         role="dialog"
         aria-modal="true"
         aria-label="NaviSoul voice mode"
-        className="menu-enter safe-top flex max-h-[calc(100dvh-8px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[28px] border border-b-0 border-[var(--border-subtle)] bg-elev-1 shadow-sheet md:max-h-[760px] md:rounded-[28px] md:border"
+        className="menu-enter safe-top relative flex max-h-[calc(100dvh-8px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[28px] border border-b-0 border-[var(--border-subtle)] bg-elev-1 shadow-sheet md:max-h-[760px] md:rounded-[28px] md:border"
       >
+        {/* The grab area, and only it: content below must still scroll. */}
+        <div {...sheet.handleProps} className="navi-sheet-grab shrink-0 pt-1"><div className="navi-sheet-grabber" /></div>
+
         <header className="flex min-h-16 items-center gap-3 border-b border-[var(--border-subtle)] px-4">
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--selection-bg)] text-accent">
             <Volume2 size={19} />
@@ -200,6 +261,17 @@ export function VoiceModeSheet({
             <div className="flex min-h-[132px] items-center justify-center">
               {combined ? (
                 <p className="w-full whitespace-pre-wrap text-[1.125rem]/7 font-medium tracking-[-0.01em] text-primary">{combined}</p>
+              ) : transcribing ? (
+                /* The gap recognition never had. Words used to appear as they
+                   were spoken; recording can only produce them at the end, and
+                   an empty panel in between reads as the recording having been
+                   thrown away. */
+                <div className="text-center" role="status">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-elev-3 text-accent">
+                    <LoaderCircle size={26} className="animate-spin" />
+                  </div>
+                  <p className="mt-3 text-[0.875rem]/5 font-medium text-secondary">Writing down what you said…</p>
+                </div>
               ) : (
                 <div className="text-center">
                   <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-elev-3 text-secondary">
@@ -211,12 +283,16 @@ export function VoiceModeSheet({
             </div>
 
             {listening ? (
-              <div className="mt-4 flex h-8 items-center justify-center gap-1" aria-label="Listening">
-                {[0, 1, 2, 3, 4, 5, 6].map((item) => (
+              /* Driven by the microphone rather than a CSS animation. A bar row
+                 that pulses on a timer looks identical whether it is hearing
+                 you or hearing nothing, which is exactly the question someone
+                 watching it is asking. */
+              <div className="mt-4 flex h-8 items-end justify-center gap-1" role="status" aria-label="Listening">
+                {VOICE_BARS.map((weight, index) => (
                   <span
-                    key={item}
-                    className="w-1.5 animate-pulse rounded-full bg-accent"
-                    style={{ height: `${12 + ((item * 7) % 18)}px`, animationDelay: `${item * 80}ms` }}
+                    key={index}
+                    className="w-1.5 rounded-full bg-accent transition-[height] duration-100"
+                    style={{ height: `${Math.max(5, Math.min(30, 5 + level * weight * 34))}px` }}
                   />
                 ))}
               </div>
@@ -245,7 +321,10 @@ export function VoiceModeSheet({
             </span>
           </button>
 
-          {supported === false ? (
+          {/* Offered whenever recording is unavailable *or* has failed: a
+              refused microphone is not a temporary condition, and the way out
+              is the keyboard's own dictation key. */}
+          {supported === false || error ? (
             <button type="button" onClick={focusKeyboardDictation} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-elev-2 px-4 text-[0.8125rem]/5 font-semibold text-primary active:bg-elev-3">
               <Keyboard size={18} />Use iPhone keyboard dictation
             </button>
@@ -256,18 +335,18 @@ export function VoiceModeSheet({
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={listening ? stop : start}
-              disabled={!online || busy || supported === false}
+              onClick={() => void (listening ? stop() : start())}
+              disabled={!online || busy || supported === false || transcribing}
               className={`flex min-h-12 items-center justify-center gap-2 rounded-2xl text-[0.875rem]/5 font-semibold disabled:opacity-45 ${listening ? "bg-elev-3 text-primary" : "bg-accent text-white active:bg-accent-pressed"}`}
             >
-              {listening ? <Square size={14} fill="currentColor" /> : <Mic size={18} />}
-              {listening ? "Stop" : "Start"}
+              {transcribing ? <LoaderCircle size={16} className="animate-spin" /> : listening ? <Square size={14} fill="currentColor" /> : <Mic size={18} />}
+              {transcribing ? "Writing…" : listening ? "Stop" : "Start"}
             </button>
-            <button type="button" onClick={useTranscript} disabled={!combined || busy} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-elev-2 text-[0.875rem]/5 font-semibold text-primary active:bg-elev-3 disabled:opacity-45">
+            <button type="button" onClick={useTranscript} disabled={!combined || busy || transcribing} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-elev-2 text-[0.875rem]/5 font-semibold text-primary active:bg-elev-3 disabled:opacity-45">
               <Check size={17} />Add to message
             </button>
           </div>
-          <button type="button" onClick={sendTranscript} disabled={!combined || busy || !online} className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-[0.875rem]/5 font-semibold text-app active:opacity-85 disabled:opacity-40">
+          <button type="button" onClick={sendTranscript} disabled={!combined || busy || transcribing || !online} className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-[0.875rem]/5 font-semibold text-app active:opacity-85 disabled:opacity-40">
             <Send size={17} />Send spoken turn to NaviSoul
           </button>
           <p className="mt-2 text-center text-[0.625rem]/4 font-medium text-tertiary">Composer microphone = quick dictation · Voice mode = reviewed spoken turn</p>

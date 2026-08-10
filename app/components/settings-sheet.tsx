@@ -952,27 +952,29 @@ export function SettingsSheet({
 
         {page === "capabilities" ? (
           <>
-            <SectionHeader>General</SectionHeader>
+            {/* Three switches, one group.
+                They used to sit under four headings — "General", "Visuals",
+                "Code execution and file creation", "Accounts" — one row each,
+                with the third heading repeating its own row's label word for
+                word. Four headings to organise three switches is not
+                organisation; it is the taxonomy costing more than the thing
+                being classified, on a screen whose title already says what all
+                three are. */}
+            <SectionHeader>What NaviSoul can do</SectionHeader>
             <Group>
               <Row
                 label="Web search"
-                description="Let NaviSoul search the web and read pages when a request needs live information."
+                description="Search the web and read pages when a request needs live information."
                 control={<SettingsToggle label="Web search" value={preferences.tools.web} onChange={() => update({ tools: { ...preferences.tools, web: !preferences.tools.web } })} />}
               />
-            </Group>
-            <SectionHeader>Visuals</SectionHeader>
-            <Group>
               <Row
                 label="Artifacts"
-                description="Generate interactive documents and designs in a dedicated window alongside your conversation."
+                description="Build interactive documents and designs in a window alongside the conversation."
                 control={<SettingsToggle label="Artifacts" value={preferences.tools.artifacts} onChange={() => update({ tools: { ...preferences.tools, artifacts: !preferences.tools.artifacts } })} />}
               />
-            </Group>
-            <SectionHeader>Code execution and file creation</SectionHeader>
-            <Group>
               <Row
-                label="Code execution and file creation"
-                description="NaviSoul runs JavaScript on this device to check its own work before answering, then fixes what fails. Nothing it runs can reach the network or your files."
+                label="Code execution"
+                description="Run JavaScript on this device to check its own work before answering, then fix what fails. Nothing it runs can reach the network or your files."
                 control={<SettingsToggle label="Code execution" value={preferences.tools.code} onChange={() => update({ tools: { ...preferences.tools, code: !preferences.tools.code } })} />}
               />
             </Group>

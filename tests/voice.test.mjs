@@ -16,22 +16,51 @@ const sheet = read("app/components/voice-mode-sheet.tsx");
 const shell = read("app/components/app-shell.tsx");
 const settings = read("app/components/settings-sheet.tsx");
 
-/* ---- There is exactly one recogniser -------------------------------- */
+/* ---- There is no recogniser left ------------------------------------- */
 
-check("the module owns the constructor lookup", speech.body.includes("webkitSpeechRecognition"), true);
-/* The check that keeps this true. Either surface reaching for the global again
-   is how the two copies came apart in the first place. */
-check("the composer does not construct its own", stripComments(composer.source).includes("webkitSpeechRecognition"), false);
-check("the sheet does not construct its own", stripComments(sheet.source).includes("webkitSpeechRecognition"), false);
-/* The composer no longer uses speech recognition at all. In an installed iOS
-   PWA `webkitSpeechRecognition` is frequently absent with no error and no
-   event to render, which is why the mic "did not work at all" — it recorded
-   audio and had it transcribed instead. The voice sheet is a live
-   conversation surface and still uses recognition, so the rule that only the
-   module may construct one still matters. */
+/* `webkitSpeechRecognition` is gone from the app entirely.
+ *
+ * It was the cause, not a symptom: in an installed iOS PWA it is frequently
+ * absent with no error and no event to render, it plays a system chime the
+ * page cannot suppress, and it ends sessions in ways nothing can observe.
+ * Every fix layered on top of it was a fix on sand — restart-on-end, fatal
+ * error sets, interim filtering, all of it working around a foundation that
+ * does not hold.
+ *
+ * The composer moved to recording plus transcription first and the voice sheet
+ * was left behind, which was worse than either answer alone: the microphone
+ * worked or did not depending on which button was pressed. Now neither uses
+ * it, and the implementation is deleted rather than left for something to
+ * reach for again. */
+check("the module no longer constructs one", speech.source.includes("webkitSpeechRecognition"), false);
+check("the composer does not either", stripComments(composer.source).includes("webkitSpeechRecognition"), false);
+check("nor the sheet", stripComments(sheet.source).includes("webkitSpeechRecognition"), false);
+check("the recognition entry point is gone", speech.source.includes("startSpeechRecognition"), false);
+/* Speech *synthesis* is a different API and still earns its place: it is what
+   reads a reply aloud, and it works. */
+check("speaking replies still works", speech.body.includes("SpeechSynthesisUtterance"), true);
+check("and still picks a good voice", speech.body.includes("pickVoice"), true);
+/* Neither surface uses speech recognition now. In an installed iOS PWA
+   `webkitSpeechRecognition` is frequently absent with no error and no event to
+   render, which is why the mic "did not work at all".
+
+   The sheet was the last holdout, and leaving it there was worse than either
+   answer alone: the microphone worked or did not depending on which button was
+   pressed. Both record audio and have it transcribed. */
 check("the composer records instead of recognising", composer.body.includes("startRecording"), true);
 check("the composer does not use recognition", composer.body.includes("startSpeechRecognition"), false);
-check("the sheet uses the shared one", sheet.body.includes("startSpeechRecognition"), true);
+check("the sheet records too", sheet.body.includes("startRecording"), true);
+check("the sheet does not use recognition either", sheet.body.includes("startSpeechRecognition"), false);
+/* Recognition streamed words as they were spoken; recording can only produce
+   them at the end. An empty panel across that gap reads as the recording
+   having been thrown away, so the wait is shown. */
+check("the sheet shows the wait for the transcript", sheet.body.includes("transcribing"), true);
+check("it says what is happening", sheet.source.includes("Writing down what you said"), true);
+/* Start / Stop / Start again is how a long thought gets spoken. */
+check("a second pass adds to the turn", /setTranscript\(\(current\) => `\$\{current\}/.test(sheet.body), true);
+/* A recording left running holds the microphone and keeps the browser's
+   recording indicator lit after the sheet is gone. */
+check("closing the sheet releases the microphone", /recorderRef\.current\?\.cancel\(\)/.test(sheet.body), true);
 
 /* ---- One language, from one place ------------------------------------ */
 
@@ -61,25 +90,72 @@ check("the migration still reads it", read("lib/storage/indexeddb.ts").body.incl
 /* ---- Interim results are not draft text ------------------------------ */
 
 /* The composer appended on every result event without checking isFinal, so
-   interim words landed in the draft and landed again once revised. */
-check("the module separates final from interim", speech.body.includes("result?.isFinal"), true);
-check("only final text is offered for appending", /if \(final\.trim\(\)\) options\.onFinal/.test(speech.body), true);
+   interim words landed in the draft and landed again once revised. The whole
+   category is gone with recognition: transcription returns one settled string,
+   so there is no half-formed text to leak anywhere. */
 /* Transcription returns one settled string, so there is no interim text to
-   leak into the draft — the class of bug this guarded cannot occur in the
-   composer any more. The rule still binds the sheet, which streams. */
-check("the sheet appends only finals", sheet.body.includes("onFinal"), true);
+   leak into the draft — the class of bug this guarded cannot occur on either
+   surface any more. */
+check("neither surface tracks interim text", sheet.body.includes("setInterim") || composer.body.includes("setInterim"), false);
 /* And appends to the draft as it stands now, not as it stood when listening
    began — a callback closes over the value from that render. */
 check("the composer reads the live draft", composer.body.includes("valueRef.current"), true);
 
 /* ---- A blocked microphone is not a retry ----------------------------- */
 
-check("permission denial is recognised", speech.body.includes('case "not-allowed"'), true);
-check("it says where to fix it", /Microphone access is off/.test(speech.body), true);
-check("it does not invite a retry", /Microphone access is off[^"]*Try again/.test(speech.body), false);
-/* A deliberate abort is not a failure and deserves no message. */
-check("an abort is silent", /case "aborted":\s*\n\s*return "";/.test(speech.body), true);
-check("the caller suppresses empty messages", speech.body.includes("if (message) options.onError?.(message)"), true);
+/* The distinction moved with the implementation: it used to be a switch over
+   recognition error codes, and now it is what `startRecording` throws. What
+   must not change is that a refused permission and a missing microphone are
+   different problems with different remedies, and neither is described as
+   though waiting would help. */
+const recorderSource = read("lib/ui/recorder.ts");
+
+check("permission denial is told apart", /NotAllowedError|SecurityError/.test(recorderSource.body), true);
+check("it says where to fix it", /Microphone access was refused/.test(recorderSource.body), true);
+check("it does not invite a retry", /Microphone access was refused[^"]*[Tt]ry again/.test(recorderSource.body), false);
+check("a missing microphone says so instead", /No microphone is available/.test(recorderSource.body), true);
+/* Both surfaces show what was thrown rather than a generic line of their own,
+   which is what makes the distinction reach the person. */
+check("the sheet surfaces the real reason", /caught instanceof Error \? caught\.message/.test(sheet.body), true);
+check("the composer does too", /error instanceof Error \? error\.message/.test(composer.body), true);
+/* Silence after a recording is not a failure of the microphone, and saying
+   "that could not be transcribed" for it sends someone to the wrong problem. */
+check("silence is reported as silence", /Nothing was picked up/.test(sheet.source), true);
+
+/* ---- The sheet behaves like the other bottom sheets ------------------- */
+
+/* It was the one bottom sheet without drag-to-dismiss: same shape, same
+   position, and the swipe that closed every other one did nothing here. An
+   affordance that works everywhere except one place is worse than one that
+   works nowhere, because nothing tells you which place you are in. */
+check("the sheet can be swiped away", sheet.body.includes("useSheetDrag"), true);
+check("the scrim fades with the drag", /sheet\.scrimProps/.test(sheet.body), true);
+check("only the grab area starts a drag", /sheet\.handleProps/.test(sheet.body), true);
+/* A second way out that skips the cleanup is a microphone left open. */
+check("a swipe goes through the same cleanup", /onDismiss: \(\) => resetAndClose\(\)/.test(sheet.body), true);
+/* Two controls sharing one name is ambiguous to a screen reader and to a test. */
+check("the scrim and the X are named apart", (sheet.source.match(/aria-label="Close voice mode"/g) ?? []).length, 1);
+
+/* ---- The language picker reaches the transcriber ---------------------- */
+
+/* Voice mode has offered a dictation-language picker all along and nothing
+   ever sent it anywhere: it wrote a stored preference and changed nothing
+   else. Whisper detects the language itself, but detection is what fails on a
+   short clip or a bilingual speaker — exactly the person who went looking for
+   the setting. */
+const route = read("app/api/voice/transcribe/route.ts");
+
+check("the recorder accepts a language", /language\?: string;/.test(recorderSource.body), true);
+check("it travels with the recording", /language=\$\{encodeURIComponent\(language\)\}/.test(recorderSource.body), true);
+/* "auto" is the absence of a hint, not a default of English. */
+check("auto sends no hint", /language && language !== "auto"/.test(recorderSource.body), true);
+check("the sheet passes the stored preference", /language: voiceLanguage/.test(sheet.body), true);
+check("the composer passes the same one", /language: voiceLanguage/.test(composer.body), true);
+check("the route forwards it to the model", /form\.append\("language", language\)/.test(route.body), true);
+/* A bare subtag is what the API takes: `he`, not `he-IL`. And an unvalidated
+   query parameter has no business reaching a provider verbatim. */
+check("the tag is validated before use", /\^\[a-z\]\{2\}/.test(route.body), true);
+check("only the primary subtag is sent", /requested\.split\("-"\)\[0\]\.toLowerCase\(\)/.test(route.body), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
-process.exit(fail ? 1 : 0);
+if (fail) process.exit(1);

@@ -88,5 +88,38 @@ check("escape closes the innermost overlay", /event\.key !== "Escape"/.test(modu
 check("escape respects a handler that already acted", module_.includes("event.defaultPrevented"), true);
 check("escape closes one, not all", /const frame = stack\[stack\.length - 1\]/.test(module_), true);
 
+/* ── Leaving for a route is not the same as dismissing ──────────────────── */
+
+/* A drawer row that opens a real screen does both from one tap: it closes the
+   drawer and it navigates. Closing normally unwinds the entry the drawer
+   pushed — right for a dismissal, wrong here, because the unwind lands after
+   the router has navigated and cancels it. Developer opened and bounced
+   straight back to the conversation. */
+const drawer = stripComments(readFileSync(join(root, "app/components/history-drawer.tsx"), "utf8"));
+
+check("the module can be told a navigation is coming", module_.includes("export function releaseOverlaysForNavigation"), true);
+check("a released frame leaves history alone", /if \(frame\.released\) \{[\s\S]{0,400}?stack\.splice\(index, 1\);[\s\S]{0,20}?return;/.test(module_), true);
+check("the Developer link says it is leaving", /onClick=\{leaveForRoute\}/.test(drawer), true);
+check("leaving releases the overlays first", /releaseOverlaysForNavigation\(\);\s+onClose\(\);/.test(drawer), true);
+check("opening a chat releases them too", /releaseOverlaysForNavigation\(\);\s+setHistoryOpen\(false\);/.test(shell), true);
+
+/* Belt and braces: even without the explicit signal, an entry that something
+   else has pushed on top of must not be unwound by us. The id is stamped into
+   the history entry when it is pushed so this can be checked, not assumed. */
+check("each frame stamps its own id", /naviOverlay: frame\.id/.test(module_), true);
+check("we only go back if our entry is still current", /\?\.naviOverlay === frame\.id/.test(module_), true);
+check("otherwise the frame is dropped quietly", /if \(frame\.owned && !onTop\) \{/.test(module_), true);
+
+/* ── Code mode's two rows go to two different places ─────────────────────── */
+
+/* "Repository" called the same handler as "Customize" two rows below it, so
+   both opened the Skills page — a row named after something the app has no
+   screen for, wired to a screen with nothing to do with it. */
+check("the code row opens connectors", /openSheet\(onConnectors\)/.test(drawer), true);
+check("it is no longer named after a screen that does not exist", /\n\s*Repository\n/.test(drawer), false);
+check("connectors is a real prop, not a reused one", /onConnectors: \(\) => void;/.test(drawer), true);
+check("the shell wires it to the connectors sheet", /onConnectors=\{\(\) => setConnectorsOpen\(true\)\}/.test(shell), true);
+check("Customize still has its own handler", /openSheet\(onCustomize\)/.test(drawer), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

@@ -40,7 +40,13 @@ type Frame = {
   restore: string;
   /** False once closed, so a pop cannot run the handler a second time. */
   live: boolean;
+  /** Stamped into the history entry, so we can tell whether it is still on top. */
+  id: number;
+  /** The overlay is closing because we are navigating away; leave history alone. */
+  released: boolean;
 };
+
+let nextFrameId = 1;
 
 /* Innermost last. Settings can open connectors on top of itself, and back has
    to take those off in the order they went on. */
@@ -107,6 +113,24 @@ function listen(): void {
   });
 }
 
+/**
+ * "I am about to navigate; the navigation is the history change."
+ *
+ * A drawer row that opens a real route does two things from one tap: it closes
+ * the drawer and it navigates. Both are correct, and together they were wrong —
+ * the close unwound the entry the drawer had pushed, and because
+ * `history.back()` lands after the router has already pushed, the unwind
+ * cancelled the navigation. Tapping Developer showed the Developer screen and
+ * then bounced straight back to the conversation.
+ *
+ * Nothing about the close is different in that case except its meaning: the
+ * overlay is not being dismissed, it is being left behind. Saying so is what
+ * distinguishes the two, and the caller is the only one who knows which it is.
+ */
+export function releaseOverlaysForNavigation(): void {
+  for (const frame of stack) frame.released = true;
+}
+
 export type OverlayRoute = {
   /** Whether the overlay is on screen. The hook follows this, never sets it. */
   open: boolean;
@@ -153,13 +177,14 @@ export function useOverlayRoute({ open, onClose, path, restore = "/" }: OverlayR
         detach: () => { frameRef.current = null; },
         owned: !first,
         restore: restoreRef.current,
-        live: true
+        live: true,
+        id: nextFrameId++,
+        released: false
       };
       frameRef.current = frame;
       stack.push(frame);
       if (frame.owned) {
-        const depth = stack.length;
-        afterPending(() => window.history.pushState({ ...window.history.state, naviOverlay: depth }, "", path ?? window.location.href));
+        afterPending(() => window.history.pushState({ ...window.history.state, naviOverlay: frame.id }, "", path ?? window.location.href));
       }
       return;
     }
@@ -170,6 +195,24 @@ export function useOverlayRoute({ open, onClose, path, restore = "/" }: OverlayR
       frame.live = false;
       const index = stack.lastIndexOf(frame);
       if (index < 0) return;
+
+      if (frame.released) {
+        /* Leaving for a real route. The navigation is the history change, so
+           touching history here would fight it — which is exactly what made
+           the Developer screen appear and then vanish. */
+        stack.splice(index, 1);
+        return;
+      }
+
+      /* Is our entry still the current one? Something else may have pushed on
+         top — a router navigation, most often — and going back would then undo
+         that rather than this overlay. The id was stamped into the entry when
+         it was pushed precisely so this can be checked rather than assumed. */
+      const onTop = (window.history.state as { naviOverlay?: number } | null)?.naviOverlay === frame.id;
+      if (frame.owned && !onTop) {
+        stack.splice(index, 1);
+        return;
+      }
 
       if (!frame.owned) {
         /* Arrived by link. There may be nothing behind us — going back would

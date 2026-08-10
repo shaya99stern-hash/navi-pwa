@@ -56,21 +56,33 @@ check("mode guidance follows the user's own choice", route.includes('productMode
 check("the old dispatch-keyed form is gone", /\bmode === "code" \? codeModeInstruction\(\) : ""/.test(route), false);
 
 /* ── Dictation survives a pause ──────────────────────────────────────────────
-   `continuous` is off on purpose — on iOS it holds the microphone across an
-   app switch — but a single utterance ends at the first breath, so recording
-   stopped every time the speaker paused to think. */
+   This was seven assertions about keeping `webkitSpeechRecognition` alive
+   across a breath: continuous off so iOS does not hold the microphone through
+   an app switch, restart-on-end so a thinking pause does not end the turn, a
+   fatal-error set so a refused permission does not loop, a flag so restarts do
+   not re-announce the start. Every one of them was scaffolding around an API
+   that does not work in an installed PWA.
+
+   Recording has none of those problems by construction. The microphone is held
+   for exactly as long as the button says it is, a pause is just quiet audio,
+   and there is nothing to restart — so the property to protect is no longer
+   "it recovers well" but "it is not used at all". */
 
 const speech = readFileSync(join(process.cwd(), "lib/ui/speech.ts"), "utf8");
-check("continuous listening stays off", speech.includes("recognition.continuous = false"), true);
-check("recognition restarts itself", /recognition\.onend = \(\) => \{[\s\S]{0,240}recognition\.start\(\)/.test(speech), true);
-check("stopping is honoured", speech.includes("stop: () => { finished = true;"), true);
-/* Hiding the page must release the microphone, which is the reason
-   `continuous` was rejected in the first place. */
-check("hiding the page ends the session", speech.includes("visibilitychange"), true);
-check("a refused permission does not loop", speech.includes("FATAL_SPEECH_ERRORS"), true);
-check("a pause is not reported as an error", speech.includes('event?.error === "no-speech" || event?.error === "aborted"'), true);
-/* One start and one end per session, not one per phrase. */
-check("restarts do not re-announce the start", speech.includes("announcedStart"), true);
+const recorder = readFileSync(join(process.cwd(), "lib/ui/recorder.ts"), "utf8");
+
+check("nothing recognises speech any more", /SpeechRecognition/.test(speech), false);
+check("dictation records instead", recorder.includes("new MediaRecorder"), true);
+/* A pause is silence in the middle of one recording, not the end of it. */
+check("the recording runs until it is stopped", /recorder\.start\(\)/.test(recorder), true);
+/* The microphone must be released on every exit, or the browser's recording
+   indicator stays lit after the sheet is gone — the same failure `continuous`
+   was rejected for. */
+check("stopping releases the microphone", /for \(const track of stream\.getTracks\(\)\) track\.stop\(\)/.test(recorder), true);
+check("abandoning it releases the microphone too", /cancel\(\) \{[\s\S]{0,120}teardown\(\)/.test(recorder), true);
+/* A stray tap is not speech, and sending it produces a 400 rather than a
+   transcript. */
+check("a too-short recording is not sent", /blob\.size < 1_200/.test(recorder), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

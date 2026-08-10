@@ -52,6 +52,20 @@ export async function POST(request: Request) {
      be the whole failure. */
   const rawContentType = request.headers.get("content-type") || "audio/webm";
   const contentType = rawContentType.split(";")[0].trim() || "audio/webm";
+
+  /* The dictation language the user chose.
+   *
+   * Voice mode has offered a language picker all along and nothing ever sent
+   * it — a control that changed a stored preference and nothing else. Whisper
+   * detects the language on its own, but detection is what fails on a short
+   * clip or a bilingual speaker, which is exactly the person who went looking
+   * for the setting. Sent as a bare subtag because that is what the API takes:
+   * `he`, not `he-IL`.
+   *
+   * "auto" means no hint, which is the correct absence rather than a default
+   * of English. */
+  const requested = (new URL(request.url).searchParams.get("language") ?? "").trim();
+  const language = /^[a-z]{2}(-[A-Za-z0-9]+)*$/i.test(requested) ? requested.split("-")[0].toLowerCase() : "";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -75,6 +89,7 @@ export async function POST(request: Request) {
     const form = new FormData();
     form.append("file", new Blob([audio], { type: contentType }), `recording.${extensionFor(contentType)}`);
     form.append("model", model);
+    if (language) form.append("language", language);
     try {
       const response = await fetch("https://router.huggingface.co/v1/audio/transcriptions", {
         method: "POST",
@@ -117,7 +132,7 @@ export async function POST(request: Request) {
        as a fallback for a provider that only speaks that dialect. */
     for (const model of models) {
       const attempt = await viaOpenAiCompatible(model);
-      if (attempt.text) return NextResponse.json({ text: attempt.text.trim(), model }, { headers: { "Cache-Control": "no-store" } });
+      if (attempt.text) return NextResponse.json({ text: attempt.text.trim(), model, language: language || "auto" }, { headers: { "Cache-Control": "no-store" } });
       if (attempt.failure) failures.push(attempt.failure);
     }
 

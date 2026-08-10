@@ -130,5 +130,34 @@ check("the stored-section allow-list accepts it", read("lib/storage/indexeddb.ts
 /* Connectors is the other route-not-a-pane row; it must keep working. */
 check("Connectors still opens its own sheet", body.includes("onOpenConnectors()"), true);
 
+/* ---- Four headings for three switches ------------------------------- */
+
+/* Capabilities had a section header per row — "General", "Visuals", "Code
+   execution and file creation", "Accounts" — one row under each, and the third
+   heading repeated its own row's label word for word. Four headings to
+   organise three switches is the taxonomy costing more than the thing being
+   classified, on a screen whose title already says what all three are. */
+const capHeads = [...capabilities.matchAll(/<SectionHeader>(.*?)<\/SectionHeader>/g)].map((m) => m[1]);
+check("Capabilities is two sections, not four", capHeads.length, 2);
+check("the three switches share one group", (capabilities.match(/<SettingsToggle/g) ?? []).length, 3);
+check("no heading repeats its own row label", capHeads.includes("Code execution and file creation"), false);
+check("web search still toggles", /tools, web: !preferences\.tools\.web/.test(capabilities), true);
+check("artifacts still toggles", /tools, artifacts: !preferences\.tools\.artifacts/.test(capabilities), true);
+check("code execution still toggles", /tools, code: !preferences\.tools\.code/.test(capabilities), true);
+check("connecting an account is still one tap away", /openPage\("connectors"\)/.test(capabilities), true);
+
+/* ---- The research banner ---------------------------------------------- */
+
+/* It was the only place the state was visible, so it earned a stripe across
+   the top. The composer now carries a research toggle that lights up when it
+   is on — at the point of use — so the banner became a second announcement of
+   something already on screen, pushing the conversation down to say it. */
+const shellSource = read("app/components/app-shell.tsx").source;
+check("no research banner across the top", shellSource.includes("Research mode on ·"), false);
+check("the offline banner stays", shellSource.includes("Offline · chats, projects, and drafts"), true);
+check("the project banner stays", shellSource.includes("Project: {activeProject.name}"), true);
+const composerSource = read("app/components/composer-dock.tsx").source;
+check("the composer still shows the state", /Research is \$\{research \? "on" : "off"\}|Research is on|research \?/.test(composerSource), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
