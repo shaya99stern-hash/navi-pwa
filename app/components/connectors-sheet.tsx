@@ -135,6 +135,33 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
   /* Twenty-two services is a useful catalogue and an overwhelming first
      screen. Connected ones are always shown; the rest wait behind a tap. */
   const [catalogExpanded, setCatalogExpanded] = useState(false);
+  /* "Configured" only means a variable is set. A key that is expired, revoked
+     or under-permissioned looks identical to a working one from here, which is
+     how transcription failed for days while its token sat there looking fine.
+     These are the results of actually calling each service. */
+  const [verified, setVerified] = useState<Record<string, { ok: boolean; reason: string }>>({});
+  const [verifying, setVerifying] = useState<string | null>(null);
+
+  async function verify(id: string) {
+    setVerifying(id);
+    try {
+      const response = await fetch("/api/connectors/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: id })
+      });
+      const data = (await response.json()) as { ok?: boolean; reason?: string; error?: string };
+      setVerified((current) => ({
+        ...current,
+        [id]: { ok: data.ok === true, reason: data.reason ?? data.error ?? "No answer." }
+      }));
+      haptic(data.ok === true ? "success" : "error", haptics);
+    } catch {
+      setVerified((current) => ({ ...current, [id]: { ok: false, reason: "The test could not run." } }));
+    } finally {
+      setVerifying(null);
+    }
+  }
 
   async function refreshCatalog() {
     try {
@@ -474,15 +501,33 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                     {provisioning === provider.id ? (
                       <LoaderCircle size={18} className="shrink-0 animate-spin text-accent" />
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => { setKeyDraftFor(keyDraftFor === provider.id ? null : provider.id); setKeyDraft(""); haptic("selection", haptics); }}
-                        className="min-h-10 shrink-0 rounded-xl px-3 text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-3"
-                      >
-                        {provider.configured ? "Replace" : "Add"}
-                      </button>
+                      <span className="flex shrink-0 items-center">
+                        {provider.configured ? (
+                          <button
+                            type="button"
+                            onClick={() => void verify(provider.id)}
+                            disabled={verifying === provider.id}
+                            className="min-h-10 shrink-0 rounded-xl px-2.5 text-[0.8125rem]/5 font-semibold text-secondary active:bg-elev-3 disabled:opacity-60"
+                          >
+                            {verifying === provider.id ? "Testing…" : "Test"}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => { setKeyDraftFor(keyDraftFor === provider.id ? null : provider.id); setKeyDraft(""); haptic("selection", haptics); }}
+                          className="min-h-10 shrink-0 rounded-xl px-2.5 text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-3"
+                        >
+                          {provider.configured ? "Replace" : "Add"}
+                        </button>
+                      </span>
                     )}
                   </div>
+                  {verified[provider.id] ? (
+                    <p className={`mt-1 flex gap-1.5 pl-12 text-[0.6875rem]/4 font-medium ${verified[provider.id].ok ? "text-accent" : "text-danger"}`}>
+                      {verified[provider.id].ok ? <Check size={13} className="shrink-0" /> : <AlertTriangle size={13} className="shrink-0" />}
+                      {verified[provider.id].reason}
+                    </p>
+                  ) : null}
 
                   {keyDraftFor === provider.id ? (
                     <div className="mt-2 space-y-2 pl-12">
