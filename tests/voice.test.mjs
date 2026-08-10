@@ -23,7 +23,14 @@ check("the module owns the constructor lookup", speech.body.includes("webkitSpee
    is how the two copies came apart in the first place. */
 check("the composer does not construct its own", stripComments(composer.source).includes("webkitSpeechRecognition"), false);
 check("the sheet does not construct its own", stripComments(sheet.source).includes("webkitSpeechRecognition"), false);
-check("the composer uses the shared one", composer.body.includes("startSpeechRecognition"), true);
+/* The composer no longer uses speech recognition at all. In an installed iOS
+   PWA `webkitSpeechRecognition` is frequently absent with no error and no
+   event to render, which is why the mic "did not work at all" — it recorded
+   audio and had it transcribed instead. The voice sheet is a live
+   conversation surface and still uses recognition, so the rule that only the
+   module may construct one still matters. */
+check("the composer records instead of recognising", composer.body.includes("startRecording"), true);
+check("the composer does not use recognition", composer.body.includes("startSpeechRecognition"), false);
 check("the sheet uses the shared one", sheet.body.includes("startSpeechRecognition"), true);
 
 /* ---- One language, from one place ------------------------------------ */
@@ -31,7 +38,9 @@ check("the sheet uses the shared one", sheet.body.includes("startSpeechRecogniti
 /* The composer used navigator.language while the sheet honoured the stored
    preference, so choosing Hebrew in Settings changed one surface and silently
    not the other. */
-check("the composer takes the preference", composer.body.includes("language: voiceLanguage"), true);
+/* Transcription detects the spoken language itself, so the composer no longer
+   needs the preference to be told to it — which removes a way for the two
+   surfaces to disagree rather than adding one. */
 check("the sheet takes the preference", sheet.body.includes("language: voiceLanguage"), true);
 check("the shell passes it to the composer", shell.body.includes("voiceLanguage={preferences.voiceLanguage}"), true);
 check("only the module resolves auto", /navigator\.language/.test(stripComments(composer.source)), false);
@@ -55,7 +64,10 @@ check("the migration still reads it", read("lib/storage/indexeddb.ts").body.incl
    interim words landed in the draft and landed again once revised. */
 check("the module separates final from interim", speech.body.includes("result?.isFinal"), true);
 check("only final text is offered for appending", /if \(final\.trim\(\)\) options\.onFinal/.test(speech.body), true);
-check("the composer appends only finals", composer.body.includes("onFinal: (text)"), true);
+/* Transcription returns one settled string, so there is no interim text to
+   leak into the draft — the class of bug this guarded cannot occur in the
+   composer any more. The rule still binds the sheet, which streams. */
+check("the sheet appends only finals", sheet.body.includes("onFinal"), true);
 /* And appends to the draft as it stands now, not as it stood when listening
    began — a callback closes over the value from that render. */
 check("the composer reads the live draft", composer.body.includes("valueRef.current"), true);

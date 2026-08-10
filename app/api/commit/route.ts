@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { authorizeApiMutation } from "@/lib/auth/api";
+import { authorizeApiMutation, authorizeApiRead } from "@/lib/auth/api";
 
 /* Node runtime on purpose: Buffer handles UTF-8 base64 correctly, which the
    Edge atob/btoa pair does not. */
@@ -61,7 +61,9 @@ async function githubFetch(url: string, token: string, init: RequestInit = {}): 
 
 /** Read a file so the panel edits real content instead of a blind paste. */
 export async function GET(request: Request) {
-  const refusal = await authorizeApiMutation(request);
+  /* A read, so the read guard: the mutation guard also requires an Origin
+     header, which browsers omit on same-origin GETs — it refused every Load. */
+  const refusal = await authorizeApiRead(request);
   if (refusal) return refusal;
 
   const { token, owner, repo } = repoConfig();

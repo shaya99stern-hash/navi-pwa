@@ -44,6 +44,8 @@ import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
 import { APP_KNOWLEDGE } from "@/lib/ai/app-knowledge";
 import { NAVI_MISSION, needsMission } from "@/lib/ai/mission";
+import { ORCHESTRATION_KNOWLEDGE, needsOrchestrationKnowledge } from "@/lib/ai/orchestration-knowledge";
+import { ENGINEERING_DISCIPLINE, needsEngineeringDiscipline } from "@/lib/ai/engineering-discipline";
 import { needsAppKnowledge, stablePrefix } from "@/lib/ai/prompt/base";
 import { csvToMarkdown, documentBlock, extractPdfText } from "@/lib/ai/document-text";
 
@@ -600,6 +602,16 @@ function systemPrompt(options: {
        and the specific mistakes already made that must not recur. Carried
        whenever the turn touches the project, its memory, or its tools. */
     needsMission(request) ? NAVI_MISSION : "",
+    /* How to move around its own models: which engine suits which work, when a
+       second is worth its latency, and how to reconcile what comes back.
+       Without this NaviSoul behaved like one model with tools and described
+       its own routing from invention. */
+    needsOrchestrationKnowledge(request, effort) ? ORCHESTRATION_KNOWLEDGE : "",
+    /* Carried whenever the repository tools are in play. Every commit deploys
+       to the phone in the user's hand, so how to read their request, how to
+       change code without breaking what surrounds it, and how to report the
+       result honestly all matter more on these turns than the tokens do. */
+    needsEngineeringDiscipline(toolNames.includes("commit_own_source")) ? ENGINEERING_DISCIPLINE : "",
     /* Keyed to the mode the user actually chose, not to how the dispatcher
        classified this message. Keying it to dispatch meant that picking Code
        and then asking something the classifier read as ordinary produced a

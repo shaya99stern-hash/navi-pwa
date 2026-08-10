@@ -1,7 +1,8 @@
 "use client";
 
-import { ArrowLeft, Check, CloudUpload, FileCode2, GitBranch, LoaderCircle, Rocket, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Check, CloudUpload, FileCode2, GitBranch, LoaderCircle, MessageSquare, Rocket, ShieldCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 /**
@@ -28,6 +29,7 @@ type Status =
 type Capability = { id: string; name: string; ready: boolean; detail: string };
 
 export default function DeveloperSettings() {
+  const router = useRouter();
   const [path, setPath] = useState("");
   const [content, setContent] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
@@ -37,6 +39,29 @@ export default function DeveloperSettings() {
      user it has no code sandbox, invented a SHOW_DEVELOPER flag, and named
      credentials that do not exist — all answerable from here. */
   const [capabilities, setCapabilities] = useState<{ loaded: boolean; items: Capability[] }>({ loaded: false, items: [] });
+  const [askDraft, setAskDraft] = useState("");
+
+  /**
+   * Hand the request to NaviSoul in Code mode.
+   *
+   * The prompt is shaped rather than passed through: "read the file first,
+   * change the smallest thing that works, say what you changed" is the
+   * difference between a considered edit and a confident rewrite of a file it
+   * never opened — which is the failure mode that breaks an app.
+   */
+  function askNaviSoul() {
+    const request = askDraft.trim();
+    if (!request) return;
+    const framed = [
+      request,
+      "",
+      "Change NaviOS's own codebase for this. Find and read the real files first, make the smallest change that fully solves it, then commit it and tell me plainly what you changed and why. If you are not confident it is right, show me the change instead of committing it."
+    ].join("\n");
+    /* `text` is the parameter /new actually reads — it is the OS share-sheet
+       contract, reused here. The request names the repository tools, so the
+       self-update group switches on regardless of the current mode. */
+    router.push(`/new?text=${encodeURIComponent(framed)}`);
+  }
 
   useEffect(() => {
     void fetch("/api/system/status", { cache: "no-store" })
@@ -146,6 +171,44 @@ export default function DeveloperSettings() {
                 </div>
               ))}
             </div>
+          </section>
+
+          {/* The ordinary way to change the app: say what you want.
+              Pasting whole files was the only route, which meant writing the
+              code yourself before the self-update engine could apply it —
+              exactly backwards for an assistant that can read the repository
+              and write the change itself. The editor below stays for the
+              times you want to drive it by hand. */}
+          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--selection-bg)] text-accent"><MessageSquare size={21} /></span>
+              <span className="min-w-0 flex-1">
+                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Just describe the change</h2>
+                <p className="mt-1 text-[0.75rem]/[1.125rem] font-medium text-secondary">
+                  Say what you want changed in your own words. NaviSoul reads the real files, works out what to edit,
+                  makes the change, and commits it — the same way you would ask a developer.
+                </p>
+              </span>
+            </div>
+
+            <textarea
+              value={askDraft}
+              onChange={(event) => setAskDraft(event.target.value)}
+              rows={3}
+              placeholder="e.g. Make the send button bigger on phones, or move the research toggle next to the mic"
+              className="mt-3 w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-elev-2 p-3 text-[0.875rem]/[1.25rem] text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            />
+            <button
+              type="button"
+              onClick={askNaviSoul}
+              disabled={!askDraft.trim()}
+              className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-[0.875rem]/5 font-semibold text-white active:bg-accent-pressed disabled:opacity-60"
+            >
+              <Rocket size={17} />Ask NaviSoul to make this change
+            </button>
+            <p className="mt-2 text-[0.6875rem]/4 font-medium text-tertiary">
+              Opens a Code-mode chat with your request. NaviSoul will read the files before editing, and tell you what it changed.
+            </p>
           </section>
 
           <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
