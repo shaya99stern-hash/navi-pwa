@@ -449,7 +449,9 @@ export function ComposerDock({
     try {
       const session = await startRecording({
         onLevel: (level) => setInputLevel(level),
-        onError: (message) => setVoiceMessage(message)
+        onError: (message) => setVoiceMessage(message),
+        // The same dictation-language preference the voice sheet uses.
+        language: voiceLanguage
       });
       recorderRef.current = session;
       setListening(true);

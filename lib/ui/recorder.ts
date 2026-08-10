@@ -53,9 +53,13 @@ function preferredMimeType(): string | undefined {
  * Start recording. Rejects if the microphone is unavailable or refused, so the
  * caller can say which of those happened rather than showing a dead button.
  */
-export async function startRecording({ onLevel, onError }: {
+export async function startRecording({ onLevel, onError, language }: {
   onLevel?: RecorderLevels;
   onError?: (message: string) => void;
+  /* The user's dictation-language preference, passed straight through. Voice
+     mode has offered this picker all along and nothing ever sent it anywhere,
+     so it changed a stored value and nothing else. `auto` means no hint. */
+  language?: string;
 } = {}): Promise<RecordingSession> {
   if (!recordingSupported()) throw new Error("This browser cannot record audio.");
 
@@ -124,7 +128,8 @@ export async function startRecording({ onLevel, onError }: {
       // Below this it is a stray tap, not speech, and the API would 400.
       if (blob.size < 1_200) return "";
 
-      const response = await fetch("/api/voice/transcribe", {
+      const hint = language && language !== "auto" ? `?language=${encodeURIComponent(language)}` : "";
+      const response = await fetch(`/api/voice/transcribe${hint}`, {
         method: "POST",
         headers: { "Content-Type": blob.type },
         body: blob
