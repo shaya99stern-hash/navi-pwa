@@ -4,6 +4,7 @@ import { getRequestClerkSessionToken, getRequestClerkUserId } from "@/lib/auth/s
 import { cloudMemoryConfigured, listCloudChats } from "@/lib/memory/cloud";
 import { factsConfigured, listFacts } from "@/lib/memory/facts";
 import { learnedSkillsConfigured, listLearnedSkills } from "@/lib/memory/learned-skills";
+import { isLessonName, LESSON_PREFIX } from "@/lib/memory/lesson";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,9 @@ export async function GET(request: Request) {
       chats: 0,
       facts: 0,
       skills: 0,
-      skillNames: [] as string[]
+      lessons: 0,
+      skillNames: [] as string[],
+      lessonNames: [] as string[]
     });
   }
 
@@ -41,14 +44,25 @@ export async function GET(request: Request) {
     learnedSkillsConfigured() ? listLearnedSkills(token).catch(() => []) : Promise.resolve([])
   ]);
 
+  /* Taught and self-learned are counted apart because they answer different
+     questions. "How many skills have I given it" is about what the user did;
+     "what has it worked out on its own" is about what the app did while they
+     were not looking, and folding the second into the first makes a number the
+     user cannot reconcile with their own memory of teaching it things. */
+  const taught = skills.filter((skill) => !isLessonName(skill.name));
+  const lessons = skills.filter((skill) => isLessonName(skill.name));
+
   return NextResponse.json({
     configured: true,
     signedIn: true,
     chats: chats.length,
     facts: facts.length,
-    skills: skills.length,
+    skills: taught.length,
+    lessons: lessons.length,
     /* Named, not just counted: "12 skills" invites the same doubt as "saved".
        Seeing the names is what makes it believable. */
-    skillNames: skills.slice(0, 40).map((skill) => skill.name)
+    skillNames: taught.slice(0, 40).map((skill) => skill.name),
+    /* The prefix is a storage detail; showing it in the UI is noise. */
+    lessonNames: lessons.slice(0, 40).map((skill) => skill.name.slice(LESSON_PREFIX.length).trim() || skill.name)
   });
 }

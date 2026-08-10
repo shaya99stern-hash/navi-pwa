@@ -36,6 +36,41 @@ check("signed in offers learn_skill", "learn_skill" in buildToolset(context({ cl
 check("signed out does not offer learn_skill", "learn_skill" in buildToolset(context({})), false);
 check("a token without a user does not offer it", "learn_skill" in buildToolset(context({ clerkToken: "t" })), false);
 
+/* ── Learning from itself, not only from instruction ────────────────────── */
+
+/* `learn_skill` stores what the user teaches. Nothing stored what NaviSoul
+   worked out on its own, so every conversation re-derived the same ground: the
+   shape of this codebase, which provider is unreliable, what a particular
+   phrasing always turns out to mean. */
+check("signed in offers record_lesson", "record_lesson" in buildToolset(context({ clerkToken: "t", clerkUserId: "u" })), true);
+check("signed out does not offer record_lesson", "record_lesson" in buildToolset(context({})), false);
+check("a token without a user cannot record a lesson", "record_lesson" in buildToolset(context({ clerkToken: "t" })), false);
+
+const reflection = readFileSync(join(process.cwd(), "lib/ai/reflection-tools.ts"), "utf8");
+/* A model asked to reflect will produce a lesson after every turn, and forty
+   vacuous entries crowd out the four worth keeping. Most of the tool
+   description is about when not to call it, and that is load-bearing. */
+check("the tool argues against over-recording", /Do NOT call it for/.test(reflection), true);
+check("it says one lesson is normal", /One lesson per conversation is normal/.test(reflection), true);
+check("it refuses to claim an unmade save", /Do not claim it was/.test(reflection), true);
+/* A tool nothing prompts is a tool nothing calls. */
+check("the instruction reaches the prompt", routeSourceHasReflection(), true);
+
+/* ── A lesson is not a skill, and is not described as one ───────────────── */
+
+/* Rendering both under "skills this user has taught you" would present every
+   self-derived guess as a standing instruction from the user — a short path to
+   NaviSoul defending its own mistaken inference as something it was told. */
+const skillsSource = readFileSync(join(process.cwd(), "lib/memory/learned-skills.ts"), "utf8");
+check("the two are separated when rendered", skillsSource.includes("What you worked out for yourself"), true);
+check("lessons are marked as its own conclusions", /not instructions from the user/.test(skillsSource), true);
+check("evidence yields to what is visible now", /trust what you can see/.test(skillsSource), true);
+
+function routeSourceHasReflection(): boolean {
+  const source = readFileSync(join(process.cwd(), "app/api/chat/route.ts"), "utf8");
+  return source.includes("REFLECTION_INSTRUCTION") && /const memoryContext = \[[^\]]*reflectionContext/.test(source);
+}
+
 /* ── The prompt block contract, checked without a network ───────────────── */
 
 const source = readFileSync(join(process.cwd(), "lib/memory/learned-skills.ts"), "utf8");

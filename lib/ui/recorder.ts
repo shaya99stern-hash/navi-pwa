@@ -30,9 +30,22 @@ export function recordingSupported(): boolean {
     && typeof MediaRecorder !== "undefined";
 }
 
-/** The first container this browser will actually record. Safari differs. */
+/**
+ * The first container this browser will record *that transcription accepts*.
+ *
+ * Order matters and was wrong. WebM/Opus came first because it is the best
+ * supported recording format on the web — and the transcription endpoint
+ * rejects it outright: `Content type "audio/webm; codecs=opus" not
+ * supported`. Recording in the format the recorder prefers rather than the
+ * one the consumer accepts made every transcription fail at the last step.
+ *
+ * MP4/AAC first: Safari records it natively, Whisper accepts it everywhere,
+ * and it is the format an iPhone would have produced anyway. WebM stays last
+ * as a genuine fallback for a browser that supports nothing else — the
+ * multipart path handles it where the raw-bytes path cannot.
+ */
 function preferredMimeType(): string | undefined {
-  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+  const candidates = ["audio/mp4", "audio/mpeg", "audio/ogg;codecs=opus", "audio/ogg", "audio/webm;codecs=opus", "audio/webm"];
   return candidates.find((type) => MediaRecorder.isTypeSupported?.(type));
 }
 

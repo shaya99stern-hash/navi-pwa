@@ -35,6 +35,8 @@ import { haptic } from "@/lib/ui/haptics";
 import { startRecording, type RecordingSession } from "@/lib/ui/recorder";
 import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
+import { useOverlayRoute } from "@/lib/ui/overlay-route";
+import { watchProviderStatus } from "@/lib/ui/provider-status";
 import {
   ATTACHMENT_BUDGET,
   MAX_ATTACHMENTS,
@@ -92,12 +94,6 @@ type Props = {
   connectorCount: number;
   connectorAccessMode: ConnectorAccessMode;
   onOpenPlaybooks: () => void;
-};
-
-type ProviderStatus = {
-  providers?: Record<string, boolean | undefined>;
-  devTools?: { github?: boolean; vercel?: boolean };
-  search?: { configured?: boolean; provider?: string | null };
 };
 
 function formatBytes(bytes: number): string {
@@ -203,6 +199,13 @@ export function ComposerDock({
   valueRef.current = value;
   const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
 
+  /* Back dismisses whatever is in front of you. These two are the composer's
+     own overlays, and leaving them out would have made the gesture work
+     everywhere except the sheet a thumb opens most often. Neither takes an
+     address: a menu is not a destination worth linking to. */
+  useOverlayRoute({ open: sourceMenuOpen, onClose: () => setSourceMenuOpen(false) });
+  useOverlayRoute({ open: integrationsOpen, onClose: () => setIntegrationsOpen(false) });
+
   /* 82 on-device commands are useless if nobody can find them, so typing a
      slash lists what it could still become. Ranking is a synchronous map
      lookup, cheap enough to run per keystroke. */
@@ -236,54 +239,31 @@ export function ComposerDock({
     setSelectedFiles((current) => current.slice(0, attachmentCount));
   }, [attachmentCount]);
 
-  useEffect(() => {
-    let cancelled = false;
+  /* One shared read of what the server has configured. The setup notice wants
+     the same answer, and both used to fetch it independently on mount and on
+     every return to the foreground — two identical requests each time, neither
+     component aware of the other. Re-probing on return is still what picks up a
+     key added elsewhere without a reload; it now happens once. */
+  useEffect(() => watchProviderStatus((data) => {
+    // A failed or unauthorized probe must not latch the UI into an error
+    // state; treat it as unknown and let sending report the real result.
+    if (!data) {
+      setProviderReady(null);
+      return;
+    }
+    // Any configured provider can answer; which one is the router's business.
+    setProviderReady(Object.values(data.providers ?? {}).some(Boolean));
+    /* The same probe already tells us what Navi can reach, so the
+       Integrations sheet costs no extra request. */
+    setIntegrations({
+      github: Boolean(data.devTools?.github),
+      vercel: Boolean(data.devTools?.vercel),
+      search: { configured: Boolean(data.search?.configured), provider: data.search?.provider ?? null },
+      loaded: true
+    });
+  }), []);
 
-    const probeProviders = () => {
-      void fetch("/api/models", { cache: "no-store" })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data: ProviderStatus | null) => {
-          if (cancelled) return;
-          // A failed or unauthorized probe must not latch the UI into an error
-          // state; treat it as unknown and let sending report the real result.
-          if (!data) {
-            setProviderReady(null);
-            return;
-          }
-          const providers = data.providers;
-          // Any configured provider can answer; which one is the router's business.
-          setProviderReady(Object.values(providers ?? {}).some(Boolean));
-          /* The same probe already tells us what Navi can reach, so the
-             Integrations sheet costs no extra request. */
-          setIntegrations({
-            github: Boolean(data.devTools?.github),
-            vercel: Boolean(data.devTools?.vercel),
-            search: { configured: Boolean(data.search?.configured), provider: data.search?.provider ?? null },
-            loaded: true
-          });
-        })
-        .catch(() => {
-          if (!cancelled) setProviderReady(null);
-        });
-    };
-
-    probeProviders();
-
-    // Re-probe on return so newly added provider keys are picked up without a
-    // reinstall or hard reload.
-    const recheck = () => {
-      if (document.visibilityState === "visible") probeProviders();
-    };
-    document.addEventListener("visibilitychange", recheck);
-    window.addEventListener("online", recheck);
-
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", recheck);
-      window.removeEventListener("online", recheck);
-      recorderRef.current?.cancel();
-    };
-  }, []);
+  useEffect(() => () => recorderRef.current?.cancel(), []);
 
   const available = providerReady !== false;
   /* Typing, attaching, and dictating stay available even with no provider
@@ -818,8 +798,12 @@ export function ComposerDock({
           {/* Actionable warnings first; otherwise, once a conversation is under
               way, the standing accuracy disclaimer takes this line. */}
           <div className="flex items-center justify-center px-3 text-center" role="status" aria-live="polite">
+            {/* The footer is capped at two lines. A provider error can run to
+                several hundred characters, and letting it wrap freely turned
+                this line into a wall of text that shoved the composer up the
+                screen. */}
             {footer ? (
-              <span className={`block pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
+              <span className={`block max-h-8 overflow-hidden pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
             ) : hasMessages ? (
               <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">NaviSoul is AI and can make mistakes. Double-check important answers.</span>
             ) : null}

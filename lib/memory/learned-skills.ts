@@ -1,5 +1,7 @@
 import "server-only";
 
+import { isLessonName } from "./lesson";
+
 /**
  * Skills NaviSoul has learned and keeps.
  *
@@ -24,6 +26,10 @@ const MAX_INSTRUCTION_CHARS = 24_000;
 /** What skill content may cost the prompt, total and per skill. */
 const PROMPT_BUDGET_CHARS = 6_000;
 const PER_SKILL_PROMPT_CHARS = 1_500;
+
+function isLesson(skill: LearnedSkill): boolean {
+  return isLessonName(skill.name);
+}
 
 export type LearnedSkill = {
   id: string;
@@ -149,14 +155,32 @@ export async function forgetSkill(clerkToken: string, id: string): Promise<boole
  * budget runs out, clipped per skill so one enormous ingestion cannot crowd
  * out the rest.
  */
+/**
+ * Two kinds of memory, said to be two kinds of memory.
+ *
+ * A skill and a lesson are different objects even though they share a table. A
+ * skill is instruction — the user said "do it this way", and it carries their
+ * authority. A lesson is evidence — NaviSoul tried something, watched what
+ * happened, and wrote down the conclusion, which carries only as much weight as
+ * its own reasoning did.
+ *
+ * Rendering both under "skills this user has taught you" would have made every
+ * self-derived guess look like a standing instruction from the user, which is a
+ * short path to NaviSoul defending its own mistaken inference as something it
+ * was told. So they are separated here, and each is introduced honestly.
+ */
 export function learnedSkillsBlock(skills: LearnedSkill[]): string {
   if (!skills.length) return "";
-  const lines: string[] = [
-    "Skills this user has taught you in past conversations. They are yours: apply them without being reminded whenever they fit the task, and never claim you lack a capability listed here.",
-    ""
-  ];
+
+  const taught = skills.filter((skill) => !isLesson(skill));
+  const learned = skills.filter(isLesson);
+  const lines: string[] = [];
+  /* One budget across both sections, not one each — the prompt does not care
+     which heading a paragraph sat under. Skills are rendered first so that when
+     the budget runs out it is a lesson that gets clipped, not an instruction. */
   let used = 0;
-  for (const skill of skills) {
+
+  const render = (skill: LearnedSkill) => {
     const header = `### ${skill.name}${skill.description ? ` — ${skill.description}` : ""}`;
     const body = used + skill.instructions.length <= PROMPT_BUDGET_CHARS
       ? skill.instructions
@@ -167,6 +191,20 @@ export function learnedSkillsBlock(skills: LearnedSkill[]): string {
       used += body.length;
     }
     lines.push("");
+  };
+
+  if (taught.length) {
+    lines.push("Skills this user has taught you in past conversations. They are yours: apply them without being reminded whenever they fit the task, and never claim you lack a capability listed here.", "");
+    for (const skill of taught) render(skill);
   }
+
+  if (learned.length) {
+    lines.push(
+      "What you worked out for yourself in past conversations. These are your own conclusions, not instructions from the user — act on them, but if one is contradicted by what you can see right now, trust what you can see and say so rather than defending the note.",
+      ""
+    );
+    for (const skill of learned) render(skill);
+  }
+
   return lines.join("\n").trim();
 }

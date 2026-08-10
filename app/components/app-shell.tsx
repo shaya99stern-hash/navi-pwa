@@ -42,6 +42,7 @@ import { instantAnswer, parseSlashCommand, runSlash } from "@/lib/skills";
 import { haptic } from "@/lib/ui/haptics";
 import { resolveVoiceLanguage, speak, whenVoicesReady } from "@/lib/ui/speech";
 import { useEdgeSwipe } from "@/lib/ui/use-edge-swipe";
+import { useOverlayRoute } from "@/lib/ui/overlay-route";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
 import { ComposerDock } from "./composer-dock";
 import { ConnectorsSheet } from "./connectors-sheet";
@@ -206,6 +207,35 @@ export function AppShell({
 
   const openHistory = useCallback(() => setHistoryOpen(true), []);
   const edgeSwipe = useEdgeSwipe({ disabled: historyOpen, haptics: preferences.haptics, onOpen: openHistory });
+
+  /* Every overlay is a place you can be, and back is how you leave it.
+   *
+   * These were plain booleans, so the back gesture skipped whatever was in
+   * front of you and navigated the chat underneath — or off the app entirely.
+   * On a phone that is the primary dismiss gesture, which is why the routing
+   * "didn't feel a hundred percent": the sheets were not in the history at all.
+   *
+   * Where the overlay has a route of its own, the address follows it, so the
+   * screen you are on is the screen the URL names — and closing puts it back
+   * rather than leaving a stale `/settings` behind. The ones without a route
+   * still take a history entry, because being dismissable by back matters more
+   * than being linkable. */
+  /* Where a link-opened overlay closes to. The stored list rather than the
+     live message array, because a conversation only has an address once it has
+     been written down — closing to `/chat/<id>` for a chat that does not exist
+     yet would put a dead link in the address bar. */
+  const restorePath = chats.some((chat) => chat.id === activeId) ? `/chat/${encodeURIComponent(activeId)}` : "/";
+  useOverlayRoute({ open: historyOpen, onClose: () => setHistoryOpen(false), path: "/recents", restore: restorePath });
+  useOverlayRoute({ open: settingsOpen, onClose: () => { setSettingsOpen(false); setSettingsSection(undefined); }, path: "/settings", restore: restorePath });
+  useOverlayRoute({ open: connectorsOpen, onClose: () => setConnectorsOpen(false), path: "/connectors", restore: restorePath });
+  useOverlayRoute({ open: projectsOpen, onClose: () => setProjectsOpen(false), path: "/projects", restore: restorePath });
+  useOverlayRoute({ open: artifactsOpen, onClose: () => setArtifactsOpen(false), path: "/artifacts", restore: restorePath });
+  useOverlayRoute({ open: voiceOpen, onClose: () => setVoiceOpen(false), path: "/voice", restore: restorePath });
+  /* No route of their own — a menu is not a destination worth linking to — but
+     back still closes them, which is the half that was actually missing. */
+  useOverlayRoute({ open: chatMenuOpen, onClose: () => setChatMenuOpen(false), restore: restorePath });
+  useOverlayRoute({ open: effortSheetOpen, onClose: () => setEffortSheetOpen(false), restore: restorePath });
+  useOverlayRoute({ open: contextMessage !== null, onClose: () => setContextMessage(null), restore: restorePath });
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
   /* Counted per user turn, not per conversation: three attempts at this
@@ -711,6 +741,21 @@ export function AppShell({
     }));
   }
 
+  /* Handlers that keep the same identity across renders, so the memoised
+     message rows can tell "nothing about this row changed" from "the draft
+     changed one component up".
+   *
+   * Both are redeclared every render and close over live state — `retry` over
+   * the project, the research switch and the message list, `rateMessage` over
+   * the active chat. Passing those straight down would defeat the memo; freezing
+   * them with a dependency list would let a row hold a closure from a render
+   * where research was still on, and retry with the wrong settings. Reading the
+   * current one through a ref keeps both properties at once. */
+  const liveHandlers = useRef({ rateMessage, retry });
+  liveHandlers.current = { rateMessage, retry };
+  const stableRate = useCallback((messageId: string, value: "up" | "down") => liveHandlers.current.rateMessage(messageId, value), []);
+  const stableRetry = useCallback(() => liveHandlers.current.retry(), []);
+
   function renameActiveChat() {
     const current = chats.find((chat) => chat.id === activeId);
     const title = window.prompt("Rename this chat", current?.title ?? "")?.trim();
@@ -1155,8 +1200,8 @@ export function AppShell({
                   haptics={preferences.haptics}
                   voiceLanguage={preferences.voiceLanguage}
                   rating={activeChat?.ratings?.[message.id]}
-                  onRate={message.role === "assistant" ? (value) => rateMessage(message.id, value) : undefined}
-                  onRetry={message.role === "assistant" && index === messages.length - 1 && !generating && online ? retry : undefined}
+                  onRate={message.role === "assistant" ? stableRate : undefined}
+                  onRetry={message.role === "assistant" && index === messages.length - 1 && !generating && online ? stableRetry : undefined}
                   onLongPress={setContextMessage}
                   capabilities={capabilityHandlers}
                 />

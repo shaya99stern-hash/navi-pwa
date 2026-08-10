@@ -17,6 +17,22 @@ const MAX_BATCH = 12;
 const MAX_INLINE_DATA_URL_CHARS = 100_000;
 
 let enabled = false;
+/**
+ * Set when the server has said, in effect, "not ever" — 503 because the
+ * deployment has no cloud memory, or 401 because nobody is signed in.
+ *
+ * Without this the mirror asked again on every change, forever. Local
+ * preferences were the only input to `enabled`, so a deployment with no
+ * Supabase and a signed-out visitor both produced a doomed PUT every few
+ * seconds for as long as the app was open — each one `keepalive`, which draws
+ * on a small per-page budget shared with the requests that do matter. Nothing
+ * surfaced it because every failure here is deliberately silent.
+ *
+ * A refusal is a fact about the deployment or the session, so it holds until
+ * one of those changes: a successful pull clears it, which is exactly when
+ * signing in or configuring the store would take effect.
+ */
+let refused = false;
 const pendingChats = new Map<string, StoredChat>();
 let pendingPreferences: NaviPreferences | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -27,6 +43,19 @@ export function setCloudSyncEnabled(value: boolean): void {
     pendingChats.clear();
     pendingPreferences = null;
   }
+}
+
+/** Is the mirror actually going to write? Exported for the settings screen. */
+export function cloudSyncActive(): boolean {
+  return enabled && !refused;
+}
+
+/* 503: this deployment has no store. 401: nobody is signed in. Both are
+   settled answers rather than transient failures, and both come back the same
+   way on the next request, so retrying is pure waste. A 5xx that is not 503,
+   or a network error, stays retryable — those do resolve on their own. */
+function noteResponse(response: Response): void {
+  if (response.status === 503 || response.status === 401) refused = true;
 }
 
 /** Strip huge inline data URLs so a chat with photos still fits a jsonb row. */
@@ -58,7 +87,7 @@ function schedule(): void {
 }
 
 async function flush(): Promise<void> {
-  if (!enabled) return;
+  if (!cloudSyncActive()) return;
   const chats = [...pendingChats.values()].slice(0, MAX_BATCH).map(compactChatForCloud);
   const preferences = pendingPreferences;
   pendingChats.clear();
@@ -70,34 +99,36 @@ async function flush(): Promise<void> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chats }),
       keepalive: true
-    }).catch(() => {});
+    }).then(noteResponse).catch(() => {});
   }
-  if (preferences) {
+  /* Checked again: the chat push may have just learned the store is unusable,
+     and sending the second request anyway would prove the same point twice. */
+  if (preferences && !refused) {
     await fetch("/api/memory/preferences", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(preferences),
       keepalive: true
-    }).catch(() => {});
+    }).then(noteResponse).catch(() => {});
   }
 }
 
 export function queueChatPush(chat: StoredChat): void {
-  if (!enabled || !chat.messages.length) return;
+  if (!cloudSyncActive() || !chat.messages.length) return;
   pendingChats.set(chat.id, chat);
   schedule();
 }
 
 export function queuePreferencesPush(preferences: NaviPreferences): void {
-  if (!enabled) return;
+  if (!cloudSyncActive()) return;
   pendingPreferences = preferences;
   schedule();
 }
 
 export function pushChatDeletion(chatId: string): void {
-  if (!enabled) return;
+  if (!cloudSyncActive()) return;
   pendingChats.delete(chatId);
-  void fetch(`/api/memory/chats?id=${encodeURIComponent(chatId)}`, { method: "DELETE", keepalive: true }).catch(() => {});
+  void fetch(`/api/memory/chats?id=${encodeURIComponent(chatId)}`, { method: "DELETE", keepalive: true }).then(noteResponse).catch(() => {});
 }
 
 /* Backgrounding a PWA on iOS is how it closes; pagehide is the last chance
@@ -124,6 +155,11 @@ export async function pullCloudMemory(): Promise<CloudPull | null> {
     if (!chatsResponse.ok) return null;
     const chatsBody = (await chatsResponse.json()) as { configured?: boolean; chats?: StoredChat[] };
     if (!chatsBody.configured) return null;
+    /* A store that answers is a store worth writing to. This is what lets a
+       sign-in, or a deployment that gains its Supabase keys, revive a mirror
+       an earlier refusal had switched off — without it, "sign in and it will
+       sync" would be true only after a reload. */
+    refused = false;
     const preferencesBody = preferencesResponse.ok
       ? ((await preferencesResponse.json()) as { preferences?: Partial<NaviPreferences> | null })
       : { preferences: null };

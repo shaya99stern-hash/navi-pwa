@@ -88,7 +88,8 @@ const chatRoute = readFileSync("app/api/chat/route.ts", "utf8");
 
 check("the capability is stated, not just its output", chatRoute.includes("memoryCapability"), true);
 check("it is stated only when memory can be written", /mayRemember && factsConfigured\(\)\s*\n?\s*\?/.test(chatRoute), true);
-check("it precedes the facts themselves", chatRoute.indexOf("memoryCapability, rememberedBlock") > -1, true);
+check("it precedes the facts themselves", chatRoute.indexOf("const memoryContext = [memoryCapability") > -1, true);
+check("the facts are still in the block", /const memoryContext = \[[^\]]*rememberedBlock/.test(chatRoute), true);
 /* The two failures, named so neither returns quietly. */
 check("it forbids denying the capability", /Never say you cannot store anything between conversations/.test(chatRoute), true);
 check("it forbids claiming a specific save", /never claim to have saved a specific item/.test(chatRoute), true);

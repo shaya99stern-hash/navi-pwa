@@ -2,6 +2,7 @@
 
 import {
   FolderKanban,
+  GitBranch,
   MessageCircle,
   Pin,
   PinOff,
@@ -11,10 +12,12 @@ import {
   Shapes,
   SlidersHorizontal,
   SquarePen,
+  Terminal,
   Trash2,
   UserRound,
   X
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { NaviMode, StoredChat } from "@/lib/ai/types";
 import { searchConversations } from "@/lib/memory";
@@ -243,10 +246,29 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
             <MessageCircle size={19} strokeWidth={1.8} className="text-secondary" />
             Chats
           </button>
-          <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <FolderKanban size={19} strokeWidth={1.8} className="text-secondary" />
-            Projects
-          </button>
+          {/* The drawer follows the mode.
+              Switching modes changed routing and the system prompt and nothing
+              a person could see, which is what made the segmented control read
+              as decoration. Code mode is about a repository and what it
+              deploys, so the drawer offers that; Chat mode is about the work
+              you keep, so it offers projects. Artifacts belong to both. */}
+          {mode === "code" ? (
+            <>
+              <Link href="/settings/Developer" onClick={onClose} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+                <Terminal size={19} strokeWidth={1.8} className="text-secondary" />
+                Developer
+              </Link>
+              <button type="button" onClick={() => openSheet(onCustomize)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+                <GitBranch size={19} strokeWidth={1.8} className="text-secondary" />
+                Repository
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+              <FolderKanban size={19} strokeWidth={1.8} className="text-secondary" />
+              Projects
+            </button>
+          )}
           <button type="button" onClick={() => openSheet(onArtifacts)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <Shapes size={19} strokeWidth={1.8} className="text-secondary" />
             Artifacts

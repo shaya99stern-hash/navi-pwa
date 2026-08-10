@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import { activeGroups, buildToolset, capToolset, MAX_ACTIVE_TOOLS, type ToolsetContext } from "@/lib/tools/registry";
+import { activeGroups, buildToolset, capToolset, MAX_ACTIVE_CODE_TOOLS, MAX_ACTIVE_TOOLS, toolCeiling, type ToolsetContext } from "@/lib/tools/registry";
 
 let pass = 0, fail = 0;
 const check = (n: string, a: unknown, e: unknown) => {
@@ -28,12 +28,27 @@ check("trimming keeps the earliest entries", Object.keys(capToolset(many, 3)), [
    three tools that must coexist with the built-ins, and starving them
    reproduces exactly the bug they fix — NaviSoul insisting it cannot reach
    the repository. Sixteen is still a ceiling, not an invitation. */
-check("the ceiling is sixteen", MAX_ACTIVE_TOOLS, 16);
+check("the chat ceiling is sixteen", MAX_ACTIVE_TOOLS, 16);
+check("chat mode gets the chat ceiling", toolCeiling("chat"), MAX_ACTIVE_TOOLS);
+check("code mode gets a larger ceiling", toolCeiling("code") > toolCeiling("chat"), true);
 
 /* Past roughly a dozen the model picks worse tools and every turn pays the
    schema cost of the ones it will not call — a failure that is invisible
    because more tools still technically works. */
-check("a real toolset stays inside the ceiling", names(ctx({ policy: { web: true, code: true, artifacts: true }, mode: "code", githubToken: "t", githubWritesEnabled: true })).length <= MAX_ACTIVE_TOOLS, true);
+const everything = ctx({ policy: { web: true, code: true, artifacts: true }, mode: "code", githubToken: "t", githubWritesEnabled: true });
+check("a real toolset stays inside its ceiling", names(everything).length <= MAX_ACTIVE_CODE_TOOLS, true);
+check("a real chat toolset stays inside the chat ceiling", names(ctx({ policy: { web: true, code: true, artifacts: true }, clerkToken: "t", clerkUserId: "u" })).length <= MAX_ACTIVE_TOOLS, true);
+
+/* One ceiling for both modes silently deleted the point of Code mode. Count
+   what it switches on — five skill tools, two execution, three web, three
+   self-update, three provisioning — and seventeen slots are gone before a
+   single repository tool is reached. The cap trims from the end, so with a
+   GitHub account connected `github_read_file` and `github_search_code` were
+   cut every turn, and the only symptom was NaviSoul saying it could not reach
+   a repository it held the token for. */
+const codeTools = names(everything);
+check("code mode can read a repository file", codeTools.includes("github_read_file"), true);
+check("code mode can search repository code", codeTools.includes("github_search_code"), true);
 
 /* A connector must never displace a built-in capability. Someone who connects
    ten servers should lose connector tools, not the ability to run code. */
@@ -64,6 +79,29 @@ check("writes need all three", activeGroups(ctx({ mode: "code", githubToken: "t"
    the research switch would take exact date arithmetic away from anyone who
    turned research off, which is not what that switch means. */
 check("the clock survives research being off", names(ctx({ policy: { web: false, code: false, artifacts: true } })).some((name) => /time|date|clock/i.test(name)), true);
+
+/* ── Knowing what it is running on ───────────────────────────────────────── */
+
+/* Every fabricated answer about NaviOS itself has one shape: asked about
+   itself, it reasoned from assumption because nothing let it look. It invented
+   a Settings path, invented an environment flag, and announced it had no code
+   sandbox while an unconfigured one sat there. So this group is unconditional —
+   there is no request shape that reliably predicts "and now I will make
+   something up about myself". */
+check("self-inspection is always available", names(ctx()).includes("inspect_environment"), true);
+check("self-inspection survives every switch being off", names(ctx({ policy: { web: false, code: false, artifacts: false } })).includes("inspect_environment"), true);
+check("a key can be tested for real", names(ctx()).includes("test_service"), true);
+check("self-inspection is not trimmed by connectors", names(ctx({ mcpTools: crowded })).includes("inspect_environment"), true);
+
+/* ── Learning from its own experience ────────────────────────────────────── */
+
+/* Same gate as `learn_skill`, because it writes to the same store. Offering a
+   tool that has nowhere to put what it is given is worse than not offering it:
+   the model reports the save, and nothing was saved. */
+check("lessons need a signed-in user", names(ctx()).includes("record_lesson"), false);
+check("lessons need a user id, not just a token", names(ctx({ clerkToken: "t" })).includes("record_lesson"), false);
+check("reflection is gated with learning", activeGroups(ctx({ clerkToken: "t", clerkUserId: "u" })).includes("reflection"), true);
+check("reflection is off when learning is", activeGroups(ctx()).includes("reflection"), false);
 
 /* ── The list is flat and well formed ────────────────────────────────────── */
 

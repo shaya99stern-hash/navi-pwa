@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { compactChatForCloud, mergeCloudChats } from "@/lib/memory/cloud-sync";
 import type { StoredChat } from "@/lib/ai/types";
 
@@ -55,6 +57,23 @@ check("a small data url survives", parts[2].url, "data:image/png;base64,tiny");
 check("text parts are untouched", parts[0].text, "look at this");
 const originalParts = (withPhoto.messages[0] as unknown as { parts: Array<{ url?: string }> }).parts;
 check("the original chat is not mutated", originalParts[1].url === bigUrl, true);
+
+/* ── A refusal is a settled answer, not a reason to keep asking ──────────── */
+
+/* Local preferences were the only input to whether the mirror wrote, so a
+   deployment with no Supabase and a signed-out visitor each produced a doomed
+   PUT every few seconds for as long as the app was open — every one of them
+   `keepalive`, drawing on a small per-page budget shared with requests that
+   matter. Every failure here is silent by design, so nothing ever surfaced it. */
+const syncSource = readFileSync(join(process.cwd(), "lib/memory/cloud-sync.ts"), "utf8");
+
+check("503 and 401 stop the mirror", /response\.status === 503 \|\| response\.status === 401/.test(syncSource), true);
+check("a transient failure does not", /catch\(\(\) => \{\}\)/.test(syncSource), true);
+check("every write path checks before sending", (syncSource.match(/cloudSyncActive\(\)/g) ?? []).length >= 4, true);
+check("the second write rechecks after the first", syncSource.includes("if (preferences && !refused)"), true);
+/* Otherwise "sign in and it will sync" would be true only after a reload. */
+check("a working pull revives it", /if \(!chatsBody\.configured\) return null;\s*\n[\s\S]{0,400}refused = false;/.test(syncSource), true);
+check("the mirror reports its own state", syncSource.includes("export function cloudSyncActive"), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

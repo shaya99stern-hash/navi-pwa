@@ -61,11 +61,32 @@ check("the quality check is gone from Account", account.includes("Run quality ch
 const privacy = block("privacy");
 const general = block("general");
 
-check("the memory list is on Privacy", privacy.includes("What NaviSoul remembers"), true);
-check("it is not on General", general.includes("What NaviSoul remembers"), false);
+check("the memory list is on Privacy", privacy.includes("What is stored"), true);
+check("it is not on General", general.includes("What is stored"), false);
 check("Privacy can forget a fact", /forget\(item\.id\)/.test(privacy), true);
 check("Privacy states the not-configured case", privacy.includes("Not enabled"), true);
 check("Privacy states the empty case", privacy.includes("Nothing yet"), true);
+
+/* ---- One subject, read top to bottom --------------------------------- */
+
+/* Four sections covered one topic in the order the features were built: a
+   paragraph, the facts list, the switches, then counts referring to "the list
+   above" across an intervening section — with the storage-durability sentence
+   printed twice, once under a toggle and once as a row of its own. */
+const heads = [...privacy.matchAll(/<SectionHeader>(.*?)<\/SectionHeader>/g)].map((m) => m[1]);
+check("Privacy is three sections, not four", heads, ["Memory", "What is stored", "Your data"]);
+check("the switches come before what they govern", privacy.indexOf("Local history") < privacy.indexOf("What is stored"), true);
+check("the facts list follows its own count", privacy.indexOf("What is stored") < privacy.indexOf("forget(item.id)"), true);
+check("the durability sentence appears once", (privacy.match(/DURABILITY_DETAIL\[durability\]/g) ?? []).length, 1);
+/* A count that pointed at a list a section away, when the list is now directly
+   beneath it. */
+check("no count refers to a list that moved", privacy.includes("listed above"), false);
+check("counts are tabular so a column stays aligned", /<Count value=/.test(privacy), true);
+
+/* Both kinds of stored knowledge are shown, and shown apart: a skill carries
+   the user's authority, a lesson only its own reasoning. */
+check("taught skills are listed", privacy.includes("skillNames.map"), true);
+check("self-learned lessons are listed separately", privacy.includes("lessonNames.map"), true);
 /* Forgetting is a privacy decision; showing it as done before the server
    confirms is the one lie this control must not tell. */
 check("the row waits for the server", /if \(response\?\.ok\) setFacts/.test(body), true);
