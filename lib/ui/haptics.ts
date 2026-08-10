@@ -65,8 +65,54 @@ function pulseIos(intent: HapticIntent) {
   }
 }
 
+/**
+ * When a real gesture last happened.
+ *
+ * Both haptic mechanisms need transient user activation: `navigator.vibrate`
+ * is refused outright without it — the browser logs "Blocked call to
+ * navigator.vibrate because user hasn't tapped on the frame" — and the iOS
+ * trick works by activating a real control, which has the same requirement.
+ *
+ * Activation expires quickly, and roughly forty haptic calls in this app fire
+ * *after* an await: a network round trip, a clipboard write, a transcription.
+ * By then the window has closed, so those taps produced no feedback at all
+ * while identical taps elsewhere did. That inconsistency is what makes the
+ * haptics feel broken rather than absent.
+ *
+ * Nothing here can grant activation the platform withheld. What it can do is
+ * stop pretending: a haptic with no chance of firing is skipped rather than
+ * attempted, which keeps the console clean and, more importantly, tells the
+ * calling code the truth — if feedback matters, fire it on the gesture rather
+ * than on the result.
+ */
+let lastGestureAt = 0;
+
+/** How long after a real gesture a haptic is still worth attempting. */
+const ACTIVATION_WINDOW_MS = 1_000;
+
+if (typeof window !== "undefined") {
+  const mark = () => { lastGestureAt = Date.now(); };
+  /* Capture phase, passive: this must observe every gesture without being
+     cancellable by a handler that stops propagation, and without ever
+     delaying a scroll. */
+  for (const event of ["pointerdown", "touchstart", "keydown"] as const) {
+    window.addEventListener(event, mark, { capture: true, passive: true });
+  }
+}
+
+/** Whether the platform will honour a haptic right now. */
+function activationLikely(): boolean {
+  const activation = (navigator as Navigator & { userActivation?: { isActive?: boolean } }).userActivation;
+  if (activation && typeof activation.isActive === "boolean") return activation.isActive;
+  // No UserActivation API: fall back to how recently a gesture was seen.
+  return Date.now() - lastGestureAt < ACTIVATION_WINDOW_MS;
+}
+
 export function haptic(intent: HapticIntent, enabled = true): void {
   if (!enabled || typeof navigator === "undefined") return;
+  /* Skip rather than attempt. The call would be refused anyway, and the
+     refusal costs a console warning on every one of them. */
+  if (!activationLikely() && Date.now() - lastGestureAt >= ACTIVATION_WINDOW_MS) return;
   try {
     if (typeof navigator.vibrate === "function") {
       navigator.vibrate(VIBRATE_PATTERNS[intent]);
