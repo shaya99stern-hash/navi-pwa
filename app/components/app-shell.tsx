@@ -3,7 +3,7 @@ import { useChat } from "@ai-sdk/react";
 import { describeResult, runInSandbox } from "@/lib/execution/sandbox";
 import { MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type FileUIPart, type UIMessage } from "ai";
-import { ChevronDown, Ellipsis, FolderKanban, Ghost, Link2, PanelLeft, Search, SquarePen, WifiOff } from "lucide-react";
+import { ChevronDown, Ellipsis, FolderKanban, Ghost, Link2, PanelLeft, SquarePen, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -42,7 +42,7 @@ import { instantAnswer, parseSlashCommand, runSlash } from "@/lib/skills";
 import { haptic } from "@/lib/ui/haptics";
 import { resolveVoiceLanguage, speak, whenVoicesReady } from "@/lib/ui/speech";
 import { useEdgeSwipe } from "@/lib/ui/use-edge-swipe";
-import { useOverlayRoute } from "@/lib/ui/overlay-route";
+import { releaseOverlaysForNavigation, useOverlayRoute } from "@/lib/ui/overlay-route";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
 import { ComposerDock } from "./composer-dock";
 import { ConnectorsSheet } from "./connectors-sheet";
@@ -684,7 +684,13 @@ export function AppShell({
     setAttachmentError(null);
     setStreamStatus(null);
     clearError();
+    /* Both halves of one tap: dismiss the drawer and go somewhere. The drawer
+       normally unwinds its own history entry on close, which is right for a
+       dismissal and wrong here — the unwind lands after the router has
+       navigated and cancels it. */
+    releaseOverlaysForNavigation();
     setHistoryOpen(false);
+    setVoiceOpen(false);
     router.push("/new");
   }, [clearError, generating, router, setMessages, stop]);
 
@@ -700,6 +706,7 @@ export function AppShell({
     setPendingFiles([]);
     setStreamStatus(null);
     clearError();
+    releaseOverlaysForNavigation();
     setHistoryOpen(false);
     router.push(`/chat/${encodeURIComponent(chat.id)}`);
   }, [clearError, generating, router, setMessages, stop]);
@@ -1047,6 +1054,7 @@ export function AppShell({
         onArtifacts={() => setArtifactsOpen(true)}
         onSettings={() => setSettingsOpen(true)}
         onCustomize={() => { setSettingsSection("skills"); setSettingsOpen(true); }}
+        onConnectors={() => setConnectorsOpen(true)}
         onOpen={openChat}
         onRename={renameChat}
         onPin={pinChat}
@@ -1138,12 +1146,14 @@ export function AppShell({
           <FolderKanban size={14} />
           Project: {activeProject.name} · {activeProject.knowledge.length} knowledge item{activeProject.knowledge.length === 1 ? "" : "s"}
         </button>
-      ) : preferences.tools.web ? (
-        <div className="flex min-h-9 items-center justify-center gap-2 border-y border-accent bg-[var(--selection-bg)] px-4 text-center text-[0.6875rem]/4 font-semibold text-accent" role="status">
-          <Search size={14} />
-          Research mode on · NaviSoul will use available web or connected sources
-        </div>
-      ) : preferences.connectedMcpServers.length ? (
+      ) : /* No research banner.
+             It was the only place the state was visible, so it earned its
+             stripe across the top. Now the composer carries a research toggle
+             that lights up when it is on — right where the request is typed,
+             which is where the state matters — and the banner became a second
+             announcement of something already on screen, pushing the
+             conversation down to say it. One indicator, at the point of use. */
+        preferences.connectedMcpServers.length ? (
         <button type="button" onClick={() => setConnectorsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-[var(--border-subtle)] bg-elev-2 px-4 text-center text-[0.6875rem]/4 font-semibold text-secondary active:bg-elev-3">
           <Link2 size={14} />
           {preferences.connectedMcpServers.length} connector{preferences.connectedMcpServers.length === 1 ? "" : "s"} · {connectorMode}

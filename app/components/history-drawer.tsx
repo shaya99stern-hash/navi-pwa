@@ -26,6 +26,7 @@ import { PWA_UPDATE_STATUS_EVENT, requestPwaUpdate, type PwaUpdateStatus } from 
 import { haptic } from "@/lib/ui/haptics";
 import { versionLabel } from "@/lib/version";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
+import { releaseOverlaysForNavigation } from "@/lib/ui/overlay-route";
 
 type Props = {
   open: boolean;
@@ -45,13 +46,15 @@ type Props = {
   onArtifacts: () => void;
   onSettings: () => void;
   onCustomize: () => void;
+  /** Code mode's second destination: the keys and accounts the work needs. */
+  onConnectors: () => void;
   onOpen: (chat: StoredChat) => void;
   onRename: (id: string, title: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onCustomize, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onCustomize, onConnectors, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
   /* Null until the user picks; the persisted value is the source of truth
@@ -128,6 +131,18 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
     haptic("selection", haptics);
     onClose();
     present();
+  }
+
+  /* Developer is a route, not a sheet, and that difference matters to the
+     history. Closing the drawer normally unwinds the entry the drawer pushed —
+     correct when you dismiss it, wrong when you are leaving for a real screen,
+     because the unwind lands after the router has already navigated and
+     cancels it. That is why Developer opened and then bounced straight back to
+     the conversation. */
+  function leaveForRoute() {
+    haptic("selection", haptics);
+    releaseOverlaysForNavigation();
+    onClose();
   }
 
   function showAllChats() {
@@ -254,13 +269,20 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
               you keep, so it offers projects. Artifacts belong to both. */}
           {mode === "code" ? (
             <>
-              <Link href="/settings/Developer" onClick={onClose} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+              <Link href="/settings/Developer" onClick={leaveForRoute} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
                 <Terminal size={19} strokeWidth={1.8} className="text-secondary" />
                 Developer
               </Link>
-              <button type="button" onClick={() => openSheet(onCustomize)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+              {/* Connectors, not "Repository".
+                  The row said Repository and called the same handler as
+                  Customize two rows below it, so both opened the Skills page —
+                  a row named after a thing the app has no screen for, wired to
+                  a screen that has nothing to do with it. Code mode's real
+                  second destination is where the GitHub token and the model
+                  keys live, and where each one can be tested. */}
+              <button type="button" onClick={() => openSheet(onConnectors)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
                 <GitBranch size={19} strokeWidth={1.8} className="text-secondary" />
-                Repository
+                Connectors and keys
               </button>
             </>
           ) : (
