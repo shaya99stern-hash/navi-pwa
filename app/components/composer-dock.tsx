@@ -818,8 +818,12 @@ export function ComposerDock({
           {/* Actionable warnings first; otherwise, once a conversation is under
               way, the standing accuracy disclaimer takes this line. */}
           <div className="flex items-center justify-center px-3 text-center" role="status" aria-live="polite">
+            {/* The footer is capped at two lines. A provider error can run to
+                several hundred characters, and letting it wrap freely turned
+                this line into a wall of text that shoved the composer up the
+                screen. */}
             {footer ? (
-              <span className={`block pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
+              <span className={`block max-h-8 overflow-hidden pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
             ) : hasMessages ? (
               <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">NaviSoul is AI and can make mistakes. Double-check important answers.</span>
             ) : null}
