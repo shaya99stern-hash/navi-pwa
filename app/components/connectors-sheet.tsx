@@ -132,6 +132,9 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
   const [keyDraftFor, setKeyDraftFor] = useState<string | null>(null);
   const [keyDraft, setKeyDraft] = useState("");
   const [provisioning, setProvisioning] = useState<string | null>(null);
+  /* Twenty-two services is a useful catalogue and an overwhelming first
+     screen. Connected ones are always shown; the rest wait behind a tap. */
+  const [catalogExpanded, setCatalogExpanded] = useState(false);
 
   async function refreshCatalog() {
     try {
@@ -361,9 +364,15 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
             </div>
             <div className="mt-4 space-y-2">
               {MODES.map((mode) => (
-                <button key={mode.id} type="button" onClick={() => { update({ connectorAccessMode: mode.id }); haptic("selection", haptics); }} className={`flex min-h-[72px] w-full items-center gap-3 rounded-2xl border px-3 text-left ${preferences.connectorAccessMode === mode.id ? "border-accent bg-[var(--selection-bg)]" : "border-[var(--border-subtle)] bg-elev-2 active:bg-elev-3"}`}>
-                  <span className="min-w-0 flex-1"><span className="block text-[0.875rem]/5 font-semibold text-primary">{mode.title}</span><span className="block text-[0.6875rem]/4 font-medium text-tertiary">{mode.detail}</span></span>
-                  {preferences.connectorAccessMode === mode.id ? <Check size={18} className="shrink-0 text-accent" /> : null}
+                /* One line each, with the explanation only under the chosen
+                   one. Three stacked paragraphs of policy made the first thing
+                   on the screen the densest thing on it. */
+                <button key={mode.id} type="button" onClick={() => { update({ connectorAccessMode: mode.id }); haptic("selection", haptics); }} className="flex min-h-11 w-full items-center gap-3 px-1 text-left active:bg-elev-2">
+                  <span className="min-w-0 flex-1">
+                    <span className={`block text-[0.875rem]/5 ${preferences.connectorAccessMode === mode.id ? "font-semibold text-primary" : "font-medium text-secondary"}`}>{mode.title}</span>
+                    {preferences.connectorAccessMode === mode.id ? <span className="mt-0.5 block text-[0.6875rem]/4 font-medium text-tertiary">{mode.detail}</span> : null}
+                  </span>
+                  {preferences.connectorAccessMode === mode.id ? <Check size={17} className="shrink-0 text-accent" /> : null}
                 </button>
               ))}
             </div>
@@ -449,7 +458,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
             </div>
 
             <div className="mt-3 divide-y divide-[var(--border-subtle)]">
-              {catalog.providers.map((provider) => (
+              {catalog.providers.filter((provider) => provider.configured || catalogExpanded || keyDraftFor === provider.id).map((provider) => (
                 <div key={provider.id} className="py-3">
                   <div className="flex min-h-12 items-center gap-3">
                     <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${provider.configured ? "bg-[var(--selection-bg)] text-accent" : "bg-elev-2 text-secondary"}`}>
@@ -506,6 +515,18 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
               ))}
               {!catalog.providers.length ? <p className="py-6 text-center text-[0.8125rem]/5 font-medium text-secondary">Loading services…</p> : null}
             </div>
+            {catalog.providers.length ? (
+              <button
+                type="button"
+                onClick={() => { setCatalogExpanded(!catalogExpanded); haptic("selection", haptics); }}
+                className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-2"
+              >
+                {catalogExpanded
+                  ? "Show fewer"
+                  : `Show all ${catalog.providers.length} services`}
+                <ChevronDown size={15} className={`shrink-0 transition-transform ${catalogExpanded ? "rotate-180" : ""}`} />
+              </button>
+            ) : null}
           </section>
 
           <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
@@ -610,7 +631,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
           </section>
 
           <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
-            <div className="flex gap-3"><LockKeyhole size={19} className="mt-0.5 shrink-0 text-accent" /><div><h2 className="text-[0.875rem]/5 font-semibold text-primary">Approval contract</h2><p className="mt-1 text-[0.75rem]/5 font-medium text-secondary">Reads may follow the selected access mode. Writes, purchases, bookings, deletes, and external sends require an explicit approval step. Disconnected, expired, blocked, and unsupported connectors remain visibly unavailable.</p></div></div>
+            <div className="flex gap-3"><LockKeyhole size={17} className="mt-0.5 shrink-0 text-accent" /><p className="text-[0.75rem]/[1.125rem] font-medium text-tertiary">Writes, purchases, bookings, deletes, and sends always ask first, whatever the access mode above says.</p></div>
           </section>
         </div>
       </main>

@@ -116,8 +116,13 @@ export async function startRecording({ onLevel, onError }: {
         headers: { "Content-Type": blob.type },
         body: blob
       });
-      const data = (await response.json().catch(() => null)) as { text?: string; error?: string } | null;
+      const data = (await response.json().catch(() => null)) as { text?: string; error?: string; detail?: string; sentAs?: string } | null;
       if (!response.ok || typeof data?.text !== "string") {
+        /* The full per-model detail goes to the console rather than the
+           composer: the footer needs one readable sentence, but a failure
+           nobody can inspect is one that gets reported as "still broken"
+           with nothing to act on. */
+        if (data?.detail) console.error("NaviSoul transcription detail:", data.detail, "sent as", data.sentAs ?? blob.type);
         throw new Error(data?.error || "That recording could not be transcribed.");
       }
       return data.text;

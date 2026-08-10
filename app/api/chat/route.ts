@@ -67,8 +67,15 @@ const MAX_TOOL_STEPS = 8;
  * Code mode earns more hops: finding a bug is list repos → list directory →
  * read file → check CI → read log → answer, and cutting that off at four
  * leaves the model guessing at exactly the point it was about to know.
+ *
+ * This comment described the intent for a long time while the value stayed at
+ * eight — identical to Chat — so the two modes differed in wording and in
+ * nothing a person could feel. Editing the app is longer still: list, read,
+ * read a caller, commit, report is five before any diagnosis has happened.
+ * Fourteen covers a real repair loop. Wall-clock is bounded separately by the
+ * request budget, so a longer ceiling cannot run away with the request.
  */
-const MAX_CODE_TOOL_STEPS = 8;
+const MAX_CODE_TOOL_STEPS = 14;
 /**
  * The wall-clock the whole request has, kept under the 60s edge ceiling so a
  * review that starts late is skipped rather than started and killed.
