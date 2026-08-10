@@ -122,5 +122,40 @@ check("the composer does too", /error instanceof Error \? error\.message/.test(c
    "that could not be transcribed" for it sends someone to the wrong problem. */
 check("silence is reported as silence", /Nothing was picked up/.test(sheet.source), true);
 
+/* ---- The sheet behaves like the other bottom sheets ------------------- */
+
+/* It was the one bottom sheet without drag-to-dismiss: same shape, same
+   position, and the swipe that closed every other one did nothing here. An
+   affordance that works everywhere except one place is worse than one that
+   works nowhere, because nothing tells you which place you are in. */
+check("the sheet can be swiped away", sheet.body.includes("useSheetDrag"), true);
+check("the scrim fades with the drag", /sheet\.scrimProps/.test(sheet.body), true);
+check("only the grab area starts a drag", /sheet\.handleProps/.test(sheet.body), true);
+/* A second way out that skips the cleanup is a microphone left open. */
+check("a swipe goes through the same cleanup", /onDismiss: \(\) => resetAndClose\(\)/.test(sheet.body), true);
+/* Two controls sharing one name is ambiguous to a screen reader and to a test. */
+check("the scrim and the X are named apart", (sheet.source.match(/aria-label="Close voice mode"/g) ?? []).length, 1);
+
+/* ---- The language picker reaches the transcriber ---------------------- */
+
+/* Voice mode has offered a dictation-language picker all along and nothing
+   ever sent it anywhere: it wrote a stored preference and changed nothing
+   else. Whisper detects the language itself, but detection is what fails on a
+   short clip or a bilingual speaker — exactly the person who went looking for
+   the setting. */
+const route = read("app/api/voice/transcribe/route.ts");
+
+check("the recorder accepts a language", /language\?: string;/.test(recorderSource.body), true);
+check("it travels with the recording", /language=\$\{encodeURIComponent\(language\)\}/.test(recorderSource.body), true);
+/* "auto" is the absence of a hint, not a default of English. */
+check("auto sends no hint", /language && language !== "auto"/.test(recorderSource.body), true);
+check("the sheet passes the stored preference", /language: voiceLanguage/.test(sheet.body), true);
+check("the composer passes the same one", /language: voiceLanguage/.test(composer.body), true);
+check("the route forwards it to the model", /form\.append\("language", language\)/.test(route.body), true);
+/* A bare subtag is what the API takes: `he`, not `he-IL`. And an unvalidated
+   query parameter has no business reaching a provider verbatim. */
+check("the tag is validated before use", /\^\[a-z\]\{2\}/.test(route.body), true);
+check("only the primary subtag is sent", /requested\.split\("-"\)\[0\]\.toLowerCase\(\)/.test(route.body), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

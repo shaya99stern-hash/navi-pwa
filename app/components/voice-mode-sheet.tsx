@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
 import { resolveVoiceLanguage } from "@/lib/ui/speech";
 import { recordingSupported, startRecording, type RecordingSession } from "@/lib/ui/recorder";
+import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 /**
  * Voice mode records and has the audio transcribed, the same as the composer.
@@ -74,6 +75,13 @@ export function VoiceModeSheet({
   const [error, setError] = useState<string | null>(null);
 
   const combined = useMemo(() => transcript.trim(), [transcript]);
+
+  /* Swipe down to dismiss, like every other bottom sheet in the app.
+     This one was the exception — same shape, same position, and the gesture
+     that closed the others did nothing here. An affordance that works
+     everywhere except one place is worse than one that works nowhere, because
+     nothing tells you which place you are in. */
+  const sheet = useSheetDrag({ open, onDismiss: () => resetAndClose(), haptics });
 
   useEffect(() => {
     if (!open) return;
@@ -207,13 +215,24 @@ export function VoiceModeSheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-end justify-center bg-overlay backdrop-blur-[5px] md:items-center md:p-4">
+    <div className="fixed inset-0 z-[110] flex items-end justify-center md:items-center md:p-4">
+      <button
+        type="button"
+        aria-label="Dismiss voice mode"
+        onClick={cancel}
+        {...sheet.scrimProps}
+        className="absolute inset-0 bg-overlay backdrop-blur-[5px]"
+      />
       <section
+        {...sheet.sheetProps}
         role="dialog"
         aria-modal="true"
         aria-label="NaviSoul voice mode"
-        className="menu-enter safe-top flex max-h-[calc(100dvh-8px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[28px] border border-b-0 border-[var(--border-subtle)] bg-elev-1 shadow-sheet md:max-h-[760px] md:rounded-[28px] md:border"
+        className="menu-enter safe-top relative flex max-h-[calc(100dvh-8px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[28px] border border-b-0 border-[var(--border-subtle)] bg-elev-1 shadow-sheet md:max-h-[760px] md:rounded-[28px] md:border"
       >
+        {/* The grab area, and only it: content below must still scroll. */}
+        <div {...sheet.handleProps} className="navi-sheet-grab shrink-0 pt-1"><div className="navi-sheet-grabber" /></div>
+
         <header className="flex min-h-16 items-center gap-3 border-b border-[var(--border-subtle)] px-4">
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--selection-bg)] text-accent">
             <Volume2 size={19} />
