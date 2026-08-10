@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { authorizeApiMutation } from "@/lib/auth/api";
+import { authorizeApiRead } from "@/lib/auth/api";
 import { getProviderAvailability } from "@/lib/ai/providers";
 import { PROVIDERS, PROVIDER_IDS } from "@/lib/ai/provider-registry";
 import { hasWebSearch, searchProviderName } from "@/lib/ai/web-tools";
@@ -32,9 +32,12 @@ type Capability = {
 };
 
 export async function GET(request: Request) {
-  /* Behind the same guard as a write: this enumerates the deployment's
-     configuration, which is not something to hand to an anonymous caller. */
-  const refusal = await authorizeApiMutation(request);
+  /* Signed-in only — this enumerates the deployment's configuration — but not
+     behind the *mutation* guard, which additionally requires an Origin header.
+     Browsers omit Origin on same-origin GET requests, so that guard refused
+     every call and the panel read "Capability status could not be read". A
+     CSRF check belongs on writes; this is a read. */
+  const refusal = await authorizeApiRead(request);
   if (refusal) return refusal;
 
   const availability = getProviderAvailability();

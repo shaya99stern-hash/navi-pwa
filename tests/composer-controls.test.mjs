@@ -19,14 +19,19 @@ const code = stripComments(body);
 check("the mic toggles on click", /onClick=\{toggleVoice\}/.test(code), true);
 check("pointer-down no longer starts recording", /onPointerDown=\{\(\) => \{ holdingMic/.test(code), false);
 check("the hold-tracking ref is gone", code.includes("holdingMic"), false);
-check("the label describes a toggle", code.includes('"Stop recording" : "Record a message"'), true);
+check("the idle label invites recording", code.includes('"Record a message"'), true);
 
 /* Recording must be legible while it happens: a lit icon says something is
    on, a running clock says you are being heard. */
 check("recording time is tracked", code.includes("recordedSeconds"), true);
 check("the timer only runs while listening", /if \(!listening\) \{ setRecordedSeconds\(0\); return; \}/.test(code), true);
-check("the footer reports listening", code.includes("`Listening ·"), true);
-check("recording reads as active, not as a warning", code.includes('listening\n    ? "text-accent"'), true);
+/* The recording bar carries the clock and the level, so the footer speaks
+   only for transcription — the state with no other indicator. */
+check("transcription is reported", code.includes('transcribing ? "Transcribing…" : null'), true);
+check("transcription reads as active, not as a warning", code.includes('transcribing\n    ? "text-accent"'), true);
+check("a live waveform is drawn", code.includes("WAVEFORM_BARS"), true);
+check("the waveform follows the real input level", code.includes("inputLevel"), true);
+check("recording can be discarded", code.includes("Discard recording"), true);
 
 /* ── Research is reachable where it is decided ───────────────────────────────
    It lived inside the plus menu, so turning search on for the next question

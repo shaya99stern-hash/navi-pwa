@@ -32,7 +32,7 @@ import {
 import { suggest, type Skill } from "@/lib/skills";
 import type { ConnectorAccessMode } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
-import { startSpeechRecognition, type SpeechSession } from "@/lib/ui/speech";
+import { startRecording, type RecordingSession } from "@/lib/ui/recorder";
 import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 import {
@@ -52,6 +52,10 @@ const DOCUMENT_ACCEPT = [
 ].join(",");
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
+
+/* Fixed per-bar phase offsets for the recording waveform. Constant so the
+   row keeps its shape across renders instead of reshuffling every frame. */
+const WAVEFORM_BARS = [0.7, 1.3, 0.9, 1.7, 1.1, 0.6, 1.5, 0.8, 1.2, 1.6, 0.75, 1.35, 0.95, 1.45, 0.65];
 
 /** Shared row shape for the + menu: icon, label, optional trailing mark. */
 const menuRow = "flex min-h-[50px] w-full items-center gap-3 px-4 text-left text-[0.9375rem]/[1.375rem] font-medium text-primary active:bg-elev-3";
@@ -166,12 +170,18 @@ export function ComposerDock({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechSession | null>(null);
+  const recorderRef = useRef<RecordingSession | null>(null);
   /** True between pointerdown and pointerup on the mic, so a tap is distinguishable from a hold. */
   /** Seconds recorded, so the composer shows progress rather than a lit icon. */
   const [recordedSeconds, setRecordedSeconds] = useState(0);
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
+  /* Transcription is a visible state of its own: the recording has stopped
+     but the words have not arrived, and a composer that looks idle for two
+     seconds reads as having thrown the recording away. */
+  const [transcribing, setTranscribing] = useState(false);
+  /** Live microphone level, 0–1, for the waveform drawn while recording. */
+  const [inputLevel, setInputLevel] = useState(0);
   const [focused, setFocused] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
@@ -272,7 +282,7 @@ export function ComposerDock({
       cancelled = true;
       document.removeEventListener("visibilitychange", recheck);
       window.removeEventListener("online", recheck);
-      recognitionRef.current?.abort();
+      recorderRef.current?.cancel();
     };
   }, []);
 
@@ -293,9 +303,9 @@ export function ComposerDock({
 
   /* Idle status is deliberately empty: the thinking indicator in the thread
      already reports progress while generating. */
-  const footer = (listening
-    ? `Listening · ${Math.floor(recordedSeconds / 60)}:${String(recordedSeconds % 60).padStart(2, "0")} · tap the mic to stop`
-    : null)
+  /* The recording bar already shows the level and the clock, so the footer
+     only speaks for the state that has no other indicator. */
+  const footer = (transcribing ? "Transcribing…" : null)
     ?? voiceMessage
     ?? attachmentMessage
     ?? (!online && !offlineCommand
@@ -308,7 +318,7 @@ export function ComposerDock({
 
   /* Recording is a live state, not a warning: it gets the accent, so the
      composer reads as working rather than as complaining. */
-  const footerTone = listening
+  const footerTone = transcribing
     ? "text-accent"
     : !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
 
@@ -440,44 +450,73 @@ export function ComposerDock({
     onOpenTools();
   }
 
-  function toggleVoice() {
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
+  /**
+   * Record, then transcribe.
+   *
+   * This used to drive `webkitSpeechRecognition`, which is why the microphone
+   * "did not work at all": in an installed iOS PWA it is often absent with no
+   * error and no event to render, so the button did nothing observable. It
+   * also plays a system chime the page cannot suppress. Recording with
+   * MediaRecorder works wherever getUserMedia does, is silent, and gives us
+   * the audio level the waveform draws.
+   */
+  async function startVoice() {
+    setVoiceMessage(null);
+    try {
+      const session = await startRecording({
+        onLevel: (level) => setInputLevel(level),
+        onError: (message) => setVoiceMessage(message)
+      });
+      recorderRef.current = session;
+      setListening(true);
+      haptic("selection", haptics);
+    } catch (error) {
+      setVoiceMessage(error instanceof Error ? error.message : "Recording could not start.");
+      haptic("error", haptics);
     }
+  }
 
-    recognitionRef.current = startSpeechRecognition({
-      /* The stored preference, not `navigator.language`. Dictation here used to
-         ignore the voice language chosen in Settings while the voice sheet
-         honoured it, so one surface followed the setting and the other did
-         not. */
-      language: voiceLanguage,
-      onStart: () => {
-        setListening(true);
-        setVoiceMessage("Listening…");
-        haptic("selection", haptics);
-      },
-      /* Finalised phrases only. Appending on every result event wrote interim
-         words into the draft and wrote them again once they were revised.
-         Read through the ref so a phrase is appended to the draft as it stands
-         now, not as it stood when listening began. */
-      onFinal: (text) => {
+  async function finishVoice() {
+    const session = recorderRef.current;
+    recorderRef.current = null;
+    if (!session) return;
+
+    setListening(false);
+    setInputLevel(0);
+    setTranscribing(true);
+    haptic("selection", haptics);
+    try {
+      const text = await session.stop();
+      if (text) {
+        /* Read through the ref so the transcript joins the draft as it stands
+           now, not as it stood when recording began. */
         const current = valueRef.current;
         onChange(`${current}${current.trim() ? " " : ""}${text}`);
-      },
-      onError: (message) => {
-        setVoiceMessage(message);
-        haptic("error", haptics);
-      },
-      onEnd: () => {
-        setListening(false);
-        /* An error message has to survive the end of the session — `onend`
-           fires after `onerror`, and clearing unconditionally erased the
-           explanation before it could be read. */
-        setVoiceMessage((current) => (current === "Listening…" ? null : current));
         textareaRef.current?.focus();
+      } else {
+        setVoiceMessage("Nothing was recorded.");
       }
-    });
+    } catch (error) {
+      setVoiceMessage(error instanceof Error ? error.message : "That recording could not be transcribed.");
+      haptic("error", haptics);
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
+  function cancelVoice() {
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
+    setListening(false);
+    setInputLevel(0);
+    setVoiceMessage(null);
+    haptic("selection", haptics);
+  }
+
+  function toggleVoice() {
+    if (transcribing) return;
+    if (listening) void finishVoice();
+    else void startVoice();
   }
 
   return (
@@ -673,6 +712,50 @@ export function ComposerDock({
               {/* Mic and voice mode stay put while typing — the send button
                   joins them instead of replacing them, so nothing under a
                   finger disappears mid-thought. Both are icon-weight peers. */}
+              {/* While recording, the mic and voice buttons give way to a
+                  cancel / waveform / confirm bar. A lit icon says "something
+                  is on"; a moving waveform says "you are being heard", which
+                  is the difference between trusting dictation and tapping it
+                  twice to check. */}
+              {listening ? (
+                <span className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1">
+                  <button
+                    type="button"
+                    onClick={cancelVoice}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3"
+                    aria-label="Discard recording"
+                  >
+                    <X size={17} strokeWidth={2} />
+                  </button>
+                  <span className="flex min-w-0 flex-1 items-center justify-center gap-[3px]" aria-hidden="true">
+                    {WAVEFORM_BARS.map((seed, index) => {
+                      /* Each bar reacts to the live level with its own phase,
+                         so the row moves like sound rather than pulsing as a
+                         block. Idle level leaves a row of dots. */
+                      const wave = 0.35 + 0.65 * Math.abs(Math.sin((recordedSeconds * 4 + index) * seed));
+                      const height = Math.max(3, Math.round(3 + inputLevel * wave * 19));
+                      return (
+                        <span
+                          key={index}
+                          className="w-[3px] shrink-0 rounded-full bg-accent transition-[height] duration-100"
+                          style={{ height: `${height}px` }}
+                        />
+                      );
+                    })}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-[0.75rem]/4 font-semibold text-secondary">
+                    {Math.floor(recordedSeconds / 60)}:{String(recordedSeconds % 60).padStart(2, "0")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={toggleVoice}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-[var(--accent-on-primary)] active:bg-accent-pressed"
+                    aria-label="Stop recording and transcribe"
+                  >
+                    <Check size={17} strokeWidth={2.4} />
+                  </button>
+                </span>
+              ) : (
               <button
                 type="button"
                 /* Tap to start, tap to stop.
@@ -686,13 +769,14 @@ export function ComposerDock({
                  * gesture. Toggling is also what a phone user actually expects
                  * from a dictation button, and it leaves the hand free. */
                 onClick={toggleVoice}
-                disabled={blocked || generating}
-                className={`composer-action ${listening ? "!bg-accent !text-[var(--accent-on-primary)]" : ""}`}
-                aria-label={listening ? "Stop recording" : "Record a message"}
-                aria-pressed={listening}
+                disabled={blocked || generating || transcribing}
+                className={`composer-action ${transcribing ? "opacity-60" : ""}`}
+                aria-label={transcribing ? "Transcribing" : "Record a message"}
               >
                 <Mic size={19} strokeWidth={1.8} />
               </button>
+              )}
+              {listening ? null : (
               <button
                 type="button"
                 onClick={onOpenVoice}
@@ -702,6 +786,7 @@ export function ComposerDock({
               >
                 <AudioLines size={19} strokeWidth={1.8} />
               </button>
+              )}
               {value.trim() || attachmentCount || generating ? (
                 <button
                   type={generating ? "button" : "submit"}
