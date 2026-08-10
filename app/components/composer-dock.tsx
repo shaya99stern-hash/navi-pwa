@@ -461,6 +461,11 @@ export function ComposerDock({
    */
   async function startVoice() {
     setVoiceMessage(null);
+    /* Before the await, not after. getUserMedia can take hundreds of
+       milliseconds and may show a permission prompt, by which time the
+       browser's user-activation window has closed and any haptic is
+       silently refused. */
+    haptic("selection", haptics);
     try {
       const session = await startRecording({
         onLevel: (level) => setInputLevel(level),
@@ -468,7 +473,6 @@ export function ComposerDock({
       });
       recorderRef.current = session;
       setListening(true);
-      haptic("selection", haptics);
     } catch (error) {
       setVoiceMessage(error instanceof Error ? error.message : "Recording could not start.");
       haptic("error", haptics);
@@ -483,6 +487,7 @@ export function ComposerDock({
     setListening(false);
     setInputLevel(0);
     setTranscribing(true);
+    /* Same reason: the transcription round trip outlives user activation. */
     haptic("selection", haptics);
     try {
       const text = await session.stop();
