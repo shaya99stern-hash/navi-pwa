@@ -2,7 +2,7 @@
 
 import type { UIMessage } from "ai";
 import { Check, Copy, FileText, RotateCcw, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { messageText } from "@/lib/chat";
 import { haptic } from "@/lib/ui/haptics";
 import { speak, whenVoicesReady } from "@/lib/ui/speech";
@@ -26,13 +26,29 @@ type Props = {
   haptics: boolean;
   voiceLanguage: string;
   rating?: "up" | "down";
-  onRate?: (value: "up" | "down") => void;
+  /** Takes the id so the shell can pass one stable handler to every row. */
+  onRate?: (messageId: string, value: "up" | "down") => void;
   onRetry?: () => void;
   onLongPress?: (message: { id: string; text: string; role: string }) => void;
   capabilities?: CapabilityHandlers;
 };
 
-export function MessageRow({ message, streaming, last, theme, chatFont, haptics, voiceLanguage, rating, onRate, onRetry, onLongPress, capabilities }: Props) {
+/**
+ * Memoised, because the draft lives one component up.
+ *
+ * Every keystroke in the composer sets state in the shell, which renders the
+ * conversation and the composer together — so typing one character re-rendered
+ * every message on screen, markdown and code highlighting included. Measured at
+ * 390x844: forty-three characters cost 1.7s against the 0.86s the typing itself
+ * took, about twenty milliseconds of work per key. That is what "slow" is.
+ *
+ * A message that is not streaming does not change while you type, so it does
+ * not need to re-render. The comparison below is explicit rather than the
+ * default shallow one because two props are recreated every render by
+ * construction — `onRetry` is only present on the last row — and a shallow
+ * compare would find them different every time and memoise nothing at all.
+ */
+function MessageRowBase({ message, streaming, last, theme, chatFont, haptics, voiceLanguage, rating, onRate, onRetry, onLongPress, capabilities }: Props) {
   const text = messageText(message);
   const files = messageFiles(message);
   const user = message.role === "user";
@@ -96,7 +112,7 @@ export function MessageRow({ message, streaming, last, theme, chatFont, haptics,
 
   function rate(value: "up" | "down") {
     haptic(value === "up" ? "success" : "selection", haptics);
-    onRate?.(value);
+    onRate?.(message.id, value);
   }
 
   const action = "flex h-9 w-9 items-center justify-center rounded-full text-tertiary active:bg-elev-2";
@@ -179,3 +195,23 @@ export function MessageRow({ message, streaming, last, theme, chatFont, haptics,
     </article>
   );
 }
+
+export const MessageRow = memo(MessageRowBase, (previous, next) => {
+  /* A streaming row changes on every chunk; nothing about it is stable, so
+     comparing is wasted work on the one row that always has to render. */
+  if (previous.streaming || next.streaming) return false;
+  return previous.message === next.message
+    && previous.last === next.last
+    && previous.theme === next.theme
+    && previous.chatFont === next.chatFont
+    && previous.haptics === next.haptics
+    && previous.voiceLanguage === next.voiceLanguage
+    && previous.rating === next.rating
+    && previous.capabilities === next.capabilities
+    /* Presence, not identity. What changes what a row draws is whether it can
+       be rated or retried at all — and the shell keeps these identities stable
+       anyway, so a difference here means the answer to that question changed. */
+    && Boolean(previous.onRate) === Boolean(next.onRate)
+    && Boolean(previous.onRetry) === Boolean(next.onRetry)
+    && Boolean(previous.onLongPress) === Boolean(next.onLongPress);
+});

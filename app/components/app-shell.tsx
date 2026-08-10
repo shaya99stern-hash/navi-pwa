@@ -741,6 +741,21 @@ export function AppShell({
     }));
   }
 
+  /* Handlers that keep the same identity across renders, so the memoised
+     message rows can tell "nothing about this row changed" from "the draft
+     changed one component up".
+   *
+   * Both are redeclared every render and close over live state — `retry` over
+   * the project, the research switch and the message list, `rateMessage` over
+   * the active chat. Passing those straight down would defeat the memo; freezing
+   * them with a dependency list would let a row hold a closure from a render
+   * where research was still on, and retry with the wrong settings. Reading the
+   * current one through a ref keeps both properties at once. */
+  const liveHandlers = useRef({ rateMessage, retry });
+  liveHandlers.current = { rateMessage, retry };
+  const stableRate = useCallback((messageId: string, value: "up" | "down") => liveHandlers.current.rateMessage(messageId, value), []);
+  const stableRetry = useCallback(() => liveHandlers.current.retry(), []);
+
   function renameActiveChat() {
     const current = chats.find((chat) => chat.id === activeId);
     const title = window.prompt("Rename this chat", current?.title ?? "")?.trim();
@@ -1185,8 +1200,8 @@ export function AppShell({
                   haptics={preferences.haptics}
                   voiceLanguage={preferences.voiceLanguage}
                   rating={activeChat?.ratings?.[message.id]}
-                  onRate={message.role === "assistant" ? (value) => rateMessage(message.id, value) : undefined}
-                  onRetry={message.role === "assistant" && index === messages.length - 1 && !generating && online ? retry : undefined}
+                  onRate={message.role === "assistant" ? stableRate : undefined}
+                  onRetry={message.role === "assistant" && index === messages.length - 1 && !generating && online ? stableRetry : undefined}
                   onLongPress={setContextMessage}
                   capabilities={capabilityHandlers}
                 />

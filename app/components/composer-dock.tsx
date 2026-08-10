@@ -36,6 +36,7 @@ import { startRecording, type RecordingSession } from "@/lib/ui/recorder";
 import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 import { useOverlayRoute } from "@/lib/ui/overlay-route";
+import { watchProviderStatus } from "@/lib/ui/provider-status";
 import {
   ATTACHMENT_BUDGET,
   MAX_ATTACHMENTS,
@@ -93,12 +94,6 @@ type Props = {
   connectorCount: number;
   connectorAccessMode: ConnectorAccessMode;
   onOpenPlaybooks: () => void;
-};
-
-type ProviderStatus = {
-  providers?: Record<string, boolean | undefined>;
-  devTools?: { github?: boolean; vercel?: boolean };
-  search?: { configured?: boolean; provider?: string | null };
 };
 
 function formatBytes(bytes: number): string {
@@ -244,54 +239,31 @@ export function ComposerDock({
     setSelectedFiles((current) => current.slice(0, attachmentCount));
   }, [attachmentCount]);
 
-  useEffect(() => {
-    let cancelled = false;
+  /* One shared read of what the server has configured. The setup notice wants
+     the same answer, and both used to fetch it independently on mount and on
+     every return to the foreground — two identical requests each time, neither
+     component aware of the other. Re-probing on return is still what picks up a
+     key added elsewhere without a reload; it now happens once. */
+  useEffect(() => watchProviderStatus((data) => {
+    // A failed or unauthorized probe must not latch the UI into an error
+    // state; treat it as unknown and let sending report the real result.
+    if (!data) {
+      setProviderReady(null);
+      return;
+    }
+    // Any configured provider can answer; which one is the router's business.
+    setProviderReady(Object.values(data.providers ?? {}).some(Boolean));
+    /* The same probe already tells us what Navi can reach, so the
+       Integrations sheet costs no extra request. */
+    setIntegrations({
+      github: Boolean(data.devTools?.github),
+      vercel: Boolean(data.devTools?.vercel),
+      search: { configured: Boolean(data.search?.configured), provider: data.search?.provider ?? null },
+      loaded: true
+    });
+  }), []);
 
-    const probeProviders = () => {
-      void fetch("/api/models", { cache: "no-store" })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data: ProviderStatus | null) => {
-          if (cancelled) return;
-          // A failed or unauthorized probe must not latch the UI into an error
-          // state; treat it as unknown and let sending report the real result.
-          if (!data) {
-            setProviderReady(null);
-            return;
-          }
-          const providers = data.providers;
-          // Any configured provider can answer; which one is the router's business.
-          setProviderReady(Object.values(providers ?? {}).some(Boolean));
-          /* The same probe already tells us what Navi can reach, so the
-             Integrations sheet costs no extra request. */
-          setIntegrations({
-            github: Boolean(data.devTools?.github),
-            vercel: Boolean(data.devTools?.vercel),
-            search: { configured: Boolean(data.search?.configured), provider: data.search?.provider ?? null },
-            loaded: true
-          });
-        })
-        .catch(() => {
-          if (!cancelled) setProviderReady(null);
-        });
-    };
-
-    probeProviders();
-
-    // Re-probe on return so newly added provider keys are picked up without a
-    // reinstall or hard reload.
-    const recheck = () => {
-      if (document.visibilityState === "visible") probeProviders();
-    };
-    document.addEventListener("visibilitychange", recheck);
-    window.addEventListener("online", recheck);
-
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", recheck);
-      window.removeEventListener("online", recheck);
-      recorderRef.current?.cancel();
-    };
-  }, []);
+  useEffect(() => () => recorderRef.current?.cancel(), []);
 
   const available = providerReady !== false;
   /* Typing, attaching, and dictating stay available even with no provider

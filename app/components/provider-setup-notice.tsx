@@ -3,11 +3,7 @@
 import { KeyRound, LoaderCircle, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
-
-type ProviderStatus = {
-  providers?: Record<string, boolean | undefined>;
-  providerStack?: { missing?: string[] };
-};
+import { readProviderStatus, watchProviderStatus, type ProviderStatus } from "@/lib/ui/provider-status";
 
 const KEY_NAMES: Record<string, string> = {
   gemini: "GEMINI_API_KEY",
@@ -24,34 +20,27 @@ export function ProviderSetupNotice({ haptics }: { haptics: boolean }) {
   const [missing, setMissing] = useState<string[] | null>(null);
   const [checking, setChecking] = useState(false);
 
-  const probe = useCallback(async (manual: boolean) => {
-    if (manual) setChecking(true);
-    try {
-      const response = await fetch("/api/models", { cache: "no-store" });
-      if (!response.ok) {
-        setMissing(null);
-        return;
-      }
-      const data = (await response.json()) as ProviderStatus;
-      const providers = data.providers ?? {};
-      // Any provider at all is enough to answer; the notice is about none.
-      const anyReady = Object.values(providers).some(Boolean);
-      setMissing(anyReady ? null : Object.keys(KEY_NAMES));
-    } catch {
-      setMissing(null);
-    } finally {
-      if (manual) setChecking(false);
-    }
+  /* A failed probe is not "nothing is configured" — it is "we do not know" —
+     so an unknown answer hides the notice rather than accusing the deployment
+     of being unconfigured. */
+  const apply = useCallback((data: ProviderStatus | null) => {
+    // Any provider at all is enough to answer; the notice is about none.
+    const anyReady = Object.values(data?.providers ?? {}).some(Boolean);
+    setMissing(!data || anyReady ? null : Object.keys(KEY_NAMES));
   }, []);
 
-  useEffect(() => {
-    void probe(false);
-    const recheck = () => {
-      if (document.visibilityState === "visible") void probe(false);
-    };
-    document.addEventListener("visibilitychange", recheck);
-    return () => document.removeEventListener("visibilitychange", recheck);
-  }, [probe]);
+  /* The user asking is the one case that must not be served from cache: they
+     tapped Check again precisely because they just changed something. */
+  const recheck = useCallback(async () => {
+    setChecking(true);
+    try {
+      apply(await readProviderStatus({ force: true }));
+    } finally {
+      setChecking(false);
+    }
+  }, [apply]);
+
+  useEffect(() => watchProviderStatus(apply), [apply]);
 
   if (!missing) return null;
 
@@ -88,7 +77,7 @@ export function ProviderSetupNotice({ haptics }: { haptics: boolean }) {
             type="button"
             onClick={() => {
               haptic("selection", haptics);
-              void probe(true);
+              void recheck();
             }}
             disabled={checking}
             className="mt-3 flex min-h-10 items-center gap-2 rounded-full bg-accent px-4 text-[0.8125rem]/5 font-semibold text-[var(--accent-on-primary)] transition-transform duration-[120ms] active:scale-95 active:bg-accent-pressed disabled:opacity-70"
