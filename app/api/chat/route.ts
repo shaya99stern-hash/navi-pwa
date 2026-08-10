@@ -24,6 +24,7 @@ import { githubWritesEnabled, readGithubToken } from "@/lib/github/oauth";
 import { googleAccessToken } from "@/lib/google/oauth";
 import { factsBlock, factsConfigured, listFacts, rememberFact } from "@/lib/memory/facts";
 import { learnedSkillsBlock, learnedSkillsConfigured, listLearnedSkills } from "@/lib/memory/learned-skills";
+import { REFLECTION_INSTRUCTION } from "@/lib/ai/reflection-tools";
 import { extractFacts, looksDurable } from "@/lib/memory/extract";
 import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
@@ -981,7 +982,19 @@ export async function POST(request: Request): Promise<Response> {
     ].join("\n")
     : "";
 
-  const memoryContext = [memoryCapability, rememberedBlock, skillsContext, recalledContext].filter(Boolean).join("\n\n");
+  /* A tool nothing prompts is a tool nothing calls.
+   *
+   * `record_lesson` exists so NaviSoul stops re-deriving what it already
+   * worked out, but a model does not go looking for a tool it has no reason to
+   * think about. The instruction sits with the memory context because that is
+   * where it is already reasoning about what it knows, and it is gated on the
+   * same condition as the tool — describing a capability that was not built
+   * this turn is exactly how it ended up claiming saves that never happened. */
+  const reflectionContext = mayRemember && clerkToken && clerkUserId && learnedSkillsConfigured()
+    ? REFLECTION_INSTRUCTION
+    : "";
+
+  const memoryContext = [memoryCapability, reflectionContext, rememberedBlock, skillsContext, recalledContext].filter(Boolean).join("\n\n");
   const playbookContext = typeof body.playbook === "string" ? body.playbook.trim().slice(0, 4_500) : "";
   const threadSummary = [
     typeof body.threadSummary === "string" ? body.threadSummary.trim().slice(0, 5_000) : "",

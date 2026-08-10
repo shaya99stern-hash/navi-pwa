@@ -335,8 +335,8 @@ export function SettingsSheet({
      Privacy page only, for the same reason facts are: it is a network read. */
   const [memoryStatus, setMemoryStatus] = useState<{
     loaded: boolean; configured: boolean; signedIn: boolean;
-    chats: number; facts: number; skills: number; skillNames: string[];
-  }>({ loaded: false, configured: false, signedIn: false, chats: 0, facts: 0, skills: 0, skillNames: [] });
+    chats: number; facts: number; skills: number; lessons: number; skillNames: string[]; lessonNames: string[];
+  }>({ loaded: false, configured: false, signedIn: false, chats: 0, facts: 0, skills: 0, lessons: 0, skillNames: [], lessonNames: [] });
   const lastTapAt = useRef(0);
 
   /* Monthly spend on the one metered lane. Read here and nowhere else: it
@@ -431,7 +431,7 @@ export function SettingsSheet({
 
     void fetch("/api/memory/status", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { configured?: boolean; signedIn?: boolean; chats?: number; facts?: number; skills?: number; skillNames?: string[] } | null) => {
+      .then((data: { configured?: boolean; signedIn?: boolean; chats?: number; facts?: number; skills?: number; lessons?: number; skillNames?: string[]; lessonNames?: string[] } | null) => {
         setMemoryStatus({
           loaded: true,
           configured: data?.configured === true,
@@ -439,7 +439,9 @@ export function SettingsSheet({
           chats: data?.chats ?? 0,
           facts: data?.facts ?? 0,
           skills: data?.skills ?? 0,
-          skillNames: Array.isArray(data?.skillNames) ? data.skillNames : []
+          lessons: data?.lessons ?? 0,
+          skillNames: Array.isArray(data?.skillNames) ? data.skillNames : [],
+          lessonNames: Array.isArray(data?.lessonNames) ? data.lessonNames : []
         });
       })
       .catch(() => setMemoryStatus((current) => ({ ...current, loaded: true })));
@@ -893,16 +895,29 @@ export function SettingsSheet({
                 <>
                   <Row label="Conversations synced" description="Stored in your private cloud memory and restored on any device you sign in to." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.chats}</span>} />
                   <Row label="Facts remembered" description="Standing facts about you, listed above." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.facts}</span>} />
-                  <Row label="Skills learned" description="Applied in every conversation, not only when a request happens to match." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.skills}</span>} />
+                  <Row label="Skills you taught it" description="Applied in every conversation, not only when a request happens to match." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.skills}</span>} />
+                  {/* Separate from the count above on purpose. These are
+                      conclusions NaviSoul drew on its own, so seeing them
+                      counted — and named below — is the only way to notice one
+                      that is wrong before it quietly shapes every answer. */}
+                  <Row label="Lessons it worked out" description="Things NaviSoul concluded from experience and carries forward on its own." control={<span className="text-[0.9375rem]/[1.375rem] text-secondary">{memoryStatus.lessons}</span>} />
                 </>
               )}
               <Row label="On this device" description={DURABILITY_DETAIL[durability]} />
             </Group>
             {memoryStatus.skillNames.length ? (
               <>
-                <p className="px-4 pt-3 text-[0.75rem]/[1.125rem] text-tertiary">What NaviSoul has learned:</p>
+                <p className="px-4 pt-3 text-[0.75rem]/[1.125rem] text-tertiary">What you have taught NaviSoul:</p>
                 <Group>
                   {memoryStatus.skillNames.map((name) => <Row key={name} label={name} />)}
+                </Group>
+              </>
+            ) : null}
+            {memoryStatus.lessonNames.length ? (
+              <>
+                <p className="px-4 pt-3 text-[0.75rem]/[1.125rem] text-tertiary">What NaviSoul worked out for itself:</p>
+                <Group>
+                  {memoryStatus.lessonNames.map((name) => <Row key={name} label={name} />)}
                 </Group>
               </>
             ) : null}

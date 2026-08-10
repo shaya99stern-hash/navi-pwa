@@ -4,7 +4,9 @@ import { buildExecutionTools } from "@/lib/ai/execution-tools";
 import { buildGitHubWriteTools } from "@/lib/ai/github-write-tools";
 import { buildGoogleTools } from "@/lib/ai/google-tools";
 import { buildConnectorTools, buildProvisioningTools } from "@/lib/ai/connector-tools";
+import { buildEnvironmentTools } from "@/lib/ai/environment-tools";
 import { buildLearningTools } from "@/lib/ai/learning-tools";
+import { buildReflectionTools } from "@/lib/ai/reflection-tools";
 import { buildSelfUpdateTools, selfUpdateToken } from "@/lib/ai/self-update-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
 import { buildWebTools } from "@/lib/ai/web-tools";
@@ -29,8 +31,27 @@ import type { CustomConnector, NaviMode, ToolPolicy } from "@/lib/ai/types";
  * turn pays the schema cost of the ones it will not call. The cap is enforced
  * rather than advised, because the failure it prevents is silent: more tools
  * still *works*, it just quietly picks worse ones.
+ *
+ * One number for both modes was wrong, and wrong in a way nothing surfaced.
+ * Count what Code mode actually switches on: five skill tools, two execution,
+ * three web, three self-update, three provisioning — seventeen before a single
+ * repository tool is reached. The cap trims from the end, so with a GitHub
+ * account connected every one of `github_read_file`, `github_search_code` and
+ * `github_check_ci` was cut before the model saw it. Code mode had the
+ * repository tools it is *for* removed on every turn, and the only symptom was
+ * NaviSoul saying it could not reach the repository while holding the token.
+ *
+ * So the ceiling is per mode. Chat keeps the tighter budget, because a chat
+ * turn genuinely does not need twenty tools and selection accuracy is the whole
+ * point. Code gets the room its surface actually requires.
  */
 export const MAX_ACTIVE_TOOLS = 16;
+export const MAX_ACTIVE_CODE_TOOLS = 22;
+
+/** The ceiling that applies to a mode. */
+export function toolCeiling(mode: NaviMode): number {
+  return mode === "code" ? MAX_ACTIVE_CODE_TOOLS : MAX_ACTIVE_TOOLS;
+}
 
 export type ToolsetContext = {
   /** The product mode. Chat never receives repository write tools. */
@@ -96,9 +117,30 @@ const GROUPS: Group[] = [
     when: () => true
   },
   {
+    /* Knowing what it is running on. Always on, and high in the order, because
+       this is the group that stops NaviSoul answering questions about itself
+       from assumption — it invented a Settings path, invented an environment
+       flag, and announced it had no code sandbox while one sat there
+       unconfigured. Every one of those is a turn where nothing let it look.
+       Two schemas on every turn is the price of not fabricating, which is
+       cheap. */
+    name: "environment",
+    tools: () => ({}),
+    when: () => true
+  },
+  {
     /* Permanent learning. Only when signed in and storage is configured, so
        the model is never offered a promise it cannot keep. */
     name: "learning",
+    tools: () => ({}),
+    when: ({ clerkToken, clerkUserId }) => Boolean(clerkToken && clerkUserId)
+  },
+  {
+    /* Learning from its own experience rather than only from instruction. Same
+       gate as `learning` because it writes to the same store: without a signed-in
+       user there is nowhere to put a lesson, and a tool that silently discards
+       what it was given is worse than one that is absent. */
+    name: "reflection",
     tools: () => ({}),
     when: ({ clerkToken, clerkUserId }) => Boolean(clerkToken && clerkUserId)
   },
@@ -108,6 +150,34 @@ const GROUPS: Group[] = [
     name: "self-update",
     tools: () => ({}),
     when: ({ mode, request }) => Boolean(selfUpdateToken()) && (mode === "code" || wantsSelfUpdate(request))
+  },
+  {
+    /* Repository and deployment reads. In both modes — "which of my repos has
+       failing CI" is not a Code-mode question — but only when the request is
+       about them, because ten tools cannot sit in a twelve-slot budget on
+       every turn without displacing everything else.
+
+       Ahead of the connector groups deliberately. Both used to sit above it and
+       both are three tools wide, which is six slots of *adding a service* taken
+       from *reading the code* on precisely the turns where the code is the
+       subject. Connecting something is a thing the user asks for by name, so it
+       survives on the turns it is wanted; reading the repository is the
+       background work of every Code-mode answer. */
+    name: "repository",
+    tools: () => ({}),
+    when: ({ mode, githubToken, request }) => Boolean(githubToken) && (mode === "code" || wantsAccountTools(request))
+  },
+  {
+    name: "repository-write",
+    /* Writes are Code mode only, and only when the deployment has switched
+       them on. Chat mode never receives them, whatever the token allows.
+
+       Kept next to the reads it depends on: opening a pull request against a
+       file you were never able to read is not a capability, it is a way to
+       write the wrong patch. Either both survive the cap or neither is much
+       use. */
+    tools: () => ({}),
+    when: ({ mode, githubToken, githubWritesEnabled }) => mode === "code" && Boolean(githubToken) && Boolean(githubWritesEnabled)
   },
   {
     /* Connecting NaviOS to a service by name, and writing the key into its own
@@ -122,22 +192,6 @@ const GROUPS: Group[] = [
     name: "custom-connectors",
     tools: () => ({}),
     when: ({ customConnectors }) => Boolean(customConnectors?.some((connector) => connector.kind !== "mcp"))
-  },
-  {
-    /* Repository and deployment reads. In both modes — "which of my repos has
-       failing CI" is not a Code-mode question — but only when the request is
-       about them, because ten tools cannot sit in a twelve-slot budget on
-       every turn without displacing everything else. */
-    name: "repository",
-    tools: () => ({}),
-    when: ({ mode, githubToken, request }) => Boolean(githubToken) && (mode === "code" || wantsAccountTools(request))
-  },
-  {
-    name: "repository-write",
-    /* Writes are Code mode only, and only when the deployment has switched
-       them on. Chat mode never receives them, whatever the token allows. */
-    tools: () => ({}),
-    when: ({ mode, githubToken, githubWritesEnabled }) => mode === "code" && Boolean(githubToken) && Boolean(githubWritesEnabled)
   },
   {
     /* Mail and calendar, in both modes. Unlike repositories these are not a
@@ -235,23 +289,25 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...buildSkillTools(onActivity),
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity }),
+    ...buildEnvironmentTools({ onActivity }),
     ...(active("learning") ? buildLearningTools({ clerkToken, clerkUserId, onActivity }) : {}),
+    ...(active("reflection") ? buildReflectionTools({ clerkToken, clerkUserId, onActivity }) : {}),
     ...(active("self-update") ? buildSelfUpdateTools({ signal, onActivity }) : {}),
-    ...(active("provisioning") ? buildProvisioningTools({ origin, cookie, onActivity }) : {}),
-    ...(active("custom-connectors") ? buildConnectorTools({ connectors: customConnectors, signal, onActivity }) : {}),
     // Repository and deployment reads, present only when their tokens are —
     // and only when this turn is plausibly about them; see `wantsAccountTools`.
     ...(active("repository") || mode === "code" ? buildDevTools(onActivity, { githubToken }) : {}),
     ...(active("repository-write") && githubToken
       ? buildGitHubWriteTools({ token: githubToken, onActivity })
       : {}),
+    ...(active("provisioning") ? buildProvisioningTools({ origin, cookie, onActivity }) : {}),
+    ...(active("custom-connectors") ? buildConnectorTools({ connectors: customConnectors, signal, onActivity }) : {}),
     ...(active("google") ? buildGoogleTools(onActivity, { accessToken: googleAccessToken }) : {})
   };
 
   /* MCP last, so a connector can never displace a built-in capability when the
      cap trims. A user who connects ten servers loses connector tools, not the
      ability to run code. */
-  return capToolset({ ...local, ...mcpTools });
+  return capToolset({ ...local, ...mcpTools }, toolCeiling(mode));
 }
 
 /** Which groups are switched on, for diagnostics and for the settings screen. */
