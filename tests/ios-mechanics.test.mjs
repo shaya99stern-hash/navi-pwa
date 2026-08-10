@@ -73,6 +73,30 @@ const skills = JSON.parse(readFileSync(join(root, "data/skills.json"), "utf8"));
 check("the data carries the slash", skills.every((s) => s.triggers.slash.startsWith("/")), true);
 check("and never doubles it", skills.every((s) => !s.triggers.slash.startsWith("//")), true);
 
+/* ── A tap that lands late reads as a tap that was missed ────────────────── */
+
+/* `touch-action: manipulation` removes iOS Safari's 300ms wait for a possible
+   double-tap-to-zoom. Without it a control responds a third of a second late,
+   which nobody experiences as slowness — they experience it as the first tap
+   not working, and tap again. That is "sometimes I have to double click".
+   
+   Selecting on the tag alone missed anything tappable that is not a `button`:
+   the Test controls in the Integrations sheet are `<span role="button">`
+   because they sit inside a row that is itself a button, and nesting buttons
+   is invalid HTML. Correct markup that silently opted them out of the fix. */
+check("tags carry the fast-tap rule", /\bbutton,\s*\n\s*a,\s*\n\s*label,/.test(css), true);
+check("so do elements that only have the role", /\[role="button"\],/.test(css), true);
+check("switches too", /\[role="switch"\],/.test(css), true);
+check("the rule is manipulation, not none", /touch-action: manipulation;/.test(css), true);
+
+/* Every tappable thing that is not a real button should be caught by the role
+   selectors above. A new one using a role this rule does not list is the
+   regression. */
+const COVERED = new Set(["button", "switch", "radio", "tab", "option"]);
+const roles = [...readFileSync(join(root, "app/components/integrations-sheet.tsx"), "utf8")
+  .matchAll(/role="(\w+)"[\s\S]{0,200}?onClick/g)].map((m) => m[1]);
+check("every clickable role in the sheet is covered", roles.filter((r) => !COVERED.has(r)), []);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
 
