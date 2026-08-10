@@ -1,0 +1,11 @@
+import { read, stripComments } from "./source.mjs";
+let pass = 0, fail = 0;
+const check = (n, a, e) => { const ok = JSON.stringify(a) === JSON.stringify(e); ok ? pass++ : fail++; console.log(`${ok ? "PASS" : "FAIL"}  ${n}`); };
+const catalog = read("lib/ai/provider-catalog.ts").body;
+const route = stripComments(read("app/api/connectors/provision/route.ts").source);
+check("detection reuses the app's resolver", catalog.includes("providerApiKey(PROVIDERS[adapter])"), true);
+check("aliases cover the non-model rows", catalog.includes("NAVI_GITHUB_TOKEN"), true);
+check("supabase aliases are covered", catalog.includes("SUPABASE_ANON_KEY"), true);
+check("the route no longer checks one exact name", route.includes("Boolean(process.env[entry.envKey]"), false);
+check("the route uses shared detection", route.includes("isEntryConfigured(entry)"), true);
+console.log(`\n${pass}/${pass + fail} passed`); process.exit(fail ? 1 : 0);
