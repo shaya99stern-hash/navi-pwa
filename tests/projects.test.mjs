@@ -59,6 +59,11 @@ check("a chat can be filed into a project", read("app/components/chat-menu-sheet
 /* Opening an old chat has to restore the project it belongs to, or its
    instructions silently stop applying. */
 check("opening a chat restores its project", /setActiveProjectId\(chat\.projectId \?\? null\)/.test(shell), true);
+/* Third correction to the audit: starting a chat while a project is active
+   already files it there. The persist path stamps the active project onto the
+   chat, so no separate "add this one too" step is needed — I had reported this
+   as missing as well. Pinned so the claim stays checkable. */
+check("a new chat inherits the active project", /projectId: activeProjectId \?\? undefined/.test(shell), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

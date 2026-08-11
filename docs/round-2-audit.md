@@ -151,12 +151,23 @@ The real gaps were narrower, and they are exactly the two the owner named:
   Projects section in the drawer with a conversation count on each row, hidden
   while searching so it cannot push results off screen.
 
+**A third correction.** Starting a chat while a project is active *does*
+already file it there — the persist path stamps the active project onto the
+chat. That is now pinned by a test too.
+
+Three wrong claims in one section is worth naming as a pattern rather than
+three slips: I read the projects code for what was missing and found what I
+expected to find. The plumbing was almost entirely present; what was absent was
+any way to *reach* it. Diagnosing "unreachable" as "unbuilt" would have meant
+rewriting working code, which is the more expensive mistake.
+
 Still open on projects:
 
-- Starting a new chat while a project is active does not yet file it there
-  automatically; you file it afterwards from the chat menu.
 - `knowledge[]` is text notes only. Attaching real files to a project — upload
   once, every chat in it can draw on them — is its own piece of work.
+- A chat with no project can be adopted by whichever project was last active,
+  because the stamp is applied on every save rather than only at creation. Low
+  harm, but it is why a chat can appear in a project you did not put it in.
 
 ### 8. Navigation — you are right, and here is the actual rule
 
