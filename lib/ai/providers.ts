@@ -138,6 +138,30 @@ export const ROUTES = {
   },
   /* OpenRouter is breadth rather than depth: one key, many models, and the
      `:free` suffix keeps it on the free tier. */
+  /**
+   * The frontier escalation.
+   *
+   * Every other route here is a fast open-weight host, and no amount of
+   * prompting turns one of those into a frontier model — the ceiling on answer
+   * quality is set by which model answers, not by how much it is told. This is
+   * the one route that raises the ceiling rather than using it better.
+   *
+   * OpenRouter because it is the one configured provider that can reach a
+   * frontier model at all, and because the model is a plain string: the
+   * deployment names what it wants in `NAVI_FRONTIER_MODEL` and can change it
+   * the day something better ships, without a code change.
+   *
+   * Deliberately unset by default. This is the only route in the table that
+   * can cost real money per request, so it stays absent until someone names a
+   * model — an app that silently starts billing because it was upgraded is a
+   * worse failure than one that answers slightly less well.
+   */
+  openRouterFrontier: {
+    provider: "openrouter",
+    model: process.env.NAVI_FRONTIER_MODEL ?? "",
+    label: "Navi Soul frontier",
+    capability: "reasoning"
+  },
   openRouterReasoning: {
     provider: "openrouter",
     model: process.env.OPENROUTER_MODEL ?? "deepseek/deepseek-r1:free",
@@ -296,6 +320,18 @@ export function availableSwarmRoutes(availability: ProviderAvailability, tools: 
  */
 export type Lane = 1 | 2 | 3 | 4;
 
+/**
+ * Whether this deployment has named a frontier model to escalate to.
+ *
+ * A separate predicate rather than a truthiness check at each call site,
+ * because "is escalation available" is a question three different places ask —
+ * the router, the diagnostics, and the settings screen — and they must not
+ * drift apart in what they consider configured.
+ */
+export function frontierConfigured(): boolean {
+  return Boolean((process.env.NAVI_FRONTIER_MODEL ?? "").trim());
+}
+
 export function selectLane(options: {
   mode: "chat" | "code";
   effort: "low" | "medium" | "high";
@@ -370,6 +406,13 @@ export function routeForLane(options: {
      without a word — the user asked for a good answer, not for a lecture about
      billing, and the free routes still give them one. */
   if (lane === 3) {
+    /* Frontier first, when there is one and the ledger allows it.
+       Lane 3 is where "this is hard" lands — high effort, or complex work in
+       either mode — so it is the only lane worth spending frontier money on.
+       Everything below is unchanged and still the answer when no frontier
+       model is named or the budget is spent: the request degrades to a good
+       free answer rather than to an apology. */
+    if (frontierConfigured() && availability.openrouter && meteredAllowed) return ROUTES.openRouterFrontier;
     if (availability.deepseek && meteredAllowed) return ROUTES.deepseekFlash;
     if (availability.cerebras) return ROUTES.cerebrasLarge;
     if (availability.openrouter) return ROUTES.openRouterReasoning;
