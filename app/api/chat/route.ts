@@ -13,7 +13,7 @@ import { compactForBudget } from "@/lib/ai/compaction";
 import { PROVIDERS } from "@/lib/ai/provider-registry";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
-import { createProviderModel, fallbackRoutes, getProviderAvailability, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
+import { classifyTask, createProviderModel, fallbackRoutes, getProviderAvailability, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
 import { markProviderFailure, markProviderSuccess, orderRoutesByHealth } from "@/lib/ai/provider-health";
 import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
@@ -1367,6 +1367,9 @@ export async function POST(request: Request): Promise<Response> {
         ? generalRoute
         : routeForLane({
           lane,
+          /* Classified from the request, not from the lane. Mechanical work
+             takes the fast route however hard the lane thought it was. */
+          taskKind: classifyTask(lastUserText),
           availability,
           tools,
           hasFiles,

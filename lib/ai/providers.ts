@@ -328,6 +328,41 @@ export type Lane = 1 | 2 | 3 | 4;
  * the router, the diagnostics, and the settings screen — and they must not
  * drift apart in what they consider configured.
  */
+/**
+ * What *kind* of work this is, as distinct from how hard it is.
+ *
+ * The lane table routes by difficulty, which is the right axis for most
+ * decisions and the wrong one for a few. Hard-and-mathematical,
+ * hard-and-mechanical and hard-and-open-ended want different machines, and
+ * "lane 3" cannot express that: it sends everything difficult to the same
+ * place. The clearest waste is mechanical work arriving at high effort —
+ * reshaping text, extracting fields, converting a format — where reasoning
+ * depth buys nothing and tokens per second is the entire experience. Under the
+ * old table that request could reach the frontier route and be billed for
+ * thinking about a transformation that has one right answer.
+ *
+ * Deliberately narrow. Only shapes that are unmistakably mechanical are
+ * classified; everything else returns null and the lane decides as before. A
+ * misclassification here sends real reasoning work to a fast shallow model,
+ * which is a far worse outcome than missing an optimisation — so the patterns
+ * are anchored to an explicit instruction verb, the same discipline the prose
+ * routes use.
+ */
+export type TaskKind = "mechanical";
+
+const MECHANICAL = /^\s*(?:please\s+)?(?:re)?(?:format|indent|minify|prettify|escape|unescape|encode|decode|transliterate|capitali[sz]e|lowercase|uppercase|slugify|sort|dedupe|de-duplicate|deduplicate|reverse|transpose|rename|renumber)\b/i;
+const CONVERSION = /^\s*(?:please\s+)?convert\s+(?:this\s+)?\S+\s+(?:to|into)\s+\S+/i;
+
+export function classifyTask(request: string | undefined): TaskKind | null {
+  if (!request) return null;
+  const text = request.trim();
+  /* A long message that opens with "format" is usually a paste to transform;
+     a short one may still be a question about formatting. Both are handled by
+     requiring the verb to lead, which a question almost never does. */
+  if (MECHANICAL.test(text) || CONVERSION.test(text)) return "mechanical";
+  return null;
+}
+
 export function frontierConfigured(): boolean {
   return Boolean((process.env.NAVI_FRONTIER_MODEL ?? "").trim());
 }
@@ -376,8 +411,21 @@ export function routeForLane(options: {
    * whether the account can afford something.
    */
   meteredAllowed?: boolean;
+  /** What kind of work this is, when it is unmistakable. See `classifyTask`. */
+  taskKind?: TaskKind | null;
 }): ProviderRoute | null {
-  const { lane, availability, tools, hasFiles, discovered, meteredAllowed } = options;
+  const { lane, availability, tools, hasFiles, discovered, meteredAllowed, taskKind } = options;
+
+  /* Mechanical work takes the fastest capable model, whatever the lane thought.
+     This sits with the capability checks rather than inside the lane switch
+     because it is the same kind of rule: a property of the work that outranks
+     how difficult the request looked. Reasoning depth cannot improve a
+     transformation with one right answer; it can only cost latency and, on the
+     metered lane, money. */
+  if (taskKind === "mechanical" && !hasFiles) {
+    if (availability.groq) return ROUTES.groqFast;
+    if (availability.cerebras) return ROUTES.cerebrasFast;
+  }
 
   /* A request that needs tools needs a model that accepts them, whatever the
      lane would have preferred. Capability beats tier. */
