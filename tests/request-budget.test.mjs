@@ -41,7 +41,7 @@ check("with a floor, so a route is never sent a request it cannot answer",
 check("the ceiling comes from the provider, not the context window alone",
   /requestTokenCeiling\(PROVIDERS\[attempt\.provider\]\)/.test(chat.code), true);
 check("a safety margin is held back from it",
-  /ceiling = requestTokenCeiling\([^)]*\) - CEILING_SAFETY_MARGIN/.test(chat.code), true);
+  /provisionalCeiling = requestTokenCeiling\([^)]*\) - CEILING_SAFETY_MARGIN/.test(chat.code), true);
 /* The two contributors the old budget ignored, which together were most of the
    payload: ~9,900 tokens of system prompt and ~2,000 of tool schemas. */
 check("the system prompt is measured before the request is sent",
@@ -79,7 +79,11 @@ check("the size branch is tested before the rate-limit branch",
 /* ── The cascade ends somewhere ─────────────────────────────────────────── */
 
 check("a floor is appended after the health ordering",
-  /const floor = lastResortRoute\(availability\);/.test(chat.code), true);
+  /const floor = lastResortRoute\(availability, meteredAllowed\);/.test(chat.code), true);
+/* The deployment is to be free to run, so the one route that bills cannot be
+   what rescues it — the free routes now fit instead. */
+check("and it cannot spend without the ledger's permission",
+  /if \(!meteredAllowed\) return null;/.test(read("lib/ai/providers.ts").code), true);
 check("it is last, so it never displaces a free route",
   /attempts\.push\(floor\)/.test(chat.code), true);
 check("and it is not added twice",

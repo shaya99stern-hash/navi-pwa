@@ -589,19 +589,26 @@ export function fallbackRoutes(options: {
  * unhelpful and untrue: a frontier model was configured and reachable the whole
  * time. Returning nothing is the one outcome worse than an expensive answer.
  *
- * Deliberately *not* gated on the spend ledger, and that is the one place in
- * this file where the budget is overruled. The ledger's job is to stop routine
- * escalation from quietly running up a bill, and it still does — `routeForLane`
- * checks it before every lane 3 call. This is not routine: by the time it runs,
- * every free route has already failed and the alternative is an app that cannot
- * answer at all. The owner named this model in `NAVI_FRONTIER_MODEL`, so the
- * charge is one they chose, not one the app invented.
+ * Gated on the spend ledger like every other paid call, and that is a
+ * deliberate reversal. It shipped ungated on the reasoning that answering
+ * expensively beats not answering — true in general, and not the owner's
+ * priority here. This deployment is to be free to run, so a route that bills
+ * cannot be the thing that rescues it; a floor that quietly charges for every
+ * outage is a worse failure than the outage, because nobody sees it happen.
  *
- * Null when no model is named, which is the default. An empty model id sent to
- * a provider fails for a reason nobody can read, so an unconfigured frontier
- * stays unreachable rather than becoming a confusing last request.
+ * Two conditions, both required. `meteredAllowed` comes from the ledger, which
+ * treats an unreadable store as exhausted — so a storage outage degrades to
+ * free rather than to unlimited billing. And no model named means no route at
+ * all, which is the default: an empty model id sent to a provider fails for a
+ * reason nobody can read.
+ *
+ * When this returns null the request still ends in a real explanation rather
+ * than nothing, because the free routes now fit — see `promptBudgetFor`. The
+ * floor is the last resort for a deployment that has opted into one, not the
+ * mechanism that makes the app work.
  */
-export function lastResortRoute(availability: ProviderAvailability): ProviderRoute | null {
+export function lastResortRoute(availability: ProviderAvailability, meteredAllowed: boolean): ProviderRoute | null {
+  if (!meteredAllowed) return null;
   if (!frontierConfigured() || !availability.openrouter) return null;
   return ROUTES.openRouterFrontier;
 }

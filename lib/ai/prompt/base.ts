@@ -175,3 +175,47 @@ const ASKS_ABOUT_APP = new RegExp([
 export function needsAppKnowledge(request: string): boolean {
   return ASKS_ABOUT_APP.test(request);
 }
+
+/**
+ * Fit the large reference blocks into whatever room the route has left.
+ *
+ * The blocks are individually justified and collectively ruinous. Measured on
+ * this codebase: `APP_KNOWLEDGE` 2,159 tokens, `CODE_CRAFT` 2,837,
+ * `ENGINEERING_DISCIPLINE` 1,993, `ORCHESTRATION_KNOWLEDGE` 978,
+ * `NAVI_MISSION` 841. Each predicate that admits one is deliberately generous,
+ * on the sound reasoning that a false positive costs a few hundred tokens — but
+ * they were written independently and never counted together, and they fire
+ * together on exactly the turns that matter most: asking about the app while
+ * holding the commit tools loads all of them. That is 8,800 tokens of
+ * reference material on top of everything else, against a free tier whose
+ * entire per-minute allowance is 8,000.
+ *
+ * So they compete for a budget instead of each deciding alone. Order is
+ * priority: what is worst to be wrong about goes first and survives the trim.
+ * A block is admitted whole or not at all — half a reference is not a smaller
+ * reference, it is a truncated instruction that reads as complete.
+ *
+ * On a roomy route nothing is dropped and this is a no-op. It exists so the
+ * *free* routes stay usable, which is the difference between an app that
+ * answers and one that reports a credential problem it does not have.
+ */
+export function fitReferenceBlocks(
+  blocks: Array<{ name: string; text: string }>,
+  budget: number
+): { kept: string[]; dropped: string[] } {
+  const kept: string[] = [];
+  const dropped: string[] = [];
+  let spent = 0;
+  for (const block of blocks) {
+    if (!block.text) continue;
+    const cost = estimateTokens(block.text);
+    /* Keep scanning rather than stopping at the first block that does not
+       fit: a small low-priority block should still get in behind a large one
+       that was refused, and stopping would spend the remaining budget on
+       nothing. */
+    if (spent + cost > budget) { dropped.push(block.name); continue; }
+    spent += cost;
+    kept.push(block.text);
+  }
+  return { kept, dropped };
+}

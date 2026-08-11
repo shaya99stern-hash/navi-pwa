@@ -57,7 +57,7 @@ import { NAVI_MISSION, needsMission } from "@/lib/ai/mission";
 import { ORCHESTRATION_KNOWLEDGE, needsOrchestrationKnowledge } from "@/lib/ai/orchestration-knowledge";
 import { ENGINEERING_DISCIPLINE, needsEngineeringDiscipline } from "@/lib/ai/engineering-discipline";
 import { CODE_CRAFT, needsCodeCraft } from "@/lib/ai/code-craft";
-import { needsAppKnowledge, stablePrefix } from "@/lib/ai/prompt/base";
+import { fitReferenceBlocks, needsAppKnowledge, stablePrefix } from "@/lib/ai/prompt/base";
 import { csvToMarkdown, documentBlock, extractPdfText } from "@/lib/ai/document-text";
 
 export const runtime = "edge";
@@ -138,6 +138,16 @@ const MIN_OUTPUT_TOKENS = 1_000;
  * lands just over it. The margin is what turns "usually fits" into "fits".
  */
 const CEILING_SAFETY_MARGIN = 400;
+/**
+ * What the rest of a turn needs, so the reference blocks get what is left.
+ *
+ * Roughly: the base prompt prefix (~1,000 tokens, measured), the short
+ * per-request instruction lines (~500), room for an actual conversation
+ * (~1,000), and `MIN_OUTPUT_TOKENS` for the reply. Held back rather than
+ * discovered, because the reference blocks have to be chosen *before* the
+ * prompt containing them can be weighed.
+ */
+const PROMPT_RESERVE_TOKENS = 3_500;
 
 type ChatRequestBody = {
   messages?: UIMessage[];
@@ -719,8 +729,36 @@ function systemPrompt(options: {
   documents?: string;
   /** The plan Soul made for this request, and what the answer must satisfy. */
   constraints?: string;
+  /**
+   * Tokens the large reference blocks may spend between them.
+   *
+   * Derived from the chosen route's own ceiling by the caller, because how much
+   * background this turn can afford is a property of where it is being sent.
+   * Omitted means unlimited, which is what every non-streaming caller wants.
+   */
+  referenceBudget?: number;
 }): string {
-  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, productMode } = options;
+  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, productMode, referenceBudget = Number.POSITIVE_INFINITY } = options;
+
+  /* The static reference material, in priority order, competing for whatever
+     room the route has. Each predicate is unchanged — this decides which of
+     the blocks they admit can actually be afforded, not whether they apply.
+
+     Ordered by what is worst to be wrong about. Which repository this app is
+     goes first because it is a few dozen tokens and a confident wrong answer
+     to "which repo is this" is the failure that motivated the block. The app
+     description follows, because inventing an answer about the product the
+     user is holding is the next worst. Routing knowledge is last: describing
+     its own lanes slightly less well is the cheapest thing to lose. */
+  const { kept: reference, dropped } = fitReferenceBlocks([
+    { name: "self-repo", text: toolNames.includes("commit_own_source") || needsAppKnowledge(request) ? selfRepoKnowledge() : "" },
+    { name: "app-knowledge", text: needsAppKnowledge(request) ? APP_KNOWLEDGE : "" },
+    { name: "engineering-discipline", text: needsEngineeringDiscipline(toolNames.includes("commit_own_source")) ? ENGINEERING_DISCIPLINE : "" },
+    { name: "code-craft", text: needsCodeCraft(toolNames.includes("commit_own_source")) ? CODE_CRAFT : "" },
+    { name: "mission", text: needsMission(request) ? NAVI_MISSION : "" },
+    { name: "orchestration", text: needsOrchestrationKnowledge(request, effort) ? ORCHESTRATION_KNOWLEDGE : "" }
+  ], referenceBudget);
+  if (dropped.length) console.info(`Navi Soul trimmed reference blocks to fit ${referenceBudget} tokens: dropped ${dropped.join(", ")}.`);
   /* Ordered stable-first, volatile-last, and that ordering is load-bearing.
      The metered lane bills a cached prompt prefix at roughly one fiftieth of an
      uncached one, and the cache matches on an exact byte prefix — so a single
@@ -738,33 +776,12 @@ function systemPrompt(options: {
        spent 3,000, most of which was a description of the app that only
        mattered when someone asked about the app. */
     stablePrefix(productMode === "code" ? "code" : "chat"),
-    /* Loaded when the request is actually about the product. It is the single
-       largest block available and answers exactly one kind of question. */
-    needsAppKnowledge(request) ? APP_KNOWLEDGE : "",
-    /* The standing brief: what this project is for, the bar for an answer,
-       and the specific mistakes already made that must not recur. Carried
-       whenever the turn touches the project, its memory, or its tools. */
-    needsMission(request) ? NAVI_MISSION : "",
-    /* How to move around its own models: which engine suits which work, when a
-       second is worth its latency, and how to reconcile what comes back.
-       Without this Navi Soul behaved like one model with tools and described
-       its own routing from invention. */
-    needsOrchestrationKnowledge(request, effort) ? ORCHESTRATION_KNOWLEDGE : "",
-    /* Carried whenever the repository tools are in play. Every commit deploys
-       to the phone in the user's hand, so how to read their request, how to
-       change code without breaking what surrounds it, and how to report the
-       result honestly all matter more on these turns than the tokens do. */
-    /* Which repository this app is. Carried whenever the repo tools are in
-       play *or* the question is about the app, because "which repo is this"
-       arrives both ways — and answering it wrong, confidently, is worse than
-       any token it costs. */
-    toolNames.includes("commit_own_source") || needsAppKnowledge(request) ? selfRepoKnowledge() : "",
-    needsEngineeringDiscipline(toolNames.includes("commit_own_source")) ? ENGINEERING_DISCIPLINE : "",
-    /* Conduct is not competence. The brief above says how to behave when
-       editing this app; this teaches the craft itself — the type system, React
-       state and effects, the two runtimes, and the bug shapes that have
-       actually shipped here. */
-    needsCodeCraft(toolNames.includes("commit_own_source")) ? CODE_CRAFT : "",
+    /* The reference material, already trimmed to what this route can afford.
+       Which blocks apply is decided by the predicates above; which of them fit
+       is decided by `fitReferenceBlocks`. Both questions used to be answered by
+       the first, which is how eight thousand tokens of background arrived at a
+       route with an eight thousand token allowance. */
+    ...reference,
     /* Keyed to the mode the user actually chose, not to how the dispatcher
        classified this message. Keying it to dispatch meant that picking Code
        and then asking something the classifier read as ordinary produced a
@@ -1490,7 +1507,7 @@ export async function POST(request: Request): Promise<Response> {
          attempt can actually call. Lifted out of the `streamText` call so its
          size can be measured before the request is sent — it is the largest
          single contributor to a turn and nothing could previously see it. */
-      const systemFor = (attemptToolNames: string[]): string => systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested });
+      const systemFor = (attemptToolNames: string[], referenceBudget: number): string => systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, referenceBudget });
 
       /* Health-ordered: a provider that has been failing across recent
          requests goes to the back of the line instead of charging every turn
@@ -1503,7 +1520,7 @@ export async function POST(request: Request): Promise<Response> {
          it is the answer of last resort, so it must stay last however badly the
          free routes have been behaving. Skipped when it is already in the list,
          and absent entirely unless a frontier model is named. */
-      const floor = lastResortRoute(availability);
+      const floor = lastResortRoute(availability, meteredAllowed);
       if (floor && !attempts.some((candidate) => candidate.model === floor.model)) attempts.push(floor);
       let lastFailure: unknown = null;
 
@@ -1518,7 +1535,21 @@ export async function POST(request: Request): Promise<Response> {
         const attemptToolNames = routeToolCallingSupport(attempt) === "custom" ? toolNames : [];
         const metered = attempt.provider === "deepseek";
         const attemptTools = attemptToolNames.length ? availableTools : {};
-        const attemptSystem = systemFor(attemptToolNames);
+
+        /* Everything the reference blocks are competing with, so what is left
+           over is what they may spend. Computed before the prompt is built
+           rather than measured after, because the budget is an input to
+           building it — see `fitReferenceBlocks`.
+
+           The reserve covers the base prefix (~1,000 tokens), the short
+           per-request instruction lines (~500), room for a real conversation
+           (~1,000), and the shortest reply worth streaming. On a roomy route
+           this leaves far more than the blocks can use and nothing is trimmed;
+           on the 8,000-token free tier it leaves about 2,000, which buys the
+           two that matter most instead of failing the request outright. */
+        const provisionalCeiling = requestTokenCeiling(PROVIDERS[attempt.provider]) - CEILING_SAFETY_MARGIN;
+        const referenceBudget = Math.max(0, provisionalCeiling - PROMPT_RESERVE_TOKENS - estimateToolTokens(attemptTools));
+        const attemptSystem = systemFor(attemptToolNames, referenceBudget);
 
         /* Size the request to what this route will actually take, before
            sending it. A turn of 20,805 tokens was offered to a route whose
@@ -1531,7 +1562,7 @@ export async function POST(request: Request): Promise<Response> {
            throughput allowance, not its context window. The fixed cost is the
            system prompt plus the tool schemas, which is most of the payload on
            an ordinary turn and which the old budget did not count at all. */
-        const ceiling = requestTokenCeiling(PROVIDERS[attempt.provider]) - CEILING_SAFETY_MARGIN;
+        const ceiling = provisionalCeiling;
         const fixed = estimateTextTokens(attemptSystem) + estimateToolTokens(attemptTools);
         /* Still bounded by the window share as well: a provider can have room
            to spare and still answer worse for being handed a huge history. */
