@@ -112,20 +112,53 @@ Every attempt failed. Navi Soul then told you it *"cannot permanently upgrade or
 rewire my own brain"* — which is **false**: `learn_skill` exists and is wired to
 a real table.
 
-The table, RLS policies, and unique constraint in
-`supabase/migrations/20260807064500_navi_cloud_memory.sql` are all correct. So
-the overwhelmingly likely cause is that **the migration was never applied to the
-live Supabase project.** I could not confirm this — the Supabase MCP connector
-in my session needs authorising, so I have no way to inspect your live schema.
+**I was wrong about the cause, and I have now checked instead of guessing.**
+
+With access to the live project (`NaviOS Project`, `nrackqbpziexpywhdrku`):
+
+- `list_migrations` shows `20260807065118 navi_cloud_memory` **applied**.
+- `list_tables` shows `navi_chats`, `navi_preferences`, `navi_learned_skills`
+  all present, RLS enabled, 0 rows.
+- The security advisor flags exactly one table for having RLS with no policies,
+  and it is `navios_memory` — an orphan not referenced anywhere in this
+  codebase. The three tables the app uses are **not** flagged, which means their
+  policies exist.
+
+So schema, policies, and migration are all fine. My "the migration was never
+applied" hypothesis — repeated confidently several times — was wrong.
+
+**What is left is the JWT.** Every policy is `user_id = auth.jwt() ->> 'sub'`.
+If Supabase cannot verify the Clerk token, `auth.jwt()` yields null, every
+policy compares against null, and every read and write is refused — which from
+the app looks identical to a missing table. That fits the evidence exactly: the
+tables exist and have never held a single row.
+
+**The fix is not SQL.** Clerk has to be registered as a third-party auth
+provider in the Supabase project (Authentication → Sign In / Providers → Third
+Party Auth), so Supabase validates Clerk's JWTs against Clerk's JWKS. Until
+then no amount of migrating changes anything.
+
+I could not verify the auth configuration or apply changes myself: read-only
+Supabase calls are permitted in this session, but `execute_sql` and
+`apply_migration` require interactive approval that a background session cannot
+obtain. The error message now names this case outright, so one attempt from the
+app will confirm it.
 
 **Recommendation, in order:**
-1. Apply the migration. One command; likely fixes it outright.
-2. Make the failure legible. Right now `learn_skill` fails and the model
-   *narrates a theory* about why. It should surface the real PostgREST error —
-   the same treatment as the mic test.
-3. Add a "Teach Navi Soul" row in Settings → Skills that writes a skill directly
-   and shows the server's answer, so teaching does not depend on the model
-   getting a tool call right.
+1. Add Clerk as a third-party auth provider in the Supabase project. This is
+   the actual fix, and it also restores chat sync and custom-connector key
+   durability, which fail for the same reason.
+2. **Done.** The failure is legible: the real PostgREST status and body now
+   reach the model and the API, and 401/403 is named as the JWT-trust case
+   rather than left as a status code.
+3. Still open: a "Teach Navi Soul" row in Settings → Skills that writes
+   directly and shows the server's answer, so teaching does not depend on the
+   model getting a tool call right.
+
+**Also worth cleaning up:** `navios_memory` has RLS enabled, no policies, and no
+references anywhere in the code — an orphan from an earlier iteration that is
+unreadable by anyone. Dropping it is a destructive change, so it is yours to
+make, not mine.
 
 ### 7. Projects are a stub
 

@@ -107,9 +107,24 @@ async function request(
          guess from "it failed": it means the migration was never applied to
          this project, so every write has always failed and always will until
          it is. Worth naming outright rather than leaving as a status code. */
+      /* The two failures worth naming, because neither is guessable from a
+         status code and they have completely different fixes.
+
+         404: the tables are not there — the migration was never applied.
+
+         401/403 with the tables present is the more likely one here, and it
+         was my own wrong guess for a whole round: the schema is fine, and
+         Supabase simply does not trust the Clerk token. `auth.jwt() ->> 'sub'`
+         then evaluates to null, every row-level-security policy compares
+         against null, and every read and write is refused — which looks
+         exactly like a missing table from the outside. The fix is not SQL; it
+         is registering Clerk as a third-party auth provider in the Supabase
+         project so it will verify Clerk's JWTs. */
       onFailure?.(response.status === 404
         ? `The cloud memory tables do not exist on this Supabase project — the migration in supabase/migrations has not been applied. (404: ${detail || "not found"})`
-        : `Supabase refused the write: ${response.status}${detail ? ` ${detail}` : ""}`);
+        : response.status === 401 || response.status === 403
+          ? `Supabase rejected the request as unauthorised (${response.status}). The tables exist, so this is almost certainly the Clerk token not being trusted: add Clerk as a third-party auth provider in the Supabase project, or every policy will compare against a null user and refuse everything. (${detail || "no detail"})`
+          : `Supabase refused the write: ${response.status}${detail ? ` ${detail}` : ""}`);
       return null;
     }
     if (response.status === 204) return "ok";
