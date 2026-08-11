@@ -47,9 +47,16 @@ export function buildLearningTools({ clerkToken, clerkUserId, onActivity = () =>
         onActivity(`Learning “${name}”`);
         const { rememberSkill } = await import("../memory/learned-skills");
         const stored = await rememberSkill(clerkToken, clerkUserId, { name, description, instructions, sourceUrl });
-        return stored
-          ? `Learned and stored permanently: "${stored.name}". It will be available in every future conversation. Tell the user it is saved — this time it is true.`
-          : "The skill could not be stored. Say so plainly rather than claiming it was saved.";
+        if ("skill" in stored) {
+          return `Learned and stored permanently: "${stored.skill.name}". It will be available in every future conversation. Tell the user it is saved — this time it is true.`;
+        }
+        /* The real reason, handed straight to the model.
+           This used to be a bare "could not be stored", so when the user asked
+           why — repeatedly — there was nothing to answer with, and the model
+           filled the gap by inventing causes and then declaring the capability
+           impossible. Given the actual reason it can report it, and the user
+           can act on it. */
+        return `The skill was NOT stored. Reason: ${stored.error}\nTell the user plainly that it failed and give them this reason verbatim. Do not claim it was saved, do not guess at a different cause, and do not tell them you are incapable of learning — the capability exists and this is a fixable fault.`;
       }
     })
   };

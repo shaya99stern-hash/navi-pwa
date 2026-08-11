@@ -18,12 +18,25 @@ type Props = {
   onSelect: (id: string | null) => void;
 };
 
-function createProject(): NaviProject {
+/**
+ * A project is created from a name the user typed, never before it.
+ *
+ * This used to run on the New button with no input at all, producing a project
+ * literally called "New project" with empty instructions — which is exactly
+ * what the exported data shows: one project, unnamed, no instructions, and no
+ * conversation ever filed into it. Naming something after creating it is a
+ * step people skip, so the thing that gives a project its whole purpose — the
+ * instructions every chat in it inherits — stayed empty.
+ *
+ * Asking first costs one sheet and makes the feature legible: you are not
+ * making a folder, you are stating what this project is for.
+ */
+function createProject(name: string, instructions: string): NaviProject {
   const now = Date.now();
   return {
     id: crypto.randomUUID?.() ?? `project-${now.toString(36)}`,
-    name: "New project",
-    instructions: "",
+    name: name.trim().slice(0, 80),
+    instructions: instructions.trim().slice(0, 8_000),
     knowledge: [],
     createdAt: now,
     updatedAt: now,
@@ -45,6 +58,8 @@ export function ProjectsSheet({
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(activeProjectId);
   const [knowledgeDraft, setKnowledgeDraft] = useState("");
+  /** The creation form. Null when it is not open. */
+  const [draft, setDraft] = useState<{ name: string; instructions: string } | null>(null);
 
   useEffect(() => {
     if (open) setSelectedId(activeProjectId ?? projects[0]?.id ?? null);
@@ -62,11 +77,21 @@ export function ProjectsSheet({
     onUpdate({ ...project, ...change, updatedAt: Date.now(), syncState: "local" });
   }
 
-  function addProject() {
-    const project = createProject();
+  function beginProject() {
+    haptic("selection", haptics);
+    setDraft({ name: "", instructions: "" });
+  }
+
+  function commitProject() {
+    if (!draft?.name.trim()) return;
+    const project = createProject(draft.name, draft.instructions);
     onCreate(project);
     setSelectedId(project.id);
-    haptic("success", haptics);
+    /* Created *and* selected for this conversation. Making a project and then
+       having to find a second button to actually use it is the step where the
+       feature was being abandoned. */
+    onSelect(project.id);
+    setDraft(null);
   }
 
   function addKnowledge() {
@@ -91,8 +116,66 @@ export function ProjectsSheet({
           <span className="block text-[1.0625rem]/6 font-semibold text-primary">Projects</span>
           <span className="block text-[0.6875rem]/4 font-medium text-tertiary">Instructions, knowledge, and conversation continuity</span>
         </span>
-        <button type="button" onClick={addProject} className="flex h-11 items-center gap-1.5 rounded-full bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed"><Plus size={17} />New</button>
+        <button type="button" onClick={beginProject} className="flex h-11 items-center gap-1.5 rounded-full bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed"><Plus size={17} />New</button>
       </header>
+
+      {/* Name and purpose first. The instructions field is the reason projects
+          exist — every chat in the project inherits it — so it is on the
+          creation form rather than behind a later edit nobody makes. It is
+          optional: refusing to create a project without a paragraph of setup
+          would just push people back to plain chats. */}
+      {draft ? (
+        <div className="fixed inset-0 z-[130] flex items-end justify-center sm:items-center">
+          <button type="button" aria-label="Cancel" onClick={() => setDraft(null)} className="absolute inset-0 bg-overlay backdrop-blur-[3px]" />
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="New project"
+            className="navi-sheet relative w-full max-w-[520px] px-gutter pb-[calc(20px+var(--safe-bottom))] pt-4 sm:rounded-[24px] sm:pb-5"
+          >
+            <h2 className="text-[1.0625rem]/6 font-semibold text-primary">New project</h2>
+            <p className="mt-1 text-[0.75rem]/4 font-medium text-tertiary">
+              Every conversation in this project follows its instructions.
+            </p>
+
+            <label className="mt-4 block text-[0.75rem]/4 font-semibold text-secondary" htmlFor="navi-project-name">Name</label>
+            <input
+              id="navi-project-name"
+              autoFocus
+              value={draft.name}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value.slice(0, 80) })}
+              onKeyDown={(event) => { if (event.key === "Enter" && draft.name.trim()) commitProject(); }}
+              placeholder="Client work, Thesis, NaviOS…"
+              className="mt-1.5 min-h-12 w-full rounded-[14px] bg-elev-2 px-3.5 text-[1rem]/6 text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
+            />
+
+            <label className="mt-4 block text-[0.75rem]/4 font-semibold text-secondary" htmlFor="navi-project-instructions">Instructions</label>
+            <textarea
+              id="navi-project-instructions"
+              value={draft.instructions}
+              onChange={(event) => setDraft({ ...draft, instructions: event.target.value.slice(0, 8_000) })}
+              rows={4}
+              placeholder="What this project is, how you want it approached, anything that should be true of every answer…"
+              className="mt-1.5 min-h-[112px] w-full resize-y rounded-[14px] bg-elev-2 px-3.5 py-3 text-[0.9375rem]/[1.375rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
+            />
+            <p className="mt-1.5 text-[0.6875rem]/4 font-medium text-tertiary">Optional, and editable later.</p>
+
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setDraft(null)} className="min-h-12 flex-1 rounded-full bg-elev-2 text-[0.875rem]/5 font-semibold text-primary active:bg-elev-3">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={commitProject}
+                disabled={!draft.name.trim()}
+                className="min-h-12 flex-1 rounded-full bg-accent text-[0.875rem]/5 font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed disabled:opacity-50"
+              >
+                Create project
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       <div className="grid min-h-0 flex-1 md:grid-cols-[280px_1fr]">
         <aside className={`${selected ? "hidden md:block" : "block"} scroll-area overflow-y-auto border-r border-[var(--border-subtle)] bg-elev-1 p-3`}>

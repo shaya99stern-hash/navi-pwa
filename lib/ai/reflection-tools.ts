@@ -66,9 +66,9 @@ export function buildReflectionTools({ clerkToken, clerkUserId, onActivity = () 
           description: trigger ? `Recall ${trigger}.` : "Learned from experience.",
           instructions: [lesson, trigger ? `\nRecall this ${trigger}.` : ""].filter(Boolean).join("\n")
         });
-        return stored
+        return "skill" in stored
           ? `Recorded. This will be in front of you in every future conversation, so do not re-derive it.`
-          : "The lesson could not be stored. Do not claim it was.";
+          : `The lesson was NOT stored. Reason: ${stored.error}\nDo not claim it was recorded.`;
       }
     })
   };

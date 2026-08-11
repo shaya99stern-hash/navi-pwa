@@ -2,7 +2,6 @@
 
 import {
   FolderKanban,
-  GitBranch,
   MessageCircle,
   Pin,
   PinOff,
@@ -10,23 +9,19 @@ import {
   RefreshCw,
   Settings,
   Shapes,
-  SlidersHorizontal,
   SquarePen,
-  Terminal,
   Trash2,
   UserRound,
   X
 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { NaviMode, StoredChat } from "@/lib/ai/types";
+import type { NaviMode, NaviProject, StoredChat } from "@/lib/ai/types";
 import { searchConversations } from "@/lib/memory";
 import { NAVI_MODES } from "@/lib/chat";
 import { PWA_UPDATE_STATUS_EVENT, requestPwaUpdate, type PwaUpdateStatus } from "@/lib/pwa-update";
 import { haptic } from "@/lib/ui/haptics";
 import { versionLabel } from "@/lib/version";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
-import { releaseOverlaysForNavigation } from "@/lib/ui/overlay-route";
 
 type Props = {
   open: boolean;
@@ -43,18 +38,20 @@ type Props = {
   onClose: () => void;
   onNew: () => void;
   onProjects: () => void;
+  /** Projects, listed in the sidebar rather than hidden behind a sheet. */
+  projects: NaviProject[];
+  activeProjectId: string | null;
+  /** Open a project: makes it active and shows its conversations. */
+  onOpenProject: (id: string) => void;
   onArtifacts: () => void;
   onSettings: () => void;
-  onCustomize: () => void;
-  /** Code mode's second destination: the keys and accounts the work needs. */
-  onConnectors: () => void;
   onOpen: (chat: StoredChat) => void;
   onRename: (id: string, title: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onCustomize, onConnectors, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, projects, activeProjectId, onOpenProject, onArtifacts, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
   /* Null until the user picks; the persisted value is the source of truth
@@ -131,18 +128,6 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
     haptic("selection", haptics);
     onClose();
     present();
-  }
-
-  /* Developer is a route, not a sheet, and that difference matters to the
-     history. Closing the drawer normally unwinds the entry the drawer pushed —
-     correct when you dismiss it, wrong when you are leaving for a real screen,
-     because the unwind lands after the router has already navigated and
-     cancels it. That is why Developer opened and then bounced straight back to
-     the conversation. */
-  function leaveForRoute() {
-    haptic("selection", haptics);
-    releaseOverlaysForNavigation();
-    onClose();
   }
 
   function showAllChats() {
@@ -261,49 +246,72 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
             <MessageCircle size={19} strokeWidth={1.8} className="text-secondary" />
             Chats
           </button>
-          {/* The drawer follows the mode.
-              Switching modes changed routing and the system prompt and nothing
-              a person could see, which is what made the segmented control read
-              as decoration. Code mode is about a repository and what it
-              deploys, so the drawer offers that; Chat mode is about the work
-              you keep, so it offers projects. Artifacts belong to both. */}
-          {mode === "code" ? (
-            <>
-              <Link href="/settings/Developer" onClick={leaveForRoute} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-                <Terminal size={19} strokeWidth={1.8} className="text-secondary" />
-                Developer
-              </Link>
-              {/* Connectors, not "Repository".
-                  The row said Repository and called the same handler as
-                  Customize two rows below it, so both opened the Skills page —
-                  a row named after a thing the app has no screen for, wired to
-                  a screen that has nothing to do with it. Code mode's real
-                  second destination is where the GitHub token and the model
-                  keys live, and where each one can be tested. */}
-              <button type="button" onClick={() => openSheet(onConnectors)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-                <GitBranch size={19} strokeWidth={1.8} className="text-secondary" />
-                Connectors and keys
-              </button>
-            </>
-          ) : (
-            <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-              <FolderKanban size={19} strokeWidth={1.8} className="text-secondary" />
-              Projects
-            </button>
-          )}
+          {/* Projects in both modes.
+              The drawer used to swap this row out for Developer and
+              "Connectors and keys" whenever Code mode was on — configuration
+              surfaces, sitting in primary navigation, replacing the user's own
+              content. That is the "why is all this stuff in this side panel"
+              complaint, and it is a real category error rather than a matter of
+              taste: the sidebar answers *what do I have*, Settings answers
+              *how is this set up*. Both of those rows live in Settings already,
+              and Settings → Developer now actually opens instead of bouncing
+              back, so nothing is lost by holding the line. */}
+          <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+            <FolderKanban size={19} strokeWidth={1.8} className="text-secondary" />
+            Projects
+          </button>
           <button type="button" onClick={() => openSheet(onArtifacts)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <Shapes size={19} strokeWidth={1.8} className="text-secondary" />
             Artifacts
           </button>
-          {/* The entry point to Skills, Playbooks, and Connectors — otherwise
-              reachable only by going through Settings. */}
-          <button type="button" onClick={() => openSheet(onCustomize)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <SlidersHorizontal size={19} strokeWidth={1.8} className="text-secondary" />
-            Customize
-          </button>
         </nav>
 
         <div ref={listRef} className="scroll-area min-h-0 flex-1 overflow-y-auto px-2 pb-5 pt-3">
+          {/* Projects, in the sidebar where they belong.
+              They existed only behind a sheet, so a project was something you
+              made once and then never saw again — which is most of why the one
+              project in the exported data has no conversations in it. A project
+              you cannot see is a project you do not file anything into.
+
+              Hidden while searching: results are ranked across everything, and
+              a fixed section above them would push the matches off screen. */}
+          {!normalized && projects.length ? (
+            <>
+              <div className="flex items-center justify-between px-3 pb-1">
+                <span className="text-[0.75rem]/4 font-semibold text-tertiary">Projects</span>
+                <button
+                  type="button"
+                  onClick={() => openSheet(onProjects)}
+                  className="min-h-8 rounded-full px-2 text-[0.75rem]/4 font-semibold text-secondary active:bg-elev-2"
+                >
+                  All
+                </button>
+              </div>
+              {projects.slice(0, 6).map((project) => {
+                const count = chats.filter((chat) => chat.projectId === project.id).length;
+                return (
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() => { haptic("selection", haptics); onClose(); onOpenProject(project.id); }}
+                    className={`flex min-h-[44px] w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left ${activeProjectId === project.id ? "bg-elev-2" : "active:bg-elev-2"}`}
+                  >
+                    <FolderKanban size={17} strokeWidth={1.8} className="shrink-0 text-secondary" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[0.9375rem]/5 font-normal text-primary">{project.name}</span>
+                      {/* The count is what makes filing feel worthwhile, and
+                          what makes an empty project obvious. */}
+                      <span className="block text-[0.75rem]/4 font-normal text-tertiary">
+                        {count === 0 ? "No conversations yet" : `${count} conversation${count === 1 ? "" : "s"}`}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              <div className="h-3" aria-hidden="true" />
+            </>
+          ) : null}
+
           {pinned.length ? (
             <>
               <div className="px-3 pb-1 text-[0.75rem]/4 font-semibold text-tertiary">Pinned</div>

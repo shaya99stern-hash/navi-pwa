@@ -59,14 +59,32 @@ function supabaseKey(): string | undefined {
   return value || undefined;
 }
 
+/**
+ * Why the last write failed, in the caller's words rather than a shrug.
+ *
+ * `if (!response.ok) return null` threw away the one thing anybody needed.
+ * PostgREST says precisely what is wrong — the table does not exist, the JWT
+ * has no `sub`, row-level security refused the insert — and all of it was
+ * discarded, so `rememberSkill` could only report "no". The model, asked why,
+ * did what a model does with a failure it cannot see: it invented a cause. The
+ * chat history has it confidently blaming Supabase connectivity, then telling
+ * the user their skills "cannot be saved permanently by me in this
+ * environment... there is no workaround", which is false — the tool exists and
+ * the table is defined. A silent failure became a capability the app denied
+ * having.
+ */
 async function request(
   clerkToken: string,
   path: string,
-  init: { method?: string; body?: unknown; prefer?: string } = {}
+  init: { method?: string; body?: unknown; prefer?: string } = {},
+  onFailure?: (reason: string) => void
 ): Promise<unknown> {
   const url = supabaseUrl();
   const key = supabaseKey();
-  if (!url || !key) return null;
+  if (!url || !key) {
+    onFailure?.("Cloud memory is not configured on this deployment (no Supabase URL or key).");
+    return null;
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -83,10 +101,38 @@ async function request(
       signal: controller.signal,
       cache: "no-store"
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => "")).slice(0, 300);
+      /* 404 on the table is the single likeliest cause and the one nobody can
+         guess from "it failed": it means the migration was never applied to
+         this project, so every write has always failed and always will until
+         it is. Worth naming outright rather than leaving as a status code. */
+      /* The two failures worth naming, because neither is guessable from a
+         status code and they have completely different fixes.
+
+         404: the tables are not there — the migration was never applied.
+
+         401/403 with the tables present is the more likely one here, and it
+         was my own wrong guess for a whole round: the schema is fine, and
+         Supabase simply does not trust the Clerk token. `auth.jwt() ->> 'sub'`
+         then evaluates to null, every row-level-security policy compares
+         against null, and every read and write is refused — which looks
+         exactly like a missing table from the outside. The fix is not SQL; it
+         is registering Clerk as a third-party auth provider in the Supabase
+         project so it will verify Clerk's JWTs. */
+      onFailure?.(response.status === 404
+        ? `The cloud memory tables do not exist on this Supabase project — the migration in supabase/migrations has not been applied. (404: ${detail || "not found"})`
+        : response.status === 401 || response.status === 403
+          ? `Supabase rejected the request as unauthorised (${response.status}). The tables exist, so this is almost certainly the Clerk token not being trusted: add Clerk as a third-party auth provider in the Supabase project, or every policy will compare against a null user and refuse everything. (${detail || "no detail"})`
+          : `Supabase refused the write: ${response.status}${detail ? ` ${detail}` : ""}`);
+      return null;
+    }
     if (response.status === 204) return "ok";
     return await response.json();
-  } catch {
+  } catch (error) {
+    onFailure?.(error instanceof Error && error.name === "AbortError"
+      ? "Cloud memory timed out."
+      : `Cloud memory could not be reached: ${error instanceof Error ? error.message : "unknown error"}`);
     return null;
   } finally {
     clearTimeout(timer);
@@ -120,11 +166,13 @@ export async function rememberSkill(
   clerkToken: string,
   userId: string,
   skill: { name: string; description?: string; instructions: string; sourceUrl?: string }
-): Promise<LearnedSkill | null> {
+): Promise<{ skill: LearnedSkill } | { error: string }> {
   const name = skill.name.trim().slice(0, MAX_NAME_CHARS);
   const instructions = skill.instructions.trim().slice(0, MAX_INSTRUCTION_CHARS);
-  if (!name || !instructions) return null;
+  if (!name) return { error: "A skill needs a name." };
+  if (!instructions) return { error: "A skill needs instructions to store." };
 
+  let failure = "";
   const rows = await request(clerkToken, `${TABLE}?on_conflict=user_id,name`, {
     method: "POST",
     body: {
@@ -136,9 +184,10 @@ export async function rememberSkill(
       updated_at: new Date().toISOString()
     },
     prefer: "resolution=merge-duplicates,return=representation"
-  });
+  }, (reason) => { failure = reason; });
   const row = Array.isArray(rows) ? (rows[0] as Row | undefined) : undefined;
-  return row ? toSkill(row) : null;
+  if (row) return { skill: toSkill(row) };
+  return { error: failure || "The store accepted the request but returned no row." };
 }
 
 export async function forgetSkill(clerkToken: string, id: string): Promise<boolean> {
