@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
 import { resolveVoiceLanguage } from "@/lib/ui/speech";
 import { recordingSupported, startRecording, type RecordingSession } from "@/lib/ui/recorder";
+import { createTurnDetector } from "@/lib/ui/conversation";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 /**
@@ -65,6 +66,16 @@ export function VoiceModeSheet({
   const [supported, setSupported] = useState<boolean | null>(null);
   const language = resolveVoiceLanguage(voiceLanguage);
   const [transcript, setTranscript] = useState("");
+  /**
+   * The transcript as a ref, because hands-free reads it from a callback.
+   *
+   * `stop()` is invoked from the recorder's level callback, which closes over
+   * the render that started the recording — so a second pass appending to
+   * `transcript` would append to whatever it was one turn ago. The state drives
+   * the display and this drives the appending; `writeTranscript` is the only
+   * thing that sets either, so they cannot drift.
+   */
+  const transcriptRef = useRef("");
   /** Between stopping and the words arriving. Its own state, because it is its
       own thing to look at — not a variety of idle. */
   const [transcribing, setTranscribing] = useState(false);
@@ -73,6 +84,19 @@ export function VoiceModeSheet({
   const [level, setLevel] = useState(0);
   const [speakReply, setSpeakReply] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Hands-free. Off by default, and that is deliberate rather than timid: it
+   * holds the microphone open across a whole conversation, which is not
+   * something to switch on for someone without asking.
+   */
+  const [conversation, setConversation] = useState(false);
+  /** True while the reply is being read aloud, so listening waits for it. */
+  const [speaking, setSpeaking] = useState(false);
+  const detector = useRef(createTurnDetector());
+  /* Guards the restart. `busy`, `speaking` and `listening` all settle at
+     slightly different moments, and without this the effect that restarts
+     listening can fire twice on the same gap and open two recorders. */
+  const restarting = useRef(false);
 
   const combined = useMemo(() => transcript.trim(), [transcript]);
 
@@ -112,6 +136,12 @@ export function VoiceModeSheet({
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  /** The one place either copy of the transcript is written. */
+  function writeTranscript(next: string) {
+    transcriptRef.current = next;
+    setTranscript(next);
+  }
+
   function persistLanguage(next: string) {
     onVoiceLanguage(next);
     haptic("selection", haptics);
@@ -128,8 +158,21 @@ export function VoiceModeSheet({
 
     setError(null);
     try {
+      detector.current.reset(Date.now());
       recorderRef.current = await startRecording({
-        onLevel: setLevel,
+        onLevel: (value) => {
+          setLevel(value);
+          /* In conversation mode the level is not only a waveform, it is the
+             end-of-turn signal. Pressing Stop is the step that makes this a
+             dictation box rather than a conversation. */
+          if (!conversation) return;
+          const ended = detector.current.push(value, Date.now());
+          if (!ended) return;
+          /* Nothing was said, so there is no clip worth transcribing — stop
+             and let the restart effect open a fresh turn. */
+          if (ended === "silent") void stop({ discard: true });
+          else void stop();
+        },
         onError: (message) => setError(message),
         /* The picker above now reaches the transcriber. It always stored a
            value and never sent it anywhere. */
@@ -147,18 +190,32 @@ export function VoiceModeSheet({
 
   /* Appends rather than replaces: Start / Stop / Start again is how a long
      thought gets spoken, and each pass should add to the turn. */
-  async function stop() {
+  async function stop({ discard = false }: { discard?: boolean } = {}) {
     const session = recorderRef.current;
     if (!session) return;
     recorderRef.current = null;
     haptic("impact-light", haptics);
     setListening(false);
     setLevel(0);
+    if (discard) { session.cancel(); return; }
     setTranscribing(true);
     try {
       const text = (await session.stop()).trim();
-      if (text) setTranscript((current) => `${current}${current.trim() ? " " : ""}${text}`);
-      else setError("Nothing was picked up. Try again a little closer to the microphone.");
+      if (!text) {
+        /* In conversation mode this is a non-event: the room was noisy enough
+           to open a turn and there were no words in it. Saying so every few
+           seconds, hands-free, would be its own kind of broken. */
+        if (!conversation) setError("Nothing was picked up. Try again a little closer to the microphone.");
+        return;
+      }
+      /* Appends rather than replaces, read from the ref so a second pass adds
+         to the turn rather than to a stale copy of it. */
+      const current = transcriptRef.current;
+      const merged = `${current}${current.trim() ? " " : ""}${text}`.trim();
+      writeTranscript(merged);
+      /* The review step is what makes this dictation. With hands-free on, the
+         turn goes as soon as the words exist. */
+      if (conversation && online && !busy) send(merged);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "That could not be transcribed.");
       haptic("error", haptics);
@@ -167,13 +224,49 @@ export function VoiceModeSheet({
     }
   }
 
+  /**
+   * Open the next turn once the exchange has fully settled.
+   *
+   * Three things have to be finished, and they finish at different moments:
+   * the request (`busy`), the reply being read aloud (`speaking`), and this
+   * sheet's own recorder. Restarting on any one of them alone is how a
+   * conversation ends up listening to itself — the microphone opens while the
+   * reply is still playing out of the speaker, transcribes it, and sends it
+   * back as the next question.
+   */
+  useEffect(() => {
+    if (!open || !conversation || !online) return;
+    if (busy || speaking || listening || transcribing || restarting.current) return;
+    restarting.current = true;
+    /* A beat before reopening. Without it the microphone catches the tail of
+       the speaker and the first syllable of the reply becomes the next turn. */
+    const timer = window.setTimeout(() => {
+      restarting.current = false;
+      void start();
+    }, 450);
+    return () => { window.clearTimeout(timer); restarting.current = false; };
+  }, [busy, conversation, listening, online, open, speaking, transcribing]);
+
+  /**
+   * Whether the reply is still being spoken.
+   *
+   * `speechSynthesis` has no reliable end event across engines — the same
+   * reason `message-row` polls it rather than listening for one. Polled only
+   * while hands-free is on, so an idle sheet costs nothing.
+   */
+  useEffect(() => {
+    if (!open || !conversation || !speakReply || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const poll = window.setInterval(() => setSpeaking(window.speechSynthesis.speaking), 300);
+    return () => { window.clearInterval(poll); setSpeaking(false); };
+  }, [conversation, open, speakReply]);
+
   function resetAndClose() {
     recorderRef.current?.cancel();
     recorderRef.current = null;
     setListening(false);
     setTranscribing(false);
     setLevel(0);
-    setTranscript("");
+    writeTranscript("");
     setError(null);
     onClose();
   }
@@ -190,18 +283,30 @@ export function VoiceModeSheet({
     resetAndClose();
   }
 
-  function sendTranscript() {
-    if (!combined || busy || !online) return;
-    const text = combined;
+  /**
+   * Hand a turn to the conversation.
+   *
+   * One path for both the Send button and the hands-free auto-send, because
+   * they must clear exactly the same state — the earlier version cleared it
+   * inline, and a second caller doing "nearly the same" is how a stale
+   * transcript ends up prepended to the next turn.
+   */
+  function send(text: string) {
+    if (!text || busy || !online) return;
     haptic("impact-light", haptics);
     recorderRef.current?.cancel();
     recorderRef.current = null;
     setListening(false);
     setTranscribing(false);
     setLevel(0);
-    setTranscript("");
+    writeTranscript("");
     setError(null);
     onSendTranscript(text, speakReply);
+  }
+
+  function sendTranscript() {
+    if (!combined || busy || !online) return;
+    send(combined);
     onClose();
   }
 
@@ -301,6 +406,42 @@ export function VoiceModeSheet({
 
           {error ? <div className="mt-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.75rem]/4 font-medium text-danger" role="alert">{error}</div> : null}
           {!online ? <div className="mt-3 rounded-2xl border border-[var(--accent-warning)] bg-elev-2 p-3 text-[0.75rem]/4 font-medium text-warning">Voice turns require a connection. Keyboard dictation can still fill the saved local draft.</div> : null}
+
+          {/* Hands-free. Above the read-aloud switch because it is the larger
+              change — it turns four deliberate acts per turn into none — and
+              because it depends on that one: a conversation you cannot hear is
+              not a conversation. Off by default; holding the microphone open
+              across a whole exchange is not something to start unasked. */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={conversation}
+            onClick={() => {
+              setConversation((value) => {
+                const next = !value;
+                /* Reading the reply aloud is what closes the loop, so turning
+                   this on turns that on rather than leaving someone in a
+                   hands-free conversation with a silent partner. */
+                if (next) setSpeakReply(true);
+                else if (listening) void stop({ discard: true });
+                return next;
+              });
+              haptic("selection", haptics);
+            }}
+            className="mt-4 flex min-h-14 w-full items-center gap-3 rounded-2xl px-2 text-left active:bg-elev-2"
+          >
+            <span className={`flex h-8 w-8 items-center justify-center rounded-full ${conversation ? "bg-accent text-white" : "bg-elev-3 text-secondary"}`}>
+              {conversation ? <Check size={17} /> : <Mic size={17} />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[0.875rem]/5 font-semibold text-primary">Hands-free conversation</span>
+              <span className="block text-[0.6875rem]/4 font-medium text-tertiary">
+                {conversation
+                  ? "Speak, pause, and it answers. Listening resumes on its own."
+                  : "Sends when you stop speaking, then listens again — no buttons"}
+              </span>
+            </span>
+          </button>
 
           <button
             type="button"
