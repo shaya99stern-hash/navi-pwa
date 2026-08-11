@@ -52,15 +52,22 @@ check("a dropped attachment leaves a note", route.includes("was attached earlier
    to Chat's. */
 
 check("chat mode is stated, not merely implied", route.includes("function chatModeInstruction"), true);
-check("mode guidance follows the user's own choice", route.includes('productMode === "code" ? codeModeInstruction(toolNames.includes("commit_own_source")) : chatModeInstruction()'), true);
+check("mode guidance follows the user's own choice", route.includes('productMode === "code" ? codeModeInstruction(toolNames.includes("commit_own_source"), toolNames.includes("github_open_pr")) : chatModeInstruction()'), true);
 /* The capability statement has to be derived from the tools actually present.
    It used to be flat prose ending "those tools are read-only... say it has to
    be applied by hand" — on every Code-mode turn, including the ones where
    `commit_own_source` was in the toolset. Asked to change the app, Navi Soul
    handed back a diff and declined, because that is what it had been told. */
-check("code mode takes whether it can commit", /function codeModeInstruction\(canCommit: boolean\)/.test(route), true);
+check("code mode takes whether it can commit", /function codeModeInstruction\(canCommit: boolean, canWriteRepos: boolean\)/.test(route), true);
+/* Two repositories, two mechanisms, and conflating them is what convinced the
+   owner their other repositories were permanently off limits. This app's own
+   source goes through the deployment's token and deploys; anything else goes
+   through the user's own GitHub account, on a branch, via a pull request. */
+check("it states the other-repository path separately", /canWriteRepos\s*\?\s*"You can also work in the user's other GitHub repositories/.test(route), true);
+check("other repositories are never committed to directly", /never commit to a default branch in someone's repository/.test(route), true);
+check("read-only is not described as permanent", /Do not describe this as a permanent limitation/.test(route), true);
 check("it says it can commit when it can", /canCommit\s*\?\s*"You can commit to NaviOS's own repository/.test(route), true);
-check("read-only is now the other branch, not the only one", /: "Those tools are read-only/.test(route), true);
+check("read-only applies only when neither path exists", /!canCommit && !canWriteRepos/.test(route), true);
 check("the old dispatch-keyed form is gone", /\bmode === "code" \? codeModeInstruction\(\) : ""/.test(route), false);
 
 /* ── Dictation survives a pause ──────────────────────────────────────────────

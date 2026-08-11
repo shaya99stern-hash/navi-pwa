@@ -291,7 +291,7 @@ export function buildToolset(context: ToolsetContext): ToolSet {
        the one capability that must never be trimmed or gated behind a group:
        the turns where it matters most are exactly the ones where something is
        already broken, and a model that cannot look is a model that invents. */
-    ...buildDiagnosticTools({ clerkToken, onActivity }),
+    ...buildDiagnosticTools({ clerkToken, hasUserGithub: Boolean(githubToken), onActivity }),
     ...buildSkillTools(onActivity),
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity }),
