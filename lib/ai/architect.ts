@@ -50,6 +50,19 @@ export type ExecutionPlan = {
    * requirements go here.
    */
   steps: string[];
+  /**
+   * What is most likely to be wrong with the answer, named before it exists.
+   *
+   * The plan already says what to do and what to satisfy. Nothing said what
+   * would probably go wrong, so the reviewer rediscovered it from scratch every
+   * time — and a reviewer told "look for errors" is measurably worse than one
+   * told "the off-by-one in the pagination boundary is the likely defect".
+   *
+   * Written by the planner, which is already reasoning about the request, so it
+   * costs no extra round trip. Bounded at three: a risk list long enough to
+   * cover everything is a list the reviewer skims.
+   */
+  risks: string[];
   /** Whether the output is worth a review pass before it is shown. */
   needsReview: boolean;
   /** How the lane was chosen, so a bad route can be diagnosed rather than guessed at. */
@@ -144,10 +157,10 @@ export function heuristicPlan(options: {
   const { text, hasFiles, imageRequested, audioRequested, tools, effort } = options;
 
   if (imageRequested) {
-    return { lane: "image", summary: "Generating an image.", constraints: IMAGE_CONSTRAINTS, steps: [], needsReview: false, source: "heuristic" };
+    return { lane: "image", summary: "Generating an image.", constraints: IMAGE_CONSTRAINTS, steps: [], risks: [], needsReview: false, source: "heuristic" };
   }
   if (audioRequested) {
-    return { lane: "audio", summary: "Generating audio.", constraints: [], steps: [], needsReview: false, source: "heuristic" };
+    return { lane: "audio", summary: "Generating audio.", constraints: [], steps: [], risks: [], needsReview: false, source: "heuristic" };
   }
 
   const code = CODE_SIGNAL.test(text);
@@ -170,6 +183,10 @@ export function heuristicPlan(options: {
     /* A heuristic plan has no planner-authored steps, so it shows no card —
        the fixed build rules are exactly what must not appear. */
     steps: [],
+    /* No model behind this plan, so it has no opinion about what will go
+       wrong. Empty is the honest answer: a guessed risk sends the reviewer
+       looking in the wrong place, which is worse than not directing it. */
+    risks: [],
     // Reviewing prose costs a round trip and rarely changes it. Code is
     // different: it either runs or it does not.
     needsReview: lane === "code" && effort !== "low",
@@ -251,7 +268,7 @@ function plannerRoute(availability: ProviderAvailability): ProviderRoute | null 
 
 const PLANNER_SYSTEM = `You classify a request for a routing system. Reply with JSON only, no prose and no code fence.
 
-{"lane":"code|research|reasoning|general","summary":"under 8 words, what is being done","constraints":["at most 3, each one a checkable requirement the answer must satisfy"]}
+{"lane":"code|research|reasoning|general","summary":"under 8 words, what is being done","constraints":["at most 3, each one a checkable requirement the answer must satisfy"],"risks":["at most 3, each one a specific way this particular answer is likely to be wrong, phrased as what to check"]}
 
 Lanes:
 - code — writing, fixing, reviewing, or explaining software, or anything about a repository, build, or deployment.
@@ -259,9 +276,11 @@ Lanes:
 - reasoning — a judgement, comparison, design, diagnosis, or plan that needs working through.
 - general — conversation, writing, or a question answerable directly.
 
-Choose by what the answer must *do*, not by vocabulary. Pick code over research when the goal is a fix rather than a citation.`;
+Choose by what the answer must *do*, not by vocabulary. Pick code over research when the goal is a fix rather than a citation.
 
-type PlannerReply = { lane?: unknown; summary?: unknown; constraints?: unknown };
+Risks are the specific failure this request invites, not generic caution. "Check the loop bound when the list is empty" is useful; "check for errors" is not. If nothing about the request is particularly error-prone, return an empty array rather than inventing something.`;
+
+type PlannerReply = { lane?: unknown; summary?: unknown; constraints?: unknown; risks?: unknown };
 
 const VALID_LANES = new Set<ExecutionLane>(["code", "research", "reasoning", "general"]);
 
@@ -320,6 +339,12 @@ export async function architectPlan(options: {
         .slice(0, 3)
       : [];
 
+    const risks = Array.isArray(parsed?.risks)
+      ? parsed.risks.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .map((item) => item.trim().slice(0, 200))
+        .slice(0, 3)
+      : [];
+
     return {
       lane,
       summary,
@@ -328,6 +353,7 @@ export async function architectPlan(options: {
          this stops being a mobile PWA. */
       constraints: [...constraintsFor(lane), ...extra],
       steps: extra,
+      risks,
       needsReview: lane === "code" && options.effort !== "low",
       source: "architect"
     };
@@ -482,6 +508,14 @@ export async function reviewDraft(options: {
       prompt: [
         `Original request:\n${request.slice(0, 3_000)}`,
         plan.constraints.length ? `Constraints:\n${plan.constraints.map((item) => `- ${item}`).join("\n")}` : "",
+        /* Above the draft, and named as the first thing to check. The planner
+           reasoned about this request before the answer existed, so its guess
+           at what will go wrong is worth more than the reviewer's fresh one —
+           and a reviewer pointed at a specific boundary finds the defect far
+           more reliably than one told to look for errors. */
+        plan.risks.length
+          ? `Most likely failures in this particular answer — check these first:\n${plan.risks.map((item) => `- ${item}`).join("\n")}`
+          : "",
         `Draft answer:\n${draft}`
       ].filter(Boolean).join("\n\n"),
       maxOutputTokens: REVIEW_MAX_TOKENS,

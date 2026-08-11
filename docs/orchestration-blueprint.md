@@ -35,9 +35,19 @@ via `constraintBlock`, and again into the reviewer as the checklist the draft is
 judged against. That is what makes verification more than "read it again": the
 reviewer has a written standard that was fixed *before* the answer existed.
 
-### The gap
+### Built
 
-**Failure points are never named.** The plan says what to do and what to
+`risks[]` is on the plan. The planner names at most three specific ways *this*
+answer is likely to be wrong, phrased as what to check, and they are handed to
+the reviewer above the draft as the first thing to look at. Generic caution is
+explicitly refused — "check the loop bound when the list is empty" is useful,
+"check for errors" is not — and the heuristic plan returns an empty list rather
+than guessing, because a wrong risk points the reviewer at the wrong place,
+which is worse than not directing it at all.
+
+### The gap it closed
+
+**Failure points were never named.** The plan says what to do and what to
 satisfy. Nothing says what is most likely to go wrong, so the reviewer has to
 rediscover it from scratch on every request.
 
@@ -92,10 +102,27 @@ There is one exception already conceded in the code — `tools.web || tools.code
 short-circuits to a tool-capable model regardless of lane, because capability
 beats tier. That exception is the whole argument for the next table generalised.
 
-### The design
+### Built, narrowly
 
-A capability matrix consulted **before** the lane, in the same position the
-tool-capability check occupies now.
+One row of the matrix ships: **mechanical work takes the fastest capable
+model**, decided before the lane and after the hard constraints. That was the
+clearest waste — reshaping text, extracting fields, converting a format all
+have one right answer, so reasoning depth buys nothing, and at high effort such
+a request could reach the metered frontier route and be billed for thinking
+about a transformation.
+
+Deliberately narrow: the classifier requires an instruction verb to *lead* the
+message, which a question almost never does. Misclassifying reasoning as
+mechanical sends real work to a shallow model, which is far worse than missing
+an optimisation. Verified against ten cases including "why does my formatter
+keep crashing", "what is the best way to convert a monolith to microservices"
+and "should I encode secrets in the URL" — all correctly left to reason.
+
+The remaining rows below are unbuilt. They need per-provider benchmarking to
+justify, and asserting a preference without it would be the invented-number
+failure this document exists to avoid.
+
+### The design
 
 | Work | Primary | Second | Why |
 |---|---|---|---|
@@ -263,8 +290,8 @@ instruction-following and is paid for on every turn.
 | 1 | ~~Re-review corrections~~ | — | **built** |
 | 2 | Turn on `tools.code` | a switch | high — converts review to measurement |
 | 3 | Set `NAVI_FRONTIER_MODEL` | one variable | high — raises the ceiling |
-| 4 | `risks[]` in the plan | small | high — directs the reviewer |
-| 5 | Task-type matrix (§2) | medium | medium |
+| 4 | ~~`risks[]` in the plan~~ | — | **built** |
+| 5 | ~~Task-type matrix (§2)~~ | — | **built, narrowly** |
 | 6 | Parallel decomposition (§4) | large | narrow — few requests qualify |
 
 Items 2 and 3 are settings, not engineering, and outrank most of the
