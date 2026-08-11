@@ -140,40 +140,72 @@ export function youTubeVideoId(url: URL): string | null {
  * English over other languages, falling back gracefully. Null when the video
  * has no captions at all, which the caller reports rather than hides.
  */
-async function fetchYouTubeTranscript(videoId: string, signal: AbortSignal): Promise<string | null> {
+/**
+ * Why a transcript could not be read — as distinct from whether one exists.
+ *
+ * Every one of these used to be `null`, and the caller turned `null` into
+ * "that video has no caption track". Five different failures, one confident
+ * claim about the world, and the app said it three times in a row to someone
+ * who was looking at the captions on their own screen.
+ *
+ * Only `no-captions` is a fact about the video. The rest are facts about *us*:
+ * YouTube served a consent or bot-check page, the markup moved, the caption
+ * list would not parse. Stating any of those as "this video has no subtitles"
+ * is inventing a property of something we failed to look at — the same failure
+ * as blaming Supabase for a write nobody could observe.
+ */
+type TranscriptFailure = "unreachable" | "no-caption-list" | "no-captions" | "empty";
+
+async function fetchYouTubeTranscript(
+  videoId: string,
+  signal: AbortSignal
+): Promise<{ text: string } | { failure: TranscriptFailure }> {
   const page = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`, {
     headers: { "Accept-Language": "en", "User-Agent": "Mozilla/5.0 (compatible; NaviOSHub/1.0)" },
     signal
   });
-  if (!page.ok) return null;
+  if (!page.ok) return { failure: "unreachable" };
   const html = await page.text();
   const title = /<title>([^<]*)<\/title>/.exec(html)?.[1]?.replace(/ - YouTube$/, "").trim() ?? "";
 
   const tracksMatch = /"captionTracks":(\[.*?\])/.exec(html);
-  if (!tracksMatch) return null;
+  /* No caption list in the page is *not* the same as a video without captions.
+     It is overwhelmingly the signal that we were served something other than
+     the watch page. */
+  if (!tracksMatch) return { failure: "no-caption-list" };
   let tracks: Array<{ baseUrl?: string; languageCode?: string; kind?: string }>;
-  try { tracks = JSON.parse(tracksMatch[1]); } catch { return null; }
+  try { tracks = JSON.parse(tracksMatch[1]); } catch { return { failure: "no-caption-list" }; }
+  /* Here — and only here — an empty list really does mean the video has none. */
+  if (!tracks.length) return { failure: "no-captions" };
   const track = tracks.find((entry) => entry.languageCode?.startsWith("en") && entry.kind !== "asr")
     ?? tracks.find((entry) => entry.languageCode?.startsWith("en"))
     ?? tracks.find((entry) => entry.kind !== "asr")
     ?? tracks[0];
-  if (!track?.baseUrl) return null;
+  if (!track?.baseUrl) return { failure: "no-captions" };
 
   const response = await fetch(`${track.baseUrl}&fmt=json3`, { signal });
-  if (!response.ok) return null;
+  if (!response.ok) return { failure: "unreachable" };
   const data = (await response.json()) as { events?: Array<{ segs?: Array<{ utf8?: string }> }> };
   const text = (data.events ?? [])
     .flatMap((event) => (event.segs ?? []).map((seg) => seg.utf8 ?? ""))
     .join("")
     .replace(/\s+/g, " ")
     .trim();
-  if (!text) return null;
+  if (!text) return { failure: "empty" };
 
   const clipped = text.length > MAX_DOCUMENT_FETCH_CHARS
     ? `${text.slice(0, MAX_DOCUMENT_FETCH_CHARS)}\n\n[Transcript truncated at ${MAX_DOCUMENT_FETCH_CHARS} characters.]`
     : text;
-  return `Transcript of YouTube video${title ? ` “${title}”` : ""} (${videoId}):\n\n${clipped}`;
+  return { text: `Transcript of YouTube video${title ? ` “${title}”` : ""} (${videoId}):\n\n${clipped}` };
 }
+
+/** One sentence per cause, and only one of them is about the video. */
+const TRANSCRIPT_FAILURE_TEXT: Record<TranscriptFailure, string> = {
+  unreachable: "YouTube did not return the video page, so the transcript could not be read. This is a failure to reach it, not a statement about the video — say exactly that in one sentence, and do not claim the video lacks captions.",
+  "no-caption-list": "The page came back without a caption list, which usually means YouTube served a consent or bot-check page rather than the video. Say that the transcript could not be retrieved and that this is not evidence the video lacks subtitles. Offer once to work from a summary the user pastes; do not list alternatives at length.",
+  "no-captions": "This video genuinely has no caption track — the caption list was returned and it was empty. Say so in one sentence.",
+  empty: "The caption track was found but contained no text. Say the transcript came back empty; do not conclude the video has no captions."
+};
 
 /** A model-supplied URL is untrusted input aimed at our own network. */
 export function assertFetchableUrl(raw: string): URL {
@@ -233,8 +265,11 @@ export function buildWebTools({ search, signal, onActivity = () => {} }: {
           const videoId = youTubeVideoId(target);
           if (videoId) {
             onActivity("Reading the video transcript");
-            const transcript = await withTimeout((inner) => fetchYouTubeTranscript(videoId, inner), signal);
-            return transcript ?? "That video has no caption track, so there is no transcript to read. Say so rather than guessing at its contents.";
+            const transcript = await withTimeout(
+              (inner) => fetchYouTubeTranscript(videoId, inner),
+              signal
+            );
+            return "text" in transcript ? transcript.text : TRANSCRIPT_FAILURE_TEXT[transcript.failure];
           }
 
           onActivity(`Reading ${target.hostname}`);

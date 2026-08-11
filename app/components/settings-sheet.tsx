@@ -352,6 +352,37 @@ export function SettingsSheet({
     chats: number; facts: number; skills: number; lessons: number; skillNames: string[]; lessonNames: string[];
   }>({ loaded: false, configured: false, signedIn: false, chats: 0, facts: 0, skills: 0, lessons: 0, skillNames: [], lessonNames: [] });
   const lastTapAt = useRef(0);
+  /* Teaching a skill directly, bypassing the model's tool call entirely. */
+  const [teach, setTeach] = useState<{ name: string; instructions: string; saving: boolean; status: { ok: boolean; message: string } | null }>(
+    { name: "", instructions: "", saving: false, status: null }
+  );
+
+  async function saveSkill() {
+    setTeach((current) => ({ ...current, saving: true, status: null }));
+    try {
+      const response = await fetch("/api/memory/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: teach.name.trim(), instructions: teach.instructions.trim() })
+      });
+      const data = (await response.json().catch(() => null)) as { error?: string; skill?: { name?: string } } | null;
+      if (!response.ok || !data?.skill) {
+        setTeach((current) => ({
+          ...current,
+          saving: false,
+          status: { ok: false, message: data?.error ?? `The store answered ${response.status}.` }
+        }));
+        return;
+      }
+      setTeach({ name: "", instructions: "", saving: false, status: { ok: true, message: `Saved “${data.skill.name}”. It applies from the next message.` } });
+    } catch (error) {
+      setTeach((current) => ({
+        ...current,
+        saving: false,
+        status: { ok: false, message: error instanceof Error ? error.message : "The request never completed." }
+      }));
+    }
+  }
   /* The microphone self-test. Three rounds of "the mic doesn't work" were
      diagnosed by reading source, and two of those guesses were wrong — so the
      app now answers the question itself instead of being guessed at. */
@@ -1276,7 +1307,63 @@ export function SettingsSheet({
           <>
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
               Skills run instantly on this device — type <span className="font-mono text-primary">/</span> in the composer to use one, even offline.
+              Many also work from ordinary words: “format this json:”, “sha256 of…”, “sort lines:”.
             </p>
+
+            {/* Teaching, without a tool call in the way.
+                Asking Navi Soul to learn something went through `learn_skill`,
+                which meant it depended on the model choosing the tool, filling
+                it correctly, and reporting the result honestly — and when the
+                write failed the model narrated a theory instead of the reason.
+                The chat history has the same request made five times.
+
+                This writes to the same store through the same API and shows
+                whatever the server actually says. It is the shortest path
+                between "keep this" and it being kept, and it is checkable. */}
+            <SectionHeader>Teach Navi Soul something</SectionHeader>
+            <Group>
+              <Row
+                label="New skill"
+                description="Stored against your account and applied in every future conversation."
+                fullWidthControl={
+                  <div>
+                    <input
+                      aria-label="Skill name"
+                      value={teach.name}
+                      onChange={(event) => setTeach({ ...teach, name: event.target.value.slice(0, 120), status: null })}
+                      placeholder="Name, e.g. How I like commit messages"
+                      className="min-h-12 w-full rounded-[12px] bg-elev-2 px-3.5 text-[0.9375rem]/[1.375rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
+                    />
+                    <textarea
+                      aria-label="Skill instructions"
+                      value={teach.instructions}
+                      onChange={(event) => setTeach({ ...teach, instructions: event.target.value.slice(0, 24_000), status: null })}
+                      rows={5}
+                      placeholder="What you want it to know or do, in your own words…"
+                      className="mt-2 min-h-[132px] w-full resize-y rounded-[12px] bg-elev-2 px-3.5 py-3 text-[0.9375rem]/[1.375rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
+                    />
+                    <div className="mt-2 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => { haptic("selection", preferences.haptics); void saveSkill(); }}
+                        disabled={teach.saving || !teach.name.trim() || !teach.instructions.trim()}
+                        className="h-9 rounded-full bg-accent px-4 text-[0.8125rem]/5 font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed disabled:opacity-50"
+                      >
+                        {teach.saving ? "Saving…" : "Teach it"}
+                      </button>
+                      {/* The server's own words, success or failure. A generic
+                          "could not be saved" is what left everyone guessing. */}
+                      {teach.status ? (
+                        <span className={`min-w-0 flex-1 text-[0.75rem]/4 ${teach.status.ok ? "text-success" : "text-danger"}`}>
+                          {teach.status.message}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                }
+              />
+            </Group>
+
             {skillGroups.map((group) => (
               <div key={group.category}>
                 <SectionHeader>{group.category}</SectionHeader>

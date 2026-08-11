@@ -188,5 +188,19 @@ check("a stylesheet rule reads the attribute", css.includes('[data-motion="reduc
 check("the attribute shortens animations, not only transitions",
   /\[data-motion="reduced"\][\s\S]{0,400}animation-duration/.test(css), true);
 
+/* ── Teaching without a tool call in the way ─────────────────────────────
+   Asking Navi Soul to learn something went through `learn_skill`, so it
+   depended on the model choosing the tool, filling it correctly, and
+   reporting the result honestly — and when the write failed it narrated a
+   theory instead of the reason. The same request appears five times in the
+   exported history. This writes to the same store through the same API and
+   shows whatever the server actually says. */
+const skills = block("skills");
+check("Skills offers a direct teach path", skills.includes("Teach Navi Soul something"), true);
+check("it posts to the real store", /fetch\("\/api\/memory\/skills"/.test(body), true);
+check("it reports the server's own message", /data\?\.error \?\? `The store answered/.test(body), true);
+check("a name and instructions are both required",
+  /!teach\.name\.trim\(\) \|\| !teach\.instructions\.trim\(\)/.test(body), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
