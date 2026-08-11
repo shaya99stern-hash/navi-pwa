@@ -581,6 +581,50 @@ export function fallbackRoutes(options: {
 }
 
 /**
+ * Navi-branded engine names, keyed to what a route is *for*.
+ *
+ * The app has a whole routing matrix and never told anyone which part of it
+ * ran. Every reply looked identical whether it came from the fast lane or the
+ * strongest one, so the effort dial had no visible effect, a degraded fallback
+ * was indistinguishable from a good answer, and the owner watching their app
+ * fail had no way to see that three engines were being tried.
+ *
+ * Keyed to capability rather than provider on purpose, and the constraint is
+ * not decoration: nothing user-facing in this app names a third party, and the
+ * system prompt forbids the model from doing it too. Naming the capability is
+ * also the more durable choice — swapping the model behind "the fast one"
+ * should not rename something the user has learned. Same reasoning as
+ * `IMAGE_ENGINES`, and the same shape.
+ */
+const ENGINE_NAMES: Record<ProviderRoute["capability"], string> = {
+  fast: "Navi Swift",
+  balanced: "Navi Core",
+  reasoning: "Navi Deep",
+  tools: "Navi Core",
+  "long-context": "Navi Wide",
+  multimodal: "Navi Vision",
+  coding: "Navi Code"
+};
+
+/**
+ * What to call the engine that answered.
+ *
+ * The frontier route is named apart from its capability because it is the one
+ * route that is categorically different — it is the only one that can cost
+ * money, and a user seeing it should be able to tell.
+ */
+export function engineName(route: ProviderRoute): string {
+  /* Read live rather than compared against `ROUTES.openRouterFrontier.model`,
+     which is resolved once at module load. Every other frontier check in this
+     file reads the environment when it is called, and a predicate that
+     disagrees with its neighbours about whether a route is the frontier one is
+     a bug waiting for the first deployment that sets the variable late. */
+  const frontier = (process.env.NAVI_FRONTIER_MODEL ?? "").trim();
+  if (route.provider === "openrouter" && frontier && route.model === frontier) return "Navi Frontier";
+  return ENGINE_NAMES[route.capability];
+}
+
+/**
  * The route that answers when nothing else did.
  *
  * The cascade had no floor. A request that failed on every configured provider

@@ -21,7 +21,7 @@ import { PROVIDERS, requestTokenCeiling } from "@/lib/ai/provider-registry";
 import { describeRequestSize, estimateTextTokens, estimateToolTokens, measureRequest } from "@/lib/ai/request-size";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
-import { classifyTask, createProviderModel, fallbackRoutes, getProviderAvailability, lastResortRoute, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
+import { classifyTask, createProviderModel, engineName, fallbackRoutes, getProviderAvailability, lastResortRoute, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
 import { markProviderFailure, markProviderSuccess, orderRoutesByHealth } from "@/lib/ai/provider-health";
 import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
@@ -49,7 +49,7 @@ import {
   shouldConsultArchitect,
   type ExecutionPlan
 } from "@/lib/ai/architect";
-import type { ConnectorAccessMode, CustomConnector, EffortLevel, ModelPreset, NaviMode, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
+import type { ConnectorAccessMode, CustomConnector, EffortLevel, ModelPreset, NaviEngineNote, NaviMode, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
 import { APP_KNOWLEDGE, selfRepoKnowledge } from "@/lib/ai/app-knowledge";
@@ -58,6 +58,7 @@ import { ORCHESTRATION_KNOWLEDGE, needsOrchestrationKnowledge } from "@/lib/ai/o
 import { ENGINEERING_DISCIPLINE, needsEngineeringDiscipline } from "@/lib/ai/engineering-discipline";
 import { CODE_CRAFT, needsCodeCraft } from "@/lib/ai/code-craft";
 import { fitReferenceBlocks, needsAppKnowledge, stablePrefix } from "@/lib/ai/prompt/base";
+import { EFFORT_LEVELS } from "@/lib/chat";
 import { csvToMarkdown, documentBlock, extractPdfText } from "@/lib/ai/document-text";
 
 export const runtime = "edge";
@@ -148,6 +149,16 @@ const CEILING_SAFETY_MARGIN = 400;
  * prompt containing them can be weighed.
  */
 const PROMPT_RESERVE_TOKENS = 3_500;
+/**
+ * The effort dial, in the words the effort sheet already uses.
+ *
+ * Derived from `EFFORT_LEVELS` rather than restated, so the badge under a reply
+ * and the control that set it can never drift into calling the same thing two
+ * different names.
+ */
+const EFFORT_LABELS: Record<EffortLevel, string> = Object.fromEntries(
+  EFFORT_LEVELS.map((level) => [level.id, level.label])
+) as Record<EffortLevel, string>;
 
 type ChatRequestBody = {
   messages?: UIMessage[];
@@ -1597,6 +1608,18 @@ export async function POST(request: Request): Promise<Response> {
            Skipping costs one round trip that was going to be refused anyway. */
         if (attemptOutputTokens < MIN_OUTPUT_TOKENS) { tooSmall(input.total); continue; }
         console.info(`Navi Soul sending to ${attempt.label}: ${describeRequestSize({ ...input, output: attemptOutputTokens, total: input.total + attemptOutputTokens }, ceiling)}`);
+
+        /* Which engine is answering, said out loud. Written before the stream
+           rather than after it, so a reply that fails halfway still carries the
+           note explaining which engine produced the half — the case where
+           knowing is worth the most. `recovered` marks a reply that an earlier
+           route dropped: an answer arriving from the second or third attempt is
+           usually the one someone is about to describe as "worse", and that is
+           the explanation. */
+        writer.write({
+          type: "data-engine",
+          data: { engine: engineName(attempt), effort: EFFORT_LABELS[effortLevel], recovered: index > 0 } satisfies NaviEngineNote
+        } as never);
 
         const result = streamText({
         model: createProviderModel(attempt, origin),

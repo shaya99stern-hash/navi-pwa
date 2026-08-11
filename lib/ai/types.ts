@@ -204,6 +204,23 @@ export type GeneratedImagePayload = {
   height?: number;
 };
 
+/**
+ * Which engine answered, and how hard it was asked to work.
+ *
+ * Persistent rather than transient, unlike `NaviStreamStatus`: this is a fact
+ * about the reply that is still true after it finishes, and the question it
+ * answers — "why is this one worse than the last one" — is usually asked long
+ * after the status line has gone.
+ */
+export type NaviEngineNote = {
+  /** Navi-branded name. Never a provider or a raw model id. */
+  engine: string;
+  /** The effort the user asked for, in the words the effort sheet uses. */
+  effort: string;
+  /** True when an earlier route failed and this one picked the request up. */
+  recovered?: boolean;
+};
+
 export type NaviStreamStatus = {
   stage:
     | "gather"

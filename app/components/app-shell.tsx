@@ -201,6 +201,9 @@ export function AppShell({
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastPersistAt = useRef(0);
+  /* Chats already sent for a summarised title. One attempt each: the title is
+     a nicety, and retrying it on every render would turn a nicety into traffic. */
+  const titleRequested = useRef<Set<string>>(new Set());
   const anchoredUserId = useRef<string | null>(null);
   const anchorTop = useRef(0);
   const priorAssistantId = useRef<string | null>(null);
@@ -544,6 +547,62 @@ export function AppShell({
     }, delay);
     return () => window.clearTimeout(timer);
   }, [activeId, activeProjectId, hydrated, incognito, messages, preferences.connectorAccessMode, preferences.saveHistory]);
+
+  /**
+   * A better title for the chat, once, after its first exchange.
+   *
+   * The heuristic title takes the first seven words of the question, which
+   * beats echoing the prompt and still fills the drawer with truncated
+   * openings — "Write me a function that takes" for a thread about parsing
+   * dates. It is hard to scan exactly when scanning matters, which is when
+   * there are enough chats to need the list.
+   *
+   * After the reply rather than during it, and in its own request: the chat
+   * route's budget is time to first token, and nobody waiting for an answer is
+   * helped by a title. Failure is silent and total — the heuristic title is
+   * already on screen and stays there.
+   */
+  useEffect(() => {
+    if (!hydrated || incognito || !preferences.saveHistory) return;
+    if (status !== "ready" || titleRequested.current.has(activeId)) return;
+    /* Only once the chat exists on the device. The write is debounced, so
+       firing before it lands would resolve against a chat that is not there
+       yet and drop the result. */
+    if (!chats.some((chat) => chat.id === activeId)) return;
+
+    const question = messageText(messages.find((message) => message.role === "user") ?? ({ parts: [] } as never));
+    const answer = messageText(messages.find((message) => message.role === "assistant") ?? ({ parts: [] } as never));
+    if (!question.trim() || !answer.trim()) return;
+
+    const chatId = activeId;
+    titleRequested.current.add(chatId);
+    const controller = new AbortController();
+    void fetch("/api/chat/title", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, answer }),
+      signal: controller.signal
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { title?: unknown } | null) => {
+        const title = typeof data?.title === "string" ? data.title.trim() : "";
+        if (!title) return;
+        setChats((current) => {
+          const next = current.map((chat) => {
+            if (chat.id !== chatId) return chat;
+            /* Never over a name the user chose. Renaming is in the chat menu,
+               and a title that quietly reverts is worse than no summary at
+               all — so this only replaces one this app generated itself. */
+            const generated = chat.title === chatTitle(chat.messages) || chat.title === "New chat";
+            return generated ? { ...chat, title } : chat;
+          });
+          void setLocalValue("chats", next);
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [activeId, chats, hydrated, incognito, messages, preferences.saveHistory, status]);
 
   /* Sending pins the new user message near the top so the reply has room to
      stream in beneath it, matching the native app. Scrolling up during a
