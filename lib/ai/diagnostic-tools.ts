@@ -140,6 +140,32 @@ async function checkRepository(): Promise<DiagnosticResult> {
   );
 }
 
+/**
+ * Whether the user's *other* repositories can be edited.
+ *
+ * Distinct from the check above, and the distinction is the point. This app's
+ * own source is reached with the deployment's token; everything else needs the
+ * person's own GitHub connection plus the deployment's write switch. Reporting
+ * one as though it covered both is how the owner came to believe their other
+ * repositories were permanently off limits.
+ */
+function checkUserRepoWrites(hasUserGithub: boolean): DiagnosticResult {
+  const writes = (process.env.NAVI_GITHUB_ALLOW_WRITES ?? "").trim().toLowerCase() === "true";
+  const oauth = Boolean((process.env.GITHUB_OAUTH_CLIENT_ID ?? "").trim());
+  if (hasUserGithub && writes) {
+    return { area: "Your other repositories", ok: true, detail: "Your connected GitHub account can branch, commit and open pull requests in any repository it can reach." };
+  }
+  const missing = [
+    hasUserGithub ? "" : oauth ? "no GitHub account is connected — connect one in Connectors" : "GitHub sign-in is not configured on this deployment (GITHUB_OAUTH_CLIENT_ID)",
+    writes ? "" : "writes are switched off (NAVI_GITHUB_ALLOW_WRITES is not true)"
+  ].filter(Boolean);
+  return {
+    area: "Your other repositories",
+    ok: false,
+    detail: `Cannot be edited: ${missing.join("; ")}. This is separate from editing this app's own source, which uses the deployment's own token.`
+  };
+}
+
 /** Which answering providers hold a credential. Presence only — cheap. */
 function checkProviders(): DiagnosticResult {
   const names: Array<[string, string]> = [
@@ -176,24 +202,27 @@ function checkSearch(): DiagnosticResult {
  * Two implementations of "what is broken" would drift, and the first time they
  * disagreed nobody would know which to believe.
  */
-export async function runAllChecks(clerkToken?: string): Promise<DiagnosticResult[]> {
+export async function runAllChecks(clerkToken?: string, hasUserGithub = false): Promise<DiagnosticResult[]> {
   return Promise.all([
     checkCloudMemory(clerkToken),
     checkTranscription(),
     checkRepository(),
+    Promise.resolve(checkUserRepoWrites(hasUserGithub)),
     Promise.resolve(checkProviders()),
     Promise.resolve(checkSearch())
   ]);
 }
 
-export function buildDiagnosticTools({ clerkToken, onActivity = () => {} }: {
+export function buildDiagnosticTools({ clerkToken, hasUserGithub = false, onActivity = () => {} }: {
   clerkToken?: string;
+  /** Whether this turn carries the user's own GitHub OAuth token. */
+  hasUserGithub?: boolean;
   onActivity?: (label: string) => void;
 } = {}): ToolSet {
   return {
     diagnose_self: tool({
       description:
-        "Check what is actually working in this deployment right now: cloud memory (whether skills and chats can really be saved), voice transcription, the app's own GitHub repository, answering providers, and web search. Each check performs a real request and reports what came back, including the exact failure. Use this whenever the user asks what is broken, why something is not working, whether a capability is available, or why you could not save, remember, commit, transcribe, or search — and before telling them a capability does not exist. Never guess at the cause of a failure when this tool can measure it.",
+        "Check what is actually working in this deployment right now: cloud memory (whether skills and chats can really be saved), voice transcription, the app's own GitHub repository, whether the user's other repositories can be edited, answering providers, and web search. Each check performs a real request and reports what came back, including the exact failure. Use this whenever the user asks what is broken, why something is not working, whether a capability is available, or why you could not save, remember, commit, transcribe, or search — and before telling them a capability does not exist. Never guess at the cause of a failure when this tool can measure it.",
       inputSchema: z.object({
         area: z.enum(["all", "memory", "voice", "repository", "providers", "search"])
           .optional()
@@ -206,6 +235,7 @@ export function buildDiagnosticTools({ clerkToken, onActivity = () => {} }: {
           wanted("memory") ? checkCloudMemory(clerkToken) : null,
           wanted("voice") ? checkTranscription() : null,
           wanted("repository") ? checkRepository() : null,
+          wanted("repository") ? Promise.resolve(checkUserRepoWrites(hasUserGithub)) : null,
           wanted("providers") ? Promise.resolve(checkProviders()) : null,
           wanted("search") ? Promise.resolve(checkSearch()) : null
         ].filter(Boolean) as Array<Promise<DiagnosticResult> | DiagnosticResult>);

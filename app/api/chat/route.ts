@@ -628,7 +628,7 @@ function chatModeInstruction(): string {
 }
 
 /** The behavioural difference between the Chat and Code models lives here. */
-function codeModeInstruction(canCommit: boolean): string {
+function codeModeInstruction(canCommit: boolean, canWriteRepos: boolean): string {
   return [
     "You are Navi Soul working in Code mode.",
     "Prefer working code over prose about code: give complete, runnable snippets with the imports they need, and state the language and file path when it matters.",
@@ -647,8 +647,25 @@ function codeModeInstruction(canCommit: boolean): string {
        or it is a guess about the app made by the app about itself. */
     canCommit
       ? "You can commit to NaviOS's own repository with commit_own_source, and every commit deploys automatically. When the user asks you to change this app, do it: read the real file first, write the complete new contents, commit, and then say plainly what you changed and link the commit. Do not hand them a diff to apply themselves, and do not ask permission for a change they have already asked for. If a commit is rejected, say so and why — never imply it landed."
-      : "Those tools are read-only: you can inspect repositories and deployments but cannot commit, merge, or deploy. If a task needs a write, give the exact change and say it has to be applied by hand."
-  ].join(" ");
+      : "",
+    /* Two different repositories, two different mechanisms, and the model kept
+       conflating them — telling the owner it could write to "NaviOS's own
+       source" but not to their other repositories, as though that were a rule
+       about repositories rather than about which token was present.
+       It is not one capability with an exception. It is two:
+         · this app's own source, through the deployment's token, committed
+           straight to the working branch, and deployed on merge;
+         · any repository the *user* has connected with their own GitHub
+           account, through branch-and-pull-request, touching nothing directly.
+       Saying which one applies is the difference between "I cannot" and "I can,
+       on a branch, and here is the PR". */
+    canWriteRepos
+      ? "You can also work in the user's other GitHub repositories — any repository their connected account can reach, not only this app. Use github_create_branch, then write files, then github_open_pr: never commit to a default branch in someone's repository. Read a file before you change it. When they ask you to change a repository, do the work and give them the pull request; do not describe the change and stop."
+      : "",
+    !canCommit && !canWriteRepos
+      ? "Repository tools are read-only in this request: you can inspect repositories and deployments but cannot commit, merge, or deploy. If a task needs a write, give the exact change and say it has to be applied by hand. Do not describe this as a permanent limitation — it depends on a connected GitHub account and a deployment setting, and diagnose_self reports which is missing."
+      : ""
+  ].filter(Boolean).join(" ");
 }
 
 function systemPrompt(options: {
@@ -729,7 +746,7 @@ function systemPrompt(options: {
        reply identical to Chat's — which is precisely the "switching modes
        doesn't feel different" complaint. The switch is an instruction from
        the user; it applies until they move it back. */
-    productMode === "code" ? codeModeInstruction(toolNames.includes("commit_own_source")) : chatModeInstruction(),
+    productMode === "code" ? codeModeInstruction(toolNames.includes("commit_own_source"), toolNames.includes("github_open_pr")) : chatModeInstruction(),
     playbookContext || "",
     effortInstruction(effort),
     ownerBlock(isOwner),
