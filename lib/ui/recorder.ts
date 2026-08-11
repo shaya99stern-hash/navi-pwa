@@ -288,3 +288,129 @@ export async function startRecording({ onLevel, onError, onAutoStop, language }:
     }
   };
 }
+
+export type MicCheck = { step: string; ok: boolean; detail: string };
+
+/**
+ * Run the whole dictation pipeline once and report which step fails.
+ *
+ * Three rounds of this bug have been diagnosed by reading source and guessing,
+ * and the guesses were wrong twice: first the transcription container, then
+ * the suspended AudioContext. Both were real defects; neither was the whole
+ * story, because "the mic doesn't work" describes six different failures and
+ * the app never said which one it hit.
+ *
+ * So this stops guessing. It exercises permission, capture, *actual measured
+ * signal*, encoding, and the network round trip in order, and names the first
+ * thing that breaks along with what it really returned. The signal check
+ * matters most: a recorder can produce a perfectly valid file of silence, and
+ * from the outside that is indistinguishable from a recorder that never
+ * started — which is exactly the "records but hears nothing" report.
+ */
+export async function diagnoseMicrophone(onProgress?: (step: string) => void): Promise<MicCheck[]> {
+  const checks: MicCheck[] = [];
+  const note = (step: string, ok: boolean, detail: string) => {
+    checks.push({ step, ok, detail });
+    return ok;
+  };
+
+  onProgress?.("Checking support");
+  if (!note("Browser support", recordingSupported(), recordingSupported()
+    ? `${isStandalone() ? "Installed app" : "Browser tab"} · getUserMedia and MediaRecorder present`
+    : "This browser cannot record audio at all.")) return checks;
+
+  const permission = await microphonePermission();
+  note("Permission", permission !== "denied", permission === null
+    ? "This browser will not report permission state; getUserMedia decides."
+    : `Reported as “${permission}”.`);
+
+  onProgress?.("Opening the microphone");
+  let audio: AudioContext | undefined;
+  try {
+    const Ctor = window.AudioContext
+      ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (Ctor) audio = new Ctor();
+  } catch { /* measured below */ }
+
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    note("Microphone access", true, "Granted.");
+  } catch (error) {
+    void audio?.close().catch(() => {});
+    note("Microphone access", false, error instanceof Error ? error.message : "Refused.");
+    return checks;
+  }
+
+  const track = stream.getAudioTracks()[0];
+  note("Audio track", Boolean(track) && track.readyState === "live" && !track.muted,
+    track ? `${track.label || "unnamed device"} · state ${track.readyState}${track.muted ? " · MUTED by the system" : ""}` : "No audio track was returned.");
+
+  note("Audio context", audio?.state === "running",
+    audio ? `State “${audio.state}”. A suspended context produces silence and a flat waveform.` : "Could not be created; the level meter cannot run.");
+
+  onProgress?.("Listening for two seconds — please speak");
+  let peak = 0;
+  if (audio) {
+    try {
+      if (audio.state === "suspended") await audio.resume().catch(() => {});
+      const analyser = audio.createAnalyser();
+      analyser.fftSize = 256;
+      audio.createMediaStreamSource(stream).connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const until = Date.now() + 2_000;
+      while (Date.now() < until) {
+        analyser.getByteTimeDomainData(data);
+        for (const value of data) peak = Math.max(peak, Math.abs(value - 128));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    } catch { /* reported by the check below */ }
+  }
+  /* 4 of 128 is the floor of real room noise. Below it the stream is silent,
+     whatever the file size says. */
+  note("Signal", peak > 4, peak > 4
+    ? `Picked up sound (peak ${Math.round((peak / 128) * 100)}%).`
+    : `Heard nothing (peak ${Math.round((peak / 128) * 100)}%). The microphone opened but no audio is reaching the app.`);
+
+  onProgress?.("Recording a sample");
+  const mimeType = preferredMimeType();
+  let blob: Blob;
+  try {
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+    const stopped = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
+    recorder.start();
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    recorder.stop();
+    await stopped;
+    blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
+    note("Encoding", blob.size > 1_200, `${blob.size.toLocaleString()} bytes as ${blob.type || "unknown type"}.`);
+  } catch (error) {
+    note("Encoding", false, error instanceof Error ? error.message : "The recorder failed.");
+    for (const t of stream.getTracks()) t.stop();
+    void audio?.close().catch(() => {});
+    return checks;
+  } finally {
+    for (const t of stream.getTracks()) t.stop();
+    void audio?.close().catch(() => {});
+  }
+
+  onProgress?.("Sending it for transcription");
+  try {
+    const response = await fetch("/api/voice/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": blob.type },
+      body: blob
+    });
+    const data = (await response.json().catch(() => null)) as { text?: string; error?: string; detail?: string } | null;
+    note("Transcription", response.ok && typeof data?.text === "string",
+      response.ok && typeof data?.text === "string"
+        ? `Returned “${data.text.trim().slice(0, 60) || "(silence)"}”.`
+        : `HTTP ${response.status}. ${data?.error ?? "No message."}${data?.detail ? ` — ${data.detail.slice(0, 180)}` : ""}`);
+  } catch (error) {
+    note("Transcription", false, error instanceof Error ? error.message : "The request never completed.");
+  }
+
+  return checks;
+}
