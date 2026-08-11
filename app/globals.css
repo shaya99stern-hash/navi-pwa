@@ -663,6 +663,12 @@ aside .scroll-area {
   }
 }
 
+/* Two ways to ask for less motion, and both have to work.
+   `prefers-reduced-motion` is the OS setting. `[data-motion="reduced"]` is the
+   app's own Motion control in Settings → General, which app-shell writes onto
+   the root element — and which, until now, nothing in this stylesheet read.
+   The switch moved, the attribute changed, and not one animation shortened:
+   a setting that described a behaviour it did not have. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -672,6 +678,15 @@ aside .scroll-area {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
 }
 
 .menu-enter {
@@ -701,6 +716,8 @@ aside .scroll-area {
 @media (prefers-reduced-motion: reduce) {
   .navi-context-preview { animation-duration: 1ms; }
 }
+
+:root[data-motion="reduced"] .navi-context-preview { animation-duration: 1ms; }
 
 /* iOS zooms the whole page when a focused field computes below 16px, then
    unzooms on blur — and that scaling is the keyboard jump, not the inset

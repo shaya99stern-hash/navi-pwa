@@ -324,29 +324,40 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
         </div>
 
         <footer className="shrink-0 border-t border-[var(--border-subtle)] px-2 py-2">
-          {/* Updating an installed PWA is otherwise invisible — people reinstall
-              the app because they cannot find this. It belongs where the app is
-              navigated from, not only inside Settings. */}
-          <button
-            type="button"
-            onClick={() => {
-              haptic("impact-light", haptics);
-              setUpdateStatus({ phase: "checking", message: "Checking…" });
-              requestPwaUpdate();
-            }}
-            disabled={updateStatus?.phase === "checking" || updateStatus?.phase === "downloading" || updateStatus?.phase === "restarting"}
-            className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-2 text-left active:bg-elev-2 disabled:opacity-70"
-          >
-            <RefreshCw size={17} strokeWidth={1.8} className={`shrink-0 text-secondary ${updateStatus?.phase === "checking" || updateStatus?.phase === "downloading" || updateStatus?.phase === "restarting" ? "animate-spin" : ""}`} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[0.875rem]/5 font-medium text-primary">
-                {updateStatus?.phase === "available" ? "Update ready — tap to install" : "Update NaviOS"}
+          {/* Present only when there is genuinely something to install.
+              This used to be a permanent row reading "NaviOS is up to date" —
+              build management sitting in primary navigation, beside Chats and
+              Projects, saying nothing on every single open. Checking for an
+              update is a Settings act and lives in Settings → Account → App.
+
+              What could not simply move there is discovery: an installed PWA
+              updates invisibly, and people were reinstalling the app because
+              they could not find this. So the row survives for the one state
+              that is worth interrupting navigation for — an update actually
+              waiting — and is absent the rest of the time. A control that
+              appears when it has something to do is not clutter; a control
+              that reports "nothing to do" forever is. */}
+          {updateStatus?.phase === "available" || updateStatus?.phase === "downloading" || updateStatus?.phase === "restarting" ? (
+            <button
+              type="button"
+              onClick={() => {
+                haptic("impact-light", haptics);
+                requestPwaUpdate();
+              }}
+              disabled={updateStatus.phase === "downloading" || updateStatus.phase === "restarting"}
+              className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-2 text-left active:bg-elev-2 disabled:opacity-70"
+            >
+              <RefreshCw size={17} strokeWidth={1.8} className={`shrink-0 text-accent ${updateStatus.phase === "downloading" || updateStatus.phase === "restarting" ? "animate-spin" : ""}`} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[0.875rem]/5 font-medium text-primary">
+                  {updateStatus.phase === "available" ? "Update ready — tap to install" : "Updating NaviOS…"}
+                </span>
+                <span className="block truncate text-[0.6875rem]/4 font-medium text-accent">
+                  {updateStatus.message ?? versionLabel()}
+                </span>
               </span>
-              <span className={`block truncate text-[0.6875rem]/4 font-medium ${updateStatus?.phase === "error" ? "text-danger" : updateStatus?.phase === "available" ? "text-accent" : "text-tertiary"}`}>
-                {updateStatus?.message ?? versionLabel()}
-              </span>
-            </span>
-          </button>
+            </button>
+          ) : null}
           <button type="button" onClick={() => openSheet(onSettings)} className="flex min-h-12 w-full items-center gap-3 rounded-[10px] px-2 text-left active:bg-elev-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-[0.8125rem] font-semibold text-[var(--accent-on-primary)]">
               <UserRound size={16} />

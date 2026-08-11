@@ -167,5 +167,17 @@ check("the project banner stays", shellSource.includes("Project: {activeProject.
 const composerSource = read("app/components/composer-dock.tsx").source;
 check("the composer still shows the state", /Research is \$\{research \? "on" : "off"\}|Research is on|research \?/.test(composerSource), true);
 
+/* ── Every switch must reach something ───────────────────────────────────────
+   The Motion control wrote `data-motion` onto the root element and no rule in
+   the stylesheet ever read it, so moving the switch changed an attribute and
+   not one animation. A setting that describes a behaviour it does not have is
+   worse than no setting: it teaches the user that the others are decoration
+   too. The OS media query is not a substitute — that is a different input. */
+const css = read("app/globals.css").source;
+check("the Motion control writes the attribute", shellSource.includes("dataset.motion = preferences.motion"), true);
+check("a stylesheet rule reads the attribute", css.includes('[data-motion="reduced"]'), true);
+check("the attribute shortens animations, not only transitions",
+  /\[data-motion="reduced"\][\s\S]{0,400}animation-duration/.test(css), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
