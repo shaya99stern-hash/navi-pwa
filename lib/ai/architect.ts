@@ -349,12 +349,71 @@ export function constraintBlock(plan: ExecutionPlan): string {
  * 3. The QA gate
  * ------------------------------------------------------------------ */
 
+/**
+ * Review until it holds, or until the budget says stop.
+ *
+ * A single pass had a gap that is easy to miss and bad when it bites: when the
+ * reviewer *revised* the draft, that revision went to the user unchecked. The
+ * one output nobody had verified was the one produced by the step whose entire
+ * job is verification — and a correction is written under more pressure than
+ * the original, against a constraint list, by a model that cannot run the code
+ * either. It is not obviously safer than what it replaced.
+ *
+ * So a revision is re-reviewed. Bounded at two rounds, because the third
+ * almost never changes the verdict and every round is a full round trip that
+ * the user waits through — and because a reviewer chain that keeps finding
+ * fault is usually two models disagreeing about taste, not converging on
+ * correctness. Each round uses a different provider: asking the model that
+ * just wrote a correction to check that correction reproduces the blind spot
+ * the second opinion existed to break.
+ *
+ * Any failure keeps the best draft so far. A verification step that cannot run
+ * is never a reason to withhold an answer.
+ */
+export async function reviewUntilSound(options: {
+  draft: string;
+  request: string;
+  plan: ExecutionPlan;
+  origin: string;
+  budgetMs?: number;
+  abortSignal?: AbortSignal;
+  /** Reports each round, for the activity trace. */
+  onPass?: (round: number) => void;
+}): Promise<{ text: string; rounds: number; verdict: ReviewResult["verdict"] }> {
+  let current = options.draft;
+  let lastVerdict: ReviewResult["verdict"] = "skipped";
+  let spent = 0;
+  let completed = 0;
+
+  for (let round = 0; round < MAX_REVIEW_ROUNDS; round += 1) {
+    const remaining = (options.budgetMs ?? REVIEW_BUDGET_MS) - spent;
+    /* Below the floor a round cannot finish, and a review that times out mid
+       flight costs the wait and returns nothing. */
+    if (remaining < 4_000) break;
+    options.onPass?.(round + 1);
+    const startedAt = Date.now();
+    const review = await reviewDraft({ ...options, draft: current, budgetMs: remaining, pass: round });
+    spent += Date.now() - startedAt;
+    completed += 1;
+    lastVerdict = review.verdict;
+    if (review.verdict === "pass" || review.verdict === "skipped") break;
+    /* Revised: keep it and check the correction on the next round. */
+    current = review.text;
+  }
+
+  return { text: current, rounds: completed, verdict: lastVerdict };
+}
+
 export type ReviewResult =
   | { verdict: "pass" }
   | { verdict: "revised"; text: string }
   | { verdict: "skipped"; reason: string };
 
 const REVIEW_BUDGET_MS = 12_000;
+/* Two rounds. The third almost never changes the verdict, and a chain that
+   keeps finding fault is usually two models disagreeing about taste rather
+   than converging on correctness — while the user waits through every one. */
+const MAX_REVIEW_ROUNDS = 2;
 const REVIEW_MAX_TOKENS = 2_200;
 /** Reviewing something enormous costs more than it can return. */
 const REVIEW_MAX_INPUT = 14_000;
@@ -389,6 +448,8 @@ export async function reviewDraft(options: {
   plan: ExecutionPlan;
   origin: string;
   budgetMs?: number;
+  /** Which round this is, so a second round uses a different reviewer. */
+  pass?: number;
   abortSignal?: AbortSignal;
 }): Promise<ReviewResult> {
   const { draft, request, plan, origin } = options;
@@ -401,12 +462,17 @@ export async function reviewDraft(options: {
 
   const availability = getProviderAvailability();
   /* A reviewer that shares the writer's weights shares its blind spots, so
-     prefer a different provider than the one most likely to have written it. */
-  const route = availability.cerebras ? ROUTES.cerebrasLarge
-    : availability.gemini ? ROUTES.geminiSynthesis
-      : availability.groq ? ROUTES.groqReasoning
-        : availability.mistral ? ROUTES.mistralBalanced
-          : null;
+     prefer a different provider than the one most likely to have written it.
+     `pass` walks further down the same list on a second round: re-reviewing a
+     correction with the model that just made it is the same blind-spot problem
+     one level deeper, and it reliably returns PASS on its own work. */
+  const reviewers = [
+    availability.cerebras ? ROUTES.cerebrasLarge : null,
+    availability.gemini ? ROUTES.geminiSynthesis : null,
+    availability.groq ? ROUTES.groqReasoning : null,
+    availability.mistral ? ROUTES.mistralBalanced : null
+  ].filter(Boolean) as ProviderRoute[];
+  const route = reviewers[Math.min(options.pass ?? 0, reviewers.length - 1)] ?? null;
   if (!route) return { verdict: "skipped", reason: "no reviewer route available" };
 
   try {
