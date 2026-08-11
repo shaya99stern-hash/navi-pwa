@@ -2,7 +2,7 @@
   "name": "navi-pwa",
   "version": "4.4.0",
   "private": true,
-  "description": "NaviOS Hub — a premium, local-first AI orchestration PWA.",
+  "description": "NaviOS Hub \u2014 a premium, local-first AI orchestration PWA.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "eval": "node evals/run.mjs",
     "eval:baseline": "node evals/run.mjs --no-tools",
-    "test": "node tests/run.mjs"
+    "test": "node tests/run.mjs",
+    "bench": "tsx evals/providers.ts"
   },
   "engines": {
     "node": "24.x"

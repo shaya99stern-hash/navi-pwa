@@ -118,9 +118,14 @@ an optimisation. Verified against ten cases including "why does my formatter
 keep crashing", "what is the best way to convert a monolith to microservices"
 and "should I encode secrets in the URL" — all correctly left to reason.
 
-The remaining rows below are unbuilt. They need per-provider benchmarking to
-justify, and asserting a preference without it would be the invented-number
-failure this document exists to avoid.
+The remaining rows below are unbuilt, and now measurable rather than guessable:
+`npm run bench` calls each configured provider directly with eight tasks that
+have checkable answers, and prints correct-count and median latency per
+capability. Run it with `--runs 3` before moving any rule.
+
+Asserting these rows without that measurement would be the invented-number
+failure this document exists to avoid — and the rows decide where every hard
+request goes, so a wrong guess is expensive and completely silent.
 
 ### The design
 
@@ -292,7 +297,9 @@ instruction-following and is paid for on every turn.
 | 3 | Set `NAVI_FRONTIER_MODEL` | one variable | high — raises the ceiling |
 | 4 | ~~`risks[]` in the plan~~ | — | **built** |
 | 5 | ~~Task-type matrix (§2)~~ | — | **built, narrowly** |
-| 6 | Parallel decomposition (§4) | large | narrow — few requests qualify |
+| 6 | ~~Benchmark harness~~ | — | **built** — `npm run bench` |
+| 7 | Fill the matrix from measurements | small, once run | medium |
+| 8 | Parallel decomposition (§4) | large | narrow — few requests qualify |
 
 Items 2 and 3 are settings, not engineering, and outrank most of the
 engineering below them. That is the least satisfying finding in this document
