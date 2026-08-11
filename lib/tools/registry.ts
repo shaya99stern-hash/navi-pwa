@@ -9,6 +9,7 @@ import { buildLearningTools } from "@/lib/ai/learning-tools";
 import { buildReflectionTools } from "@/lib/ai/reflection-tools";
 import { buildSelfUpdateTools, selfUpdateToken } from "@/lib/ai/self-update-tools";
 import { buildSkillTools } from "@/lib/ai/skill-tools";
+import { buildDiagnosticTools } from "../ai/diagnostic-tools";
 import { buildWebTools } from "@/lib/ai/web-tools";
 import type { CustomConnector, NaviMode, ToolPolicy } from "@/lib/ai/types";
 
@@ -286,6 +287,11 @@ export function buildToolset(context: ToolsetContext): ToolSet {
   const active = (name: string) => GROUPS.find((group) => group.name === name)?.when(context) ?? false;
 
   const local: ToolSet = {
+    /* First, deliberately. The cap trims from the end, and self-diagnosis is
+       the one capability that must never be trimmed or gated behind a group:
+       the turns where it matters most are exactly the ones where something is
+       already broken, and a model that cannot look is a model that invents. */
+    ...buildDiagnosticTools({ clerkToken, onActivity }),
     ...buildSkillTools(onActivity),
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity }),
