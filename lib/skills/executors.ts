@@ -7,9 +7,9 @@
  * signature stays async so a genuinely heavy skill — a PDF or YAML parser —
  * can still be code-split behind a dynamic import.
  *
- * The catalog in data/skills.json describes 200 skills. Only the ones
- * registered here actually run, and the registry hides the rest from
- * suggestions rather than offering a menu of dead ends.
+ * Every skill in data/skills.json is registered here and actually runs; the
+ * registry hides anything unimplemented from suggestions rather than offering
+ * a menu of dead ends.
  */
 import { register, type Executor } from "./registry";
 import * as text from "./impl/text";
@@ -19,6 +19,15 @@ import * as datetime from "./impl/datetime";
 import * as math from "./impl/math";
 import * as data from "./impl/data";
 import * as analysis from "./impl/analysis";
+import * as color from "./impl/color";
+import * as convert from "./impl/convert";
+import * as finance from "./impl/finance";
+import * as web from "./impl/web";
+import * as markdown from "./impl/markdown";
+import * as list from "./impl/list";
+import * as validate from "./impl/validate";
+import * as geo from "./impl/geo";
+import * as random from "./impl/random";
 
 /**
  * Skills that transform text are meaningless without any. Left unguarded they
@@ -125,3 +134,121 @@ register("text-analysis.frontmatter-parse", async () => needsText(analysis.front
 register("text-analysis.language-detect", async () => needsText(analysis.languageDetect, "/language-detect some text"));
 
 export {};
+
+/* color */
+register("color.hex-to-rgb", async () => color.hexToRgb);
+register("color.rgb-to-hex", async () => color.rgbToHexSkill);
+register("color.color-contrast", async () => color.colorContrast);
+register("color.lighten-darken", async () => color.lightenDarken);
+register("color.color-palette", async () => color.colorPalette);
+register("color.hsl-convert", async () => color.hslConvert);
+register("color.color-name", async () => color.colorName);
+register("color.gradient-css", async () => color.gradientCss);
+register("color.color-blind-sim", async () => color.colorBlindSim);
+register("color.random-color", async () => color.randomColor);
+register("color.color-mix", async () => color.colorMix);
+register("color.luminance", async () => color.colorLuminance);
+
+/* convert */
+register("convert.temperature-convert", async () => convert.temperatureConvert);
+register("convert.length-convert", async () => convert.lengthConvert);
+register("convert.weight-convert", async () => convert.weightConvert);
+register("convert.volume-convert", async () => convert.volumeConvert);
+register("convert.area-convert", async () => convert.areaConvert);
+register("convert.speed-convert", async () => convert.speedConvert);
+register("convert.data-size-convert", async () => convert.dataSizeConvert);
+register("convert.pressure-convert", async () => convert.pressureConvert);
+register("convert.energy-convert", async () => convert.energyConvert);
+register("convert.angle-convert", async () => convert.angleConvert);
+register("convert.time-convert", async () => convert.timeConvert);
+register("convert.fuel-economy", async () => convert.fuelEconomy);
+
+/* finance */
+register("finance.compound-interest", async () => finance.compoundInterest);
+register("finance.loan-payment", async () => finance.loanPayment);
+register("finance.currency-format", async () => finance.currencyFormat);
+register("finance.tip-calculate", async () => finance.tipCalculate);
+register("finance.discount-calculate", async () => finance.discountCalculate);
+register("finance.vat-calculate", async () => finance.vatCalculate);
+register("finance.roi-calculate", async () => finance.roiCalculate);
+register("finance.break-even", async () => finance.breakEven);
+register("finance.depreciation", async () => finance.depreciation);
+register("finance.margin-markup", async () => finance.marginMarkup);
+
+/* web */
+register("web.url-parse", async () => web.urlParse);
+register("web.slug-to-title", async () => web.slugToTitle);
+register("web.meta-tags", async () => web.metaTags);
+register("web.http-status", async () => web.httpStatus);
+register("web.mime-type", async () => web.mimeType);
+register("web.user-agent-parse", async () => web.userAgentParse);
+register("web.cookie-parse", async () => web.cookieParse);
+register("web.cors-headers", async () => web.corsHeaders);
+register("web.robots-txt", async () => web.robotsTxt);
+register("web.sitemap-entry", async () => web.sitemapEntry);
+register("web.favicon-sizes", async () => web.faviconSizes);
+register("web.data-uri", async () => web.dataUri);
+register("web.srcset-generate", async () => web.srcsetGenerate);
+register("web.media-query", async () => web.mediaQuery);
+
+/* markdown */
+register("markdown.md-to-text", async () => markdown.mdToText);
+register("markdown.md-table", async () => markdown.mdTable);
+register("markdown.md-escape", async () => markdown.mdEscape);
+register("markdown.md-link-list", async () => markdown.mdLinkList);
+register("markdown.md-heading-tree", async () => markdown.mdHeadingTree);
+register("markdown.md-checklist", async () => markdown.mdChecklist);
+register("markdown.md-footnotes", async () => markdown.mdFootnotes);
+register("markdown.md-code-fence", async () => markdown.mdCodeFence);
+register("markdown.md-badge", async () => markdown.mdBadge);
+register("markdown.md-toc-links", async () => markdown.mdTocLinks);
+register("markdown.md-blockquote", async () => markdown.mdBlockquote);
+register("markdown.md-strip-formatting", async () => markdown.mdStripFormatting);
+
+/* list */
+register("list.list-unique", async () => list.listUnique);
+register("list.list-intersect", async () => list.listIntersect);
+register("list.list-difference", async () => list.listDifference);
+register("list.list-union", async () => list.listUnion);
+register("list.list-shuffle", async () => list.listShuffle);
+register("list.list-chunk", async () => list.listChunk);
+register("list.list-flatten", async () => list.listFlatten);
+register("list.list-zip", async () => list.listZip);
+register("list.list-rotate", async () => list.listRotate);
+register("list.list-sample", async () => list.listSample);
+register("list.list-frequency", async () => list.listFrequency);
+register("list.list-partition", async () => list.listPartition);
+
+/* validate */
+register("validate.email-validate", async () => validate.emailValidate);
+register("validate.url-validate", async () => validate.urlValidate);
+register("validate.ip-validate", async () => validate.ipValidate);
+register("validate.credit-card-validate", async () => validate.creditCardValidate);
+register("validate.iban-validate", async () => validate.ibanValidate);
+register("validate.isbn-validate", async () => validate.isbnValidate);
+register("validate.mac-address-validate", async () => validate.macAddressValidate);
+register("validate.hex-color-validate", async () => validate.hexColorValidate);
+register("validate.semver-compare", async () => validate.semverCompare);
+register("validate.phone-format", async () => validate.phoneFormat);
+register("validate.postcode-validate", async () => validate.postcodeValidate);
+register("validate.checksum-verify", async () => validate.checksumVerify);
+register("validate.cron-describe", async () => validate.cronDescribe);
+register("validate.json-schema-lite", async () => validate.jsonSchemaLite);
+
+/* geo */
+register("geo.haversine-distance", async () => geo.haversineDistance);
+register("geo.bearing-calculate", async () => geo.bearingCalculate);
+register("geo.coordinate-convert", async () => geo.coordinateConvert);
+register("geo.bounding-box", async () => geo.boundingBox);
+register("geo.geohash-encode", async () => geo.geohashEncode);
+register("geo.utm-convert", async () => geo.utmConvert);
+register("geo.timezone-offset", async () => geo.timezoneOffset);
+register("geo.country-code", async () => geo.countryCode);
+
+/* random */
+register("random.dice-roll", async () => random.diceRoll);
+register("random.coin-flip", async () => random.coinFlip);
+register("random.random-pick", async () => random.randomPick);
+register("random.random-string", async () => random.randomString);
+register("random.weighted-pick", async () => random.weightedPick);
+register("random.shuffle-seed", async () => random.shuffleSeed);

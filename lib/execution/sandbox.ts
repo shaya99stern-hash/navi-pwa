@@ -56,11 +56,26 @@ function truncate(text: string): string {
 }
 
 /**
- * The worker body, as source, because a worker built from a Blob URL is the
- * only way to get one without shipping a separate file that the service worker
- * would then also have to cache and version.
+ * Where the worker is fetched from, and why it is a route rather than a Blob.
+ *
+ * A worker built from a `blob:` URL inherits the *owner document's* CSP. This
+ * app's `script-src` deliberately has no `'unsafe-eval'` outside development,
+ * so the `new Function` below threw `EvalError` on every production run: code
+ * execution worked on a laptop and could never work on the deployed site.
+ *
+ * A worker fetched from a real URL is governed by the CSP on *its own*
+ * response instead. Serving it from `/sandbox-worker` lets that one response
+ * carry `'unsafe-eval'` while the page keeps a strict policy, so permission to
+ * compile a string exists only inside the thing whose job is compiling
+ * strings.
  */
-const WORKER_SOURCE = `
+export const SANDBOX_WORKER_PATH = "/sandbox-worker";
+
+/**
+ * The worker body, as source, so the route handler and the Blob fallback are
+ * served from one definition rather than drifting apart.
+ */
+export const WORKER_SOURCE = `
 self.onmessage = function (event) {
   var code = event.data && event.data.code;
   var logs = [];
@@ -163,8 +178,16 @@ export function runInSandbox(code: string, timeoutMs = EXECUTION_TIMEOUT_MS): Pr
     }, timeoutMs);
 
     try {
-      url = URL.createObjectURL(new Blob([WORKER_SOURCE], { type: "text/javascript" }));
-      worker = new Worker(url);
+      /* The route first, because only its response can carry 'unsafe-eval'.
+         The Blob is kept as a fallback for `next dev`, offline starts before
+         the service worker has the route cached, and any deployment serving
+         this file without the header. */
+      try {
+        worker = new Worker(SANDBOX_WORKER_PATH);
+      } catch {
+        url = URL.createObjectURL(new Blob([WORKER_SOURCE], { type: "text/javascript" }));
+        worker = new Worker(url);
+      }
 
       worker.onmessage = (event: MessageEvent) => {
         if (finished) return;
@@ -228,6 +251,16 @@ export function describeResult(result: ExecutionResult): string {
   const lines: string[] = [];
   lines.push(result.ok ? "The code ran successfully." : "The code failed.");
   if (result.stderr) lines.push(`Error:\n${result.stderr}`);
+  /* Said at the point of failure, not only in the system prompt, because this
+     is the text the model is reading when it decides what to do next. Left to
+     itself it computes the answer by hand and presents it as the result —
+     observed producing a 62-character "SHA-256" and crediting it to a
+     cryptographic library it never called. */
+  if (!result.ok) {
+    lines.push(
+      "Do not supply the result this code would have produced. You do not know it. Report that execution failed and why. If a built-in skill covers the task — /sha-hash, /hmac-sign, /expression-evaluate, /base64-encode-decode and the rest run on-device and do not need this sandbox — use that instead. Otherwise give the user the exact code to run themselves."
+    );
+  }
   if (result.stdout) lines.push(`Output:\n${result.stdout}`);
   if (result.value) lines.push(`Returned:\n${result.value}`);
   if (!result.stdout && !result.value && result.ok) lines.push("It produced no output. Return a value or log something to show the result.");

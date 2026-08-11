@@ -1723,5 +1723,2228 @@
     "requiresModel": false,
     "offline": true,
     "deps": []
+  },
+  {
+    "id": "color.hex-to-rgb",
+    "name": "Hex to RGB",
+    "category": "color",
+    "description": "Convert a hex or named colour to RGB and HSL.",
+    "triggers": {
+      "keywords": [
+        "hex",
+        "rgb",
+        "colour",
+        "color",
+        "convert"
+      ],
+      "slash": "/hex-to-rgb"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_hex-to-rgb"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.rgb-to-hex",
+    "name": "RGB to Hex",
+    "category": "color",
+    "description": "Convert rgb(r, g, b) to a hex colour.",
+    "triggers": {
+      "keywords": [
+        "rgb",
+        "hex",
+        "colour",
+        "color"
+      ],
+      "slash": "/rgb-to-hex"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_rgb-to-hex"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.color-contrast",
+    "name": "Contrast Ratio",
+    "category": "color",
+    "description": "WCAG contrast ratio between two colours, with AA and AAA verdicts.",
+    "triggers": {
+      "keywords": [
+        "contrast",
+        "wcag",
+        "accessibility",
+        "a11y",
+        "ratio"
+      ],
+      "slash": "/color-contrast"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_color-contrast"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.lighten-darken",
+    "name": "Lighten or Darken",
+    "category": "color",
+    "description": "Shift a colour's lightness by a percentage.",
+    "triggers": {
+      "keywords": [
+        "lighten",
+        "darken",
+        "tint",
+        "shade"
+      ],
+      "slash": "/lighten-darken"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_lighten-darken"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.color-palette",
+    "name": "Colour Palette",
+    "category": "color",
+    "description": "Complement, triad, analogous and split-complement from one colour.",
+    "triggers": {
+      "keywords": [
+        "palette",
+        "complement",
+        "triad",
+        "analogous",
+        "scheme"
+      ],
+      "slash": "/color-palette"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_color-palette"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.hsl-convert",
+    "name": "HSL Convert",
+    "category": "color",
+    "description": "Convert any colour to HSL.",
+    "triggers": {
+      "keywords": [
+        "hsl",
+        "hue",
+        "saturation",
+        "lightness"
+      ],
+      "slash": "/hsl-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_hsl-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.color-name",
+    "name": "Colour Name",
+    "category": "color",
+    "description": "Name a colour, or find the nearest named one.",
+    "triggers": {
+      "keywords": [
+        "name",
+        "nearest",
+        "colour",
+        "color"
+      ],
+      "slash": "/color-name"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_color-name"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.gradient-css",
+    "name": "CSS Gradient",
+    "category": "color",
+    "description": "Build a linear-gradient declaration from two or more colours.",
+    "triggers": {
+      "keywords": [
+        "gradient",
+        "linear",
+        "css",
+        "background"
+      ],
+      "slash": "/gradient-css"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_gradient-css"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.color-blind-sim",
+    "name": "Colour Blindness",
+    "category": "color",
+    "description": "Simulate protanopia, deuteranopia and tritanopia.",
+    "triggers": {
+      "keywords": [
+        "colorblind",
+        "colourblind",
+        "protanopia",
+        "deuteranopia",
+        "accessibility"
+      ],
+      "slash": "/color-blind-sim"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_color-blind-sim"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.random-color",
+    "name": "Random Colour",
+    "category": "color",
+    "description": "Cryptographically random hex colours.",
+    "triggers": {
+      "keywords": [
+        "random",
+        "colour",
+        "color",
+        "generate"
+      ],
+      "slash": "/random-color"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_random-color"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.color-mix",
+    "name": "Mix Colours",
+    "category": "color",
+    "description": "Blend two colours by weight.",
+    "triggers": {
+      "keywords": [
+        "mix",
+        "blend",
+        "interpolate"
+      ],
+      "slash": "/color-mix"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_color-mix"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "color.luminance",
+    "name": "Relative Luminance",
+    "category": "color",
+    "description": "WCAG relative luminance, and whether to pair with light or dark text.",
+    "triggers": {
+      "keywords": [
+        "luminance",
+        "brightness",
+        "wcag"
+      ],
+      "slash": "/luminance"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:color_luminance"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.temperature-convert",
+    "name": "Temperature",
+    "category": "convert",
+    "description": "Convert between Celsius, Fahrenheit and Kelvin.",
+    "triggers": {
+      "keywords": [
+        "temperature",
+        "celsius",
+        "fahrenheit",
+        "kelvin"
+      ],
+      "slash": "/temperature-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_temperature-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.length-convert",
+    "name": "Length",
+    "category": "convert",
+    "description": "Convert length between metric and imperial units.",
+    "triggers": {
+      "keywords": [
+        "length",
+        "distance",
+        "metre",
+        "feet",
+        "miles"
+      ],
+      "slash": "/length-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_length-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.weight-convert",
+    "name": "Weight",
+    "category": "convert",
+    "description": "Convert mass between grams, kilos, pounds, ounces and stone.",
+    "triggers": {
+      "keywords": [
+        "weight",
+        "mass",
+        "kg",
+        "pounds",
+        "ounces"
+      ],
+      "slash": "/weight-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_weight-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.volume-convert",
+    "name": "Volume",
+    "category": "convert",
+    "description": "Convert volume between litres, gallons, cups and spoons.",
+    "triggers": {
+      "keywords": [
+        "volume",
+        "litres",
+        "gallons",
+        "cups",
+        "millilitres"
+      ],
+      "slash": "/volume-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_volume-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.area-convert",
+    "name": "Area",
+    "category": "convert",
+    "description": "Convert area between metric, imperial, hectares and acres.",
+    "triggers": {
+      "keywords": [
+        "area",
+        "acres",
+        "hectares",
+        "square"
+      ],
+      "slash": "/area-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_area-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.speed-convert",
+    "name": "Speed",
+    "category": "convert",
+    "description": "Convert speed between mph, km/h, m/s and knots.",
+    "triggers": {
+      "keywords": [
+        "speed",
+        "mph",
+        "kph",
+        "knots",
+        "velocity"
+      ],
+      "slash": "/speed-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_speed-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.data-size-convert",
+    "name": "Data Size",
+    "category": "convert",
+    "description": "Convert bytes between decimal and binary units.",
+    "triggers": {
+      "keywords": [
+        "bytes",
+        "kb",
+        "mb",
+        "gb",
+        "gib",
+        "size"
+      ],
+      "slash": "/data-size-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_data-size-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.pressure-convert",
+    "name": "Pressure",
+    "category": "convert",
+    "description": "Convert pressure between bar, psi, pascals and atmospheres.",
+    "triggers": {
+      "keywords": [
+        "pressure",
+        "psi",
+        "bar",
+        "pascal",
+        "atm"
+      ],
+      "slash": "/pressure-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_pressure-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.energy-convert",
+    "name": "Energy",
+    "category": "convert",
+    "description": "Convert energy between joules, calories, kWh and BTU.",
+    "triggers": {
+      "keywords": [
+        "energy",
+        "joules",
+        "calories",
+        "kwh",
+        "btu"
+      ],
+      "slash": "/energy-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_energy-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.angle-convert",
+    "name": "Angle",
+    "category": "convert",
+    "description": "Convert angles between degrees, radians, gradians and turns.",
+    "triggers": {
+      "keywords": [
+        "angle",
+        "degrees",
+        "radians",
+        "gradians"
+      ],
+      "slash": "/angle-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_angle-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.time-convert",
+    "name": "Time Units",
+    "category": "convert",
+    "description": "Convert durations between seconds, hours, days and years.",
+    "triggers": {
+      "keywords": [
+        "time",
+        "duration",
+        "seconds",
+        "hours",
+        "days"
+      ],
+      "slash": "/time-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_time-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "convert.fuel-economy",
+    "name": "Fuel Economy",
+    "category": "convert",
+    "description": "Convert between mpg (UK and US), L/100km and km/L.",
+    "triggers": {
+      "keywords": [
+        "fuel",
+        "mpg",
+        "economy",
+        "consumption"
+      ],
+      "slash": "/fuel-economy"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:convert_fuel-economy"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "finance.compound-interest",
+    "name": "Compound Interest",
+    "category": "finance",
+    "description": "Future value with optional regular contributions.",
+    "triggers": {
+      "keywords": [
+        "compound",
+        "interest",
+        "savings",
+        "investment",
+        "future value"
+      ],
+      "slash": "/compound-interest"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:finance_compound-interest"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "finance.loan-payment",
+    "name": "Loan Payment",
+    "category": "finance",
+    "description": "Monthly payment, total repaid and total interest.",
+    "triggers": {
+      "keywords": [
+        "loan",
+        "mortgage",
+        "payment",
+        "amortise",
+        "repayment"
+      ],
+      "slash": "/loan-payment"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:finance_loan-payment"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "finance.currency-format",
+    "name": "Currency Format",
+    "category": "finance",
+    "description": "Format a number as currency for any locale.",
+    "triggers": {
+      "keywords": [
+        "currency",
+        "format",
+        "money",
+        "locale"
+      ],
+      "slash": "/currency-format"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:finance_currency-format"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "finance.tip-calculate",
+    "name": "Tip",
+    "category": "finance",
+    "description": "Tip, total and per-person split.",
+    "triggers": {
+      "keywords": [
+        "tip",
+        "gratuity",
+        "split",
+        "bill"
+      ],
+      "slash": "/tip-calculate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:finance_tip-calculate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "finance.discount-calculate",
+    "name": "Discount",
+    "category": "finance",
+    "description": "Sale price and amount saved.",
+    "triggers": {
+      "keywords": [
+        "discount",
+        "sale",
+        "percent off",
+        "savings"
+      ],
+      "slash": "/discount-calculate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:finance_discount-calculate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "finance.vat-calculate",
+    "name": "VAT and Sales Tax",
+    "category": "finance",
+    "description": "Net, tax and gross, inclusive or exclusive.",
+    "triggers": {
+      "keywords": [
+        "vat",
+        "tax",
+        "sales tax",
+        "gst",
+        "net",
+        "gross"
+      ],
+      "slash": "/vat-calculate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:finance_vat-calculate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "finance.roi-calculate",
+    "name": "ROI",
+    "category": "finance",
+    "description": "Return on investment, with annualised return.",
+    "triggers": {
+      "keywords": [
+        "roi",
+        "return",
+        "investment",
+        "profit"
+      ],
+      "slash": "/roi-calculate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:finance_roi-calculate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "finance.break-even",
+    "name": "Break Even",
+    "category": "finance",
+    "description": "Units and revenue needed to cover fixed costs.",
+    "triggers": {
+      "keywords": [
+        "break even",
+        "breakeven",
+        "fixed cost",
+        "contribution"
+      ],
+      "slash": "/break-even"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:finance_break-even"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "finance.depreciation",
+    "name": "Depreciation",
+    "category": "finance",
+    "description": "Straight-line depreciation schedule.",
+    "triggers": {
+      "keywords": [
+        "depreciation",
+        "asset",
+        "book value",
+        "straight line"
+      ],
+      "slash": "/depreciation"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:finance_depreciation"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "finance.margin-markup",
+    "name": "Margin and Markup",
+    "category": "finance",
+    "description": "Both figures for the same sale, so they do not get confused.",
+    "triggers": {
+      "keywords": [
+        "margin",
+        "markup",
+        "profit",
+        "pricing"
+      ],
+      "slash": "/margin-markup"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:finance_margin-markup"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.url-parse",
+    "name": "Parse URL",
+    "category": "web",
+    "description": "Break a URL into protocol, host, path and query parameters.",
+    "triggers": {
+      "keywords": [
+        "url",
+        "parse",
+        "query",
+        "host",
+        "path"
+      ],
+      "slash": "/url-parse"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_url-parse"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.slug-to-title",
+    "name": "Slug to Title",
+    "category": "web",
+    "description": "Turn a slug or filename into title case.",
+    "triggers": {
+      "keywords": [
+        "slug",
+        "title",
+        "filename",
+        "humanize"
+      ],
+      "slash": "/slug-to-title"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_slug-to-title"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.meta-tags",
+    "name": "Meta Tags",
+    "category": "web",
+    "description": "Generate SEO, Open Graph and Twitter card tags.",
+    "triggers": {
+      "keywords": [
+        "meta",
+        "og",
+        "opengraph",
+        "twitter",
+        "seo",
+        "head"
+      ],
+      "slash": "/meta-tags"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_meta-tags"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.http-status",
+    "name": "HTTP Status",
+    "category": "web",
+    "description": "What a status code means and when to use it.",
+    "triggers": {
+      "keywords": [
+        "http",
+        "status",
+        "code",
+        "404",
+        "500"
+      ],
+      "slash": "/http-status"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_http-status"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.mime-type",
+    "name": "MIME Type",
+    "category": "web",
+    "description": "Look up the MIME type for a file extension.",
+    "triggers": {
+      "keywords": [
+        "mime",
+        "content type",
+        "extension"
+      ],
+      "slash": "/mime-type"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_mime-type"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.user-agent-parse",
+    "name": "Parse User Agent",
+    "category": "web",
+    "description": "Browser, OS, mobile and bot from a User-Agent string.",
+    "triggers": {
+      "keywords": [
+        "user agent",
+        "ua",
+        "browser",
+        "device"
+      ],
+      "slash": "/user-agent-parse"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_user-agent-parse"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.cookie-parse",
+    "name": "Parse Cookie",
+    "category": "web",
+    "description": "Break a Cookie or Set-Cookie header into parts.",
+    "triggers": {
+      "keywords": [
+        "cookie",
+        "header",
+        "set-cookie"
+      ],
+      "slash": "/cookie-parse"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_cookie-parse"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.cors-headers",
+    "name": "CORS Headers",
+    "category": "web",
+    "description": "Generate CORS headers, with the wildcard-plus-credentials trap called out.",
+    "triggers": {
+      "keywords": [
+        "cors",
+        "headers",
+        "preflight",
+        "origin"
+      ],
+      "slash": "/cors-headers"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_cors-headers"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.robots-txt",
+    "name": "robots.txt",
+    "category": "web",
+    "description": "Generate a robots.txt with a sitemap reference.",
+    "triggers": {
+      "keywords": [
+        "robots",
+        "crawler",
+        "seo",
+        "disallow"
+      ],
+      "slash": "/robots-txt"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_robots-txt"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.sitemap-entry",
+    "name": "Sitemap XML",
+    "category": "web",
+    "description": "Generate sitemap.xml entries for a list of URLs.",
+    "triggers": {
+      "keywords": [
+        "sitemap",
+        "xml",
+        "seo",
+        "urlset"
+      ],
+      "slash": "/sitemap-entry"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_sitemap-entry"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.favicon-sizes",
+    "name": "Favicon Sizes",
+    "category": "web",
+    "description": "The icon set that actually covers current browsers and PWA installs.",
+    "triggers": {
+      "keywords": [
+        "favicon",
+        "icon",
+        "apple touch",
+        "pwa",
+        "manifest"
+      ],
+      "slash": "/favicon-sizes"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_favicon-sizes"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.data-uri",
+    "name": "Data URI",
+    "category": "web",
+    "description": "Encode text as a base64 data URI.",
+    "triggers": {
+      "keywords": [
+        "data uri",
+        "base64",
+        "inline",
+        "embed"
+      ],
+      "slash": "/data-uri"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_data-uri"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.srcset-generate",
+    "name": "Responsive srcset",
+    "category": "web",
+    "description": "Build a responsive img tag with srcset and sizes.",
+    "triggers": {
+      "keywords": [
+        "srcset",
+        "responsive",
+        "image",
+        "picture",
+        "sizes"
+      ],
+      "slash": "/srcset-generate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_srcset-generate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "web.media-query",
+    "name": "Media Queries",
+    "category": "web",
+    "description": "Common CSS media queries, including dark mode and reduced motion.",
+    "triggers": {
+      "keywords": [
+        "media query",
+        "css",
+        "breakpoint",
+        "responsive",
+        "dark mode"
+      ],
+      "slash": "/media-query"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:web_media-query"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-to-text",
+    "name": "Markdown to Text",
+    "category": "markdown",
+    "description": "Strip markdown down to readable plain text.",
+    "triggers": {
+      "keywords": [
+        "markdown",
+        "plain text",
+        "strip",
+        "convert"
+      ],
+      "slash": "/md-to-text"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-to-text"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-table",
+    "name": "Markdown Table",
+    "category": "markdown",
+    "description": "Turn CSV or tab-separated rows into an aligned markdown table.",
+    "triggers": {
+      "keywords": [
+        "markdown",
+        "table",
+        "csv",
+        "align"
+      ],
+      "slash": "/md-table"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-table"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-escape",
+    "name": "Escape Markdown",
+    "category": "markdown",
+    "description": "Escape characters that markdown would otherwise interpret.",
+    "triggers": {
+      "keywords": [
+        "markdown",
+        "escape",
+        "literal"
+      ],
+      "slash": "/md-escape"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-escape"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-link-list",
+    "name": "Extract Links",
+    "category": "markdown",
+    "description": "List every link in a markdown document.",
+    "triggers": {
+      "keywords": [
+        "markdown",
+        "links",
+        "extract",
+        "urls"
+      ],
+      "slash": "/md-link-list"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-link-list"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-heading-tree",
+    "name": "Heading Tree",
+    "category": "markdown",
+    "description": "Show the heading structure as an indented outline.",
+    "triggers": {
+      "keywords": [
+        "markdown",
+        "headings",
+        "outline",
+        "structure"
+      ],
+      "slash": "/md-heading-tree"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-heading-tree"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-checklist",
+    "name": "Checklist",
+    "category": "markdown",
+    "description": "Turn lines into a markdown task list.",
+    "triggers": {
+      "keywords": [
+        "markdown",
+        "checklist",
+        "todo",
+        "tasks"
+      ],
+      "slash": "/md-checklist"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-checklist"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-footnotes",
+    "name": "Check Footnotes",
+    "category": "markdown",
+    "description": "Find footnote references with no definition, and definitions never used.",
+    "triggers": {
+      "keywords": [
+        "markdown",
+        "footnotes",
+        "references"
+      ],
+      "slash": "/md-footnotes"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-footnotes"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-code-fence",
+    "name": "Code Fence",
+    "category": "markdown",
+    "description": "Wrap code in a fence long enough to survive nested backticks.",
+    "triggers": {
+      "keywords": [
+        "markdown",
+        "code",
+        "fence",
+        "backticks"
+      ],
+      "slash": "/md-code-fence"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-code-fence"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-badge",
+    "name": "Shields Badge",
+    "category": "markdown",
+    "description": "Generate a shields.io badge, plain or linked.",
+    "triggers": {
+      "keywords": [
+        "badge",
+        "shields",
+        "readme",
+        "status"
+      ],
+      "slash": "/md-badge"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-badge"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-toc-links",
+    "name": "Table of Contents",
+    "category": "markdown",
+    "description": "Build a linked TOC using GitHub's slug rules, duplicates included.",
+    "triggers": {
+      "keywords": [
+        "toc",
+        "contents",
+        "anchors",
+        "github"
+      ],
+      "slash": "/md-toc-links"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-toc-links"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-blockquote",
+    "name": "Blockquote",
+    "category": "markdown",
+    "description": "Quote text, optionally as a GitHub note or warning callout.",
+    "triggers": {
+      "keywords": [
+        "blockquote",
+        "quote",
+        "note",
+        "warning",
+        "callout"
+      ],
+      "slash": "/md-blockquote"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-blockquote"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "markdown.md-strip-formatting",
+    "name": "Strip Emphasis",
+    "category": "markdown",
+    "description": "Remove bold, italic, strikethrough and code marks.",
+    "triggers": {
+      "keywords": [
+        "strip",
+        "bold",
+        "italic",
+        "emphasis"
+      ],
+      "slash": "/md-strip-formatting"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:markdown_md-strip-formatting"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-unique",
+    "name": "Unique Items",
+    "category": "list",
+    "description": "Remove duplicates and report how many went.",
+    "triggers": {
+      "keywords": [
+        "unique",
+        "dedupe",
+        "duplicates",
+        "distinct"
+      ],
+      "slash": "/list-unique"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-unique"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-intersect",
+    "name": "Intersection",
+    "category": "list",
+    "description": "Items present in both lists.",
+    "triggers": {
+      "keywords": [
+        "intersect",
+        "both",
+        "common",
+        "set"
+      ],
+      "slash": "/list-intersect"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-intersect"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-difference",
+    "name": "Difference",
+    "category": "list",
+    "description": "Items in the first list but not the second.",
+    "triggers": {
+      "keywords": [
+        "difference",
+        "except",
+        "minus",
+        "set"
+      ],
+      "slash": "/list-difference"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-difference"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-union",
+    "name": "Union",
+    "category": "list",
+    "description": "Every item from both lists, deduplicated.",
+    "triggers": {
+      "keywords": [
+        "union",
+        "combine",
+        "merge",
+        "set"
+      ],
+      "slash": "/list-union"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-union"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-shuffle",
+    "name": "Shuffle",
+    "category": "list",
+    "description": "Randomly reorder a list.",
+    "triggers": {
+      "keywords": [
+        "shuffle",
+        "random",
+        "reorder"
+      ],
+      "slash": "/list-shuffle"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-shuffle"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-chunk",
+    "name": "Chunk",
+    "category": "list",
+    "description": "Split a list into groups of a given size.",
+    "triggers": {
+      "keywords": [
+        "chunk",
+        "batch",
+        "group",
+        "split"
+      ],
+      "slash": "/list-chunk"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-chunk"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-flatten",
+    "name": "Flatten",
+    "category": "list",
+    "description": "Flatten a nested JSON array into lines.",
+    "triggers": {
+      "keywords": [
+        "flatten",
+        "nested",
+        "array",
+        "json"
+      ],
+      "slash": "/list-flatten"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-flatten"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-zip",
+    "name": "Zip Lists",
+    "category": "list",
+    "description": "Pair two lists together line by line.",
+    "triggers": {
+      "keywords": [
+        "zip",
+        "pair",
+        "merge",
+        "combine"
+      ],
+      "slash": "/list-zip"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-zip"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-rotate",
+    "name": "Rotate",
+    "category": "list",
+    "description": "Rotate a list by a number of positions.",
+    "triggers": {
+      "keywords": [
+        "rotate",
+        "shift",
+        "cycle"
+      ],
+      "slash": "/list-rotate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-rotate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-sample",
+    "name": "Sample",
+    "category": "list",
+    "description": "Take a random sample without replacement.",
+    "triggers": {
+      "keywords": [
+        "sample",
+        "random",
+        "pick",
+        "draw"
+      ],
+      "slash": "/list-sample"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-sample"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-frequency",
+    "name": "Frequency",
+    "category": "list",
+    "description": "Count how often each item appears, most common first.",
+    "triggers": {
+      "keywords": [
+        "frequency",
+        "count",
+        "tally",
+        "histogram"
+      ],
+      "slash": "/list-frequency"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-frequency"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "list.list-partition",
+    "name": "Partition",
+    "category": "list",
+    "description": "Split a list into matching and non-matching items.",
+    "triggers": {
+      "keywords": [
+        "partition",
+        "filter",
+        "split",
+        "match"
+      ],
+      "slash": "/list-partition"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:list_list-partition"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.email-validate",
+    "name": "Validate Email",
+    "category": "validate",
+    "description": "Check an address and say what is wrong with it.",
+    "triggers": {
+      "keywords": [
+        "email",
+        "validate",
+        "address",
+        "check"
+      ],
+      "slash": "/email-validate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_email-validate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.url-validate",
+    "name": "Validate URL",
+    "category": "validate",
+    "description": "Check a URL and break out its parts.",
+    "triggers": {
+      "keywords": [
+        "url",
+        "validate",
+        "link",
+        "check"
+      ],
+      "slash": "/url-validate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_url-validate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.ip-validate",
+    "name": "Validate IP",
+    "category": "validate",
+    "description": "Check IPv4 or IPv6, and say whether it is private or public.",
+    "triggers": {
+      "keywords": [
+        "ip",
+        "ipv4",
+        "ipv6",
+        "validate",
+        "private"
+      ],
+      "slash": "/ip-validate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_ip-validate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.credit-card-validate",
+    "name": "Card Luhn Check",
+    "category": "validate",
+    "description": "Luhn check and card brand. Well-formed, not necessarily real.",
+    "triggers": {
+      "keywords": [
+        "credit card",
+        "luhn",
+        "card",
+        "validate"
+      ],
+      "slash": "/credit-card-validate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_credit-card-validate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.iban-validate",
+    "name": "Validate IBAN",
+    "category": "validate",
+    "description": "Mod-97 check on an international bank account number.",
+    "triggers": {
+      "keywords": [
+        "iban",
+        "bank",
+        "account",
+        "validate"
+      ],
+      "slash": "/iban-validate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_iban-validate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.isbn-validate",
+    "name": "Validate ISBN",
+    "category": "validate",
+    "description": "Checksum an ISBN-10 or ISBN-13.",
+    "triggers": {
+      "keywords": [
+        "isbn",
+        "book",
+        "validate",
+        "checksum"
+      ],
+      "slash": "/isbn-validate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_isbn-validate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.mac-address-validate",
+    "name": "Validate MAC",
+    "category": "validate",
+    "description": "Check a MAC address and read its unicast and local bits.",
+    "triggers": {
+      "keywords": [
+        "mac",
+        "address",
+        "ethernet",
+        "validate"
+      ],
+      "slash": "/mac-address-validate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_mac-address-validate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.hex-color-validate",
+    "name": "Validate Hex Colour",
+    "category": "validate",
+    "description": "Check a 3, 4, 6 or 8 digit hex colour.",
+    "triggers": {
+      "keywords": [
+        "hex",
+        "colour",
+        "color",
+        "validate"
+      ],
+      "slash": "/hex-color-validate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_hex-color-validate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.semver-compare",
+    "name": "Compare Versions",
+    "category": "validate",
+    "description": "Compare two semantic versions, prereleases included.",
+    "triggers": {
+      "keywords": [
+        "semver",
+        "version",
+        "compare",
+        "release"
+      ],
+      "slash": "/semver-compare"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_semver-compare"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.phone-format",
+    "name": "Format Phone",
+    "category": "validate",
+    "description": "Format a phone number, including E.164.",
+    "triggers": {
+      "keywords": [
+        "phone",
+        "number",
+        "e164",
+        "format"
+      ],
+      "slash": "/phone-format"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_phone-format"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.postcode-validate",
+    "name": "Validate Postcode",
+    "category": "validate",
+    "description": "Recognise UK, US, Canadian and European postcode formats.",
+    "triggers": {
+      "keywords": [
+        "postcode",
+        "zip",
+        "postal",
+        "validate"
+      ],
+      "slash": "/postcode-validate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_postcode-validate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.checksum-verify",
+    "name": "Verify Checksum",
+    "category": "validate",
+    "description": "Hash text and compare it against an expected digest.",
+    "triggers": {
+      "keywords": [
+        "checksum",
+        "verify",
+        "hash",
+        "integrity"
+      ],
+      "slash": "/checksum-verify"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_checksum-verify"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.cron-describe",
+    "name": "Explain Cron",
+    "category": "validate",
+    "description": "Say in words when a cron expression fires.",
+    "triggers": {
+      "keywords": [
+        "cron",
+        "schedule",
+        "crontab",
+        "explain"
+      ],
+      "slash": "/cron-describe"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_cron-describe"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "validate.json-schema-lite",
+    "name": "Infer JSON Shape",
+    "category": "validate",
+    "description": "Describe the shape of a JSON document.",
+    "triggers": {
+      "keywords": [
+        "json",
+        "schema",
+        "shape",
+        "structure",
+        "infer"
+      ],
+      "slash": "/json-schema-lite"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:validate_json-schema-lite"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "geo.haversine-distance",
+    "name": "Distance Between Points",
+    "category": "geo",
+    "description": "Great-circle distance in km, miles and nautical miles.",
+    "triggers": {
+      "keywords": [
+        "distance",
+        "haversine",
+        "coordinates",
+        "between",
+        "km"
+      ],
+      "slash": "/haversine-distance"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:geo_haversine-distance"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "geo.bearing-calculate",
+    "name": "Bearing",
+    "category": "geo",
+    "description": "Initial compass bearing from one point to another.",
+    "triggers": {
+      "keywords": [
+        "bearing",
+        "heading",
+        "compass",
+        "direction"
+      ],
+      "slash": "/bearing-calculate"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:geo_bearing-calculate"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "geo.coordinate-convert",
+    "name": "Convert Coordinates",
+    "category": "geo",
+    "description": "Decimal degrees, DMS and geo URI for one point.",
+    "triggers": {
+      "keywords": [
+        "coordinates",
+        "dms",
+        "decimal",
+        "latitude",
+        "longitude"
+      ],
+      "slash": "/coordinate-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:geo_coordinate-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "geo.bounding-box",
+    "name": "Bounding Box",
+    "category": "geo",
+    "description": "A bounding box of a given radius around a point.",
+    "triggers": {
+      "keywords": [
+        "bounding box",
+        "bbox",
+        "radius",
+        "area"
+      ],
+      "slash": "/bounding-box"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:geo_bounding-box"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "geo.geohash-encode",
+    "name": "Geohash",
+    "category": "geo",
+    "description": "Encode coordinates as a geohash at a chosen precision.",
+    "triggers": {
+      "keywords": [
+        "geohash",
+        "encode",
+        "coordinates",
+        "cell"
+      ],
+      "slash": "/geohash-encode"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:geo_geohash-encode"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "geo.utm-convert",
+    "name": "UTM Coordinates",
+    "category": "geo",
+    "description": "Convert WGS84 latitude and longitude to UTM.",
+    "triggers": {
+      "keywords": [
+        "utm",
+        "projection",
+        "grid",
+        "wgs84"
+      ],
+      "slash": "/utm-convert"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:geo_utm-convert"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "geo.timezone-offset",
+    "name": "Timezone Offset",
+    "category": "geo",
+    "description": "Current time and UTC offset for an IANA timezone.",
+    "triggers": {
+      "keywords": [
+        "timezone",
+        "offset",
+        "utc",
+        "iana"
+      ],
+      "slash": "/timezone-offset"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:geo_timezone-offset"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "geo.country-code",
+    "name": "Country Code",
+    "category": "geo",
+    "description": "Look up an ISO country code, or search by name.",
+    "triggers": {
+      "keywords": [
+        "country",
+        "iso",
+        "code",
+        "nation"
+      ],
+      "slash": "/country-code"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:geo_country-code"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "random.dice-roll",
+    "name": "Roll Dice",
+    "category": "random",
+    "description": "Roll dice in standard notation, unbiased.",
+    "triggers": {
+      "keywords": [
+        "dice",
+        "roll",
+        "d20",
+        "d6",
+        "rpg"
+      ],
+      "slash": "/dice-roll"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:random_dice-roll"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "random.coin-flip",
+    "name": "Flip a Coin",
+    "category": "random",
+    "description": "Flip one coin or many, with a tally.",
+    "triggers": {
+      "keywords": [
+        "coin",
+        "flip",
+        "heads",
+        "tails",
+        "toss"
+      ],
+      "slash": "/coin-flip"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:random_coin-flip"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "random.random-pick",
+    "name": "Pick at Random",
+    "category": "random",
+    "description": "Choose one or more options at random.",
+    "triggers": {
+      "keywords": [
+        "pick",
+        "choose",
+        "random",
+        "decide"
+      ],
+      "slash": "/random-pick"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:random_random-pick"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "random.random-string",
+    "name": "Random String",
+    "category": "random",
+    "description": "Generate random strings from a chosen character set.",
+    "triggers": {
+      "keywords": [
+        "random",
+        "string",
+        "token",
+        "generate"
+      ],
+      "slash": "/random-string"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:random_random-string"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "random.weighted-pick",
+    "name": "Weighted Pick",
+    "category": "random",
+    "description": "Choose at random with weights.",
+    "triggers": {
+      "keywords": [
+        "weighted",
+        "random",
+        "probability",
+        "pick"
+      ],
+      "slash": "/weighted-pick"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:random_weighted-pick"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
+  },
+  {
+    "id": "random.shuffle-seed",
+    "name": "Seeded Shuffle",
+    "category": "random",
+    "description": "Shuffle reproducibly from a seed, or freely without one.",
+    "triggers": {
+      "keywords": [
+        "shuffle",
+        "seed",
+        "reproducible",
+        "random"
+      ],
+      "slash": "/shuffle-seed"
+    },
+    "executor": {
+      "kind": "local",
+      "ref": "fn:random_shuffle-seed"
+    },
+    "requiresModel": false,
+    "offline": true,
+    "deps": []
   }
 ]

@@ -1,0 +1,24 @@
+# Why this file exists.
+#
+# A patch generated elsewhere carried `Binary files a/lib/security/artifacts.ts
+# and b/... differ` in place of a diff, so an entire bug fix vanished silently:
+# the patch applied, the tests for that fix failed, and nothing said why. The
+# file is ordinary UTF-8 — box-drawing characters and em-dashes in comments were
+# enough for git's heuristic to call it binary in that environment.
+#
+# Declaring source as text makes the detection explicit rather than inferred, so
+# a diff is always a diff.
+*.ts    text diff
+*.tsx   text diff
+*.mjs   text diff
+*.js    text diff
+*.json  text diff
+*.css   text diff
+*.md    text diff
+
+# Genuinely binary, so no one is tempted to widen the rules above.
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
