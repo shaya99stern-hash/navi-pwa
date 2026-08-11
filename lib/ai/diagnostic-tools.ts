@@ -169,6 +169,23 @@ function checkSearch(): DiagnosticResult {
  * needs every check run together so the model can say which of them failed and
  * which are fine, in one turn, instead of guessing which to look at.
  */
+/**
+ * Every check, run together.
+ *
+ * Exported so the Diagnostics screen can run exactly what the model runs.
+ * Two implementations of "what is broken" would drift, and the first time they
+ * disagreed nobody would know which to believe.
+ */
+export async function runAllChecks(clerkToken?: string): Promise<DiagnosticResult[]> {
+  return Promise.all([
+    checkCloudMemory(clerkToken),
+    checkTranscription(),
+    checkRepository(),
+    Promise.resolve(checkProviders()),
+    Promise.resolve(checkSearch())
+  ]);
+}
+
 export function buildDiagnosticTools({ clerkToken, onActivity = () => {} }: {
   clerkToken?: string;
   onActivity?: (label: string) => void;

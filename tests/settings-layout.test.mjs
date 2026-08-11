@@ -188,5 +188,33 @@ check("a stylesheet rule reads the attribute", css.includes('[data-motion="reduc
 check("the attribute shortens animations, not only transitions",
   /\[data-motion="reduced"\][\s\S]{0,400}animation-duration/.test(css), true);
 
+/* ── Teaching without a tool call in the way ─────────────────────────────
+   Asking Navi Soul to learn something went through `learn_skill`, so it
+   depended on the model choosing the tool, filling it correctly, and
+   reporting the result honestly — and when the write failed it narrated a
+   theory instead of the reason. The same request appears five times in the
+   exported history. This writes to the same store through the same API and
+   shows whatever the server actually says. */
+const skills = block("skills");
+check("Skills offers a direct teach path", skills.includes("Teach Navi Soul something"), true);
+check("it posts to the real store", /fetch\("\/api\/memory\/skills"/.test(body), true);
+check("it reports the server's own message", /data\?\.error \?\? `The store answered/.test(body), true);
+check("a name and instructions are both required",
+  /!teach\.name\.trim\(\) \|\| !teach\.instructions\.trim\(\)/.test(body), true);
+
+/* ── What is broken, without asking the assistant ────────────────────────
+   `diagnose_self` gives the model the same answer, and that is the one that
+   stops it inventing a cause. But the turn where you most need it is the turn
+   where something in that path may be the broken thing, so there has to be a
+   way that needs no model and no conversation. It runs the identical checks
+   rather than a parallel set — two implementations of "what is broken" would
+   drift, and the first time they disagreed nobody would know which to trust. */
+check("Diagnostics can run every check", diagnosticsPage.includes("Run all checks"), true);
+check("it calls the shared route", /fetch\("\/api\/system\/diagnostics"/.test(body), true);
+check("the route reuses the model's own checks",
+  read("app/api/system/diagnostics/route.ts").body.includes("runAllChecks"), true);
+check("the tool and the screen share one implementation",
+  read("lib/ai/diagnostic-tools.ts").body.includes("export async function runAllChecks"), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
