@@ -738,7 +738,17 @@ export function SettingsSheet({
               />
               <Row
                 label="Haptics"
-                description="Subtle touch feedback on selection, success, and errors."
+                /* What it used to say — "on selection, success, and errors" —
+                   described two thirds of a thing that could not happen. A
+                   haptic needs transient user activation, and success and
+                   error are by definition known after a round trip, by which
+                   time the activation the tap granted has expired. Those ticks
+                   were refused every time, so the same gesture buzzed or did
+                   not depending on whether its outcome happened to be
+                   synchronous. Feedback now fires on the touch, which is the
+                   only moment the platform will honour, and outcomes are
+                   reported where an outcome belongs: on screen. */
+                description="A light tick when a touch is registered — a button, a switch, a sheet opening or closing. Results are shown on screen rather than felt."
                 control={<SettingsToggle label="Haptics" value={preferences.haptics} onChange={() => update({ haptics: !preferences.haptics })} />}
               />
             </Group>
