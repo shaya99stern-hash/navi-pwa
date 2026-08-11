@@ -135,7 +135,11 @@ const nextConfig = {
         ]
       },
       {
-        source: "/:path*",
+        /* Everything except the sandbox worker, which ships its own policy.
+           Two Content-Security-Policy headers on one response are intersected
+           by the browser, so the strict page policy would re-block the eval
+           the worker route exists to allow. */
+        source: "/((?!sandbox-worker$).*)",
         headers: [
           { key: "Content-Security-Policy", value: contentSecurityPolicy },
           { key: "X-Content-Type-Options", value: "nosniff" },

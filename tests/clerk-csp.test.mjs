@@ -72,5 +72,30 @@ check("a non-key decodes to nothing", decode("not-a-key"), null);
 const portal = (host) => host.replace(/^clerk\./, "accounts.");
 check("the portal sits beside the API", portal("clerk.navikeep.org"), "accounts.navikeep.org");
 
+/* ---- The sandbox worker carries its own policy ----------------------
+ * `new Function` needs 'unsafe-eval', which the page policy must never grant.
+ * A worker loaded from a URL is governed by its own response headers, so the
+ * permission can live on that one route — but only if the global header skips
+ * it. Two Content-Security-Policy headers on one response are *intersected*,
+ * so the strict one would re-block exactly what the route exists to allow. */
+const globalRule = headers.find((entry) =>
+  entry.headers.some((header) => header.key === "Content-Security-Policy"));
+
+check("the global rule excludes the worker", /sandbox-worker/.test(globalRule.source), true);
+check("it is a negative lookahead, not a match", globalRule.source.includes("(?!"), true);
+
+/* Behaviour, not spelling: build the matcher and try both paths. */
+const matcher = new RegExp(`^${globalRule.source.replace(/^\//, "/")}$`);
+check("the worker route escapes the strict policy", matcher.test("/sandbox-worker"), false);
+check("an ordinary page still gets it", matcher.test("/settings"), true);
+check("a nested path still gets it", matcher.test("/api/chat"), true);
+
+/* And the route really does grant eval to itself, or the exclusion above just
+   leaves it with no policy at all. */
+const worker = readFileSync(join(process.cwd(), "app/sandbox-worker/route.ts"), "utf8");
+check("the worker route sets its own policy", worker.includes("Content-Security-Policy"), true);
+check("it grants eval only to itself", /script-src[^"]*unsafe-eval/.test(worker), true);
+check("it can reach nothing else", /default-src 'none'/.test(worker), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
