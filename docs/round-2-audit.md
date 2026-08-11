@@ -258,9 +258,13 @@ the interface you actually want.
 - **YouTube transcripts fail.** You asked four times to learn from a video. It
   cannot fetch transcripts; it should say so once, in one sentence, not
   three paragraphs of alternatives each time.
-- **Artifacts silently exceed a size limit.** The chat-history export failed
-  repeatedly with the model theorising about why. The limit should be checked
-  before emitting, with a real message.
+- **Artifacts silently exceeded a size limit.** **Fixed.** The cap is 180 KB and
+  the model was never told it existed — so it generated a large document, had it
+  rejected with no error it could read, invented an explanation, and retried at
+  the same size. The chat history has that loop three attempts deep on the
+  chat-history export. The budget is now stated in the artifact instruction,
+  with the instruction to narrow or split *before* emitting. A limit nobody is
+  told about is a trap rather than a limit.
 - **"Stop writing in code"** — you said it explicitly. Heavy bold/headers/code
   fences on every answer is a prompt default worth changing; the reference iOS
   client writes prose by default and reserves structure for when it helps.

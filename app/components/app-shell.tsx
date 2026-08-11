@@ -415,7 +415,15 @@ export function AppShell({
           : undefined;
         if (requestedChat) {
           setActiveId(requestedChat.id);
-          setActiveProjectId(requestedChat.projectId ?? state.activeProjectId);
+          /* A chat that belongs to no project opens in no project.
+             It used to fall back to whatever project was last active globally,
+             and because the persist path stamps the active project onto every
+             save, simply *opening* an unfiled chat quietly filed it into that
+             project. So a conversation could appear inside a project the user
+             never put it in — and the more they used projects, the more often
+             it happened. `openChat` already reads it this way; only the
+             restore-on-load path disagreed. */
+          setActiveProjectId(requestedChat.projectId ?? null);
           setMessages(requestedChat.messages);
         } else {
           setActiveId(initialChatRef.current);

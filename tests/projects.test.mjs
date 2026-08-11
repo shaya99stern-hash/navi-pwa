@@ -64,6 +64,15 @@ check("opening a chat restores its project", /setActiveProjectId\(chat\.projectI
    chat, so no separate "add this one too" step is needed — I had reported this
    as missing as well. Pinned so the claim stays checkable. */
 check("a new chat inherits the active project", /projectId: activeProjectId \?\? undefined/.test(shell), true);
+/* But an existing chat that belongs to no project must open in no project.
+   The restore path used to fall back to the last globally active project, and
+   since the persist path stamps the active project onto every save, opening an
+   unfiled chat quietly filed it into that project. The more projects were used,
+   the more often it happened. */
+check("restoring an unfiled chat does not adopt the last project",
+  /setActiveProjectId\(requestedChat\.projectId \?\? null\)/.test(shell), true);
+check("no path falls back to the stored project for a chat",
+  /requestedChat\.projectId \?\? state\.activeProjectId/.test(shell), false);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
