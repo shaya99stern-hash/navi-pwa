@@ -104,7 +104,10 @@ check("a released frame leaves history alone", /if \(frame\.released\) \{[\s\S]{
    place that still opens that route: the settings sheet. Same bug, same fix,
    asserted where the code actually lives. */
 const settings = stripComments(readFileSync(join(root, "app/components/settings-sheet.tsx"), "utf8"));
-check("the settings sheet releases before routing", /releaseOverlaysForNavigation\(\);\s+onClose\(\);\s+router\.push/.test(settings), true);
+/* Nothing in Settings opens a route any more — the Developer screen it used to
+   push to has been deleted, so the release-before-navigate rule has no caller
+   left here. What matters now is that nothing routes at all. */
+check("the settings sheet no longer routes anywhere", /router\.push\(/.test(settings), false);
 check("opening a chat releases them too", /releaseOverlaysForNavigation\(\);\s+setHistoryOpen\(false\);/.test(shell), true);
 
 /* Belt and braces: even without the explicit signal, an entry that something
@@ -131,7 +134,7 @@ check("Projects is in the sidebar", /openSheet\(onProjects\)/.test(drawer), true
 check("the mode no longer decides the nav rows", /mode === "code" \? \(/.test(drawer), false);
 /* Both destinations remain reachable, one level in. */
 check("Settings still offers Connectors", /RootRow label="Connectors"/.test(settings), true);
-check("Settings still offers Developer", /RootRow label="Developer"/.test(settings), true);
+check("Developer is gone from Settings", /RootRow label="Developer"/.test(settings), false);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

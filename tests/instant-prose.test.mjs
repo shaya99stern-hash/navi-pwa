@@ -47,7 +47,24 @@ check("objects render as one line, not fenced JSON", source.includes('pairs.join
 
 /* A pattern that matched but produced nothing must fall through to the model
    rather than reporting an error the user cannot act on. */
-check("a fired-but-empty route yields to the model", /return null;\n  \}\n\n  if \(TODAY/.test(source), true);
+check("a fired-but-empty route yields to the model",
+  /A pattern that matched but produced nothing[\s\S]{0,200}return null;/.test(source), true);
+
+/* ── The length cap was the real ceiling ──────────────────────────────────
+   Most of the 82 skills do not answer a short question — they operate on
+   something pasted, which is long and often several lines. Under a
+   120-character gate every one of them was unreachable no matter how good its
+   pattern was, so the gate, not the pattern, was the limit. It now applies
+   only to the loose short-form handlers; anchored routes read the whole
+   message. */
+const routeLoopAt = source.indexOf("for (const route of PROSE_ROUTES)");
+const lengthGateAt = source.indexOf("query.length > 120");
+check("anchored routes run before the length gate", routeLoopAt > 0 && routeLoopAt < lengthGateAt, true);
+check("the loose short-form handlers keep their cap", lengthGateAt > 0, true);
+/* Structured results of every shape render, including arrays of objects —
+   `String(value)` there produces "[object Object]", which is how a correct
+   csv-to-json result was displayed. */
+check("arrays of objects render as JSON", /JSON\.stringify\(output, null, 2\)/.test(source), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

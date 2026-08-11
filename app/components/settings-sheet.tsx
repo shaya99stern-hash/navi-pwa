@@ -111,7 +111,6 @@ const PAGE_TITLES: Record<Exclude<PageId, "root">, string> = {
   connectors: "Connectors",
   skills: "Skills",
   playbooks: "Playbooks",
-  developer: "Developer"
 };
 
 const DURABILITY_DETAIL: Record<StorageDurability, string> = {
@@ -450,7 +449,10 @@ export function SettingsSheet({
 
   useEffect(() => {
     if (!open) return;
-    setPage(initialSection ?? "root");
+    /* A section that no longer exists opens the list, not a blank pane.
+       `lastMenuSection` is persisted, so a device that last had Developer open
+       would otherwise reopen Settings onto nothing at all. */
+    setPage(initialSection && initialSection in PAGE_TITLES ? initialSection : "root");
   }, [initialSection, open]);
 
   useEffect(() => {
@@ -542,19 +544,6 @@ export function SettingsSheet({
     /* Developer is a route rather than a pane: it is a working surface with
        its own editor and commit state, which a sheet that closes on a stray
        swipe is the wrong container for. */
-    if (next === "developer") {
-      /* Release before closing, exactly as the drawer does.
-         `onClose()` unwinds the history entry this sheet pushed — right when
-         you dismiss it, wrong when you are leaving for a real route, because
-         the unwind is asynchronous and lands *after* `router.push`, cancelling
-         it. That is why Settings → Developer opened and immediately bounced
-         back to the conversation. The drawer was fixed for this; the settings
-         sheet has the same navigation and never got the same treatment. */
-      releaseOverlaysForNavigation();
-      onClose();
-      router.push("/settings/Developer");
-      return;
-    }
     setPage(next);
     update({ lastMenuSection: next });
   };
@@ -663,10 +652,6 @@ export function SettingsSheet({
             <RootRow label="Skills" active={page === "skills"} onOpen={() => openPage("skills")} />
             <RootRow label="Playbooks" active={page === "playbooks"} onOpen={() => openPage("playbooks")} />
             <RootRow label="Connectors" onOpen={() => openPage("connectors")} />
-            {/* The self-update engine. It was reachable only by typing the URL,
-                so the app looked like it had no developer surface at all — and
-                the assistant, asked where it was, invented a menu path. */}
-            <RootRow label="Developer" onOpen={() => openPage("developer")} />
           </Group>
           {/* Diagnostics live behind this. They are for proving a suspicion
               about the app, not for using it, and a routing override left on
@@ -1102,6 +1087,33 @@ export function SettingsSheet({
               answer, and the routing override makes answers worse by design — it exists so a
               single engine can be blamed or cleared.
             </p>
+
+            {/* What the Developer screen was actually for.
+                That screen was a path box, a textarea and a commit button — a
+                text editor on a phone, and a worse one than simply telling
+                Navi Soul in Code mode to make the change, which reads the file
+                and commits it itself. The editor is gone. What could not go is
+                this: the deployment variables are real and someone has to be
+                able to look them up. They live here, with the other things
+                that exist to answer "why is it behaving like that". */}
+            <SectionHeader>Deployment variables</SectionHeader>
+            <p className="px-4 text-[0.8125rem]/[1.25rem] text-tertiary">
+              Set in the hosting project&apos;s environment, then redeploy. They apply to everyone using this
+              deployment. Ask Navi Soul &ldquo;what is broken?&rdquo; to have it check which of these are actually working.
+            </p>
+            <Group>
+              {[
+                ["GITHUB_PAT / NAVI_GITHUB_TOKEN", "Lets Navi Soul read and commit to this app's own repository in Code mode. Without it, self-editing is off."],
+                ["NAVI_SELF_UPDATE_BRANCH", "Which branch self-edits commit to. Defaults to main."],
+                ["GOOGLE_OAUTH_CLIENT_ID / _SECRET", "Lets each person connect their own Gmail and Calendar."],
+                ["GITHUB_OAUTH_CLIENT_ID / _SECRET", "Per-person GitHub. Must be a separate OAuth app from the one Clerk uses for sign-in — one app holds one callback URL."],
+                ["NAVI_VERCEL_TOKEN", "Deployment and build-log reads, for the whole deployment rather than per person."],
+                ["MCP_SERVER_REGISTRY_JSON", "The connector servers this deployment offers."],
+                ["HF_TOKEN", "Voice transcription, image and audio generation. Needs the “Make calls to Inference Providers” permission."]
+              ].map(([name, detail]) => (
+                <Row key={name} label={name} description={detail} />
+              ))}
+            </Group>
 
             <SectionHeader>Routing</SectionHeader>
             <Group>

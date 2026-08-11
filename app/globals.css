@@ -505,7 +505,10 @@ aside .scroll-area {
 
 .navi-markdown > :first-child { margin-top: 0; }
 .navi-markdown > :last-child { margin-bottom: 0; }
-.navi-markdown p { margin: 0 0 0.8rem; line-height: 1.6; }
+/* Paragraph rhythm inside one answer. The line height carries readability;
+   the margin only has to separate paragraphs, and must stay clearly smaller
+   than the gap between messages or the two boundaries compete. */
+.navi-markdown p { margin: 0 0 0.85rem; line-height: 1.65; }
 /* Tailwind's preflight removes list markers, which left bullets and numbers
    missing from every rendered reply. */
 /* Tightened: at the old spacing a three-item list took most of a phone screen
@@ -592,8 +595,27 @@ aside .scroll-area {
   animation: navi-cursor 0.9s steps(2, jump-none) infinite;
 }
 
-.density-compact .message-stack { gap: 10px; }
-.density-comfortable .message-stack { gap: 16px; }
+/* Where one message ends and the next begins.
+   These were 10px and 16px, against a 12.8px gap between paragraphs *inside*
+   a single answer — so a turn boundary was indistinguishable from a paragraph
+   break, and a long reply followed by a question followed by another reply
+   read as one continuous column of text. That is the "no bubbles, it's just
+   mush" complaint: not a missing bubble, a missing boundary.
+
+   An assistant message deliberately has no bubble — full-measure prose is the
+   right treatment for something you actually read, and boxing it would shrink
+   the line length that makes it readable. So the separation has to come from
+   space, which means the space has to be unambiguous. */
+.density-compact .message-stack { gap: 18px; }
+.density-comfortable .message-stack { gap: 26px; }
+
+/* A turn boundary gets more room than a message boundary.
+   Question → answer is one exchange and reads as a unit; the next question is
+   where the thread turns over. Extra space above a user message that follows
+   an assistant one marks that, and marks nothing else — the first message in a
+   thread has no preceding sibling, so it is untouched. */
+.message-stack > [data-role="assistant"] + [data-role="user"] { margin-top: 14px; }
+.density-compact .message-stack > [data-role="assistant"] + [data-role="user"] { margin-top: 8px; }
 
 @keyframes menu-in {
   from { opacity: 0; transform: translateY(-14px); }

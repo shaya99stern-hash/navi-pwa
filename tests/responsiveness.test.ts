@@ -52,7 +52,15 @@ check("a dropped attachment leaves a note", route.includes("was attached earlier
    to Chat's. */
 
 check("chat mode is stated, not merely implied", route.includes("function chatModeInstruction"), true);
-check("mode guidance follows the user's own choice", route.includes('productMode === "code" ? codeModeInstruction() : chatModeInstruction()'), true);
+check("mode guidance follows the user's own choice", route.includes('productMode === "code" ? codeModeInstruction(toolNames.includes("commit_own_source")) : chatModeInstruction()'), true);
+/* The capability statement has to be derived from the tools actually present.
+   It used to be flat prose ending "those tools are read-only... say it has to
+   be applied by hand" — on every Code-mode turn, including the ones where
+   `commit_own_source` was in the toolset. Asked to change the app, Navi Soul
+   handed back a diff and declined, because that is what it had been told. */
+check("code mode takes whether it can commit", /function codeModeInstruction\(canCommit: boolean\)/.test(route), true);
+check("it says it can commit when it can", /canCommit\s*\?\s*"You can commit to NaviOS's own repository/.test(route), true);
+check("read-only is now the other branch, not the only one", /: "Those tools are read-only/.test(route), true);
 check("the old dispatch-keyed form is gone", /\bmode === "code" \? codeModeInstruction\(\) : ""/.test(route), false);
 
 /* ── Dictation survives a pause ──────────────────────────────────────────────

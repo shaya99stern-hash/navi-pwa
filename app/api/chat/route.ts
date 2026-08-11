@@ -628,7 +628,7 @@ function chatModeInstruction(): string {
 }
 
 /** The behavioural difference between the Chat and Code models lives here. */
-function codeModeInstruction(): string {
+function codeModeInstruction(canCommit: boolean): string {
   return [
     "You are Navi Soul working in Code mode.",
     "Prefer working code over prose about code: give complete, runnable snippets with the imports they need, and state the language and file path when it matters.",
@@ -636,7 +636,18 @@ function codeModeInstruction(): string {
     "Match the conventions of any code the user shows you. Flag breaking changes, missing tests, and security problems even when unasked.",
     "If a request is ambiguous between several implementations, pick the most conventional one and say what you assumed.",
     "When repository or deployment tools are available, read the real file, the real CI log, or the real build log before diagnosing. Never describe code you have not read or guess at an error you could have fetched.",
-    "Those tools are read-only: you can inspect repositories and deployments but cannot commit, merge, or deploy. If a task needs a write, give the exact change and say it has to be applied by hand."
+    /* This line used to be unconditional, and it was a standing instruction to
+       refuse. Every Code-mode turn ended with "those tools are read-only... say
+       it has to be applied by hand" — including the turns where
+       `commit_own_source` was sitting right there in the toolset. The owner
+       asked repeatedly why Navi Soul would not just make the change; this is
+       why. It was doing what it was told.
+
+       A capability statement has to be derived from the tools actually present,
+       or it is a guess about the app made by the app about itself. */
+    canCommit
+      ? "You can commit to NaviOS's own repository with commit_own_source, and every commit deploys automatically. When the user asks you to change this app, do it: read the real file first, write the complete new contents, commit, and then say plainly what you changed and link the commit. Do not hand them a diff to apply themselves, and do not ask permission for a change they have already asked for. If a commit is rejected, say so and why — never imply it landed."
+      : "Those tools are read-only: you can inspect repositories and deployments but cannot commit, merge, or deploy. If a task needs a write, give the exact change and say it has to be applied by hand."
   ].join(" ");
 }
 
@@ -718,7 +729,7 @@ function systemPrompt(options: {
        reply identical to Chat's — which is precisely the "switching modes
        doesn't feel different" complaint. The switch is an instruction from
        the user; it applies until they move it back. */
-    productMode === "code" ? codeModeInstruction() : chatModeInstruction(),
+    productMode === "code" ? codeModeInstruction(toolNames.includes("commit_own_source")) : chatModeInstruction(),
     playbookContext || "",
     effortInstruction(effort),
     ownerBlock(isOwner),

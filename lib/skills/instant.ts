@@ -6,6 +6,8 @@ import * as datetime from "./impl/datetime";
 import * as crypto from "./impl/crypto";
 import * as encode from "./impl/encode";
 import * as text from "./impl/text";
+import * as data from "./impl/data";
+import * as analysis from "./impl/analysis";
 import type { SkillResult } from "./registry";
 
 /**
@@ -62,7 +64,15 @@ function render(result: SkillResult): string | null {
       .map(([key, value]) => `${key.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}: ${value}`);
     return pairs.length ? pairs.join(" · ") : null;
   }
-  if (Array.isArray(output)) return output.length ? output.map(String).join(", ") : null;
+  if (Array.isArray(output)) {
+    if (!output.length) return null;
+    /* `String(value)` on an array of objects produces "[object Object]", which
+       is how csv-to-json rendered its perfectly correct result. Anything with
+       structure inside it is worth showing as JSON. */
+    return output.some((entry) => entry && typeof entry === "object")
+      ? JSON.stringify(output, null, 2)
+      : output.map(String).join(", ");
+  }
   return null;
 }
 
@@ -149,35 +159,83 @@ const PROSE_ROUTES: Array<{
     pattern: /^(?:generate|give me)?\s*(?:a\s+)?random number between\s+(-?\d+)\s+and\s+(-?\d+)\s*\??$/i,
     skill: "math.random-number",
     run: (m) => math.randomNumber({ min: Number(m[1]), max: Number(m[2]) })
+  },
+
+  /* Routes that take a body of text.
+     These are why the input length cap had to move. Most of the 82 skills do
+     not answer a short question — they operate on something pasted, which is
+     long and often several lines. Under a 120-character ceiling every one of
+     them was unreachable no matter how good its pattern was, so the ceiling,
+     not the pattern, was the limit.
+
+     They stay safe because the keyword is anchored at the start: the whole
+     message has to begin with the instruction, so a sentence that merely
+     mentions "slugify" is not intercepted. */
+  {
+    pattern: /^(?:pretty[- ]?print|format|prettify)\s+(?:this\s+)?json:?\s+([\s\S]+)$/i,
+    skill: "data-format.json-format",
+    run: (m) => data.jsonFormat({ text: m[1] })
+  },
+  {
+    pattern: /^minify\s+(?:this\s+)?json:?\s+([\s\S]+)$/i,
+    skill: "data-format.json-minify",
+    run: (m) => data.jsonMinify({ text: m[1] })
+  },
+  {
+    pattern: /^(?:is\s+)?(?:this\s+)?json\s+valid:?\s+([\s\S]+)$/i,
+    skill: "data-format.json-validate",
+    run: (m) => data.jsonValidate({ text: m[1] })
+  },
+  {
+    pattern: /^slugify:?\s+([\s\S]+)$/i,
+    skill: "text.slugify",
+    run: (m) => text.slugify({ text: m[1] })
+  },
+  {
+    pattern: /^(upper|lower|title|sentence|camel|snake|kebab)\s?case:?\s+([\s\S]+)$/i,
+    skill: "text.change-case",
+    run: (m) => text.changeCase({ text: m[2], mode: m[1].toLowerCase() })
+  },
+  {
+    pattern: /^(?:remove|delete|strip)\s+duplicate\s+lines(?:\s+from)?:?\s+([\s\S]+)$/i,
+    skill: "text.dedupe-lines",
+    run: (m) => text.dedupeLines({ text: m[1] })
+  },
+  {
+    pattern: /^sort\s+(?:these\s+)?lines:?\s+([\s\S]+)$/i,
+    skill: "text.sort-lines",
+    run: (m) => text.sortLines({ text: m[1] })
+  },
+  {
+    pattern: /^reverse\s+(?:the\s+)?(?:text|string):?\s+([\s\S]+)$/i,
+    skill: "text.reverse-text",
+    run: (m) => text.reverseText({ text: m[1] })
+  },
+  {
+    pattern: /^(?:escape|unescape)\s+html:?\s+([\s\S]+)$/i,
+    skill: "encode.html-entity-escape",
+    run: (m) => encode.htmlEntities({ text: m[1], decode: /^unescape/i.test(m[0]) })
+  },
+  {
+    pattern: /^decode\s+(?:this\s+)?jwt:?\s+([\s\S]+)$/i,
+    skill: "encode.jwt-decode",
+    run: (m) => encode.jwtDecode({ text: m[1].trim() })
+  },
+  {
+    pattern: /^(?:how long|reading time)\s+(?:to read|for|of):?\s+([\s\S]+)$/i,
+    skill: "text-analysis.reading-time",
+    run: (m) => analysis.readingTime({ text: m[1] })
+  },
+  {
+    pattern: /^csv\s+to\s+json:?\s+([\s\S]+)$/i,
+    skill: "data-format.csv-to-json",
+    run: (m) => data.csvToJson({ text: m[1] })
   }
 ];
 
 export async function instantAnswer(input: string): Promise<InstantAnswer | null> {
   const query = input.trim();
-  if (!query || query.length > 120 || query.startsWith("/")) return null;
-
-  // Bare arithmetic: "1240 * 0.17", "(3+4)/2".
-  const bare = query.replace(/[?=\s]+$/, "");
-  if (ARITHMETIC.test(bare) && HAS_OPERATOR.test(bare) && /\d/.test(bare)) {
-    try {
-      const value = evaluateExpression(bare.replace(/,/g, ""));
-      return { text: `${bare} = ${value}`, skill: "math.expression-evaluate" };
-    } catch {
-      return null; // Malformed; let the model read it as prose instead.
-    }
-  }
-
-  const conversion = CONVERSION.exec(query);
-  if (conversion) {
-    const [, value, from, to] = conversion;
-    const text = unwrap(await math.unitConvert({
-      value: Number(value),
-      from: from.replace("°", ""),
-      to: to.replace("°", "")
-    }));
-    if (text) return { text, skill: "math.unit-convert" };
-    return null; // Not a unit pair we know; the model may still answer it.
-  }
+  if (!query || query.startsWith("/")) return null;
 
   /* Everything above stays as it was. What follows widens the doorway.
 
@@ -202,6 +260,35 @@ export async function instantAnswer(input: string): Promise<InstantAnswer | null
        showing — it means the arguments were not what they looked like, and the
        model can still answer properly. */
     return null;
+  }
+
+  /* The short-form handlers below match loose shapes — bare arithmetic, a
+     conversion, "what day is it" — so they are only safe on something short.
+     The routes above are anchored to an explicit keyword and may read the
+     whole message, which is what lets them work on pasted text. */
+  if (query.length > 120) return null;
+
+  // Bare arithmetic: "1240 * 0.17", "(3+4)/2".
+  const bare = query.replace(/[?=\s]+$/, "");
+  if (ARITHMETIC.test(bare) && HAS_OPERATOR.test(bare) && /\d/.test(bare)) {
+    try {
+      const value = evaluateExpression(bare.replace(/,/g, ""));
+      return { text: `${bare} = ${value}`, skill: "math.expression-evaluate" };
+    } catch {
+      return null; // Malformed; let the model read it as prose instead.
+    }
+  }
+
+  const conversion = CONVERSION.exec(query);
+  if (conversion) {
+    const [, value, from, to] = conversion;
+    const text = unwrap(await math.unitConvert({
+      value: Number(value),
+      from: from.replace("°", ""),
+      to: to.replace("°", "")
+    }));
+    if (text) return { text, skill: "math.unit-convert" };
+    return null; // Not a unit pair we know; the model may still answer it.
   }
 
   if (TODAY.test(query)) {
