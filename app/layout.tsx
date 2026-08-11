@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Source_Serif_4 } from "next/font/google";
+import { Source_Serif_4, Inter, JetBrains_Mono } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import type { ReactNode } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
@@ -26,8 +26,23 @@ import WebVitals from "./web-vitals";
 
 const displaySerif = Source_Serif_4({
   subsets: ["latin"],
+  style: ["normal", "italic"],
   display: "swap",
   variable: "--font-display"
+});
+
+const sans = Inter({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  display: "swap",
+  variable: "--font-sans"
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  display: "swap",
+  variable: "--font-mono"
 });
 
 const siteUrl = getNaviAuthCanonicalOrigin() ?? "https://navisonnet.vercel.app";
@@ -35,41 +50,41 @@ const siteUrl = getNaviAuthCanonicalOrigin() ?? "https://navisonnet.vercel.app";
 async function buildMetadata(): Promise<Metadata> {
   const theme = await readThemeCookie();
   return {
-  metadataBase: new URL(siteUrl),
-  applicationName: "NaviOS",
-  title: { default: "NaviOS — Private AI Workspace", template: "%s · NaviOS" },
-  description: "A private, local-first AI workspace for conversations, files, images, interactive tools, and long-running projects.",
-  manifest: "/manifest.webmanifest",
-  alternates: { canonical: "/" },
-  keywords: ["NaviOS", "Navi Soul", "AI workspace", "AI assistant", "private AI", "PWA"],
-  formatDetection: { telephone: false, address: false, email: false },
-  /* iOS reads this once at launch and ignores later mutation, so it has to be
-     rendered per request. black-translucent draws white glyphs, which vanish
-     against the ivory light theme; default keeps them dark. */
-  appleWebApp: {
-    capable: true,
-    title: "NaviOS",
-    statusBarStyle: theme === "light" ? "default" : "black-translucent"
-  },
-  icons: {
-    icon: [{ url: "/pwa-icon-192-v5.png", type: "image/png", sizes: "192x192" }],
-    apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" }]
-  },
-  openGraph: {
-    type: "website",
-    url: siteUrl,
-    siteName: "NaviOS",
-    title: "NaviOS — Private AI Workspace",
-    description: "Conversations, files, images, tools, and multi-provider AI in one installable workspace.",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "NaviOS private AI workspace" }]
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "NaviOS — Private AI Workspace",
-    description: "Conversations, files, images, tools, and multi-provider AI in one installable workspace.",
-    images: ["/opengraph-image"]
-  },
-  robots: {
+    metadataBase: new URL(siteUrl),
+    applicationName: "NaviOS",
+    title: { default: "NaviOS — Private AI Workspace", template: "%s · NaviOS" },
+    description: "A private, local-first AI workspace for conversations, files, images, interactive tools, and long-running projects.",
+    manifest: "/manifest.webmanifest",
+    alternates: { canonical: "/" },
+    keywords: ["NaviOS", "Navi Soul", "AI workspace", "AI assistant", "private AI", "PWA"],
+    formatDetection: { telephone: false, address: false, email: false },
+    /* iOS reads this once at launch and ignores later mutation, so it has to be
+       rendered per request. black-translucent draws white glyphs, which vanish
+       against the ivory light theme; default keeps them dark. */
+    appleWebApp: {
+      capable: true,
+      title: "NaviOS",
+      statusBarStyle: theme === "light" ? "default" : "black-translucent"
+    },
+    icons: {
+      icon: [{ url: "/pwa-icon-192-v5.png", type: "image/png", sizes: "192x192" }],
+      apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" }]
+    },
+    openGraph: {
+      type: "website",
+      url: siteUrl,
+      siteName: "NaviOS",
+      title: "NaviOS — Private AI Workspace",
+      description: "Conversations, files, images, tools, and multi-provider AI in one installable workspace.",
+      images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "NaviOS private AI workspace" }]
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: "NaviOS — Private AI Workspace",
+      description: "Conversations, files, images, tools, and multi-provider AI in one installable workspace.",
+      images: ["/opengraph-image"]
+    },
+    robots: {
       index: true,
       follow: true,
       googleBot: { index: true, follow: true, "max-image-preview": "large" }
@@ -196,7 +211,12 @@ try {
   ) : children;
 
   return (
-    <html lang="en-US" data-theme="dark" className={`dark ${displaySerif.variable}`} suppressHydrationWarning>
+    <html
+      lang="en-US"
+      data-theme="dark"
+      className={`dark ${displaySerif.variable} ${sans.variable} ${mono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         {/* Without these an installed PWA boots to a blank white screen. Each
