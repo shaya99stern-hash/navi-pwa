@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { NaviMode, StoredChat } from "@/lib/ai/types";
+import type { NaviMode, NaviProject, StoredChat } from "@/lib/ai/types";
 import { searchConversations } from "@/lib/memory";
 import { NAVI_MODES } from "@/lib/chat";
 import { PWA_UPDATE_STATUS_EVENT, requestPwaUpdate, type PwaUpdateStatus } from "@/lib/pwa-update";
@@ -43,6 +43,11 @@ type Props = {
   onClose: () => void;
   onNew: () => void;
   onProjects: () => void;
+  /** Projects, listed in the sidebar rather than hidden behind a sheet. */
+  projects: NaviProject[];
+  activeProjectId: string | null;
+  /** Open a project: makes it active and shows its conversations. */
+  onOpenProject: (id: string) => void;
   onArtifacts: () => void;
   onSettings: () => void;
   onCustomize: () => void;
@@ -54,7 +59,7 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, onArtifacts, onSettings, onCustomize, onConnectors, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, projects, activeProjectId, onOpenProject, onArtifacts, onSettings, onCustomize, onConnectors, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
   /* Null until the user picks; the persisted value is the source of truth
@@ -304,6 +309,51 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
         </nav>
 
         <div ref={listRef} className="scroll-area min-h-0 flex-1 overflow-y-auto px-2 pb-5 pt-3">
+          {/* Projects, in the sidebar where they belong.
+              They existed only behind a sheet, so a project was something you
+              made once and then never saw again — which is most of why the one
+              project in the exported data has no conversations in it. A project
+              you cannot see is a project you do not file anything into.
+
+              Hidden while searching: results are ranked across everything, and
+              a fixed section above them would push the matches off screen. */}
+          {!normalized && projects.length ? (
+            <>
+              <div className="flex items-center justify-between px-3 pb-1">
+                <span className="text-[0.75rem]/4 font-semibold text-tertiary">Projects</span>
+                <button
+                  type="button"
+                  onClick={() => openSheet(onProjects)}
+                  className="min-h-8 rounded-full px-2 text-[0.75rem]/4 font-semibold text-secondary active:bg-elev-2"
+                >
+                  All
+                </button>
+              </div>
+              {projects.slice(0, 6).map((project) => {
+                const count = chats.filter((chat) => chat.projectId === project.id).length;
+                return (
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() => { haptic("selection", haptics); onClose(); onOpenProject(project.id); }}
+                    className={`flex min-h-[44px] w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left ${activeProjectId === project.id ? "bg-elev-2" : "active:bg-elev-2"}`}
+                  >
+                    <FolderKanban size={17} strokeWidth={1.8} className="shrink-0 text-secondary" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[0.9375rem]/5 font-normal text-primary">{project.name}</span>
+                      {/* The count is what makes filing feel worthwhile, and
+                          what makes an empty project obvious. */}
+                      <span className="block text-[0.75rem]/4 font-normal text-tertiary">
+                        {count === 0 ? "No conversations yet" : `${count} conversation${count === 1 ? "" : "s"}`}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              <div className="h-3" aria-hidden="true" />
+            </>
+          ) : null}
+
           {pinned.length ? (
             <>
               <div className="px-3 pb-1 text-[0.75rem]/4 font-semibold text-tertiary">Pinned</div>

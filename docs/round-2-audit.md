@@ -132,23 +132,31 @@ in my session needs authorising, so I have no way to inspect your live schema.
 Your export tells the whole story: one project, `{"name": "New project",
 "instructions": "", "knowledge": []}`, and **not one chat has a `projectId`**.
 
-The plumbing exists — `projectId` on chats, `setProject`, project instructions
-ride along in `requestBody`. What is missing is the entire flow:
+**Correction to an earlier draft of this document.** Two claims here were
+wrong, and both made the feature sound more broken than it is: project
+`knowledge[]` *is* used — it ships in `requestBody` and the server renders it
+into the prompt — and filing a chat into a project *does* exist, as "Move to
+project" in the chat menu. Both are now pinned by tests so the corrections
+cannot drift back.
 
-- `createProject()` immediately makes a project called "New project" with no
-  naming step.
-- Projects never appear in the sidebar; they live behind a sheet.
-- Nothing files a chat into a project from the chat itself.
-- `knowledge[]` is declared and never used.
+The real gaps were narrower, and they are exactly the two the owner named:
 
-**Plan** (you confirmed the target):
-1. Creation opens a sheet: name + instructions, then Create. No more "New project".
-2. Projects become their own sidebar section above Chats, each expanding to its chats.
-3. Starting a chat from inside a project files it there; the chat menu gains "Move to project".
-4. The header shows the project a chat belongs to.
-5. `knowledge[]` last — attach files once, every chat in the project can use them.
+- `createProject()` immediately made a project called "New project" with no
+  naming step, so the instructions field that gives a project its entire
+  purpose stayed empty. **Fixed:** creation opens a form asking for a name
+  (required) and instructions (optional), and creating also selects the project
+  for the current conversation.
+- Projects never appeared in the sidebar; they lived behind a sheet, so a
+  project was something you made once and never saw again. **Fixed:** a
+  Projects section in the drawer with a conversation count on each row, hidden
+  while searching so it cannot push results off screen.
 
-Steps 1–4 are a contained piece of work. Step 5 is its own project.
+Still open on projects:
+
+- Starting a new chat while a project is active does not yet file it there
+  automatically; you file it afterwards from the chat menu.
+- `knowledge[]` is text notes only. Attaching real files to a project — upload
+  once, every chat in it can draw on them — is its own piece of work.
 
 ### 8. Navigation — you are right, and here is the actual rule
 

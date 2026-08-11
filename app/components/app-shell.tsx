@@ -1058,6 +1058,12 @@ export function AppShell({
         onClose={() => setHistoryOpen(false)}
         onNew={newChat}
         onProjects={() => setProjectsOpen(true)}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        /* Opening a project makes it active for the next message and shows it
+           in the sheet, so tapping one from the sidebar is a single act rather
+           than "find it, then remember to switch to it". */
+        onOpenProject={(id) => { setActiveProjectId(id); setProjectsOpen(true); }}
         onArtifacts={() => setArtifactsOpen(true)}
         onSettings={() => setSettingsOpen(true)}
         onCustomize={() => { setSettingsSection("skills"); setSettingsOpen(true); }}
