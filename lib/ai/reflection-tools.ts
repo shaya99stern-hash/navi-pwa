@@ -5,7 +5,7 @@ import { LESSON_PREFIX } from "../memory/lesson";
 /**
  * Learning from what just happened.
  *
- * `learn_skill` stores what the *user* teaches. Nothing stored what NaviSoul
+ * `learn_skill` stores what the *user* teaches. Nothing stored what Navi Soul
  * worked out for itself, so the same ground was re-covered every time: the
  * shape of this codebase, which provider is unreliable, that a particular
  * request always means a particular thing. Each conversation started from the

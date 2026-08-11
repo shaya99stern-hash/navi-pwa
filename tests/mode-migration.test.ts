@@ -3,10 +3,10 @@
 type NaviMode = "chat" | "code";
 
 const LEGACY_PRESET_TO_MODE: Record<string, NaviMode> = {
-  "navi-code": "code", "navi-fable": "code", "navi-soul": "chat", "navi-sol": "chat",
+  "navi-code": "code", "navi-soul-deep": "code", "navi-soul": "chat", "navi-soul-direct": "chat",
   "navi-chat": "chat", auto: "chat", "gemini-direct": "chat", "groq-direct": "chat",
   "huggingface-direct": "chat", "navi-5": "code", "fable-5": "code",
-  "navi-sol-5-6": "chat", "opus-4-8": "chat", "groq-balanced": "chat",
+  "navi-soul-direct-5-6": "chat", "opus-4-8": "chat", "groq-balanced": "chat",
   "groq-reasoning": "chat", "groq-fast": "chat", "gemini-flash": "chat",
   "openrouter-free": "chat"
 };
@@ -24,9 +24,9 @@ const check = (n: string, a: unknown, e: unknown) => {
 
 // The rule: anyone on Code keeps Code, everyone else lands on Chat.
 check("navi-code keeps Code", normalizeMode(undefined, "navi-code"), "code");
-check("navi-fable keeps Code", normalizeMode(undefined, "navi-fable"), "code");
+check("navi-soul-deep keeps Code", normalizeMode(undefined, "navi-soul-deep"), "code");
 check("navi-soul becomes Chat", normalizeMode(undefined, "navi-soul"), "chat");
-check("navi-sol becomes Chat", normalizeMode(undefined, "navi-sol"), "chat");
+check("navi-soul-direct becomes Chat", normalizeMode(undefined, "navi-soul-direct"), "chat");
 check("direct routes become Chat", normalizeMode(undefined, "gemini-direct"), "chat");
 
 // Nobody is ever left unset — the whole point of the migration.
@@ -41,9 +41,9 @@ check("a bogus mode falls back to the preset", normalizeMode("nonsense", "navi-c
 
 // Every preset the app has ever shipped must be covered, not defaulted by luck.
 const EVERY_SHIPPED_PRESET = [
-  "navi-soul", "navi-code", "auto", "navi-fable", "navi-sol",
+  "navi-soul", "navi-code", "auto", "navi-soul-deep", "navi-soul-direct",
   "gemini-direct", "groq-direct", "huggingface-direct", "navi-chat",
-  "navi-5", "fable-5", "navi-sol-5-6", "opus-4-8"
+  "navi-5", "fable-5", "navi-soul-direct-5-6", "opus-4-8"
 ];
 check("every shipped preset is mapped explicitly",
   EVERY_SHIPPED_PRESET.every((p) => p in LEGACY_PRESET_TO_MODE), true);

@@ -6,7 +6,7 @@ import type { UIMessage } from "ai";
 /**
  * The plan, before the work.
  *
- * NaviSoul has been making plans for a while — deciding what a good answer looks
+ * Navi Soul has been making plans for a while — deciding what a good answer looks
  * like, and what it has to satisfy — but the plan lived entirely inside the
  * request. The user saw a one-line status and then a finished answer, which
  * means the only moment they could correct a misread of their intent was after

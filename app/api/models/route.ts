@@ -9,9 +9,11 @@ export const runtime = "edge";
 
 const VALID_PRESETS = new Set<ModelPreset>(DIAGNOSTIC_ROUTES.map((route) => route.id));
 
+/* This reads a deployment environment variable, not a stored user preference,
+   so there is no device to migrate — an unrecognised value falls through to
+   `auto`, which is the right answer for a name this build no longer has. The
+   aliases that named other companies' models are gone with the rest. */
 function normalizeConfiguredDefault(value: string | undefined): ModelPreset {
-  if (value === "navi-5" || value === "fable-5") return "navi-fable";
-  if (value === "navi-sol-5-6" || value === "opus-4-8") return "navi-sol";
   return value && VALID_PRESETS.has(value as ModelPreset) ? value as ModelPreset : "auto";
 }
 
@@ -20,8 +22,8 @@ export async function GET(request: Request): Promise<Response> {
   const catalog = await getSwarmCatalogStatus(request.signal).catch(() => ({
     dynamicCatalog: false,
     routerModels: 0,
-    fableCatalogCandidates: 0,
-    solCatalogCandidates: 0
+    deepCatalogCandidates: 0,
+    directCatalogCandidates: 0
   }));
 
   return Response.json(
@@ -42,21 +44,21 @@ export async function GET(request: Request): Promise<Response> {
         missing: stack.missing
       },
       swarms: {
-        "navi-fable": {
+        "navi-soul-deep": {
           specialistRoles: 72,
           profile: "long-horizon projects, coding, tests, documents, and visual verification",
           adaptiveModelSelection: true,
           maxConcurrentCouncils: 8,
           privateDeliberation: true,
-          candidateModels: catalog.fableCatalogCandidates
+          candidateModels: catalog.deepCatalogCandidates
         },
-        "navi-sol": {
+        "navi-soul-direct": {
           specialistRoles: 96,
           profile: "parallel reasoning, research, quantitative work, design, and blind verification",
           adaptiveModelSelection: true,
           maxConcurrentCouncils: 10,
           privateDeliberation: true,
-          candidateModels: catalog.solCatalogCandidates
+          candidateModels: catalog.directCatalogCandidates
         }
       },
       huggingFaceCatalog: {

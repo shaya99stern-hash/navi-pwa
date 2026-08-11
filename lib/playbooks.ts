@@ -9,9 +9,17 @@ import builtIn from "@/data/playbooks.json";
  * system prompt when the request matches, so the model brings a method rather
  * than improvising one.
  *
- * The format is deliberately Anthropic's SKILL.md — YAML frontmatter with
- * `name` and `description`, then a markdown body — so any skill published for
- * Claude Code or claude.ai can be pasted in and works here unchanged.
+ * The format is deliberately the common SKILL.md one — YAML frontmatter with
+ * `name` and `description`, then a markdown body — so a skill file written for
+ * another tool can be pasted in and read here.
+ *
+ * "Read here" is the honest claim, and it is narrower than the one this file
+ * used to make. Measured against 35 published SKILL.md files: every one
+ * parsed, but 22 exceeded MAX_INSTRUCTION_CHARS and were trimmed, the longest
+ * keeping a fifth of its body. Files that ship companion scripts or reference
+ * documents cannot bring them at all, because a playbook is prompt text and
+ * nothing else. Callers are told when a file was trimmed so the user finds out
+ * from the app rather than from a playbook that quietly stops mid-instruction.
  */
 
 export type Playbook = {
@@ -61,7 +69,7 @@ function terms(text: string): string[] {
  * on a canonical form: `---` fences, quoted or bare values, and extra
  * frontmatter fields that are simply ignored.
  */
-export function parseSkillMarkdown(source: string): { playbook: Omit<Playbook, "source"> } | { error: string } {
+export function parseSkillMarkdown(source: string): { playbook: Omit<Playbook, "source">; truncated: boolean } | { error: string } {
   const text = source.replace(/\r\n/g, "\n").trim();
   const fenced = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text);
   if (!fenced) return { error: "This does not look like a SKILL.md file — it needs a --- frontmatter block at the top." };
@@ -88,7 +96,8 @@ export function parseSkillMarkdown(source: string): { playbook: Omit<Playbook, "
       name: name.slice(0, 80),
       description: description.slice(0, 400),
       instructions: instructions.slice(0, MAX_INSTRUCTION_CHARS)
-    }
+    },
+    truncated: instructions.length > MAX_INSTRUCTION_CHARS
   };
 }
 

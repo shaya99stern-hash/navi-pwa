@@ -161,13 +161,13 @@ export const ROUTES = {
   deepseekFlash: {
     provider: "deepseek",
     model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
-    label: "NaviSoul quality",
+    label: "Navi Soul quality",
     capability: "reasoning"
   },
   deepseekPro: {
     provider: "deepseek",
     model: process.env.DEEPSEEK_PRO_MODEL ?? "deepseek-v4-pro",
-    label: "NaviSoul quality",
+    label: "Navi Soul quality",
     capability: "reasoning"
   },
   mistralBalanced: {
@@ -240,7 +240,7 @@ function configuredHfRoutes(): ProviderRoute[] {
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, 24)
-    .map((model, index) => hf(model, `NaviSoul · analysis ${index + 1}`, "balanced"));
+    .map((model, index) => hf(model, `Navi Soul · analysis ${index + 1}`, "balanced"));
   if (custom?.length) return custom;
 
   /* Capability-ordered so a council of any size still spans reasoning,
@@ -489,9 +489,9 @@ export function fallbackRoutes(options: {
   return ordered.slice(0, 2);
 }
 
-export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-sol-5-6"): ProviderRoute {
+export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-soul-direct-5-6"): ProviderRoute {
   if (availability.gemini) return ROUTES.geminiSynthesis;
-  if (profile === "navi-sol-5-6" && availability.huggingface) return ROUTES.hfGptOss;
+  if (profile === "navi-soul-direct-5-6" && availability.huggingface) return ROUTES.hfGptOss;
   if (profile === "navi-5" && availability.huggingface) return ROUTES.hfGlm;
   // Synthesis reads every specialist answer, so it wants headroom.
   if (availability.cerebras) return ROUTES.cerebrasLarge;
@@ -504,11 +504,11 @@ export function selectSynthesisRoute(availability: ProviderAvailability, profile
 export function selectVerificationRoute(
   availability: ProviderAvailability,
   synthesisProvider: ProviderName,
-  profile: "navi-5" | "navi-sol-5-6"
+  profile: "navi-5" | "navi-soul-direct-5-6"
 ): ProviderRoute {
   if (synthesisProvider !== "groq" && availability.groq) return ROUTES.groqReasoning;
   if (synthesisProvider !== "huggingface" && availability.huggingface) {
-    return profile === "navi-sol-5-6" ? ROUTES.hfDeepSeek : ROUTES.hfGptOss;
+    return profile === "navi-soul-direct-5-6" ? ROUTES.hfDeepSeek : ROUTES.hfGptOss;
   }
   if (synthesisProvider !== "gemini" && availability.gemini) return ROUTES.geminiSynthesis;
   // A checker that shares the writer's provider shares its blind spots.

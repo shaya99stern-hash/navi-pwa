@@ -13,7 +13,7 @@ import { buildWebTools } from "@/lib/ai/web-tools";
 import type { CustomConnector, NaviMode, ToolPolicy } from "@/lib/ai/types";
 
 /**
- * One place that decides what NaviSoul can do this turn.
+ * One place that decides what Navi Soul can do this turn.
  *
  * Before this the answer was assembled inline in the chat route from five
  * separate builders, each with its own idea of when it applied. Nothing could
@@ -39,7 +39,7 @@ import type { CustomConnector, NaviMode, ToolPolicy } from "@/lib/ai/types";
  * account connected every one of `github_read_file`, `github_search_code` and
  * `github_check_ci` was cut before the model saw it. Code mode had the
  * repository tools it is *for* removed on every turn, and the only symptom was
- * NaviSoul saying it could not reach the repository while holding the token.
+ * Navi Soul saying it could not reach the repository while holding the token.
  *
  * So the ceiling is per mode. Chat keeps the tighter budget, because a chat
  * turn genuinely does not need twenty tools and selection accuracy is the whole
@@ -118,7 +118,7 @@ const GROUPS: Group[] = [
   },
   {
     /* Knowing what it is running on. Always on, and high in the order, because
-       this is the group that stops NaviSoul answering questions about itself
+       this is the group that stops Navi Soul answering questions about itself
        from assumption — it invented a Settings path, invented an environment
        flag, and announced it had no code sandbox while one sat there
        unconfigured. Every one of those is a turn where nothing let it look.

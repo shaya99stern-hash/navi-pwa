@@ -61,8 +61,16 @@ check("the quality check is gone from Account", account.includes("Run quality ch
 const privacy = block("privacy");
 const general = block("general");
 
-check("the memory list is on Privacy", privacy.includes("What is stored"), true);
-check("it is not on General", general.includes("What is stored"), false);
+/* The single "What is stored" section became two, because it was answering two
+   questions with one number. The device count is always knowable; the account
+   count is knowable only when a store is configured and someone is signed in,
+   and collapsing them printed `Conversations 0` beside a drawer listing five. */
+check("the memory list is on Privacy", privacy.includes("On this device"), true);
+check("the account mirror is stated separately", privacy.includes("Synced to your account"), true);
+check("it is not on General", general.includes("On this device"), false);
+/* The device count reads the same array the drawer renders, so the two screens
+   cannot disagree about a number the user can see in both. */
+check("the device count comes from the rendered chats", privacy.includes("localChatCount"), true);
 check("Privacy can forget a fact", /forget\(item\.id\)/.test(privacy), true);
 check("Privacy states the not-configured case", privacy.includes("Not enabled"), true);
 check("Privacy states the empty case", privacy.includes("Nothing yet"), true);
@@ -74,9 +82,9 @@ check("Privacy states the empty case", privacy.includes("Nothing yet"), true);
    above" across an intervening section — with the storage-durability sentence
    printed twice, once under a toggle and once as a row of its own. */
 const heads = [...privacy.matchAll(/<SectionHeader>(.*?)<\/SectionHeader>/g)].map((m) => m[1]);
-check("Privacy is three sections, not four", heads, ["Memory", "What is stored", "Your data"]);
-check("the switches come before what they govern", privacy.indexOf("Local history") < privacy.indexOf("What is stored"), true);
-check("the facts list follows its own count", privacy.indexOf("What is stored") < privacy.indexOf("forget(item.id)"), true);
+check("Privacy is four sections in reading order", heads, ["Memory", "On this device", "Synced to your account", "Your data"]);
+check("the switches come before what they govern", privacy.indexOf("Local history") < privacy.indexOf("On this device"), true);
+check("the facts list follows its own count", privacy.indexOf("Synced to your account") < privacy.indexOf("forget(item.id)"), true);
 check("the durability sentence appears once", (privacy.match(/DURABILITY_DETAIL\[durability\]/g) ?? []).length, 1);
 /* A count that pointed at a list a section away, when the list is now directly
    beneath it. */
@@ -158,6 +166,18 @@ check("the offline banner stays", shellSource.includes("Offline · chats, projec
 check("the project banner stays", shellSource.includes("Project: {activeProject.name}"), true);
 const composerSource = read("app/components/composer-dock.tsx").source;
 check("the composer still shows the state", /Research is \$\{research \? "on" : "off"\}|Research is on|research \?/.test(composerSource), true);
+
+/* ── Every switch must reach something ───────────────────────────────────────
+   The Motion control wrote `data-motion` onto the root element and no rule in
+   the stylesheet ever read it, so moving the switch changed an attribute and
+   not one animation. A setting that describes a behaviour it does not have is
+   worse than no setting: it teaches the user that the others are decoration
+   too. The OS media query is not a substitute — that is a different input. */
+const css = read("app/globals.css").source;
+check("the Motion control writes the attribute", shellSource.includes("dataset.motion = preferences.motion"), true);
+check("a stylesheet rule reads the attribute", css.includes('[data-motion="reduced"]'), true);
+check("the attribute shortens animations, not only transitions",
+  /\[data-motion="reduced"\][\s\S]{0,400}animation-duration/.test(css), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

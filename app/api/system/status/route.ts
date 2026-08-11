@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 /**
  * Which engine capabilities are actually live, and what each missing one needs.
  *
- * The exported chats are full of NaviSoul guessing at this — announcing it had
+ * The exported chats are full of Navi Soul guessing at this — announcing it had
  * no code sandbox when one is built in but unconfigured, inventing a
  * SHOW_DEVELOPER flag, naming credentials that do not exist. The app knows the
  * real answer; nothing was surfacing it. Names of variables only: never a
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
       id: "sandbox",
       name: "Code sandbox",
       ready: !sandboxGap,
-      /* NaviSoul has told this user it has no sandbox at all. It has one; it
+      /* Navi Soul has told this user it has no sandbox at all. It has one; it
          was unconfigured, which is a different sentence with a fix at the end. */
       detail: sandboxGap ?? "Python runs in an isolated Vercel Sandbox. JavaScript runs on-device."
     },
@@ -84,15 +84,15 @@ export async function GET(request: Request) {
       name: "Self-update engine",
       ready: Boolean(selfUpdateToken()),
       detail: selfUpdateToken()
-        ? `NaviSoul can read and commit to ${repo.owner}/${repo.repo}; every commit deploys.`
-        : "Needs GITHUB_PAT in Vercel. Without it NaviSoul cannot edit its own source."
+        ? `Navi Soul can read and commit to ${repo.owner}/${repo.repo}; every commit deploys.`
+        : "Needs GITHUB_PAT in Vercel. Without it Navi Soul cannot edit its own source."
     },
     {
       id: "github-writes",
       name: "GitHub writes (your account)",
       ready: githubWritesEnabled(),
       detail: githubWritesEnabled()
-        ? "NaviSoul may commit and open pull requests on connected repositories."
+        ? "Navi Soul may commit and open pull requests on connected repositories."
         : "Read-only. Set NAVI_GITHUB_ALLOW_WRITES=true in Vercel and reconnect GitHub."
     },
     {

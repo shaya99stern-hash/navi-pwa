@@ -16,7 +16,7 @@ type Props = {
 };
 
 const MODES: Array<{ id: ConnectorAccessMode; title: string; detail: string }> = [
-  { id: "ask", title: "Ask every time", detail: "NaviSoul may inspect connector availability, but external access waits for your approval." },
+  { id: "ask", title: "Ask every time", detail: "Navi Soul may inspect connector availability, but external access waits for your approval." },
   { id: "auto", title: "Auto for reads", detail: "Read-only resources may be used automatically. Writes, deletes, sends, bookings, and purchases still require approval." },
   { id: "always", title: "Always available", detail: "Connected read-only resources stay available in this conversation. Sensitive actions still require explicit confirmation." }
 ];
@@ -55,7 +55,7 @@ const ACCOUNTS: AccountConnector[] = [
     statusPath: "/api/google/status",
     /* "Not configured" with no way forward is a dead end. Connecting needs
        credentials that only exist in the deployment, so say which ones. */
-    setup: "Needs GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in Vercel. See docs/google-connector-setup.md.",
+    setup: "Not available on this deployment yet. It has to be enabled by whoever administers it; the steps are under Settings → Developer.",
     reads: "Read your mail and calendar",
     writes: "Send mail and create events"
   },
@@ -65,12 +65,12 @@ const ACCOUNTS: AccountConnector[] = [
     detail: "Repositories, pull requests, and CI logs",
     connectPath: "/api/github/oauth/start",
     statusPath: "/api/github/status",
-    setup: "Needs GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET in Vercel.",
+    setup: "Not available on this deployment yet. It has to be enabled by whoever administers it; the steps are under Settings → Developer.",
     reads: "Read repositories, pull requests, and CI logs",
     writes: "Commit to a working branch and open pull requests",
     /* "Read only" with no way forward is the dead end this screen kept
        hitting: writes are a separate deliberate opt-in, so name the switch. */
-    unlockWrites: "Writes are off. Set NAVI_GITHUB_ALLOW_WRITES=true in Vercel and reconnect to let NaviSoul commit and open pull requests."
+    unlockWrites: "Writes are off for this deployment, so Navi Soul can read your repositories but not change them. Turning them on is a deployment setting; the steps are under Settings → Developer."
   },
   {
     id: "vercel",
@@ -79,7 +79,12 @@ const ACCOUNTS: AccountConnector[] = [
     /* No status route and no Connect button: this one is configured with a
        deployment-wide token rather than per user, so there is nothing for an
        individual to authorize. Saying so beats an inert row. */
-    setup: "Configured for the whole deployment with NAVI_VERCEL_TOKEN, not per person.",
+    /* Environment-variable names and deploy steps are not consumer copy. What
+       someone reading this screen needs to know is whether they can act on it
+       — and here they cannot, because it is set once for everyone. The name of
+       the variable lives in Settings → Developer, where the person who can
+       actually set it is looking. */
+    setup: "Set up once for the whole deployment, not per person. Nothing to connect here.",
     reads: "Read deployments and build logs"
   }
 ];
@@ -455,7 +460,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                     )}
                   </div>
                   {/* Connected but read-only is the state that looks broken:
-                      the account is linked and NaviSoul still refuses to
+                      the account is linked and Navi Soul still refuses to
                       commit. Name the switch instead of leaving a badge. */}
                   {connected && !status?.writesEnabled && account.unlockWrites ? (
                     <p className="ml-[52px] pb-3 text-[0.6875rem]/4 font-medium text-tertiary">{account.unlockWrites}</p>
@@ -478,7 +483,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                 <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Services NaviOS can connect</h2>
                 <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
                   {catalog.selfConfigurable
-                    ? "Pick one, paste the key, and NaviOS sets it up and redeploys itself. You can also just ask NaviSoul in chat."
+                    ? "Pick one, paste the key, and NaviOS sets it up and redeploys itself. You can also just ask Navi Soul in chat."
                     : catalog.setupHint ?? "Loading…"}
                 </p>
               </span>
@@ -668,7 +673,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                 <div className="py-8 text-center">
                   <p className="text-[0.8125rem]/5 font-medium text-secondary">No connector servers yet.</p>
                   <p className="mx-auto mt-1 max-w-[46ch] text-[0.6875rem]/4 font-medium text-tertiary">
-                    These are added by the deployment, not from this device, so their credentials never reach the browser. Set <span className="font-mono text-secondary">MCP_SERVER_REGISTRY_JSON</span> in Vercel and redeploy.
+                    Connector servers are set up for the whole deployment rather than per person, so there is nothing to add from this device. Whoever administers this deployment can configure them; the details are under Settings → Developer.
                   </p>
                 </div>
               ) : null}

@@ -4,7 +4,7 @@ import type { EffortLevel, ModelPreset, NaviMode, NaviPreferences, ResponseStyle
 /**
  * The two modes, and the only product choice the interface offers.
  *
- * There is one brain — NaviSoul — behind both. Which free provider answers a
+ * There is one brain — Navi Soul — behind both. Which free provider answers a
  * given turn is chosen by the router and never named on screen, so nothing
  * here mentions a model.
  */
@@ -16,8 +16,8 @@ export const NAVI_MODES: Array<{ id: NaviMode; label: string; detail: string }> 
 /** The internal routes a diagnostics pin may select. Never shown otherwise. */
 export const DIAGNOSTIC_ROUTES: Array<{ id: ModelPreset; label: string }> = [
   { id: "navi-soul", label: "Automatic" },
-  { id: "navi-fable", label: "Staged council" },
-  { id: "navi-sol", label: "Parallel council" },
+  { id: "navi-soul-deep", label: "Staged council" },
+  { id: "navi-soul-direct", label: "Parallel council" },
   { id: "huggingface-direct", label: "Hugging Face" },
   { id: "gemini-direct", label: "Gemini" },
   { id: "groq-direct", label: "Groq" }

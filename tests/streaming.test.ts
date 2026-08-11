@@ -98,7 +98,7 @@ const partial = createArtifactGate();
 const beforeClose = partial.push("Intro text.\n```navi-artifact\n" + artifact.slice(0, 40));
 check("prose before a fence is released", beforeClose, "Intro text.\n");
 check("an unclosed payload is withheld", beforeClose.includes("html"), false);
-check("an unclosed payload is dropped at the end", partial.flush(), "\n> NaviSoul removed an incomplete artifact payload.\n");
+check("an unclosed payload is dropped at the end", partial.flush(), "\n> Navi Soul removed an incomplete artifact payload.\n");
 
 // An invalid payload is replaced rather than rendered.
 const broken = streamThrough(["```navi-artifact\n{not json}\n```"]);

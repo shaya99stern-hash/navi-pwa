@@ -92,13 +92,14 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
   }
 
   async function copySource() {
+    // On the gesture, not after the clipboard write; see code-block.tsx. The
+    // notice below reports the outcome, which is what an outcome needs.
+    haptic("selection", haptics);
     try {
       await navigator.clipboard.writeText(source || fileContent);
       setNotice("Artifact source copied");
-      haptic("success", haptics);
     } catch {
       setNotice("Clipboard access was unavailable");
-      haptic("error", haptics);
     }
   }
 
@@ -117,6 +118,9 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
   }
 
   async function shareArtifact() {
+    // On the gesture: the share sheet and the clipboard fallback are both
+    // async, so a tick after either one has no activation left to fire on.
+    haptic("selection", haptics);
     const file = new File([fileContent], fileName, { type: mimeType });
     try {
       if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
@@ -126,11 +130,9 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
         await navigator.clipboard.writeText(source || fileContent);
         setNotice("Sharing is unavailable here; source copied instead");
       }
-      haptic("success", haptics);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setNotice("Artifact could not be shared");
-      haptic("error", haptics);
     }
   }
 
@@ -205,7 +207,7 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
               <span className="block truncate text-[1rem]/5 font-semibold text-primary">{payload.title}</span>
               <span className="block text-[0.625rem]/4 font-semibold uppercase tracking-[0.08em] text-tertiary">Interactive artifact</span>
             </span>
-            <button type="button" onClick={editWithNavi} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Edit artifact with NaviSoul"><Pencil size={18} /></button>
+            <button type="button" onClick={editWithNavi} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Edit artifact with Navi Soul"><Pencil size={18} /></button>
             <button type="button" onClick={downloadArtifact} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Download artifact"><Download size={18} /></button>
             <button type="button" onClick={() => void shareArtifact()} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Share artifact"><Share2 size={18} /></button>
           </header>

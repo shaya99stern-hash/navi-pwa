@@ -1,9 +1,9 @@
 import type { UIMessage } from "ai";
 
-export type SwarmPreset = "navi-fable" | "navi-sol";
+export type SwarmPreset = "navi-soul-deep" | "navi-soul-direct";
 
 /**
- * The product mode. One brain — NaviSoul — and two ways to work with it.
+ * The product mode. One brain — Navi Soul — and two ways to work with it.
  *
  * The user switches mode, never model. Which free provider answers is an
  * implementation detail they neither see nor choose, so it does not belong in
@@ -14,7 +14,7 @@ export type NaviMode = "chat" | "code";
 /** Retained only so preferences stored by v4.2.0 and earlier still migrate. */
 export type LegacyModelPreset =
   | "navi-soul" | "navi-chat" | "navi-code" | "auto"
-  | "navi-fable" | "navi-sol"
+  | "navi-soul-deep" | "navi-soul-direct"
   | "gemini-direct" | "groq-direct" | "huggingface-direct";
 
 /**

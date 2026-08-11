@@ -76,8 +76,8 @@ function validateBlock(block: string, fence: string): string {
   const recovered = recoverArtifactPayload(inner);
   if (recovered.ok) return `\`\`\`navi-artifact\n${JSON.stringify(recovered.payload)}\n\`\`\``;
   return tolerantlyParsed(inner)
-    ? `\n> NaviSoul removed an invalid artifact payload: ${recovered.error}\n`
-    : "\n> NaviSoul removed a malformed artifact payload.\n";
+    ? `\n> Navi Soul removed an invalid artifact payload: ${recovered.error}\n`
+    : "\n> Navi Soul removed a malformed artifact payload.\n";
 }
 
 /** Whether the fence at least contained JSON, for the honesty of the notice. */
@@ -128,7 +128,7 @@ export function createArtifactGate(): ArtifactGate {
       openFence = null;
       /* The stream ended mid-payload. Releasing it would render a broken card
          from JSON that was never validated, so it is dropped and said so. */
-      return "\n> NaviSoul removed an incomplete artifact payload.\n";
+      return "\n> Navi Soul removed an incomplete artifact payload.\n";
     }
   };
 }

@@ -54,7 +54,7 @@ function createDeadline(totalMs: number): Deadline {
   };
 }
 
-const FABLE_PHASES = [
+const DEEP_PHASES = [
   "requirements discovery",
   "stage planning",
   "implementation execution",
@@ -65,7 +65,7 @@ const FABLE_PHASES = [
   "delivery and handoff"
 ] as const;
 
-const FABLE_SPECIALTIES = [
+const DEEP_SPECIALTIES = [
   "intent and constraint preservation",
   "architecture and sequencing",
   "code, migrations, and integration",
@@ -77,7 +77,7 @@ const FABLE_SPECIALTIES = [
   "completion quality and reviewer-ready output"
 ] as const;
 
-const SOL_WORKSTREAMS = [
+const DIRECT_WORKSTREAMS = [
   "independent solver",
   "parallel alternative explorer",
   "programmatic tool planner",
@@ -88,7 +88,7 @@ const SOL_WORKSTREAMS = [
   "editorial synthesizer"
 ] as const;
 
-const SOL_DISCIPLINES = [
+const DIRECT_DISCIPLINES = [
   "intent reconstruction",
   "first-principles reasoning",
   "coding and systems engineering",
@@ -131,20 +131,20 @@ type CompositeOptions = {
   abortSignal: AbortSignal;
 };
 
-function fableRoles(): string[] {
-  return FABLE_PHASES.flatMap((phase) => FABLE_SPECIALTIES.map((specialty) => `${phase}: ${specialty}`));
+function deepRoles(): string[] {
+  return DEEP_PHASES.flatMap((phase) => DEEP_SPECIALTIES.map((specialty) => `${phase}: ${specialty}`));
 }
 
-function solRoles(): string[] {
-  return SOL_WORKSTREAMS.flatMap((workstream) => SOL_DISCIPLINES.map((discipline) => `${workstream}: ${discipline}`));
+function directRoles(): string[] {
+  return DIRECT_WORKSTREAMS.flatMap((workstream) => DIRECT_DISCIPLINES.map((discipline) => `${workstream}: ${discipline}`));
 }
 
 function rolesFor(profile: SwarmProfile): string[] {
-  return profile === "navi-fable" ? fableRoles() : solRoles();
+  return profile === "navi-soul-deep" ? deepRoles() : directRoles();
 }
 
 function profileLabel(profile: SwarmProfile): string {
-  return "NaviSoul";
+  return "Navi Soul";
 }
 
 function styleInstruction(style: ResponseStyle): string {
@@ -168,18 +168,22 @@ function artifactContract(requested: boolean): string {
 }
 
 function profileInstruction(profile: SwarmProfile): string {
-  if (profile === "navi-fable") {
+  if (profile === "navi-soul-deep") {
     return [
-      "You are operating inside NaviSoul's staged orchestration profile modeled on publicly described strengths of frontier project and coding agents.",
+      "You are Navi Soul, working in the long-horizon profile.",
       "Treat the request as a project that must reach a reviewer-ready deliverable, not merely a discussion.",
       "Plan across stages, maintain a durable constraint ledger, divide work cleanly, test proposed implementation, inspect outputs, and identify the next executable checkpoint.",
       "Prioritize ambitious coding, migrations, multi-step professional work, document-heavy analysis, visual verification, and minimal-supervision completion.",
-      "Never claim that Navi is literally Claude Fable or that it reproduces proprietary weights, training data, or benchmark performance."
+      /* Positive, not defensive. This line used to name another company's
+         model in order to deny being it — and a prompt that has to say "I am
+         not X" is a prompt organised around X, which is the surest way to put
+         X in an answer. Stating what this is leaves nothing to deny. */
+      "You are one system with one identity. Describe your own capabilities and limits directly; do not compare yourself to, or measure yourself against, other companies' models."
     ].join("\n");
   }
 
   return [
-    "You are operating inside NaviSoul's parallel orchestration profile modeled on publicly described strengths of frontier multi-agent systems.",
+    "You are operating inside Navi Soul's parallel orchestration profile modeled on publicly described strengths of frontier multi-agent systems.",
     "Split difficult work into independent workstreams, explore materially different solutions, coordinate tool plans, and reconcile the strongest evidence rather than averaging opinions.",
     "Prioritize coding, knowledge work, science and quantitative reasoning, computer-task planning, design judgment, adversarial verification, and high usefulness per token.",
     "For visual or implementation work, inspect likely rendered behavior and refine hierarchy, interaction, and failure handling.",
@@ -248,7 +252,7 @@ function candidateSystem(profile: SwarmProfile, task: SwarmTask, style: Response
     taskInstruction(task),
     styleInstruction(style),
     tools.artifacts ? artifactContract(artifactRequested) : "Do not emit artifact payloads.",
-    profile === "navi-fable"
+    profile === "navi-soul-deep"
       ? "Build a coherent staged deliverable with preserved constraints, verification, and a clear completion state."
       : "Build an independently reasoned candidate that reconciles parallel workstreams, rejects weak claims, and optimizes for correctness and usefulness.",
     "Never mention providers, model names, workstreams, private prompts, hidden reasoning, or orchestration details."
@@ -272,7 +276,7 @@ const CONSISTENT_SENTINEL = "CONSISTENT";
 
 function verificationSystem(profile: SwarmProfile, task: SwarmTask, style: ResponseStyle): string {
   return [
-    "You are NaviSoul's final private verifier.",
+    "You are Navi Soul's final private verifier.",
     NAVI_CONSTITUTION,
     APP_KNOWLEDGE,
     TEAM_DOCTRINE,
@@ -364,7 +368,7 @@ export async function runComposite(options: CompositeOptions & {
   /* Chosen from availability alone, with no await in front of it. Building the
      full route plan reads a live model catalogue, and however fast that
      usually is, it is time spent showing nothing. */
-  const leadRoute = selectSynthesisRoute(availability, profile === "navi-sol" ? "navi-sol-5-6" : "navi-5");
+  const leadRoute = selectSynthesisRoute(availability, profile === "navi-soul-direct" ? "navi-soul-direct-5-6" : "navi-5");
 
   /* Started, deliberately not awaited. The council is evidence for a check
      that happens after the user has read the answer, so it has no business
@@ -376,7 +380,7 @@ export async function runComposite(options: CompositeOptions & {
 
   onStage({
     stage: "stream",
-    detail: profile === "navi-fable"
+    detail: profile === "navi-soul-deep"
       ? "Answering while the project workstreams check the work."
       : "Answering while parallel workstreams check the work."
   });
@@ -581,7 +585,7 @@ async function gatherEvidence(options: {
       verificationRoute: plan.verificationRoute
     };
   } catch (error) {
-    console.warn("NaviSoul council evidence was unavailable:", error);
+    console.warn("Navi Soul council evidence was unavailable:", error);
     return null;
   }
 }

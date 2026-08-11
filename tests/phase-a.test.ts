@@ -132,16 +132,20 @@ const UI_FILES = [
   "lib/ai/prompt/base.ts"
 ];
 
-/* Matches a bare `Navi` not followed by the letters that make it NaviOS or
-   NaviSoul, and not part of an identifier like `naviMarkdown`. Comments are
-   stripped first — this rule is about what a user reads. */
-const BARE_NAVI = /\bNavi(?![A-Za-z])/;
+/* Matches a bare `Navi` not followed by the letters that make it NaviOS, and
+   not part of an identifier like `naviMarkdown`. Comments are stripped first —
+   this rule is about what a user reads.
+
+   The model name is two words, so `Navi Soul` has to be excluded explicitly:
+   the space that separates them is exactly what the bare-`Navi` rule was
+   written to catch, and without this the correct name fails its own test. */
+const BARE_NAVI = /\bNavi(?![A-Za-z])(?! Soul\b)/;
 
 for (const file of UI_FILES) {
   const source = readFileSync(join(root, file), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|\s)\/\/.*$/gm, "");
-  check(`${file} says NaviSoul or NaviOS, never bare Navi`, BARE_NAVI.test(source), false);
+  check(`${file} says Navi Soul or NaviOS, never bare Navi`, BARE_NAVI.test(source), false);
 }
 
 console.log(`\n${pass}/${pass + fail} passed`);

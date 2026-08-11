@@ -208,7 +208,7 @@ export function VoiceModeSheet({
   function focusKeyboardDictation() {
     cancel();
     window.setTimeout(() => {
-      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Chat with NaviSoul"]')?.focus();
+      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Chat with Navi Soul"]')?.focus();
     }, 80);
   }
 
@@ -227,7 +227,7 @@ export function VoiceModeSheet({
         {...sheet.sheetProps}
         role="dialog"
         aria-modal="true"
-        aria-label="NaviSoul voice mode"
+        aria-label="Navi Soul voice mode"
         className="menu-enter safe-top relative flex max-h-[calc(100dvh-8px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[28px] border border-b-0 border-[var(--border-subtle)] bg-elev-1 shadow-sheet md:max-h-[760px] md:rounded-[28px] md:border"
       >
         {/* The grab area, and only it: content below must still scroll. */}
@@ -316,7 +316,7 @@ export function VoiceModeSheet({
               {speakReply ? <Check size={17} /> : <Volume2 size={17} />}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[0.875rem]/5 font-semibold text-primary">Read NaviSoul’s reply aloud</span>
+              <span className="block text-[0.875rem]/5 font-semibold text-primary">Read Navi Soul’s reply aloud</span>
               <span className="block text-[0.6875rem]/4 font-medium text-tertiary">Uses the browser’s on-device speech voice when available</span>
             </span>
           </button>
@@ -347,7 +347,7 @@ export function VoiceModeSheet({
             </button>
           </div>
           <button type="button" onClick={sendTranscript} disabled={!combined || busy || transcribing || !online} className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-[0.875rem]/5 font-semibold text-app active:opacity-85 disabled:opacity-40">
-            <Send size={17} />Send spoken turn to NaviSoul
+            <Send size={17} />Send spoken turn to Navi Soul
           </button>
           <p className="mt-2 text-center text-[0.625rem]/4 font-medium text-tertiary">Composer microphone = quick dictation · Voice mode = reviewed spoken turn</p>
         </footer>

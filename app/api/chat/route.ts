@@ -150,8 +150,8 @@ const ALLOWED_PRESETS = new Set<ModelPreset>([
   "navi-soul",
   "navi-code",
   "auto",
-  "navi-fable",
-  "navi-sol",
+  "navi-soul-deep",
+  "navi-soul-direct",
   "gemini-direct",
   "groq-direct",
   "huggingface-direct"
@@ -178,17 +178,23 @@ const rateBuckets = globalRateState.__naviV4RateBuckets ?? (globalRateState.__na
 
 /** A v4.2.0 client still sends a preset; map it to the mode it expressed. */
 const LEGACY_PRESET_MODE: Record<string, NaviMode> = {
+  /* The pre-v4.2.0 spellings stay here and only here: this maps what an old
+     client sends onto a mode, so the keys have to match what those clients
+     actually put on the wire. */
   "navi-code": "code", "navi-fable": "code", "navi-5": "code", "fable-5": "code",
-  "navi-soul": "chat", "navi-sol": "chat", "navi-chat": "chat", auto: "chat",
+  "navi-soul-deep": "code",
+  "navi-soul": "chat", "navi-sol": "chat", "navi-soul-direct": "chat", "navi-chat": "chat", auto: "chat",
   "gemini-direct": "chat", "groq-direct": "chat", "huggingface-direct": "chat"
 };
 
 function normalizePreset(value: unknown): ModelPreset {
+  /* The aliases borrowed from other companies' model names are gone. They only
+     ever served clients from before v4.2.0, and `LEGACY_PRESET_MODE` above
+     already maps those same request bodies to a mode — while any preset this
+     function does not recognise falls through to `navi-soul`, which is where
+     such a client was heading anyway. What is left are this product's own
+     retired names. */
   const legacy: Record<string, ModelPreset> = {
-    "navi-5": "navi-fable",
-    "fable-5": "navi-fable",
-    "navi-sol-5-6": "navi-sol",
-    "opus-4-8": "navi-sol",
     "navi-chat": "navi-soul",
     auto: "navi-soul"
   };
@@ -330,10 +336,10 @@ const RESEARCH_REQUEST = /\b(search|research|investigate|look ?up|look into|find
 
 /** Named so the status line can say what was engaged, in Navi's own words. */
 const DISPATCH_LABEL: Record<Dispatch, string> = {
-  code: "NaviSoul · code",
-  research: "NaviSoul · research",
-  reasoning: "NaviSoul · reasoning",
-  general: "NaviSoul"
+  code: "Navi Soul · code",
+  research: "Navi Soul · research",
+  reasoning: "Navi Soul · reasoning",
+  general: "Navi Soul"
 };
 
 function dispatchFor(text: string, band: Effort, effort: EffortLevel): Dispatch {
@@ -540,7 +546,7 @@ function artifactInstruction(requested: boolean): string {
  */
 function chatModeInstruction(): string {
   return [
-    "You are NaviSoul working in NaviOS Chat.",
+    "You are Navi Soul working in NaviOS Chat.",
     "Answer in prose. Explain in plain language first, and reach for a code block only when the user asked for code or when nothing else can express the answer.",
     "Prefer the shortest complete answer. Where a question has a short answer and a long one, give the short one and offer to go further.",
     "Engage with what was actually asked rather than the general topic around it, and pick up the thread of the conversation instead of restarting it each turn.",
@@ -551,7 +557,7 @@ function chatModeInstruction(): string {
 /** The behavioural difference between the Chat and Code models lives here. */
 function codeModeInstruction(): string {
   return [
-    "You are NaviSoul working in Code mode.",
+    "You are Navi Soul working in Code mode.",
     "Prefer working code over prose about code: give complete, runnable snippets with the imports they need, and state the language and file path when it matters.",
     "When debugging, reason from the actual error text and the code shown; name the root cause before proposing the fix, and keep the fix minimal.",
     "Match the conventions of any code the user shows you. Flag breaking changes, missing tests, and security problems even when unasked.",
@@ -613,7 +619,7 @@ function systemPrompt(options: {
     needsMission(request) ? NAVI_MISSION : "",
     /* How to move around its own models: which engine suits which work, when a
        second is worth its latency, and how to reconcile what comes back.
-       Without this NaviSoul behaved like one model with tools and described
+       Without this Navi Soul behaved like one model with tools and described
        its own routing from invention. */
     needsOrchestrationKnowledge(request, effort) ? ORCHESTRATION_KNOWLEDGE : "",
     /* Carried whenever the repository tools are in play. Every commit deploys
@@ -713,7 +719,7 @@ function capabilityInstruction(): string {
  * reaching here is the end of the line rather than a first attempt.
  *
  * Three rules the copy follows. It names no provider, because the user talks
- * to NaviSoul and NaviSoul has no vendors. It does not apologise, because an
+ * to Navi Soul and Navi Soul has no vendors. It does not apologise, because an
  * apology is not information and reads as evasion when repeated. And it says
  * what to do next, because the only useful part of an error is the next step.
  *
@@ -721,12 +727,12 @@ function capabilityInstruction(): string {
  */
 function streamError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  console.error("NaviSoul stream error:", error);
+  console.error("Navi Soul stream error:", error);
   const lower = message.toLowerCase();
   if (lower.includes("image providers") || lower.includes("image-generation provider")) return "Image generation is unavailable right now. Tap to retry in a moment.";
   if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "Too many requests just now. Tap to retry in a moment.";
   if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401") || lower.includes("403") || lower.includes("forbidden")) {
-    return "NaviSoul has no working credential to answer with. Add one in Settings.";
+    return "Navi Soul has no working credential to answer with. Add one in Settings.";
   }
   if (lower.includes("timeout") || lower.includes("aborted")) return "That took too long. Tap to retry, or lower the effort.";
   return "That didn't go through. Tap to retry.";
@@ -783,10 +789,10 @@ async function meterSpend(result: { usage: PromiseLike<unknown>; providerMetadat
     const parsed = readUsage(merged);
     if (!parsed) return;
     const tier = /pro/i.test(model) ? "pro" : "flash";
-    console.info("NaviSoul metered request", { model, ...parsed });
+    console.info("Navi Soul metered request", { model, ...parsed });
     await recordSpend(parsed, tier);
   } catch (error) {
-    console.error("NaviSoul could not meter a request:", error);
+    console.error("Navi Soul could not meter a request:", error);
   }
 }
 
@@ -819,7 +825,7 @@ async function extractDocuments(messages: UIMessage[]): Promise<Array<{ name: st
         if (table.text) out.push({ name, block: documentBlock(name, table) });
       }
     } catch (error) {
-      console.warn("NaviSoul could not read an attached document:", error);
+      console.warn("Navi Soul could not read an attached document:", error);
     }
   }
 
@@ -870,9 +876,9 @@ function resolveHeadlinePreset(options: {
   // Escalation costs real latency, so it needs both signals: the user asked
   // for depth *and* the request itself is genuinely hard.
   if (effort !== "high" || complexityBand === "normal") return preset;
-  if (preset === "navi-soul" || preset === "auto") return "navi-sol";
-  // Fable is the long-horizon build swarm — the right escalation for code.
-  if (preset === "navi-code") return "navi-fable";
+  if (preset === "navi-soul" || preset === "auto") return "navi-soul-direct";
+  // The long-horizon build swarm — the right escalation for code.
+  if (preset === "navi-code") return "navi-soul-deep";
   return preset;
 }
 
@@ -888,15 +894,15 @@ export async function POST(request: Request): Promise<Response> {
     const reason = await authorizationError.json().catch(() => null) as { error?: string } | null;
     return refuse(reason?.error === "Sign in to continue."
       ? "Your session expired. Reload the app to sign back in."
-      : reason?.error || "NaviSoul could not authorize this request.");
+      : reason?.error || "Navi Soul could not authorize this request.");
   }
-  if (isRateLimited(clientIdentifier(request))) return refuse("You are sending messages faster than NaviSoul can answer them. Wait a few seconds and try again.", { "Retry-After": "30" });
+  if (isRateLimited(clientIdentifier(request))) return refuse("You are sending messages faster than Navi Soul can answer them. Wait a few seconds and try again.", { "Retry-After": "30" });
 
   let body: ChatRequestBody;
   try {
     body = (await request.json()) as ChatRequestBody;
   } catch {
-    return refuse("NaviSoul could not read that request. Reload the app and try again.");
+    return refuse("Navi Soul could not read that request. Reload the app and try again.");
   }
 
   /* Read inside the request scope. `cookies()` throws once the request closes,
@@ -915,7 +921,7 @@ export async function POST(request: Request): Promise<Response> {
   const clerkUserId = clerkToken ? await getRequestClerkUserId(request) : null;
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) return refuse("There was no message to send.");
-  if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; NaviSoul will still remember the important parts.`);
+  if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; Navi Soul will still remember the important parts.`);
   if (JSON.stringify(body.messages).length > MAX_SERIALIZED_CHARACTERS) return refuse("This conversation and its attachments are too large to send. Start a new chat, or remove an attachment.");
 
   const messages = body.messages.slice(-MAX_MESSAGES);
@@ -924,7 +930,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
   const lastUserText = textOf(lastUserMessage);
-  if (!lastUserText) return refuse("Add a short description of what you want NaviSoul to do with this.");
+  if (!lastUserText) return refuse("Add a short description of what you want Navi Soul to do with this.");
 
   const currentImageAttachments = imageAttachments(lastUserMessage);
   const imageRequested = imageGenerationIntent(lastUserText, currentImageAttachments.length > 0);
@@ -984,7 +990,7 @@ export async function POST(request: Request): Promise<Response> {
 
   /* A tool nothing prompts is a tool nothing calls.
    *
-   * `record_lesson` exists so NaviSoul stops re-deriving what it already
+   * `record_lesson` exists so Navi Soul stops re-deriving what it already
    * worked out, but a model does not go looking for a tool it has no reason to
    * think about. The instruction sits with the memory context because that is
    * where it is already reasoning about what it knows, and it is gated on the
@@ -1099,7 +1105,7 @@ export async function POST(request: Request): Promise<Response> {
         : ["", {} as Awaited<ReturnType<typeof buildMcpTools>>];
       // Clock and page reading need no configuration, so they are always on;
       // search joins them only when a provider key is present.
-      /* One registry decides what NaviSoul can do this turn, rather than five
+      /* One registry decides what Navi Soul can do this turn, rather than five
          builders assembled here with five separate ideas of when they apply.
          It also enforces the ceiling on how many tools go out — past roughly a
          dozen, selection accuracy falls and every turn pays the schema cost of
@@ -1165,11 +1171,11 @@ export async function POST(request: Request): Promise<Response> {
 
       const modelMessages = await convertToModelMessages(redactGeneratedMedia(messages));
 
-      if (resolvedPreset === "navi-fable" || resolvedPreset === "navi-sol") {
+      if (resolvedPreset === "navi-soul-deep" || resolvedPreset === "navi-soul-direct") {
         const swarmProfile: SwarmPreset = resolvedPreset;
         writer.write(statusChunk({
           stage: "plan",
-          detail: swarmProfile === "navi-fable"
+          detail: swarmProfile === "navi-soul-deep"
             ? "Planning staged long-horizon work."
             : "Planning independent parallel workstreams."
         }));
@@ -1250,7 +1256,7 @@ export async function POST(request: Request): Promise<Response> {
         }) ?? generalRoute;
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
-      /* The plan, shown rather than only acted on. NaviSoul has been making one
+      /* The plan, shown rather than only acted on. Navi Soul has been making one
          for a while, but it lived entirely inside the request — so the only
          moment the user could correct a misread of their intent was after the
          work was already done. Correcting a plan is far cheaper than
@@ -1359,7 +1365,7 @@ export async function POST(request: Request): Promise<Response> {
         timeout: { totalMs: 50_000, chunkMs: 14_000 },
         abortSignal: request.signal,
         experimental_transform: smoothStream({ delayInMs: 26, chunking: "word" }),
-        onError: ({ error }) => console.error("NaviSoul provider stream failed:", error)
+        onError: ({ error }) => console.error("Navi Soul provider stream failed:", error)
       });
       /* Billed from what the response actually reported, not from an estimate.
          Cache hits and misses differ in price by roughly fifty times, so a
@@ -1384,7 +1390,7 @@ export async function POST(request: Request): Promise<Response> {
         const grounding = groundingFor({ retrieved: retrieval?.block });
         const shouldCritique = plan.needsReview && critiqueAllowed({ lane, grounding });
         if (plan.needsReview && !shouldCritique) {
-          console.info("NaviSoul skipped the critique pass:", skipReason({ lane, grounding }));
+          console.info("Navi Soul skipped the critique pass:", skipReason({ lane, grounding }));
         }
         if (shouldCritique) {
           writer.write(statusChunk({ stage: "draft", detail: "Drafting the implementation." }));

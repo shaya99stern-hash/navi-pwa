@@ -22,8 +22,21 @@ export const maxDuration = 60;
  * credential and stays on a free tier.
  */
 
-/** Roughly two minutes of Opus. Longer than anyone dictates into a composer. */
-const MAX_AUDIO_BYTES = 8_000_000;
+/**
+ * Below the platform's own ceiling, deliberately.
+ *
+ * This was 8 MB, which is larger than the request body Vercel will accept —
+ * roughly 4.5 MB, and 4 MB on the edge runtime, enforced at the edge before
+ * any handler runs. A body between those two numbers was refused by the
+ * platform, so the 413 written here could never be the thing that rendered:
+ * the browser saw an opaque failure and the composer looked like it had hung.
+ * A limit above the platform's is not a limit, it is a comment.
+ *
+ * The client caps recording at 60 seconds and refuses to upload past
+ * MAX_UPLOAD_BYTES, so this is the second of two guards rather than the only
+ * one — but it has to sit under the platform number to ever be reachable.
+ */
+const MAX_AUDIO_BYTES = 3_500_000;
 const TIMEOUT_MS = 45_000;
 
 function transcriptionModel(): string {
@@ -44,7 +57,7 @@ export async function POST(request: Request) {
   const audio = await request.arrayBuffer();
   if (!audio.byteLength) return NextResponse.json({ error: "No audio was received." }, { status: 400 });
   if (audio.byteLength > MAX_AUDIO_BYTES) {
-    return NextResponse.json({ error: "That recording is too long. Keep it under about two minutes." }, { status: 413 });
+    return NextResponse.json({ error: "That recording is too long. Keep it under a minute." }, { status: 413 });
   }
 
   /* Strip codec parameters. `audio/webm; codecs=opus` is rejected by name
@@ -174,7 +187,7 @@ export async function POST(request: Request) {
       }
     }
 
-    console.error("NaviSoul transcription failed:", failures.join(" | "));
+    console.error("Navi Soul transcription failed:", failures.join(" | "));
     /* Short enough to read at a glance, because the composer footer is two
        lines and the raw provider body wrapped into a wall of text that pushed
        the whole interface around. The full reason still travels in `detail`

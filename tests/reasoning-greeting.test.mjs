@@ -87,8 +87,14 @@ check("the profile still takes precedence", shell.indexOf("preferences.profile.d
    so a single read runs too early to see a user. */
 check("it waits for Clerk to load", /if \(read\(\)\) return;[\s\S]{0,200}setInterval/.test(shell), true);
 /* A name turns the line into an address, so the bare time-of-day form is the
-   only one that reads correctly beside it. */
-check("a name yields the plain form", /\$\{part\}, \$\{name\}/.test(launch), true);
+   only one that reads correctly beside it. The name goes through `presentName`
+   because it falls back to the account handle, which is whatever its owner
+   typed — "Evening, shaya" reads as a database field rather than an address. */
+check("a name yields the plain form", /\$\{part\}, \$\{presentName\(name\)\}/.test(launch), true);
+check("a lowercase handle is capitalised", /function presentName/.test(launch), true);
+/* Only leading letters, and only where already lowercase: a blanket title-case
+   would rewrite "McDonald" and "d'Angelo", which the user typed deliberately. */
+check("an already-capitalised name is left alone", /\(\^\|\[\\s-\]\)\(\\p\{Ll\}\)/.test(launch), true);
 check("the parts are time-of-day", /Late night|Morning|Afternoon|Evening/.test(launch), true);
 // With no name the rotation stands; a placeholder is worse than the variety.
 check("no name keeps the rotation", launch.includes("setGreeting(greetingForNow(new Date()))"), true);

@@ -15,7 +15,7 @@ export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 /**
- * What NaviSoul remembers, and the ability to forget it.
+ * What Navi Soul remembers, and the ability to forget it.
  *
  * The same Clerk session token the app already holds is what Supabase's
  * row-level security keys on, so this route never needs a service role and

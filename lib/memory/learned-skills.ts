@@ -3,10 +3,10 @@ import "server-only";
 import { isLessonName } from "./lesson";
 
 /**
- * Skills NaviSoul has learned and keeps.
+ * Skills Navi Soul has learned and keeps.
  *
  * The failure this replaces is written all through the app's chat history:
- * someone says "learn this page and keep it", NaviSoul answers "I've stored
+ * someone says "learn this page and keep it", Navi Soul answers "I've stored
  * this in my durable memory" — and nothing anywhere stores anything. The next
  * conversation knows none of it. A claim of memory with no memory behind it is
  * the worst kind of bug, because the user only discovers it after relying on
@@ -160,13 +160,13 @@ export async function forgetSkill(clerkToken: string, id: string): Promise<boole
  *
  * A skill and a lesson are different objects even though they share a table. A
  * skill is instruction — the user said "do it this way", and it carries their
- * authority. A lesson is evidence — NaviSoul tried something, watched what
+ * authority. A lesson is evidence — Navi Soul tried something, watched what
  * happened, and wrote down the conclusion, which carries only as much weight as
  * its own reasoning did.
  *
  * Rendering both under "skills this user has taught you" would have made every
  * self-derived guess look like a standing instruction from the user, which is a
- * short path to NaviSoul defending its own mistaken inference as something it
+ * short path to Navi Soul defending its own mistaken inference as something it
  * was told. So they are separated here, and each is introduced honestly.
  */
 export function learnedSkillsBlock(skills: LearnedSkill[]): string {

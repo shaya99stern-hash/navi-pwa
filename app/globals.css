@@ -463,6 +463,25 @@ aside .scroll-area {
   animation: message-in var(--navi-motion-fast) ease-out both;
 }
 
+/* Skip the layout and paint of finished messages that are far off screen.
+   `messages.slice(-MAX_MESSAGES)` bounds what is sent to the model, not what
+   the DOM holds, so a long thread keeps every row live — and these rows carry
+   backdrop-filter surfaces, which are expensive to keep composited.
+
+   The cheap platform primitive before a windowing library: no virtualisation,
+   no changed markup, and the rows stay in the document so find-in-page,
+   accessibility, and anchor links keep working. `auto` rather than `hidden`
+   so a row becomes relevant on its own when scrolled toward.
+
+   The estimate only has to be the right order of magnitude — it is what the
+   scrollbar is sized from before a row has been measured, and a wrong guess
+   costs a scrollbar that settles rather than content that jumps. The
+   streaming row opts out; see message-row.tsx. */
+.navi-message-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
 .navi-launch {
   animation: launch-in 220ms var(--navi-ease-standard) both;
 }
@@ -644,6 +663,12 @@ aside .scroll-area {
   }
 }
 
+/* Two ways to ask for less motion, and both have to work.
+   `prefers-reduced-motion` is the OS setting. `[data-motion="reduced"]` is the
+   app's own Motion control in Settings → General, which app-shell writes onto
+   the root element — and which, until now, nothing in this stylesheet read.
+   The switch moved, the attribute changed, and not one animation shortened:
+   a setting that described a behaviour it did not have. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -653,6 +678,15 @@ aside .scroll-area {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
 }
 
 .menu-enter {
@@ -682,6 +716,8 @@ aside .scroll-area {
 @media (prefers-reduced-motion: reduce) {
   .navi-context-preview { animation-duration: 1ms; }
 }
+
+:root[data-motion="reduced"] .navi-context-preview { animation-duration: 1ms; }
 
 /* iOS zooms the whole page when a focused field computes below 16px, then
    unzooms on blur — and that scaling is the keyboard jump, not the inset

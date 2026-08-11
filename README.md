@@ -8,7 +8,7 @@ NaviOS Hub is a self-contained Next.js App Router PWA with a premium mobile shel
 
 A 64-role hidden swarm tuned for long-running knowledge work, coding, planning, document understanding, implementation, testing, and constraint preservation. Sixteen specialized roles are grouped into independent councils. Their private outputs are reconciled and verified before a single Navi answer is streamed to the user.
 
-### NaviSoul 5.6
+### Navi Soul 5.6
 
 A 96-role hidden swarm tuned for flagship reasoning, research synthesis, coding quality, quantitative checking, design judgment, context continuity, adversarial review, and token-efficient final writing. The frontend never renders internal agent conversations, provider names, scratch work, or private reasoning.
 

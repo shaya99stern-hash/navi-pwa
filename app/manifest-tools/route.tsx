@@ -32,7 +32,7 @@ export function GET() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop: "auto", minHeight: 92, display: "flex", alignItems: "center", padding: "18px 26px", borderRadius: 32, background: "#FFFDFC", border: "2px solid rgba(33,25,20,.14)", color: "#80736A", fontSize: 23 }}>Message NaviSoul</div>
+          <div style={{ marginTop: "auto", minHeight: 92, display: "flex", alignItems: "center", padding: "18px 26px", borderRadius: 32, background: "#FFFDFC", border: "2px solid rgba(33,25,20,.14)", color: "#80736A", fontSize: 23 }}>Message Navi Soul</div>
         </div>
       </div>
     </div>,

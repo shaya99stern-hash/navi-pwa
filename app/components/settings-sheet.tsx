@@ -44,6 +44,13 @@ type Props = {
   initialSection?: MenuSection;
   durability: StorageDurability;
   preferences: NaviPreferences;
+  /* Conversations held in IndexedDB on this device — the same list the drawer
+     renders. The "What is stored" screen counted only the cloud mirror, so a
+     signed-out user, or any deployment without Supabase, read `Conversations 0`
+     while five of them sat visible in the drawer beside it. The number was
+     accurate about the cloud and wrong about the question being asked, on a
+     privacy screen, which is the worst place to be technically correct. */
+  localChatCount: number;
   onClose: () => void;
   onPreferences: (preferences: NaviPreferences) => void;
   onOpenConnectors: () => void;
@@ -317,6 +324,7 @@ export function SettingsSheet({
   initialSection,
   durability,
   preferences,
+  localChatCount,
   onClose,
   onPreferences,
   onOpenConnectors,
@@ -380,7 +388,7 @@ export function SettingsSheet({
 
   const [evalState, setEvalState] = useState<{ phase: "idle" | "running" | "done" | "error"; message: string }>({
     phase: "idle",
-    message: "Scores NaviSoul against a fixed task set. Takes a couple of minutes."
+    message: "Scores Navi Soul against a fixed task set. Takes a couple of minutes."
   });
 
   const runEvals = async () => {
@@ -659,14 +667,14 @@ export function SettingsSheet({
             <SectionHeader>Profile</SectionHeader>
             <Group>
               <Row label="Full name" control={<TextField label="Full name" value={preferences.profile.fullName} onChange={(fullName) => updateProfile({ fullName })} />} />
-              <Row label="What should NaviSoul call you?" control={<TextField label="Display name" value={preferences.profile.displayName} onChange={(displayName) => updateProfile({ displayName })} />} />
+              <Row label="What should Navi Soul call you?" control={<TextField label="Display name" value={preferences.profile.displayName} onChange={(displayName) => updateProfile({ displayName })} />} />
               <Row label="What best describes your work?" control={<BareSelect label="Work" value={preferences.profile.work} options={WORK_OPTIONS} onChange={(work) => updateProfile({ work })} />} />
               <Row
-                label="Instructions for NaviSoul"
-                description="NaviSoul keeps these in mind across every chat on this device."
+                label="Instructions for Navi Soul"
+                description="Navi Soul keeps these in mind across every chat on this device."
                 fullWidthControl={
                   <textarea
-                    aria-label="Instructions for NaviSoul"
+                    aria-label="Instructions for Navi Soul"
                     value={preferences.profile.instructions}
                     onChange={(event) => updateProfile({ instructions: event.target.value.slice(0, 4_000) })}
                     placeholder="e.g. keep explanations brief and to the point"
@@ -730,7 +738,17 @@ export function SettingsSheet({
               />
               <Row
                 label="Haptics"
-                description="Subtle touch feedback on selection, success, and errors."
+                /* What it used to say — "on selection, success, and errors" —
+                   described two thirds of a thing that could not happen. A
+                   haptic needs transient user activation, and success and
+                   error are by definition known after a round trip, by which
+                   time the activation the tap granted has expired. Those ticks
+                   were refused every time, so the same gesture buzzed or did
+                   not depending on whether its outcome happened to be
+                   synchronous. Feedback now fires on the touch, which is the
+                   only moment the platform will honour, and outcomes are
+                   reported where an outcome belongs: on screen. */
+                description="A light tick when a touch is registered — a button, a switch, a sheet opening or closing. Results are shown on screen rather than felt."
                 control={<SettingsToggle label="Haptics" value={preferences.haptics} onChange={() => update({ haptics: !preferences.haptics })} />}
               />
             </Group>
@@ -758,7 +776,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Response completions"
-                description="Get notified when NaviSoul has finished a response. Useful for long-running tasks."
+                description="Get notified when Navi Soul has finished a response. Useful for long-running tasks."
                 control={<SettingsToggle label="Response completions" value={preferences.notifyOnComplete} onChange={() => void enableNotifications()} />}
               />
             </Group>
@@ -789,7 +807,7 @@ export function SettingsSheet({
               ) : (
                 <Row
                   label="Signed out"
-                  description="Chats stay on this device while signed out. Signing in lets NaviSoul answer and syncs your history to your private cloud memory."
+                  description="Chats stay on this device while signed out. Signing in lets Navi Soul answer and syncs your history to your private cloud memory."
                   control={<InlineButton onClick={signIn}>Sign in</InlineButton>}
                 />
               )}
@@ -854,7 +872,7 @@ export function SettingsSheet({
               />
               <Row
                 label="Memory"
-                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages NaviSoul actually uses are sent."
+                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages Navi Soul actually uses are sent."
                 control={<SettingsToggle label="Memory" value={preferences.memory} onChange={() => update({ memory: !preferences.memory })} />}
               />
             </Group>
@@ -862,19 +880,35 @@ export function SettingsSheet({
             {/* Counted, not promised. "Saved" with nothing to check it against
                 is exactly the claim that stopped being believable — so this
                 reads the store and shows what is in it, by name. */}
-            <SectionHeader>What is stored</SectionHeader>
+            {/* Two questions, asked and answered separately, because they have
+                different answers and merging them is what made this screen
+                lie. "What is on this phone" is always answerable and is what
+                the drawer beside it shows. "What has reached my account" is
+                answerable only when a store is configured and someone is
+                signed in — and when it is not, the honest answer is a sentence
+                about sync, never a zero next to the word Conversations. */}
+            <SectionHeader>On this device</SectionHeader>
+            <Group>
+              <Row
+                label="Conversations"
+                description="Held in this browser. These are the chats in your drawer."
+                control={<Count value={localChatCount} />}
+              />
+            </Group>
+
+            <SectionHeader>Synced to your account</SectionHeader>
             <Group>
               {!memoryStatus.loaded ? (
                 <Row label="Reading your memory…" />
               ) : !memoryStatus.configured ? (
                 <Row
                   label="Cloud memory is off"
-                  description="Chats and skills stay on this device. Configure Supabase on the deployment to sync them across devices."
+                  description="Nothing leaves this device. Your conversations above are safe here; they are simply not mirrored anywhere, so they do not follow you to another device."
                 />
               ) : !memoryStatus.signedIn ? (
                 <Row
                   label="Signed out"
-                  description="Everything is on this device only. Sign in to sync chats, facts, and skills to your private cloud memory."
+                  description="Nothing is syncing. Your conversations above stay on this device. Sign in to mirror chats, facts, and skills to your private cloud memory."
                 />
               ) : (
                 <>
@@ -882,10 +916,10 @@ export function SettingsSheet({
                   <Row label="Facts about you" description="Listed below, and removable one by one." control={<Count value={memoryStatus.facts} />} />
                   <Row label="Skills you taught it" description="Applied in every conversation, not only when a request happens to match." control={<Count value={memoryStatus.skills} />} />
                   {/* Separate from the count above on purpose. These are
-                      conclusions NaviSoul drew on its own, so seeing them
+                      conclusions Navi Soul drew on its own, so seeing them
                       counted — and named below — is the only way to notice one
                       that is wrong before it quietly shapes every answer. */}
-                  <Row label="Lessons it worked out" description="Conclusions NaviSoul drew from experience and carries forward on its own." control={<Count value={memoryStatus.lessons} />} />
+                  <Row label="Lessons it worked out" description="Conclusions Navi Soul drew from experience and carries forward on its own." control={<Count value={memoryStatus.lessons} />} />
                 </>
               )}
             </Group>
@@ -960,7 +994,7 @@ export function SettingsSheet({
                 organisation; it is the taxonomy costing more than the thing
                 being classified, on a screen whose title already says what all
                 three are. */}
-            <SectionHeader>What NaviSoul can do</SectionHeader>
+            <SectionHeader>What Navi Soul can do</SectionHeader>
             <Group>
               <Row
                 label="Web search"
@@ -1007,7 +1041,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Pin an engine"
-                description="NaviSoul reads each request and routes it to whichever engine leads at that job. Pinning one disables that routing entirely, for every request, until it is set back to automatic."
+                description="Navi Soul reads each request and routes it to whichever engine leads at that job. Pinning one disables that routing entirely, for every request, until it is set back to automatic."
                 control={
                   <BareSelect
                     label="Pin an engine"
@@ -1066,9 +1100,20 @@ export function SettingsSheet({
         {page === "playbooks" ? (
           <>
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
-              Playbooks are methods NaviSoul applies when a request matches one — how to debug, how to review code,
-              how to edit a document without disturbing it. They use Anthropic&apos;s SKILL.md format, so any skill
-              published for Claude can be pasted in below and works here unchanged.
+              {/* This used to promise that any published skill "works here
+                  unchanged". Measured against 35 real published SKILL.md
+                  files: all 35 parsed, but 22 had their instructions cut at
+                  4,000 characters — one kept only a fifth of its body — and
+                  the ones that ship companion scripts or reference files
+                  cannot bring them, because a playbook is prompt text and
+                  nothing else. "Unchanged" was true for a third of them.
+                  The sentence now says what the parser actually does, and
+                  truncation is reported at paste time rather than silently. */}
+              Playbooks are methods Navi Soul applies when a request matches one — how to debug, how to review code,
+              how to edit a document without disturbing it. They use the SKILL.md format — YAML frontmatter with a
+              name and description, then markdown instructions — so a skill file written for any tool that uses it
+              can be pasted in below. Only the instructions are read: a long file is trimmed to the first 4,000
+              characters, and bundled scripts or reference files do not come across.
             </p>
 
             <SectionHeader>Add a playbook</SectionHeader>
@@ -1082,7 +1127,7 @@ export function SettingsSheet({
                       aria-label="Paste a SKILL.md file"
                       value={playbookDraft}
                       onChange={(event) => { setPlaybookDraft(event.target.value); setPlaybookNotice(null); }}
-                      placeholder={"---\nname: my-playbook\ndescription: When NaviSoul should use this\n---\n\n# Instructions…"}
+                      placeholder={"---\nname: my-playbook\ndescription: When Navi Soul should use this\n---\n\n# Instructions…"}
                       rows={5}
                       className="min-h-[128px] w-full resize-y rounded-[12px] bg-elev-2 px-3.5 py-3 font-mono text-[0.8125rem]/[1.125rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
                     />
@@ -1095,7 +1140,12 @@ export function SettingsSheet({
                           const next = preferences.customPlaybooks.filter((entry) => entry.id !== result.playbook.id);
                           update({ customPlaybooks: [...next, result.playbook].slice(0, 40) });
                           setPlaybookDraft("");
-                          setPlaybookNotice(`Added “${result.playbook.name}”.`);
+                          /* Said out loud, because the alternative is a
+                             playbook that stops mid-sentence during a real
+                             request and no way to know why. */
+                          setPlaybookNotice(result.truncated
+                            ? `Added “${result.playbook.name}”, trimmed to the first 4,000 characters.`
+                            : `Added “${result.playbook.name}”.`);
                           haptic("success", preferences.haptics);
                         }}
                         disabled={!playbookDraft.trim()}

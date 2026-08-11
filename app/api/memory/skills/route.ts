@@ -12,7 +12,7 @@ import {
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-/** What NaviSoul has learned, and the ability to unlearn it. */
+/** What Navi Soul has learned, and the ability to unlearn it. */
 
 const OFF = { configured: false, skills: [] as const };
 

@@ -2,10 +2,10 @@ import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 
 /**
- * NaviSoul editing its own codebase.
+ * Navi Soul editing its own codebase.
  *
  * The failure this replaces is in the exported chats verbatim: asked to make
- * a change, NaviSoul answered "I'll execute them now", produced nothing, and
+ * a change, Navi Soul answered "I'll execute them now", produced nothing, and
  * then explained that "/api/commit is not available in this environment" and
  * that it "cannot directly interact with your repository". It was inventing an
  * HTTP call to a route it had no way to reach, because it had been told the

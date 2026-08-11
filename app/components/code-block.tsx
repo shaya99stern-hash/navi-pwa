@@ -25,9 +25,15 @@ export function CodeBlock({ code, language, theme, haptics }: { code: string; la
   const prismLanguage = (LANGUAGE_ALIASES[language] ?? (language || "text")) as Language;
 
   async function copy() {
+    /* On the tap, not on the clipboard write. `writeText` is async, and by the
+       time it resolves the user-activation window has closed, so the tick was
+       refused every time — while the visually identical wrap button beside it,
+       being synchronous, ticked normally. That inconsistency is the thing that
+       reads as broken. The check mark below is what confirms the copy
+       succeeded; the haptic confirms the tap was received. */
+    haptic("selection", haptics);
     await navigator.clipboard.writeText(code);
     setCopied(true);
-    haptic("success", haptics);
     window.setTimeout(() => setCopied(false), 1_300);
   }
 

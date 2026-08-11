@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, CloudUpload, FileCode2, GitBranch, LoaderCircle, MessageSquare, Rocket, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Check, CloudUpload, FileCode2, GitBranch, KeyRound, LoaderCircle, MessageSquare, Rocket, ShieldCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -35,14 +35,14 @@ export default function DeveloperSettings() {
   const [commitMessage, setCommitMessage] = useState("");
   const [loaded, setLoaded] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({ phase: "idle" });
-  /* What is actually switched on in this deployment. NaviSoul has told this
+  /* What is actually switched on in this deployment. Navi Soul has told this
      user it has no code sandbox, invented a SHOW_DEVELOPER flag, and named
      credentials that do not exist — all answerable from here. */
   const [capabilities, setCapabilities] = useState<{ loaded: boolean; items: Capability[] }>({ loaded: false, items: [] });
   const [askDraft, setAskDraft] = useState("");
 
   /**
-   * Hand the request to NaviSoul in Code mode.
+   * Hand the request to Navi Soul in Code mode.
    *
    * The prompt is shaped rather than passed through: "read the file first,
    * change the smallest thing that works, say what you changed" is the
@@ -138,7 +138,7 @@ export default function DeveloperSettings() {
                 <p className="mt-1 text-[0.75rem]/[1.125rem] font-medium text-secondary">
                   Edits commit straight to the app&apos;s own GitHub repository, and every commit triggers a Vercel
                   deployment — so a change made here becomes the running app within minutes. You can also just ask
-                  NaviSoul in Code mode: with GitHub connected it reads, edits, and commits the codebase itself.
+                  Navi Soul in Code mode: with GitHub connected it reads, edits, and commits the codebase itself.
                 </p>
               </span>
             </div>
@@ -185,7 +185,7 @@ export default function DeveloperSettings() {
               <span className="min-w-0 flex-1">
                 <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Just describe the change</h2>
                 <p className="mt-1 text-[0.75rem]/[1.125rem] font-medium text-secondary">
-                  Say what you want changed in your own words. NaviSoul reads the real files, works out what to edit,
+                  Say what you want changed in your own words. Navi Soul reads the real files, works out what to edit,
                   makes the change, and commits it — the same way you would ask a developer.
                 </p>
               </span>
@@ -204,10 +204,10 @@ export default function DeveloperSettings() {
               disabled={!askDraft.trim()}
               className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-[0.875rem]/5 font-semibold text-white active:bg-accent-pressed disabled:opacity-60"
             >
-              <Rocket size={17} />Ask NaviSoul to make this change
+              <Rocket size={17} />Ask Navi Soul to make this change
             </button>
             <p className="mt-2 text-[0.6875rem]/4 font-medium text-tertiary">
-              Opens a Code-mode chat with your request. NaviSoul will read the files before editing, and tell you what it changed.
+              Opens a Code-mode chat with your request. Navi Soul will read the files before editing, and tell you what it changed.
             </p>
           </section>
 
@@ -270,6 +270,41 @@ export default function DeveloperSettings() {
                 <span>{status.message}{status.url ? <> <a href={status.url} target="_blank" rel="noreferrer noopener" className="font-semibold text-accent">View the commit.</a></> : null}</span>
               </div>
             ) : null}
+          </section>
+
+          {/* The deployment variables, gathered here.
+              These sentences used to sit on the Connectors screen, where they
+              told someone holding a phone to open a Vercel dashboard and
+              redeploy — an instruction a consumer surface cannot act on and
+              should not carry. They are real and worth keeping, so they moved
+              to the one screen whose audience can use them rather than being
+              deleted. */}
+          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elev-2 text-secondary"><KeyRound size={21} /></span>
+              <span className="min-w-0 flex-1">
+                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Deployment settings</h2>
+                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
+                  Set these in the hosting project&apos;s environment, then redeploy. They apply to everyone using this
+                  deployment, not to one account.
+                </p>
+              </span>
+            </div>
+            <dl className="mt-3 space-y-3">
+              {[
+                ["GOOGLE_OAUTH_CLIENT_ID / _SECRET", "Lets each person connect their own Gmail and Calendar. See docs/google-connector-setup.md."],
+                ["GITHUB_OAUTH_CLIENT_ID / _SECRET", "Lets each person connect their own GitHub. This must be a separate OAuth app from the one Clerk uses for sign-in — one OAuth app holds one callback URL."],
+                ["NAVI_GITHUB_ALLOW_WRITES", "Set to true to let Navi Soul commit to a working branch and open pull requests. Off by default; reconnect GitHub after changing it."],
+                ["NAVI_VERCEL_TOKEN", "Deployment and build-log reads. Configured once for the whole deployment rather than per person; scope it to the team that owns this project."],
+                ["MCP_SERVER_REGISTRY_JSON", "The connector servers this deployment offers. Their credentials stay on the server and never reach the browser."],
+                ["HF_TOKEN", "Voice transcription, image and audio generation. Needs the “Make calls to Inference Providers” permission."]
+              ].map(([name, detail]) => (
+                <div key={name} className="rounded-xl bg-elev-2 p-3">
+                  <dt className="font-mono text-[0.75rem]/4 font-semibold text-primary">{name}</dt>
+                  <dd className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">{detail}</dd>
+                </div>
+              ))}
+            </dl>
           </section>
 
           <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">

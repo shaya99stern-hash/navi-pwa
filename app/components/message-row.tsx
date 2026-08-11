@@ -84,9 +84,10 @@ function MessageRowBase({ message, streaming, last, theme, chatFont, haptics, vo
   if (!text && files.length === 0 && !streaming) return null;
 
   async function copy() {
+    // On the gesture, not after the clipboard write; see code-block.tsx.
+    haptic("selection", haptics);
     await navigator.clipboard.writeText(text);
     setCopied(true);
-    haptic("success", haptics);
     window.setTimeout(() => setCopied(false), 1_300);
   }
 
@@ -125,7 +126,12 @@ function MessageRowBase({ message, streaming, last, theme, chatFont, haptics, vo
       onPointerUp={cancelHold}
       onPointerCancel={() => cancelHold()}
       onPointerMove={cancelHold}
-      className={`navi-message-enter flex ${user ? "justify-end" : "justify-start"}`}
+      /* `navi-message-row` lets the browser skip rendering rows that are far
+         off screen. Deliberately not applied while streaming: the row is
+         growing a character at a time, and giving a changing element a guessed
+         intrinsic height is what makes scroll anchoring jump. The finished
+         rows above are the ones worth skipping anyway. */
+      className={`navi-message-enter flex ${streaming ? "" : "navi-message-row"} ${user ? "justify-end" : "justify-start"}`}
     >
       {user ? (
         <div className="max-w-[85%] rounded-[18px] bg-[var(--bg-bubble-user)] px-4 py-2.5 text-[1rem]/[1.5rem] font-normal text-primary">

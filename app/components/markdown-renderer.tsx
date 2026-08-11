@@ -66,7 +66,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, ha
             if (!capabilities) return null;
             const parsed = parseSkillMarkdown(value.trim());
             if ("error" in parsed) {
-              return <div className="my-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-tertiary">NaviSoul drafted a capability that could not be read: {parsed.error}</div>;
+              return <div className="my-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-tertiary">Navi Soul drafted a capability that could not be read: {parsed.error}</div>;
             }
             return (
               <CapabilityCard

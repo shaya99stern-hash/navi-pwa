@@ -55,7 +55,7 @@ export async function extractPdfText(bytes: Uint8Array): Promise<ExtractedDocume
     const { text: clipped, truncated } = clip(merged);
     return { text: clipped, truncated, pages: totalPages };
   } catch (error) {
-    console.warn("NaviSoul could not extract text from a PDF:", error);
+    console.warn("Navi Soul could not extract text from a PDF:", error);
     return null;
   }
 }

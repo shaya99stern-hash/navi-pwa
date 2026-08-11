@@ -12,7 +12,7 @@ import type { ProviderName } from "./types";
  *
  * This is that knowledge, in one table. It is used three ways: the connector
  * sheet lists it, a fuzzy lookup resolves a spoken or typed name onto it, and
- * NaviSoul reads it so "connect me to Together" can be carried out rather than
+ * Navi Soul reads it so "connect me to Together" can be carried out rather than
  * explained.
  */
 
@@ -133,12 +133,12 @@ export const PROVIDER_CATALOG: CatalogEntry[] = [
   {
     id: "github-pat", names: ["github", "git hub", "github token", "github pat"], label: "GitHub token", envKey: "GITHUB_PAT", kind: "custom",
     keyUrl: "https://github.com/settings/personal-access-tokens/new",
-    free: true, detail: "Lets NaviSoul read and commit its own source. Contents: read and write."
+    free: true, detail: "Lets Navi Soul read and commit its own source. Contents: read and write."
   },
   {
     id: "github-writes", names: ["github writes", "allow writes"], label: "GitHub writes", envKey: "NAVI_GITHUB_ALLOW_WRITES", kind: "custom",
     keyUrl: "https://vercel.com/docs/environment-variables",
-    free: true, detail: 'Set the value to "true" to let NaviSoul commit through your connected account.'
+    free: true, detail: 'Set the value to "true" to let Navi Soul commit through your connected account.'
   },
   {
     id: "vercel", names: ["vercel", "vercel token"], label: "Vercel token", envKey: "NAVI_VERCEL_TOKEN", kind: "custom",

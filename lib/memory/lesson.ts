@@ -12,7 +12,7 @@
  * matching the first time one copy changed.
  */
 
-/** Marks a stored row as something NaviSoul worked out, not something it was told. */
+/** Marks a stored row as something Navi Soul worked out, not something it was told. */
 export const LESSON_PREFIX = "Lesson:";
 
 /** Was this row self-learned? Tolerant of case and leading space, since the name round-trips through a database and a prompt. */
