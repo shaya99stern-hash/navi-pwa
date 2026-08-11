@@ -318,3 +318,46 @@ the interface you actually want.
 6. **Diff-in-chat for Code mode** (§10), then delete the file editor.
 
 Items 1 and 2 are yours and take minutes. Everything else I can build.
+
+
+---
+
+## Frontier escalation
+
+Added after the question "can it be almost as intelligent as a frontier model".
+
+The honest answer is that prompt volume does not create intelligence. The system
+prompt is deliberately ~1,200 tokens and there is a test enforcing that budget,
+because a long prompt degrades instruction-following and costs latency on every
+turn — including the turns that ask what 15% of 200 is. **Answer quality is
+bounded by which model answers, not by how much it is told.**
+
+Every provider configured here — Groq, Gemini, Cerebras, DeepSeek, Mistral,
+Together, NVIDIA, SambaNova, Hugging Face — is a fast open-weight host. No
+prompt turns one of those into a frontier model.
+
+So: lane 3, which is where "this is hard" lands (high effort, or complex work
+in either mode), now escalates to a frontier model through OpenRouter when one
+is named.
+
+- `NAVI_FRONTIER_MODEL` — an OpenRouter model id. **Unset by default**, because
+  this is the only route in the table that bills per request, and an app that
+  silently starts spending because it was upgraded is a worse failure than one
+  that answers slightly less well.
+- Requires `OPENROUTER_API_KEY`, and the spend ledger must authorise it.
+- When any of those is missing, lane 3 falls through to the free routes exactly
+  as before — a good answer rather than an apology.
+
+Settings → Diagnostics reports it, because every failure here is silent: no
+model named, no key, or no durable spend store all produce the same symptom —
+a good answer where a better one was available, and nobody would ever notice.
+
+### What else actually moves quality
+
+1. **This.** Which model answers.
+2. **Verification loops.** Code execution to check its own work before
+   answering. Built, and off in the exported preferences (`tools.code: false`).
+3. **Observation over instruction.** `diagnose_self` did more for answer quality
+   than any paragraph of instruction would have: every fabricated answer in the
+   chat history came from a question about the running system with no way to
+   look.

@@ -179,6 +179,33 @@ function checkProviders(): DiagnosticResult {
     : { area: "Answering providers", ok: false, detail: "No provider credentials are set, so nothing can answer." };
 }
 
+/**
+ * Whether the hardest requests can reach a frontier model.
+ *
+ * Worth its own row because it is the one setting that changes how good the
+ * answers are, and because every failure mode is silent: with no model named
+ * the app simply answers slightly less well and says nothing; with a model
+ * named but no OpenRouter key it never escalates; with both but no durable
+ * spend store the ledger refuses to authorise spending. Three different
+ * causes, one indistinguishable symptom — a good answer where a better one
+ * was available.
+ */
+function checkFrontier(): DiagnosticResult {
+  const model = (process.env.NAVI_FRONTIER_MODEL ?? "").trim();
+  const openrouter = Boolean((process.env.OPENROUTER_API_KEY ?? "").trim());
+  if (!model) {
+    return {
+      area: "Frontier escalation",
+      ok: false,
+      detail: "No frontier model is set, so hard requests are answered by the free routes. Set NAVI_FRONTIER_MODEL to an OpenRouter model id to raise the ceiling on difficult work. This one costs money per request, which is why it is off by default."
+    };
+  }
+  if (!openrouter) {
+    return { area: "Frontier escalation", ok: false, detail: `NAVI_FRONTIER_MODEL is set to “${model}” but there is no OPENROUTER_API_KEY, so it can never be reached.` };
+  }
+  return { area: "Frontier escalation", ok: true, detail: `Hard requests escalate to “${model}” via OpenRouter, within the monthly spending limit. Everything else stays on the free routes.` };
+}
+
 /** Web search, which the user can switch on and then find does nothing. */
 function checkSearch(): DiagnosticResult {
   const tavily = (process.env.TAVILY_API_KEY ?? "").trim();
@@ -209,6 +236,7 @@ export async function runAllChecks(clerkToken?: string, hasUserGithub = false): 
     checkRepository(),
     Promise.resolve(checkUserRepoWrites(hasUserGithub)),
     Promise.resolve(checkProviders()),
+    Promise.resolve(checkFrontier()),
     Promise.resolve(checkSearch())
   ]);
 }
@@ -237,6 +265,7 @@ export function buildDiagnosticTools({ clerkToken, hasUserGithub = false, onActi
           wanted("repository") ? checkRepository() : null,
           wanted("repository") ? Promise.resolve(checkUserRepoWrites(hasUserGithub)) : null,
           wanted("providers") ? Promise.resolve(checkProviders()) : null,
+          wanted("providers") ? Promise.resolve(checkFrontier()) : null,
           wanted("search") ? Promise.resolve(checkSearch()) : null
         ].filter(Boolean) as Array<Promise<DiagnosticResult> | DiagnosticResult>);
 
