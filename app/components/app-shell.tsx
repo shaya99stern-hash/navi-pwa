@@ -396,7 +396,8 @@ export function AppShell({
       id: activeProject.id,
       name: activeProject.name,
       instructions: activeProject.instructions,
-      knowledge: activeProject.knowledge
+      knowledge: activeProject.knowledge,
+      documents: activeProject.documents
     } : undefined
   }), [activeChat?.connectorAccessMode, activeChat?.summary, activeProject, messages, playbooks, preferences, recalledContext]);
 

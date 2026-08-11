@@ -150,6 +150,20 @@ const CEILING_SAFETY_MARGIN = 400;
  */
 const PROMPT_RESERVE_TOKENS = 3_500;
 /**
+ * What a project's documents may contribute to one turn, in characters.
+ *
+ * About 4,000 tokens. Generous enough that a project of reference material is
+ * genuinely useful, bounded because a project is replayed into *every*
+ * conversation that belongs to it — an unbounded knowledge base is a permanent
+ * tax on every request rather than a one-off cost, and it would arrive at the
+ * routing budget from a direction nothing was measuring.
+ *
+ * The turn is still sized against the route afterwards, so this being too
+ * generous for a free tier degrades to a route with more room rather than to a
+ * failed request.
+ */
+const MAX_PROJECT_DOCUMENT_CHARS = 16_000;
+/**
  * The effort dial, in the words the effort sheet already uses.
  *
  * Derived from `EFFORT_LEVELS` rather than restated, so the badge under a reply
@@ -193,6 +207,7 @@ type ProjectContextInput = {
   name?: unknown;
   instructions?: unknown;
   knowledge?: unknown;
+  documents?: unknown;
 };
 
 type RateBucket = { count: number; resetAt: number };
@@ -320,12 +335,44 @@ function projectContextSummary(value: unknown): string {
       .filter(Boolean)
       .slice(0, 30)
     : [];
+  /* Documents the project carries, as text. Named individually so the model
+     can say which one a fact came from — an unattributed wall of prose is how
+     a project's own files end up cited as though they were the web.
+
+     Budgeted per document *and* in total. A project is replayed into every
+     conversation that belongs to it, so an unbounded knowledge base is a
+     permanent tax on every turn — the same shape as the 20,000-token prompt,
+     arriving from a direction nothing was watching. Whatever survives is then
+     bounded again by the slice at the end. */
+  const documents = Array.isArray(project.documents)
+    ? project.documents
+      .filter((item): item is { name?: unknown; text?: unknown } => Boolean(item) && typeof item === "object")
+      .map((item) => ({
+        name: typeof item.name === "string" ? item.name.trim().slice(0, 120) : "Document",
+        text: typeof item.text === "string" ? item.text.trim() : ""
+      }))
+      .filter((item) => item.text)
+      .slice(0, 20)
+    : [];
+
+  let documentBudget = MAX_PROJECT_DOCUMENT_CHARS;
+  const documentBlocks: string[] = [];
+  for (const document of documents) {
+    if (documentBudget <= 0) break;
+    const text = document.text.slice(0, documentBudget);
+    documentBudget -= text.length;
+    documentBlocks.push(`### ${document.name}\n${text}`);
+  }
+
   return [
     `Active project: ${name}`,
     instructions ? `Project instructions:\n${instructions}` : "",
     knowledge.length ? `Project knowledge:\n${knowledge.map((item) => `- ${item}`).join("\n")}` : "",
-    "Treat project instructions and knowledge as durable user-provided context. Do not claim they came from external sources."
-  ].filter(Boolean).join("\n\n").slice(0, 6_000);
+    documentBlocks.length
+      ? `Project documents, read as text. Reason from them directly, and name the document when a fact comes from one:\n\n${documentBlocks.join("\n\n")}`
+      : "",
+    "Treat project instructions, knowledge, and documents as durable user-provided context. Do not claim they came from external sources."
+  ].filter(Boolean).join("\n\n").slice(0, 6_000 + MAX_PROJECT_DOCUMENT_CHARS);
 }
 
 function clientIdentifier(request: Request): string {

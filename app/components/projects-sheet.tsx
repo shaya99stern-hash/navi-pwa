@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, ChevronLeft, FileText, FolderKanban, Plus, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import type { NaviProject, StoredChat } from "@/lib/ai/types";
+import { Check, ChevronLeft, FileText, FolderKanban, Plus, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { NaviProject, ProjectDocument, StoredChat } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
 
 type Props = {
@@ -44,6 +44,40 @@ function createProject(name: string, instructions: string): NaviProject {
   };
 }
 
+/**
+ * A file as base64, without the data-URL prefix the reader adds.
+ *
+ * `readAsDataURL` rather than `readAsArrayBuffer` and a manual encode: the
+ * browser's own base64 is faster than anything written here, and the prefix is
+ * a known fixed shape rather than something to parse.
+ */
+function encodeFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      const comma = result.indexOf(",");
+      comma === -1 ? reject(new Error("Unreadable file.")) : resolve(result.slice(comma + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Unreadable file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+/* Some platforms hand over an empty `type` for files picked from cloud
+   storage, and a markdown file is routinely typed as nothing at all. The
+   extension is the only signal left, and guessing wrong here costs a clear
+   error from the route rather than a bad document. */
+function guessMediaType(filename: string): string {
+  const extension = filename.toLowerCase().split(".").pop() ?? "";
+  if (extension === "pdf") return "application/pdf";
+  if (extension === "csv") return "text/csv";
+  if (extension === "json") return "application/json";
+  if (extension === "xml") return "application/xml";
+  return "text/plain";
+}
+
+
 export function ProjectsSheet({
   open,
   projects,
@@ -58,6 +92,9 @@ export function ProjectsSheet({
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(activeProjectId);
   const [knowledgeDraft, setKnowledgeDraft] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   /** The creation form. Null when it is not open. */
   const [draft, setDraft] = useState<{ name: string; instructions: string } | null>(null);
 
@@ -99,6 +136,56 @@ export function ProjectsSheet({
     patch(selected, { knowledge: [...selected.knowledge, knowledgeDraft.trim()] });
     setKnowledgeDraft("");
     haptic("success", haptics);
+  }
+
+  /**
+   * Read files into the project as text.
+   *
+   * Sequential rather than parallel: extraction is a model-free server call but
+   * a PDF is still real work, and four at once on a phone competes with the
+   * scroll it is happening under. The failures are per-file and reported per
+   * file, because "one of your four documents was a scan" is the only version
+   * of that message anyone can act on.
+   */
+  async function addFiles(project: NaviProject, list: FileList | null) {
+    const files = Array.from(list ?? []);
+    if (!files.length) return;
+    setUploading(true);
+    setUploadError(null);
+
+    const added: ProjectDocument[] = [];
+    const failed: string[] = [];
+    for (const file of files) {
+      try {
+        const data = await encodeFile(file);
+        const response = await fetch("/api/projects/knowledge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, mediaType: file.type || guessMediaType(file.name), data })
+        });
+        const payload = await response.json() as { title?: string; text?: string; truncated?: boolean; error?: string };
+        if (!response.ok || !payload.text) { failed.push(`${file.name}: ${payload.error ?? "could not be read"}`); continue; }
+        added.push({
+          id: crypto.randomUUID?.() ?? `document-${Date.now().toString(36)}-${added.length}`,
+          name: payload.title ?? file.name,
+          text: payload.text,
+          truncated: Boolean(payload.truncated),
+          addedAt: Date.now()
+        });
+      } catch {
+        failed.push(`${file.name}: could not be read`);
+      }
+    }
+
+    if (added.length) {
+      /* Capped at twenty, matching what storage will keep on read. Silently
+         storing a twenty-first that disappears on the next load is worse than
+         refusing it. */
+      patch(project, { documents: [...(project.documents ?? []), ...added].slice(0, 20) });
+      haptic("success", haptics);
+    }
+    setUploadError(failed.length ? failed.join(" · ") : null);
+    setUploading(false);
   }
 
   function removeProject(project: NaviProject) {
@@ -239,6 +326,49 @@ export function ProjectsSheet({
                     </div>
                   ))}
                   {!selected.knowledge.length ? <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] px-4 py-8 text-center text-[0.75rem]/5 font-medium text-tertiary">No project knowledge yet.</div> : null}
+                </div>
+              </section>
+
+              {/* Files, which is what makes this a knowledge base rather than a
+                  system prompt with a name. The document's *text* is what gets
+                  stored and carried — see the extraction route for why. */}
+              <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
+                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Project files</h2>
+                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">Attach documents once and Navi Soul reads them in every conversation in this project. PDF, CSV, JSON, and text.</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.csv,.json,.txt,.md,.xml,application/pdf,text/csv,application/json,text/plain,text/markdown"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => { void addFiles(selected, event.target.files); event.target.value = ""; }}
+                />
+                <button
+                  type="button"
+                  onClick={() => { haptic("selection", haptics); fileInputRef.current?.click(); }}
+                  disabled={uploading}
+                  className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 px-4 text-[0.8125rem]/5 font-semibold text-primary active:bg-elev-3 disabled:opacity-50"
+                >
+                  <Upload size={16} />{uploading ? "Reading…" : "Add files"}
+                </button>
+                {uploadError ? <p className="mt-2 text-[0.75rem]/5 font-medium text-danger">{uploadError}</p> : null}
+                <div className="mt-3 space-y-2">
+                  {(selected.documents ?? []).map((document) => (
+                    <div key={document.id} className="flex gap-3 rounded-2xl bg-elev-2 p-3">
+                      <FileText size={17} className="mt-0.5 shrink-0 text-accent" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[0.8125rem]/5 font-semibold text-primary">{document.name}</span>
+                        {/* The character count is the honest unit here: it is
+                            what the budget is spent in, and "truncated" without
+                            a size reads as a failure rather than a limit. */}
+                        <span className="block text-[0.6875rem]/4 font-medium text-tertiary">
+                          {document.text.length.toLocaleString()} characters{document.truncated ? " · truncated to fit" : ""}
+                        </span>
+                      </span>
+                      <button type="button" onClick={() => patch(selected, { documents: (selected.documents ?? []).filter((entry) => entry.id !== document.id) })} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-danger active:bg-elev-3" aria-label={`Remove ${document.name}`}><Trash2 size={15} /></button>
+                    </div>
+                  ))}
+                  {!(selected.documents ?? []).length ? <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] px-4 py-8 text-center text-[0.75rem]/5 font-medium text-tertiary">No files yet.</div> : null}
                 </div>
               </section>
             </div>
