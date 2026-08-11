@@ -10,6 +10,7 @@ import { MarkdownRenderer, type CapabilityHandlers } from "./markdown-renderer";
 import { ExecutionTrace, executionRuns } from "./execution-trace";
 import { ToolActivityList, toolActivity } from "./tool-activity";
 import { PlanCard, planFor } from "./plan-card";
+import { EngineNote, engineNoteFor } from "./engine-note";
 import { ReasoningDisclosure, ReasoningTrace, hadReasoning, reasoningFor } from "./reasoning-disclosure";
 
 function messageFiles(message: UIMessage): Array<{ filename?: string; mediaType?: string }> {
@@ -190,10 +191,19 @@ function MessageRowBase({ message, streaming, last, theme, chatFont, haptics, vo
                   </button>
                 ) : null}
               </div>
-              {last ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src="/brand-spark.png" alt="" aria-hidden="true" className="ml-2.5 mt-1 h-[14px] w-[14px] opacity-70" />
-              ) : null}
+              {/* The mark and, beside it, which engine actually answered.
+                  The mark alone was decorative — the one place under a reply
+                  that could have said something said nothing, while the app
+                  routed across a dozen models in silence. The note is always
+                  visible, unlike the action row above it, because it is
+                  information about the reply rather than a control for it. */}
+              <div className="ml-2.5 mt-1 flex items-center gap-2">
+                {last ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src="/brand-spark.png" alt="" aria-hidden="true" className="h-[14px] w-[14px] opacity-70" />
+                ) : null}
+                {(() => { const note = engineNoteFor(message); return note ? <EngineNote note={note} /> : null; })()}
+              </div>
             </>
           ) : null}
         </div>

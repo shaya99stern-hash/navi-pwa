@@ -2,6 +2,7 @@ import { PROVIDERS, requestTokenCeiling } from "@/lib/ai/provider-registry";
 import { describeRequestSize, estimateTextTokens, estimateToolTokens, measureRequest } from "@/lib/ai/request-size";
 import { isCredentialRejection, markProviderFailure, markProviderSuccess, rejectedProviders, resetProviderHealth } from "@/lib/ai/provider-health";
 import { lastResortRoute } from "@/lib/ai/providers";
+import { fitReferenceBlocks } from "@/lib/ai/prompt/base";
 import type { ProviderAvailability } from "@/lib/ai/providers";
 import type { ModelMessage, ToolSet } from "ai";
 
@@ -125,13 +126,79 @@ resetProviderHealth();
 
 const availability = { openrouter: true } as unknown as ProviderAvailability;
 delete process.env.NAVI_FRONTIER_MODEL;
-check("no floor when no frontier model is named", lastResortRoute(availability), null);
+check("no floor when no frontier model is named", lastResortRoute(availability, true), null);
 process.env.NAVI_FRONTIER_MODEL = "anthropic/claude-opus-5";
 check("no floor without the key that reaches it",
-  lastResortRoute({ openrouter: false } as unknown as ProviderAvailability), null);
-const floor = lastResortRoute(availability);
-check("otherwise the frontier answers rather than nothing", floor?.provider, "openrouter");
+  lastResortRoute({ openrouter: false } as unknown as ProviderAvailability, true), null);
+/* The deployment is to be free to run, so the one route that bills cannot be
+   what rescues it. The ledger treats an unreadable store as exhausted, which
+   means a storage outage degrades to free rather than to unlimited billing. */
+check("no floor when the ledger has not authorised spending",
+  lastResortRoute(availability, false), null);
+const floor = lastResortRoute(availability, true);
+check("a deployment that opted in still gets one", floor?.provider, "openrouter");
 delete process.env.NAVI_FRONTIER_MODEL;
+
+/* ── The reference blocks compete for room instead of each deciding alone ── */
+
+/* Measured on this codebase, and the reason the free tier could not be served:
+   APP_KNOWLEDGE 2,159 tokens, CODE_CRAFT 2,837, ENGINEERING_DISCIPLINE 1,993,
+   ORCHESTRATION_KNOWLEDGE 978, NAVI_MISSION 841. Every predicate admitting one
+   is individually reasonable; nothing counted them together. */
+const block = (name: string, tokens: number) => ({ name, text: "x".repeat(tokens * 4) });
+const candidates = [
+  block("self-repo", 60),
+  block("app-knowledge", 2_159),
+  block("engineering-discipline", 1_993),
+  block("code-craft", 2_837),
+  block("mission", 841),
+  block("orchestration", 978)
+];
+
+const roomy = fitReferenceBlocks(candidates, Number.POSITIVE_INFINITY);
+check("a roomy route drops nothing", roomy.dropped, []);
+check("and keeps every block it was given", roomy.kept.length, 6);
+
+/* The two budgets Groq's free tier actually produces, after the reserve for
+   prefix, tools, conversation and reply: 3,100 for an ordinary chat turn with
+   about a dozen tools, 2,100 for a code turn carrying all twenty-two. */
+
+const chatTurn = fitReferenceBlocks(candidates, 3_100);
+check("an ordinary free-tier turn keeps which repository this app is",
+  chatTurn.kept[0].length, 60 * 4);
+check("and the app description, which is the answer when the question is about the app",
+  chatTurn.kept[1].length, 2_159 * 4);
+check("routing knowledge is the first thing dropped",
+  chatTurn.dropped.includes("orchestration"), true);
+check("and the two largest code blocks go with it",
+  chatTurn.dropped.includes("code-craft") && chatTurn.dropped.includes("engineering-discipline"), true);
+
+/* A code turn carries ten more tool schemas, so the background budget is
+   smaller — and what survives changes to match. The app description losing to
+   the code-conduct block here is the right trade: this is a turn holding the
+   commit tools, where how to change code without breaking it matters more than
+   how the product is described. */
+const codeTurn = fitReferenceBlocks(candidates, 2_100);
+check("a crowded code turn keeps the code conduct rules instead",
+  codeTurn.kept[1].length, 1_993 * 4);
+check("and drops the app description it can no longer afford",
+  codeTurn.dropped.includes("app-knowledge"), true);
+check("either way the tiny load-bearing block always survives",
+  [chatTurn, codeTurn].every((fit) => fit.kept[0].length === 60 * 4), true);
+
+/* A block that does not fit must not stop the scan: a small low-priority block
+   should still get in behind a large one that was refused, and stopping would
+   spend the rest of the budget on nothing. */
+const scan = fitReferenceBlocks([block("huge", 5_000), block("tiny", 100)], 1_000);
+check("a refused block does not end the scan", scan.kept.length, 1);
+check("the small one behind it still fits", scan.dropped, ["huge"]);
+
+/* Whole or not at all. Half a reference is not a smaller reference — it is a
+   truncated instruction that reads as complete. */
+check("nothing is admitted partially",
+  fitReferenceBlocks([block("one", 5_000)], 4_999).kept, []);
+check("an empty block costs nothing and is not reported as dropped",
+  fitReferenceBlocks([{ name: "absent", text: "" }], 0), { kept: [], dropped: [] });
 
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

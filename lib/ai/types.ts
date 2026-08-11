@@ -55,11 +55,32 @@ export type AttachmentMeta = {
   size: number;
 };
 
+/**
+ * A document a project carries into every conversation that uses it.
+ *
+ * The extracted text, never the file. A project is replayed into each request
+ * that belongs to it, so keeping the bytes would mean carrying a PDF into a
+ * turn that needs a paragraph of it — the same class of mistake as the
+ * 20,000-token prompt, arriving from a direction nothing was watching.
+ */
+export type ProjectDocument = {
+  id: string;
+  /** The filename, kept so the model can cite which document a fact came from. */
+  name: string;
+  text: string;
+  /** True when the file was longer than one document may contribute. */
+  truncated: boolean;
+  addedAt: number;
+};
+
 export type NaviProject = {
   id: string;
   name: string;
   instructions: string;
+  /** Typed notes. Short by nature — a sentence the user wants remembered. */
   knowledge: string[];
+  /** Uploaded files, read as text. Absent on projects saved before v4.5. */
+  documents?: ProjectDocument[];
   createdAt: number;
   updatedAt: number;
   syncState: "local" | "synced" | "attention";
@@ -202,6 +223,23 @@ export type GeneratedImagePayload = {
   prompt: string;
   width?: number;
   height?: number;
+};
+
+/**
+ * Which engine answered, and how hard it was asked to work.
+ *
+ * Persistent rather than transient, unlike `NaviStreamStatus`: this is a fact
+ * about the reply that is still true after it finishes, and the question it
+ * answers — "why is this one worse than the last one" — is usually asked long
+ * after the status line has gone.
+ */
+export type NaviEngineNote = {
+  /** Navi-branded name. Never a provider or a raw model id. */
+  engine: string;
+  /** The effort the user asked for, in the words the effort sheet uses. */
+  effort: string;
+  /** True when an earlier route failed and this one picked the request up. */
+  recovered?: boolean;
 };
 
 export type NaviStreamStatus = {

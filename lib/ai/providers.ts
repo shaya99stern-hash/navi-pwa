@@ -581,6 +581,50 @@ export function fallbackRoutes(options: {
 }
 
 /**
+ * Navi-branded engine names, keyed to what a route is *for*.
+ *
+ * The app has a whole routing matrix and never told anyone which part of it
+ * ran. Every reply looked identical whether it came from the fast lane or the
+ * strongest one, so the effort dial had no visible effect, a degraded fallback
+ * was indistinguishable from a good answer, and the owner watching their app
+ * fail had no way to see that three engines were being tried.
+ *
+ * Keyed to capability rather than provider on purpose, and the constraint is
+ * not decoration: nothing user-facing in this app names a third party, and the
+ * system prompt forbids the model from doing it too. Naming the capability is
+ * also the more durable choice — swapping the model behind "the fast one"
+ * should not rename something the user has learned. Same reasoning as
+ * `IMAGE_ENGINES`, and the same shape.
+ */
+const ENGINE_NAMES: Record<ProviderRoute["capability"], string> = {
+  fast: "Navi Swift",
+  balanced: "Navi Core",
+  reasoning: "Navi Deep",
+  tools: "Navi Core",
+  "long-context": "Navi Wide",
+  multimodal: "Navi Vision",
+  coding: "Navi Code"
+};
+
+/**
+ * What to call the engine that answered.
+ *
+ * The frontier route is named apart from its capability because it is the one
+ * route that is categorically different — it is the only one that can cost
+ * money, and a user seeing it should be able to tell.
+ */
+export function engineName(route: ProviderRoute): string {
+  /* Read live rather than compared against `ROUTES.openRouterFrontier.model`,
+     which is resolved once at module load. Every other frontier check in this
+     file reads the environment when it is called, and a predicate that
+     disagrees with its neighbours about whether a route is the frontier one is
+     a bug waiting for the first deployment that sets the variable late. */
+  const frontier = (process.env.NAVI_FRONTIER_MODEL ?? "").trim();
+  if (route.provider === "openrouter" && frontier && route.model === frontier) return "Navi Frontier";
+  return ENGINE_NAMES[route.capability];
+}
+
+/**
  * The route that answers when nothing else did.
  *
  * The cascade had no floor. A request that failed on every configured provider
@@ -589,19 +633,26 @@ export function fallbackRoutes(options: {
  * unhelpful and untrue: a frontier model was configured and reachable the whole
  * time. Returning nothing is the one outcome worse than an expensive answer.
  *
- * Deliberately *not* gated on the spend ledger, and that is the one place in
- * this file where the budget is overruled. The ledger's job is to stop routine
- * escalation from quietly running up a bill, and it still does — `routeForLane`
- * checks it before every lane 3 call. This is not routine: by the time it runs,
- * every free route has already failed and the alternative is an app that cannot
- * answer at all. The owner named this model in `NAVI_FRONTIER_MODEL`, so the
- * charge is one they chose, not one the app invented.
+ * Gated on the spend ledger like every other paid call, and that is a
+ * deliberate reversal. It shipped ungated on the reasoning that answering
+ * expensively beats not answering — true in general, and not the owner's
+ * priority here. This deployment is to be free to run, so a route that bills
+ * cannot be the thing that rescues it; a floor that quietly charges for every
+ * outage is a worse failure than the outage, because nobody sees it happen.
  *
- * Null when no model is named, which is the default. An empty model id sent to
- * a provider fails for a reason nobody can read, so an unconfigured frontier
- * stays unreachable rather than becoming a confusing last request.
+ * Two conditions, both required. `meteredAllowed` comes from the ledger, which
+ * treats an unreadable store as exhausted — so a storage outage degrades to
+ * free rather than to unlimited billing. And no model named means no route at
+ * all, which is the default: an empty model id sent to a provider fails for a
+ * reason nobody can read.
+ *
+ * When this returns null the request still ends in a real explanation rather
+ * than nothing, because the free routes now fit — see `promptBudgetFor`. The
+ * floor is the last resort for a deployment that has opted into one, not the
+ * mechanism that makes the app work.
  */
-export function lastResortRoute(availability: ProviderAvailability): ProviderRoute | null {
+export function lastResortRoute(availability: ProviderAvailability, meteredAllowed: boolean): ProviderRoute | null {
+  if (!meteredAllowed) return null;
   if (!frontierConfigured() || !availability.openrouter) return null;
   return ROUTES.openRouterFrontier;
 }

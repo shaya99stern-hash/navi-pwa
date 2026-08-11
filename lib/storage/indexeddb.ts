@@ -1,4 +1,4 @@
-import type { ConnectorAccessMode, NaviMode, NaviPreferences, NaviProject, StoredChat } from "../ai/types";
+import type { ConnectorAccessMode, NaviMode, NaviPreferences, NaviProject, ProjectDocument, StoredChat } from "../ai/types";
 import { DEFAULT_PREFERENCES, effortFromLegacyStyle, sortChats } from "../chat";
 
 const DB_NAME = "navi-local-v3";
@@ -263,6 +263,32 @@ function readLegacyVoiceLanguage(): string {
   }
 }
 
+/**
+ * Project documents as read back off the device.
+ *
+ * Bounded here as well as at upload, because this reads whatever is on disk —
+ * which includes records written by an older build, and by cloud sync from
+ * another device. A file is the one part of a project that a user can make
+ * arbitrarily large by accident, and a project is replayed into every
+ * conversation that belongs to it.
+ */
+function normalizeProjectDocuments(value: unknown): ProjectDocument[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap<ProjectDocument>((item) => {
+    if (!item || typeof item !== "object") return [];
+    const document = item as Partial<ProjectDocument>;
+    const text = typeof document.text === "string" ? document.text : "";
+    if (typeof document.id !== "string" || !text.trim()) return [];
+    return [{
+      id: document.id,
+      name: typeof document.name === "string" && document.name.trim() ? document.name.slice(0, 120) : "Document",
+      text: text.slice(0, 12_000),
+      truncated: Boolean(document.truncated) || text.length > 12_000,
+      addedAt: typeof document.addedAt === "number" ? document.addedAt : Date.now()
+    }];
+  }).slice(0, 20);
+}
+
 function normalizeProjects(value: unknown): NaviProject[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap<NaviProject>((item) => {
@@ -278,6 +304,7 @@ function normalizeProjects(value: unknown): NaviProject[] {
       name: project.name,
       instructions: typeof project.instructions === "string" ? project.instructions : "",
       knowledge: Array.isArray(project.knowledge) ? project.knowledge.filter((entry): entry is string => typeof entry === "string").slice(0, 100) : [],
+      documents: normalizeProjectDocuments(project.documents),
       createdAt,
       updatedAt: typeof project.updatedAt === "number" ? project.updatedAt : createdAt,
       syncState

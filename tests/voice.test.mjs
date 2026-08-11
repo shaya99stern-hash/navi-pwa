@@ -57,7 +57,15 @@ check("the sheet does not use recognition either", sheet.body.includes("startSpe
 check("the sheet shows the wait for the transcript", sheet.body.includes("transcribing"), true);
 check("it says what is happening", sheet.source.includes("Writing down what you said"), true);
 /* Start / Stop / Start again is how a long thought gets spoken. */
-check("a second pass adds to the turn", /setTranscript\(\(current\) => `\$\{current\}/.test(sheet.body), true);
+check("a second pass adds to the turn",
+  /const merged = `\$\{current\}\$\{current\.trim\(\) \? " " : ""\}\$\{text\}`/.test(sheet.body), true);
+/* Read from a ref, not from state. `stop()` runs inside the recorder's level
+   callback, which closes over the render that started the recording — so
+   appending to the state variable would append to a copy one turn stale. */
+check("and reads the running transcript from a ref, not a stale closure",
+  /const current = transcriptRef\.current;/.test(sheet.body), true);
+check("with one writer keeping the ref and the state together",
+  /function writeTranscript\(next: string\)/.test(sheet.body), true);
 /* A recording left running holds the microphone and keeps the browser's
    recording indicator lit after the sheet is gone. */
 check("closing the sheet releases the microphone", /recorderRef\.current\?\.cancel\(\)/.test(sheet.body), true);
@@ -156,6 +164,46 @@ check("the route forwards it to the model", /form\.append\("language", language\
    query parameter has no business reaching a provider verbatim. */
 check("the tag is validated before use", /\^\[a-z\]\{2\}/.test(route.body), true);
 check("only the primary subtag is sent", /requested\.split\("-"\)\[0\]\.toLowerCase\(\)/.test(route.body), true);
+
+/* ── Hands-free ──────────────────────────────────────────────────────────
+   The dictation flow is four deliberate acts per turn — speak, Stop, read,
+   Send — three of them needing a hand and eyes, which is the entire thing you
+   are trying to avoid by talking to something. */
+
+check("the sheet can run hands-free", /const \[conversation, setConversation\]/.test(sheet.body), true);
+/* Off by default. Holding the microphone open across a whole exchange is not
+   something to start on someone's behalf. */
+check("and it is off until asked for", /useState\(false\);/.test(sheet.body), true);
+check("the end of a turn is detected rather than pressed",
+  /createTurnDetector/.test(sheet.body), true);
+check("and the turn is sent without a review step",
+  /if \(conversation && online && !busy\) send\(merged\);/.test(sheet.body), true);
+
+/* The failure that would make it unusable: opening the microphone while the
+   reply is still playing out of the speaker, transcribing it, and sending it
+   back as the next question. */
+check("listening waits for the request to finish",
+  /if \(busy \|\| speaking \|\| listening \|\| transcribing \|\| restarting\.current\) return;/.test(sheet.body), true);
+check("and for the reply to stop being spoken",
+  /setSpeaking\(window\.speechSynthesis\.speaking\)/.test(sheet.body), true);
+check("with a beat before reopening, so the speaker's tail is not the next turn",
+  /}, 450\);/.test(sheet.body), true);
+/* busy, speaking and listening settle at different moments; without the guard
+   one gap opens two recorders. */
+check("a guard stops two recorders opening on one gap",
+  /const restarting = useRef\(false\);/.test(sheet.body), true);
+
+/* A turn with no words in it costs a transcription and returns nothing. */
+check("a silent turn is discarded rather than transcribed",
+  /if \(ended === "silent"\) void stop\(\{ discard: true \}\);/.test(sheet.body), true);
+/* Saying "nothing was picked up" every few seconds, hands-free, is its own
+   kind of broken. */
+check("and it does not nag about it while hands-free",
+  /if \(!conversation\) setError\("Nothing was picked up/.test(sheet.body), true);
+
+/* A hands-free conversation with a silent partner is not a conversation. */
+check("turning it on turns on reading the reply aloud",
+  /if \(next\) setSpeakReply\(true\);/.test(sheet.body), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
