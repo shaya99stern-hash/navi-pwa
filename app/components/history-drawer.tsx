@@ -2,7 +2,6 @@
 
 import {
   FolderKanban,
-  GitBranch,
   MessageCircle,
   Pin,
   PinOff,
@@ -10,14 +9,11 @@ import {
   RefreshCw,
   Settings,
   Shapes,
-  SlidersHorizontal,
   SquarePen,
-  Terminal,
   Trash2,
   UserRound,
   X
 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { NaviMode, NaviProject, StoredChat } from "@/lib/ai/types";
 import { searchConversations } from "@/lib/memory";
@@ -26,7 +22,6 @@ import { PWA_UPDATE_STATUS_EVENT, requestPwaUpdate, type PwaUpdateStatus } from 
 import { haptic } from "@/lib/ui/haptics";
 import { versionLabel } from "@/lib/version";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
-import { releaseOverlaysForNavigation } from "@/lib/ui/overlay-route";
 
 type Props = {
   open: boolean;
@@ -50,16 +45,13 @@ type Props = {
   onOpenProject: (id: string) => void;
   onArtifacts: () => void;
   onSettings: () => void;
-  onCustomize: () => void;
-  /** Code mode's second destination: the keys and accounts the work needs. */
-  onConnectors: () => void;
   onOpen: (chat: StoredChat) => void;
   onRename: (id: string, title: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, projects, activeProjectId, onOpenProject, onArtifacts, onSettings, onCustomize, onConnectors, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, projects, activeProjectId, onOpenProject, onArtifacts, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
   /* Null until the user picks; the persisted value is the source of truth
@@ -136,18 +128,6 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
     haptic("selection", haptics);
     onClose();
     present();
-  }
-
-  /* Developer is a route, not a sheet, and that difference matters to the
-     history. Closing the drawer normally unwinds the entry the drawer pushed —
-     correct when you dismiss it, wrong when you are leaving for a real screen,
-     because the unwind lands after the router has already navigated and
-     cancels it. That is why Developer opened and then bounced straight back to
-     the conversation. */
-  function leaveForRoute() {
-    haptic("selection", haptics);
-    releaseOverlaysForNavigation();
-    onClose();
   }
 
   function showAllChats() {
@@ -266,45 +246,23 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
             <MessageCircle size={19} strokeWidth={1.8} className="text-secondary" />
             Chats
           </button>
-          {/* The drawer follows the mode.
-              Switching modes changed routing and the system prompt and nothing
-              a person could see, which is what made the segmented control read
-              as decoration. Code mode is about a repository and what it
-              deploys, so the drawer offers that; Chat mode is about the work
-              you keep, so it offers projects. Artifacts belong to both. */}
-          {mode === "code" ? (
-            <>
-              <Link href="/settings/Developer" onClick={leaveForRoute} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-                <Terminal size={19} strokeWidth={1.8} className="text-secondary" />
-                Developer
-              </Link>
-              {/* Connectors, not "Repository".
-                  The row said Repository and called the same handler as
-                  Customize two rows below it, so both opened the Skills page —
-                  a row named after a thing the app has no screen for, wired to
-                  a screen that has nothing to do with it. Code mode's real
-                  second destination is where the GitHub token and the model
-                  keys live, and where each one can be tested. */}
-              <button type="button" onClick={() => openSheet(onConnectors)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-                <GitBranch size={19} strokeWidth={1.8} className="text-secondary" />
-                Connectors and keys
-              </button>
-            </>
-          ) : (
-            <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-              <FolderKanban size={19} strokeWidth={1.8} className="text-secondary" />
-              Projects
-            </button>
-          )}
+          {/* Projects in both modes.
+              The drawer used to swap this row out for Developer and
+              "Connectors and keys" whenever Code mode was on — configuration
+              surfaces, sitting in primary navigation, replacing the user's own
+              content. That is the "why is all this stuff in this side panel"
+              complaint, and it is a real category error rather than a matter of
+              taste: the sidebar answers *what do I have*, Settings answers
+              *how is this set up*. Both of those rows live in Settings already,
+              and Settings → Developer now actually opens instead of bouncing
+              back, so nothing is lost by holding the line. */}
+          <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+            <FolderKanban size={19} strokeWidth={1.8} className="text-secondary" />
+            Projects
+          </button>
           <button type="button" onClick={() => openSheet(onArtifacts)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <Shapes size={19} strokeWidth={1.8} className="text-secondary" />
             Artifacts
-          </button>
-          {/* The entry point to Skills, Playbooks, and Connectors — otherwise
-              reachable only by going through Settings. */}
-          <button type="button" onClick={() => openSheet(onCustomize)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <SlidersHorizontal size={19} strokeWidth={1.8} className="text-secondary" />
-            Customize
           </button>
         </nav>
 

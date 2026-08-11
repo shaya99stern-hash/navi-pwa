@@ -1066,8 +1066,6 @@ export function AppShell({
         onOpenProject={(id) => { setActiveProjectId(id); setProjectsOpen(true); }}
         onArtifacts={() => setArtifactsOpen(true)}
         onSettings={() => setSettingsOpen(true)}
-        onCustomize={() => { setSettingsSection("skills"); setSettingsOpen(true); }}
-        onConnectors={() => setConnectorsOpen(true)}
         onOpen={openChat}
         onRename={renameChat}
         onPin={pinChat}

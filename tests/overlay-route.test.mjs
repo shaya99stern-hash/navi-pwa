@@ -99,8 +99,12 @@ const drawer = stripComments(readFileSync(join(root, "app/components/history-dra
 
 check("the module can be told a navigation is coming", module_.includes("export function releaseOverlaysForNavigation"), true);
 check("a released frame leaves history alone", /if \(frame\.released\) \{[\s\S]{0,400}?stack\.splice\(index, 1\);[\s\S]{0,20}?return;/.test(module_), true);
-check("the Developer link says it is leaving", /onClick=\{leaveForRoute\}/.test(drawer), true);
-check("leaving releases the overlays first", /releaseOverlaysForNavigation\(\);\s+onClose\(\);/.test(drawer), true);
+/* The drawer no longer carries a Developer row — configuration left primary
+   navigation — so the release-before-navigate rule now has to hold in the one
+   place that still opens that route: the settings sheet. Same bug, same fix,
+   asserted where the code actually lives. */
+const settings = stripComments(readFileSync(join(root, "app/components/settings-sheet.tsx"), "utf8"));
+check("the settings sheet releases before routing", /releaseOverlaysForNavigation\(\);\s+onClose\(\);\s+router\.push/.test(settings), true);
 check("opening a chat releases them too", /releaseOverlaysForNavigation\(\);\s+setHistoryOpen\(false\);/.test(shell), true);
 
 /* Belt and braces: even without the explicit signal, an entry that something
@@ -110,16 +114,24 @@ check("each frame stamps its own id", /naviOverlay: frame\.id/.test(module_), tr
 check("we only go back if our entry is still current", /\?\.naviOverlay === frame\.id/.test(module_), true);
 check("otherwise the frame is dropped quietly", /if \(frame\.owned && !onTop\) \{/.test(module_), true);
 
-/* ── Code mode's two rows go to two different places ─────────────────────── */
+/* ── The sidebar is content; Settings is configuration ───────────────────── */
 
-/* "Repository" called the same handler as "Customize" two rows below it, so
-   both opened the Skills page — a row named after something the app has no
-   screen for, wired to a screen with nothing to do with it. */
-check("the code row opens connectors", /openSheet\(onConnectors\)/.test(drawer), true);
+/* The drawer used to swap Projects out for Developer and "Connectors and keys"
+   whenever Code mode was on — configuration surfaces sitting in primary
+   navigation, replacing the user's own content. Both live in Settings, and
+   Settings → Developer now actually opens rather than bouncing back, so the
+   sidebar can hold one rule: what you have, not how it is set up. */
+check("no Developer row in the sidebar", /\n\s*Developer\n/.test(drawer), false);
+check("no connectors row in the sidebar", /openSheet\(onConnectors\)/.test(drawer), false);
+check("no Customize row", /openSheet\(onCustomize\)/.test(drawer), false);
 check("it is no longer named after a screen that does not exist", /\n\s*Repository\n/.test(drawer), false);
-check("connectors is a real prop, not a reused one", /onConnectors: \(\) => void;/.test(drawer), true);
-check("the shell wires it to the connectors sheet", /onConnectors=\{\(\) => setConnectorsOpen\(true\)\}/.test(shell), true);
-check("Customize still has its own handler", /openSheet\(onCustomize\)/.test(drawer), true);
+/* Projects is content, so it is present in both modes rather than being the
+   row that gets displaced. */
+check("Projects is in the sidebar", /openSheet\(onProjects\)/.test(drawer), true);
+check("the mode no longer decides the nav rows", /mode === "code" \? \(/.test(drawer), false);
+/* Both destinations remain reachable, one level in. */
+check("Settings still offers Connectors", /RootRow label="Connectors"/.test(settings), true);
+check("Settings still offers Developer", /RootRow label="Developer"/.test(settings), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

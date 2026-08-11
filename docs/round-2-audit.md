@@ -166,8 +166,19 @@ Memory, Capabilities, Skills, Playbooks, Connectors, Developer. "Customize" is
 a third thing that is really a shortcut into Settings — which is why it reads as
 meaningless.
 
-**The rule I would apply:** *the sidebar is things you have; Settings is things
+**Fixed.** The rule applied: *the sidebar is things you have; Settings is things
 you configure.*
+
+The sidebar is now New chat · Chats · Projects · Artifacts, in both modes.
+Code mode used to swap Projects out for Developer and "Connectors and keys" —
+configuration surfaces displacing the user's own content, which is exactly the
+"why is all this stuff in this side panel" complaint. Customize is gone; a menu
+whose only job is to shortcut into another menu is redundancy by definition.
+Both destinations remain in Settings, and Settings → Developer now opens
+instead of bouncing back, so nothing became unreachable.
+
+The original reasoning, kept because it is the rule to apply to the next row
+somebody wants to add:
 
 - **Sidebar:** New chat · Chats · Projects · Artifacts. Nothing else. That is
   your content.
