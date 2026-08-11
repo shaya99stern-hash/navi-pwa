@@ -127,19 +127,21 @@ check("an empty pane says what it is for", body.includes("Choose a section."), t
    to it, so the app looked like it had no developer surface — and asked
    where it was, the assistant invented a menu path that did not exist.
    A screen nothing navigates to is a screen that does not exist. */
-check("a Developer row exists", /RootRow label="Developer"/.test(code), true);
-check("it navigates to the real route", body.includes('router.push("/settings/Developer")'), true);
-check("developer is a known section", read("lib/ai/types.ts").body.includes('| "developer"'), true);
-/* Persisted sections are reopened on the next visit. Developer is a route,
-   not a pane, so persisting it would reopen Settings onto a blank pane. */
-check("opening Developer does not persist a pane", /next === "developer"[\s\S]{0,900}router\.push/.test(body), true);
-/* Developer is a route, and leaving for a route must release the overlay
-   history first. `onClose()` unwinds the entry this sheet pushed; that unwind
-   is asynchronous and lands after `router.push`, cancelling it — which is why
-   Settings → Developer opened and bounced straight back to the conversation.
-   The drawer already does this; the sheet did not. */
-check("leaving for the Developer route releases the overlay history",
-  /next === "developer"[\s\S]{0,900}releaseOverlaysForNavigation\(\)[\s\S]{0,200}router\.push/.test(body), true);
+/* The Developer screen is gone. It was a path box, a textarea and a commit
+   button — a text editor on a phone, and a worse one than telling Navi Soul in
+   Code mode to make the change, which reads the file and commits it itself.
+   Two ways to do one thing, where the worse way was the one with a menu entry. */
+check("no Developer row", /RootRow label="Developer"/.test(code), false);
+check("nothing routes to the deleted screen", body.includes("/settings/Developer"), false);
+check("developer is no longer a section", read("lib/ai/types.ts").body.includes('| "developer"'), false);
+/* The deployment variables were the one thing on that screen worth keeping,
+   so they moved to Diagnostics rather than being deleted with it. */
+check("the deployment variables survived", body.includes("Deployment variables"), true);
+check("they are on Diagnostics", block("diagnostics").includes("NAVI_SELF_UPDATE_BRANCH"), true);
+/* A persisted `lastMenuSection` of "developer" must open the list, not a pane
+   that renders nothing. */
+check("a retired section falls back to the root list",
+  /initialSection && initialSection in PAGE_TITLES \? initialSection : "root"/.test(body), true);
 check("the stored-section allow-list accepts it", read("lib/storage/indexeddb.ts").body.includes('"developer"'), true);
 
 /* Connectors is the other route-not-a-pane row; it must keep working. */

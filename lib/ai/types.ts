@@ -141,7 +141,11 @@ export type MenuSection =
   | "connectors"
   | "skills"
   | "playbooks"
-  | "developer";
+  /* "developer" was a section and is not any more: the screen behind it was a
+     path box, a textarea and a commit button, which Code mode does better by
+     reading the file and committing itself. Devices that stored it as their
+     last-opened section fall back to the root list; see `settings-sheet`. */
+  ;
 
 export type ProviderName =
   | "gemini"

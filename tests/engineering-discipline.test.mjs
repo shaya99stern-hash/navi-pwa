@@ -55,12 +55,18 @@ check("results are explained in plain language", brief.includes("a non-programme
 const route = read("app/api/chat/route.ts").body;
 check("the brief is gated on the commit tool", route.includes('needsEngineeringDiscipline(toolNames.includes("commit_own_source"))'), true);
 
-/* The Developer panel's framing can stay short precisely because the brief
-   carries the weight — but it must still tell NaviSoul to read first. */
-const panel = read("app/settings/Developer/page.tsx").body;
-check("the panel asks it to read first", panel.includes("Find and read the real files first"), true);
-check("the panel offers a no-commit path", panel.includes("show me the change instead of committing it"), true);
-check("the panel posts to the parameter /new reads", panel.includes("/new?text="), true);
+/* The Developer panel used to carry this framing in its own copy — "read the
+   real files first", "show me the change instead of committing it". The panel
+   is gone, because a path box and a commit button is a worse editor than
+   telling Navi Soul to make the change. So the framing has to live where the
+   work now happens: in the Code-mode instruction itself, which is the only
+   place left that can insist on reading before writing. */
+check("code mode is told to read the real file first", /read the real file first/.test(route), true);
+check("code mode is told to commit rather than hand back a diff",
+  /Do not hand them a diff to apply themselves/.test(route), true);
+/* The honesty rule survives the panel that used to state it. */
+check("a rejected commit may never be implied to have landed",
+  /never imply it landed/.test(route), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
