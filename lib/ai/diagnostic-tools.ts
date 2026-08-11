@@ -1,5 +1,6 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
+import { providerProbes } from "./providers";
 
 /**
  * Letting Navi Soul find out what is actually wrong with itself.
@@ -166,17 +167,56 @@ function checkUserRepoWrites(hasUserGithub: boolean): DiagnosticResult {
   };
 }
 
-/** Which answering providers hold a credential. Presence only — cheap. */
-function checkProviders(): DiagnosticResult {
-  const names: Array<[string, string]> = [
-    ["Groq", "GROQ_API_KEY"], ["Gemini", "GEMINI_API_KEY"], ["Hugging Face", "HF_TOKEN"],
-    ["Cerebras", "CEREBRAS_API_KEY"], ["OpenRouter", "OPENROUTER_API_KEY"], ["Together", "TOGETHER_API_KEY"],
-    ["Mistral", "MISTRAL_API_KEY"], ["DeepSeek", "DEEPSEEK_API_KEY"]
-  ];
-  const set = names.filter(([, key]) => (process.env[key] ?? "").trim()).map(([label]) => label);
-  return set.length
-    ? { area: "Answering providers", ok: true, detail: `${set.length} configured: ${set.join(", ")}. Use test_connector for a live check of any one of them.` }
-    : { area: "Answering providers", ok: false, detail: "No provider credentials are set, so nothing can answer." };
+/**
+ * Which answering providers actually work — not which ones have a key.
+ *
+ * This row used to count environment variables and report the total as though
+ * it meant something. It is the exact failure this whole module was written to
+ * end, sitting inside the module: a Cerebras key that had been returning
+ * `Forbidden` on every request for weeks was reported as one of six providers
+ * "configured", in green, next to six checks that all performed real requests.
+ * The app was simultaneously unable to answer and certain it was healthy.
+ *
+ * So it does what every other check here does and asks. Listing models is the
+ * cheapest call that proves a key works, costs no tokens, and the key never
+ * leaves `providerProbes` — this function receives a prepared request and
+ * reports a status without ever holding a credential.
+ */
+async function checkProviders(): Promise<DiagnosticResult> {
+  const probes = providerProbes();
+  if (!probes.length) return { area: "Answering providers", ok: false, detail: "No provider credentials are set, so nothing can answer." };
+
+  const results = await Promise.all(probes.map(async (probe) => withTimeout(
+    async (signal) => {
+      const response = await fetch(probe.url, { headers: probe.headers, signal, cache: "no-store" });
+      if (response.ok) return { label: probe.label, ok: true, why: "" };
+      /* The distinction that matters, because the fixes are different and only
+         one of them is urgent: a rejected key needs replacing, a rate-limited
+         one is working and busy. */
+      const why = response.status === 401 || response.status === 403
+        ? `rejected the key (${response.status}) — it is dead or revoked, replace it`
+        : response.status === 429
+          ? "rate-limited right now, but the key is valid"
+          : `answered ${response.status}`;
+      return { label: probe.label, ok: false, why };
+    },
+    () => ({ label: probe.label, ok: false, why: "did not answer within 10 seconds" })
+  )));
+
+  const working = results.filter((entry) => entry.ok);
+  const broken = results.filter((entry) => !entry.ok);
+  if (!broken.length) {
+    return { area: "Answering providers", ok: true, detail: `${working.length} of ${results.length} answered a live request: ${working.map((entry) => entry.label).join(", ")}.` };
+  }
+  const detail = [
+    `${working.length} of ${results.length} providers answered a live request${working.length ? `: ${working.map((entry) => entry.label).join(", ")}` : ""}.`,
+    `Not working: ${broken.map((entry) => `${entry.label} ${entry.why}`).join("; ")}.`,
+    "A key being present in the environment is not evidence it works; these were each tried."
+  ].join(" ");
+  /* Some providers failing is not a failed check while others answer — the app
+     can still reply. It is reported either way, because a dead key that nobody
+     is told about is how this went unnoticed for weeks. */
+  return { area: "Answering providers", ok: working.length > 0, detail };
 }
 
 /**
@@ -235,7 +275,7 @@ export async function runAllChecks(clerkToken?: string, hasUserGithub = false): 
     checkTranscription(),
     checkRepository(),
     Promise.resolve(checkUserRepoWrites(hasUserGithub)),
-    Promise.resolve(checkProviders()),
+    checkProviders(),
     Promise.resolve(checkFrontier()),
     Promise.resolve(checkSearch())
   ]);
@@ -264,7 +304,7 @@ export function buildDiagnosticTools({ clerkToken, hasUserGithub = false, onActi
           wanted("voice") ? checkTranscription() : null,
           wanted("repository") ? checkRepository() : null,
           wanted("repository") ? Promise.resolve(checkUserRepoWrites(hasUserGithub)) : null,
-          wanted("providers") ? Promise.resolve(checkProviders()) : null,
+          wanted("providers") ? checkProviders() : null,
           wanted("providers") ? Promise.resolve(checkFrontier()) : null,
           wanted("search") ? Promise.resolve(checkSearch()) : null
         ].filter(Boolean) as Array<Promise<DiagnosticResult> | DiagnosticResult>);

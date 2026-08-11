@@ -1,3 +1,10 @@
+/* First, and it has to stay first. This installs a `DOMException` constructor
+   the edge runtime does not provide, and the AI SDK below builds its abort
+   errors with one — on every retry backoff and every `smoothStream` delay. An
+   import ordered after the SDK's would still run before any request, but this
+   is a load-bearing side effect and reading it at the top is how it survives
+   the next person tidying the import list. */
+import "@/lib/ai/dom-exception";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -10,10 +17,11 @@ import {
   type UIMessage
 } from "ai";
 import { compactForBudget } from "@/lib/ai/compaction";
-import { PROVIDERS } from "@/lib/ai/provider-registry";
+import { PROVIDERS, requestTokenCeiling } from "@/lib/ai/provider-registry";
+import { describeRequestSize, estimateTextTokens, estimateToolTokens, measureRequest } from "@/lib/ai/request-size";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
-import { classifyTask, createProviderModel, fallbackRoutes, getProviderAvailability, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
+import { classifyTask, createProviderModel, fallbackRoutes, getProviderAvailability, lastResortRoute, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
 import { markProviderFailure, markProviderSuccess, orderRoutesByHealth } from "@/lib/ai/provider-health";
 import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
@@ -113,6 +121,23 @@ const LONG_CONTEXT_TURNS = 14;
  * fits gets rejected for being over it.
  */
 const CONTEXT_INPUT_SHARE = 0.6;
+/**
+ * The shortest reply worth starting a request for.
+ *
+ * Used as the floor when the output cap is sized to what a route has left. If a
+ * route cannot spare even this much after the prompt and the tool schemas, it
+ * cannot serve the request at all and is skipped rather than sent a payload it
+ * will refuse — see the attempt loop.
+ */
+const MIN_OUTPUT_TOKENS = 1_000;
+/**
+ * Held back from every ceiling.
+ *
+ * The token estimate is four-characters-to-one and the provider's tokeniser is
+ * not, so a request sized exactly to the limit is a request that sometimes
+ * lands just over it. The margin is what turns "usually fits" into "fits".
+ */
+const CEILING_SAFETY_MARGIN = 400;
 
 type ChatRequestBody = {
   messages?: UIMessage[];
@@ -839,6 +864,13 @@ function streamError(error: unknown): string {
   console.error("Navi Soul stream error:", error);
   const lower = message.toLowerCase();
   if (lower.includes("image providers") || lower.includes("image-generation provider")) return "Image generation is unavailable right now. Tap to retry in a moment.";
+  /* Checked before the rate-limit branch, because the provider's own words for
+     this are "Request too large ... tokens per minute" and the substring
+     `rate limit` would otherwise claim it. They need different answers: waiting
+     fixes a rate limit and does nothing at all for a request that is too big. */
+  if (lower.includes("more room than any configured route") || lower.includes("request too large") || lower.includes("too large")) {
+    return "This request is too big for the engines available. Start a new chat, detach any files, or lower the effort.";
+  }
   if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "Too many requests just now. Tap to retry in a moment.";
   if (lower.includes("api_key") || lower.includes("api key") || lower.includes("credential") || lower.includes("401") || lower.includes("403") || lower.includes("forbidden")) {
     return "Navi Soul has no working credential to answer with. Add one in Settings.";
@@ -1437,8 +1469,7 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       const compactionCache = new Map<number, ModelMessage[]>();
-      const messagesFor = async (attempt: typeof route): Promise<ModelMessage[]> => {
-        const budget = Math.floor(PROVIDERS[attempt.provider].contextWindow * CONTEXT_INPUT_SHARE);
+      const messagesFor = async (budget: number): Promise<ModelMessage[]> => {
         const cached = compactionCache.get(budget);
         if (cached) return cached;
         const { messages: fitted, compacted } = await compactForBudget({
@@ -1455,6 +1486,12 @@ export async function POST(request: Request): Promise<Response> {
         return fitted;
       };
 
+      /* The system prompt, built per attempt because it names the tools that
+         attempt can actually call. Lifted out of the `streamText` call so its
+         size can be measured before the request is sent — it is the largest
+         single contributor to a turn and nothing could previously see it. */
+      const systemFor = (attemptToolNames: string[]): string => systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested });
+
       /* Health-ordered: a provider that has been failing across recent
          requests goes to the back of the line instead of charging every turn
          its timeout. Deprioritized, never dropped. */
@@ -1462,6 +1499,12 @@ export async function POST(request: Request): Promise<Response> {
         route,
         ...fallbackRoutes({ primary: route, availability, complex: complexRoute })
       ]);
+      /* The floor, appended after the health ordering rather than inside it:
+         it is the answer of last resort, so it must stay last however badly the
+         free routes have been behaving. Skipped when it is already in the list,
+         and absent entirely unless a frontier model is named. */
+      const floor = lastResortRoute(availability);
+      if (floor && !attempts.some((candidate) => candidate.model === floor.model)) attempts.push(floor);
       let lastFailure: unknown = null;
 
       for (const [index, attempt] of attempts.entries()) {
@@ -1474,15 +1517,64 @@ export async function POST(request: Request): Promise<Response> {
            answer turns a recoverable failure into a guaranteed one. */
         const attemptToolNames = routeToolCallingSupport(attempt) === "custom" ? toolNames : [];
         const metered = attempt.provider === "deepseek";
-        const attemptMessages = await messagesFor(attempt);
+        const attemptTools = attemptToolNames.length ? availableTools : {};
+        const attemptSystem = systemFor(attemptToolNames);
+
+        /* Size the request to what this route will actually take, before
+           sending it. A turn of 20,805 tokens was offered to a route whose
+           entire per-minute allowance is 8,000 — a request that could not
+           succeed, could not be retried into succeeding, and failed over to
+           three other routes that were never the problem.
+
+           Two numbers matter and neither was being read. The ceiling is the
+           provider's own limit on one request; on a free tier that is its
+           throughput allowance, not its context window. The fixed cost is the
+           system prompt plus the tool schemas, which is most of the payload on
+           an ordinary turn and which the old budget did not count at all. */
+        const ceiling = requestTokenCeiling(PROVIDERS[attempt.provider]) - CEILING_SAFETY_MARGIN;
+        const fixed = estimateTextTokens(attemptSystem) + estimateToolTokens(attemptTools);
+        /* Still bounded by the window share as well: a provider can have room
+           to spare and still answer worse for being handed a huge history. */
+        const inputBudget = Math.min(
+          Math.floor(PROVIDERS[attempt.provider].contextWindow * CONTEXT_INPUT_SHARE),
+          ceiling - fixed - MIN_OUTPUT_TOKENS
+        );
+
+        /* Checked before compaction rather than left to the arithmetic below.
+           A route with no room for the conversation would otherwise reach
+           `streamText` with an empty message list — a request carrying the
+           whole system prompt and no question — which is a worse failure than
+           the one being prevented, because it returns an answer. */
+        const tooSmall = (weighed: number) => {
+          console.info(`Navi Soul skipped ${attempt.label}: ${describeRequestSize({ system: estimateTextTokens(attemptSystem), tools: estimateToolTokens(attemptTools), messages: Math.max(0, weighed - fixed), output: 0, total: weighed }, ceiling)}`);
+          lastFailure ??= new Error(`This turn needs more room than any configured route will accept (${weighed} tokens of prompt).`);
+        };
+        if (inputBudget <= 0) { tooSmall(fixed); continue; }
+
+        const attemptMessages = await messagesFor(inputBudget);
+
+        /* What is left over, capped by the ceiling on any one reply. This is
+           the line that broke production: a flat 8,000 was reserved on every
+           call, which on the 8,000-token route was the entire allowance — so
+           even a one-word question was refused before the prompt was counted. */
+        const input = measureRequest({ system: attemptSystem, tools: attemptTools, messages: attemptMessages, output: 0 });
+        const attemptOutputTokens = Math.min(MAX_OUTPUT_TOKENS, ceiling - input.total);
+
+        /* Compaction is best-effort — it returns the conversation unchanged
+           when the summariser is down — so the decision is made on what the
+           payload actually weighs now, not on what the budget hoped it would.
+           Skipping costs one round trip that was going to be refused anyway. */
+        if (attemptOutputTokens < MIN_OUTPUT_TOKENS) { tooSmall(input.total); continue; }
+        console.info(`Navi Soul sending to ${attempt.label}: ${describeRequestSize({ ...input, output: attemptOutputTokens, total: input.total + attemptOutputTokens }, ceiling)}`);
+
         const result = streamText({
         model: createProviderModel(attempt, origin),
-        system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
+        system: attemptSystem,
         messages: attemptMessages,
         ...(attemptToolNames.length
           ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
           : {}),
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        maxOutputTokens: attemptOutputTokens,
         maxRetries: 1,
         timeout: { totalMs: 50_000, chunkMs: 14_000 },
         abortSignal: request.signal,
@@ -1522,7 +1614,7 @@ export async function POST(request: Request): Promise<Response> {
             markProviderSuccess(attempt.provider);
           } catch (error) {
             /* Nothing was shown, so another provider may still answer. */
-            markProviderFailure(attempt.provider);
+            markProviderFailure(attempt.provider, error);
             lastFailure = error;
             continue;
           }
@@ -1582,7 +1674,7 @@ export async function POST(request: Request): Promise<Response> {
           const { committed, preamble, failure } = await readUntilCommitted(reader);
 
           if (!committed) {
-            markProviderFailure(attempt.provider);
+            markProviderFailure(attempt.provider, failure);
             lastFailure = failure ?? new Error("The provider produced no content.");
             continue;
           }
@@ -1593,7 +1685,7 @@ export async function POST(request: Request): Promise<Response> {
           writer.merge(stream);
           return;
         } catch (error) {
-          markProviderFailure(attempt.provider);
+          markProviderFailure(attempt.provider, error);
           lastFailure = error;
           continue;
         }

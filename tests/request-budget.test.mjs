@@ -1,0 +1,131 @@
+import { read } from "./source.mjs";
+
+/**
+ * The wiring that makes the budget real.
+ *
+ * `request-size.test.ts` proves the measurements are right. This proves the
+ * chat route actually uses them — which is the half that was missing before,
+ * since a correct budget nothing consults is exactly what `CONTEXT_INPUT_SHARE`
+ * already was. Its own comment admitted that the system prompt, retrieved
+ * files, documents, tool schemas and the reply "all come out of the same
+ * window, and none of them is counted", and then multiplied by 0.6 and hoped.
+ */
+
+let pass = 0, fail = 0;
+const check = (n, a, e) => {
+  const ok = JSON.stringify(a) === JSON.stringify(e); ok ? pass++ : fail++;
+  console.log(`${ok ? "PASS" : "FAIL"}  ${n}${ok ? "" : `\n   got:  ${JSON.stringify(a)}\n   want: ${JSON.stringify(e)}`}`);
+};
+
+const chat = read("app/api/chat/route.ts");
+const registry = read("lib/ai/provider-registry.ts");
+const health = read("lib/ai/provider-health.ts");
+const models = read("app/api/models/route.ts");
+
+/* ── The output reservation is sized, never flat ────────────────────────── */
+
+/* The single line that broke production. A flat 8,000-token reservation is the
+   whole of Groq's free-tier per-minute allowance, so every request — including
+   a one-word question — was over the limit before the prompt was counted. */
+check("the output cap is no longer a flat constant",
+  /maxOutputTokens: MAX_OUTPUT_TOKENS/.test(chat.code), false);
+check("it is sized per attempt",
+  /maxOutputTokens: attemptOutputTokens/.test(chat.code), true);
+check("from what the route has left after the prompt",
+  /attemptOutputTokens = Math\.min\(MAX_OUTPUT_TOKENS, ceiling - input\.total\)/.test(chat.code), true);
+check("with a floor, so a route is never sent a request it cannot answer",
+  /attemptOutputTokens < MIN_OUTPUT_TOKENS/.test(chat.code), true);
+
+/* ── The budget counts the whole payload ────────────────────────────────── */
+
+check("the ceiling comes from the provider, not the context window alone",
+  /requestTokenCeiling\(PROVIDERS\[attempt\.provider\]\)/.test(chat.code), true);
+check("a safety margin is held back from it",
+  /ceiling = requestTokenCeiling\([^)]*\) - CEILING_SAFETY_MARGIN/.test(chat.code), true);
+/* The two contributors the old budget ignored, which together were most of the
+   payload: ~9,900 tokens of system prompt and ~2,000 of tool schemas. */
+check("the system prompt is measured before the request is sent",
+  /estimateTextTokens\(attemptSystem\)/.test(chat.code), true);
+check("so are the tool schemas",
+  /estimateToolTokens\(attemptTools\)/.test(chat.code), true);
+check("and compaction is given the budget that remains",
+  /ceiling - fixed - MIN_OUTPUT_TOKENS/.test(chat.code), true);
+
+/* The system prompt has to be built before it can be weighed. Inlining it back
+   into the `streamText` call would silently restore the blind spot. */
+check("the prompt is built where it can be measured",
+  /const systemFor = /.test(chat.code), true);
+check("and the stream is handed the measured string",
+  /system: attemptSystem,/.test(chat.code), true);
+
+/* ── An impossible request is not offered to a route that must refuse it ── */
+
+check("a route without room is skipped rather than tried",
+  /Navi Soul skipped \$\{attempt\.label\}/.test(chat.source), true);
+check("the skip says what the payload weighed",
+  /Navi Soul skipped \$\{attempt\.label\}: \$\{describeRequestSize\(/.test(chat.source), true);
+/* A route with no room must be rejected before compaction, not left to the
+   arithmetic — otherwise it reaches the provider with an empty message list,
+   which is the whole system prompt and no question, and gets answered. */
+check("a route with no room is skipped before the messages are fitted",
+  /if \(inputBudget <= 0\) \{ tooSmall\(fixed\); continue; \}/.test(chat.code), true);
+/* The failure must reach the user as a size problem, not as a retry prompt:
+   waiting fixes a rate limit and does nothing for a request that is too big. */
+check("and the copy tells them to shrink it, not to retry",
+  /too big for the engines available/.test(chat.source), true);
+check("the size branch is tested before the rate-limit branch",
+  chat.body.indexOf("more room than any configured route") < chat.body.indexOf('lower.includes("429")'), true);
+
+/* ── The cascade ends somewhere ─────────────────────────────────────────── */
+
+check("a floor is appended after the health ordering",
+  /const floor = lastResortRoute\(availability\);/.test(chat.code), true);
+check("it is last, so it never displaces a free route",
+  /attempts\.push\(floor\)/.test(chat.code), true);
+check("and it is not added twice",
+  /!attempts\.some\(/.test(chat.code), true);
+
+/* ── Presence is not health ─────────────────────────────────────────────── */
+
+check("the registry separates a request limit from a context window",
+  /requestTokenLimit\?: number/.test(registry.code), true);
+check("Groq's measured limit is recorded",
+  /requestTokenLimit: 8_000/.test(registry.code), true);
+check("an operator can override it per provider",
+  /NAVI_\$\{adapter\.id\.toUpperCase\(\)\}_TOKEN_LIMIT/.test(registry.code), true);
+
+check("a refused credential is remembered apart from a transient failure",
+  /export function rejectedProviders\(\)/.test(health.code), true);
+check("and a rate limit is explicitly not one of them",
+  /message\.includes\("rate limit"\)[\s\S]{0,40}return false/.test(health.code), true);
+
+check("the models route reports what works, not what is set",
+  /providers: usable,/.test(models.code), true);
+check("raw presence stays available for the Connectors screen",
+  /configured: stack\.providers,/.test(models.code), true);
+check("a present-but-refused key is named rather than silently dropped",
+  /rejectedCredentials: rejected,/.test(models.code), true);
+
+/* ── The error about the error ──────────────────────────────────────────── */
+
+/* `@ai-sdk/provider-utils` builds its abort error with `new DOMException`, and
+   its `delay()` runs on every `smoothStream` chunk and every retry backoff. The
+   edge runtime has no constructor for it, so every abort — including the ones
+   failover depends on — threw `TypeError: DOMException is not a constructor`. */
+check("the shim is imported by the route that streams",
+  /import "@\/lib\/ai\/dom-exception";/.test(chat.code), true);
+check("before the SDK that needs it",
+  chat.source.indexOf('import "@/lib/ai/dom-exception"') < chat.source.indexOf('} from "ai"'), true);
+
+const shim = read("lib/ai/dom-exception.ts");
+/* A `typeof` check passes on the edge runtime's non-constructible binding,
+   which is the entire case this exists for — so the test is to build one. */
+check("it detects the fault by construction, not by typeof",
+  /new \(candidate as new/.test(shim.source), true);
+check("it carries the name AbortError checks read",
+  /this\.name = name/.test(shim.code), true);
+check("and leaves a working runtime alone",
+  /if \(constructible\(scope\.DOMException\)\) return;/.test(shim.code), true);
+
+console.log(`\n${pass}/${pass + fail} passed`);
+process.exit(fail ? 1 : 0);
