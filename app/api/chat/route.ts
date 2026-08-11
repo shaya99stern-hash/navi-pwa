@@ -19,6 +19,7 @@ import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { getRequestClerkSessionToken, getRequestClerkUserId } from "@/lib/auth/session";
+import { isClerkUserAllowed } from "@/lib/auth/config";
 import { readUntilCommitted } from "@/lib/ai/lane-commit";
 import { githubWritesEnabled, readGithubToken } from "@/lib/github/oauth";
 import { googleAccessToken } from "@/lib/google/oauth";
@@ -43,7 +44,7 @@ import {
 import type { ConnectorAccessMode, CustomConnector, EffortLevel, ModelPreset, NaviMode, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
-import { APP_KNOWLEDGE } from "@/lib/ai/app-knowledge";
+import { APP_KNOWLEDGE, selfRepoKnowledge } from "@/lib/ai/app-knowledge";
 import { NAVI_MISSION, needsMission } from "@/lib/ai/mission";
 import { ORCHESTRATION_KNOWLEDGE, needsOrchestrationKnowledge } from "@/lib/ai/orchestration-knowledge";
 import { ENGINEERING_DISCIPLINE, needsEngineeringDiscipline } from "@/lib/ai/engineering-discipline";
@@ -145,7 +146,26 @@ const REQUEST_WINDOW_MS = 60_000;
 const REQUESTS_PER_WINDOW = 60;
 const MAX_MESSAGES = 50;
 const MAX_SERIALIZED_CHARACTERS = 18_000_000;
-const MAX_OUTPUT_TOKENS = 1_900;
+/**
+ * How long a single answer may be.
+ *
+ * This was 1,900 tokens — roughly 1,400 words — and it is written all over the
+ * chat history as "Why do you keep stopping", "Continue where you left off",
+ * "Continue from where you stopped", over and over in the same conversation.
+ * The model was not stopping. It was being cut off mid-sentence, and then
+ * asked to reconstruct its own place in an answer it could not see the end of,
+ * which is why the resumptions repeated themselves and drifted.
+ *
+ * A cap this low is invisible as a bug and reads as the assistant being flaky
+ * — the single most damaging kind of defect, because it makes every long
+ * answer untrustworthy. Anything asked of an assistant that writes plans,
+ * audits, or code exceeds 1,400 words routinely.
+ *
+ * 8,000 is a real ceiling rather than a guardrail: long enough that ordinary
+ * work finishes in one turn, and still bounded so a runaway generation cannot
+ * bill indefinitely.
+ */
+const MAX_OUTPUT_TOKENS = 8_000;
 const ALLOWED_PRESETS = new Set<ModelPreset>([
   "navi-soul",
   "navi-code",
@@ -519,6 +539,35 @@ function userContextBlock(value: unknown): string {
   ].filter(Boolean).join("\n");
 }
 
+/**
+ * That the person on the other end owns this deployment.
+ *
+ * Nothing ever said so. The user's report — "Navi Soul doesn't see me as the
+ * owner and it needs to listen to anything I tell it" — is the visible half of
+ * a real gap: the model was told about tools, modes, and a profile that is
+ * empty by default, and never that the single authenticated user of a
+ * single-user deployment is the person whose app this is. So it hedged,
+ * deferred, and told the owner what it was "not allowed" to do in their own
+ * product.
+ *
+ * This is a statement of standing, not a grant of new powers. It does not
+ * loosen a single guard: `write-guards.ts` still governs what may be written,
+ * confirmation is still required for destructive or outward-facing actions,
+ * and the honesty rules still outrank any instruction to overstate what
+ * happened. Being the owner means their preferences settle product questions —
+ * how the app should look, behave, and be built — not that refusals and
+ * safety checks stop applying to them.
+ */
+function ownerBlock(isOwner: boolean): string {
+  if (!isOwner) return "";
+  return [
+    "The person you are talking to owns and operates this NaviOS deployment. It is their product.",
+    "Their decisions about how NaviOS should look, behave, and be built are final — do not argue design or product direction with them once they have decided, and do not tell them a product choice is not yours to make.",
+    "When they ask you to change the app, treat it as authorised work: read the real files, make the change, and report exactly what you did.",
+    "This settles authority, not accuracy. Never tell them something worked when it did not, never claim to have saved, committed, or learned something unless a tool result says so, and keep asking before destructive or irreversible actions."
+  ].join("\n");
+}
+
 function artifactInstruction(requested: boolean): string {
   const contract = [
     "NaviOS artifacts are real interactive documents rendered in an isolated browser sandbox.",
@@ -581,6 +630,8 @@ function systemPrompt(options: {
   mcpContext?: string;
   toolNames?: string[];
   userContext?: string;
+  /** The caller owns this deployment; see `ownerBlock`. */
+  isOwner?: boolean;
   memoryContext?: string;
   playbookContext?: string;
   /** The request asked Navi to learn something, so it may offer a capability. */
@@ -592,7 +643,7 @@ function systemPrompt(options: {
   /** The plan Soul made for this request, and what the answer must satisfy. */
   constraints?: string;
 }): string {
-  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, productMode } = options;
+  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, productMode } = options;
   /* Ordered stable-first, volatile-last, and that ordering is load-bearing.
      The metered lane bills a cached prompt prefix at roughly one fiftieth of an
      uncached one, and the cache matches on an exact byte prefix — so a single
@@ -626,6 +677,11 @@ function systemPrompt(options: {
        to the phone in the user's hand, so how to read their request, how to
        change code without breaking what surrounds it, and how to report the
        result honestly all matter more on these turns than the tokens do. */
+    /* Which repository this app is. Carried whenever the repo tools are in
+       play *or* the question is about the app, because "which repo is this"
+       arrives both ways — and answering it wrong, confidently, is worse than
+       any token it costs. */
+    toolNames.includes("commit_own_source") || needsAppKnowledge(request) ? selfRepoKnowledge() : "",
     needsEngineeringDiscipline(toolNames.includes("commit_own_source")) ? ENGINEERING_DISCIPLINE : "",
     /* Conduct is not competence. The brief above says how to behave when
        editing this app; this teaches the craft itself — the type system, React
@@ -641,6 +697,7 @@ function systemPrompt(options: {
     productMode === "code" ? codeModeInstruction() : chatModeInstruction(),
     playbookContext || "",
     effortInstruction(effort),
+    ownerBlock(isOwner),
     userContext || "",
     toolNames.length
       ? `You can call these tools and their results are real: ${toolNames.join(", ")}. Call one whenever it would answer better than recalling — anything current, factual, personal, or specific to the user's own data. Never do arithmetic, unit conversion, date maths, or counting in your head when a tool will do it exactly; approximating those is the most common way you are wrong. Prefer searching and reading a source over answering from memory, and cite the URLs you actually read.`
@@ -919,6 +976,10 @@ export async function POST(request: Request): Promise<Response> {
      inside the stream callback that runs after that. */
   const clerkToken = getRequestClerkSessionToken(request);
   const clerkUserId = clerkToken ? await getRequestClerkUserId(request) : null;
+  /* Owner of this deployment. With an allowlist configured that is exactly the
+     named accounts; without one, a signed-in user of a single-owner deployment
+     is the owner — which is what this app is. Signed out is never the owner. */
+  const isOwner = Boolean(clerkUserId) && isClerkUserAllowed(clerkUserId!);
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) return refuse("There was no message to send.");
   if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; Navi Soul will still remember the important parts.`);
@@ -1355,7 +1416,7 @@ export async function POST(request: Request): Promise<Response> {
         const attemptMessages = await messagesFor(attempt);
         const result = streamText({
         model: createProviderModel(attempt, origin),
-        system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
+        system: systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested }),
         messages: attemptMessages,
         ...(attemptToolNames.length
           ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }

@@ -132,7 +132,14 @@ check("it navigates to the real route", body.includes('router.push("/settings/De
 check("developer is a known section", read("lib/ai/types.ts").body.includes('| "developer"'), true);
 /* Persisted sections are reopened on the next visit. Developer is a route,
    not a pane, so persisting it would reopen Settings onto a blank pane. */
-check("opening Developer does not persist a pane", /next === "developer"[\s\S]{0,200}router\.push/.test(body), true);
+check("opening Developer does not persist a pane", /next === "developer"[\s\S]{0,900}router\.push/.test(body), true);
+/* Developer is a route, and leaving for a route must release the overlay
+   history first. `onClose()` unwinds the entry this sheet pushed; that unwind
+   is asynchronous and lands after `router.push`, cancelling it — which is why
+   Settings → Developer opened and bounced straight back to the conversation.
+   The drawer already does this; the sheet did not. */
+check("leaving for the Developer route releases the overlay history",
+  /next === "developer"[\s\S]{0,900}releaseOverlaysForNavigation\(\)[\s\S]{0,200}router\.push/.test(body), true);
 check("the stored-section allow-list accepts it", read("lib/storage/indexeddb.ts").body.includes('"developer"'), true);
 
 /* Connectors is the other route-not-a-pane row; it must keep working. */

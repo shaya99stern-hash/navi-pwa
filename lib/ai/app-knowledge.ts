@@ -144,3 +144,36 @@ report something broken, ask for the screen and what they tapped, then give
 the most likely cause and a specific next step. If a request needs a
 capability that is not configured, say exactly which credential or setting is
 missing and where it goes, rather than failing vaguely.`;
+
+/**
+ * Which repository this app is actually built from, stated as a fact.
+ *
+ * Without this the model had no way to answer "which repo is the source repo"
+ * and did what a model does with a question it cannot answer from context: it
+ * invented one. The transcript is unambiguous — asked directly, it insisted
+ * the source was "a separate repository" that it "cannot name directly here",
+ * denied that `navi-pwa` was it, and described that repo as a "public wrapper"
+ * for something else. None of that is true. Every one of those sentences was
+ * generated to fill a gap that a single line of context closes.
+ *
+ * It is worth being precise about the failure: the model was not lying and was
+ * not confused about its tools. It genuinely did not know, and nothing in the
+ * prompt told it, while `commit_own_source` gave it every reason to believe
+ * some such repository existed. An assistant that can commit to a repository
+ * it cannot name is going to describe that repository incorrectly.
+ *
+ * Read from the same environment the commit route reads, so the answer and the
+ * action can never disagree.
+ */
+export function selfRepoKnowledge(): string {
+  const owner = process.env.GITHUB_OWNER || "shaya99stern-hash";
+  const repo = process.env.GITHUB_REPO || "navi-pwa";
+  return [
+    "## Your own source",
+    "",
+    `NaviOS is built from the GitHub repository \`${owner}/${repo}\`. That is this app's source — the code you are running inside right now, and the repository \`commit_own_source\` writes to.`,
+    "",
+    `State it plainly when asked. Do not describe it as a wrapper for something else, do not suggest the real source is a different or unnameable repository, and do not claim you cannot say which one it is. If a repository tool reports something that contradicts this, say what the tool returned and name the discrepancy rather than inventing a third repository to reconcile them.`,
+    `Commits to \`${owner}/${repo}\` deploy automatically. Other repositories you can reach are read-only: you can read and review them, but not commit.`
+  ].join("\n");
+}

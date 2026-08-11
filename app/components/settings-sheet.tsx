@@ -23,7 +23,9 @@ import {
 } from "@/lib/pwa-update";
 import type { StorageDurability } from "@/lib/storage/indexeddb";
 import { haptic } from "@/lib/ui/haptics";
+import { diagnoseMicrophone, type MicCheck } from "@/lib/ui/recorder";
 import { versionLabel } from "@/lib/version";
+import { releaseOverlaysForNavigation } from "@/lib/ui/overlay-route";
 
 /**
  * Settings, structured the way a native settings surface is: a root list in
@@ -351,6 +353,26 @@ export function SettingsSheet({
     chats: number; facts: number; skills: number; lessons: number; skillNames: string[]; lessonNames: string[];
   }>({ loaded: false, configured: false, signedIn: false, chats: 0, facts: 0, skills: 0, lessons: 0, skillNames: [], lessonNames: [] });
   const lastTapAt = useRef(0);
+  /* The microphone self-test. Three rounds of "the mic doesn't work" were
+     diagnosed by reading source, and two of those guesses were wrong — so the
+     app now answers the question itself instead of being guessed at. */
+  const [micTest, setMicTest] = useState<{ running: boolean; step: string; checks: MicCheck[] }>(
+    { running: false, step: "", checks: [] }
+  );
+
+  async function runMicTest() {
+    setMicTest({ running: true, step: "Starting", checks: [] });
+    try {
+      const checks = await diagnoseMicrophone((step) => setMicTest((c) => ({ ...c, step })));
+      setMicTest({ running: false, step: "", checks });
+    } catch (error) {
+      setMicTest({
+        running: false,
+        step: "",
+        checks: [{ step: "Test", ok: false, detail: error instanceof Error ? error.message : "The test could not run." }]
+      });
+    }
+  }
 
   /* Monthly spend on the one metered lane. Read here and nowhere else: it
      belongs on the account page, not in the middle of an answer. */
@@ -521,6 +543,14 @@ export function SettingsSheet({
        its own editor and commit state, which a sheet that closes on a stray
        swipe is the wrong container for. */
     if (next === "developer") {
+      /* Release before closing, exactly as the drawer does.
+         `onClose()` unwinds the history entry this sheet pushed — right when
+         you dismiss it, wrong when you are leaving for a real route, because
+         the unwind is asynchronous and lands *after* `router.push`, cancelling
+         it. That is why Settings → Developer opened and immediately bounced
+         back to the conversation. The drawer was fixed for this; the settings
+         sheet has the same navigation and never got the same treatment. */
+      releaseOverlaysForNavigation();
       onClose();
       router.push("/settings/Developer");
       return;
@@ -768,6 +798,42 @@ export function SettingsSheet({
                        has to remember to keep a second one in step. */
                     onChange={(voiceLanguage) => update({ voiceLanguage })}
                   />
+                }
+              />
+              {/* Runs the real pipeline — permission, capture, measured signal,
+                  encoding, and the network round trip — and names the first
+                  step that fails. "It doesn't work" describes six different
+                  failures; this says which one. */}
+              <Row
+                label="Test microphone"
+                description="Records two seconds and reports exactly which step fails. Speak while it listens."
+                control={
+                  <InlineButton onClick={() => { haptic("selection", preferences.haptics); void runMicTest(); }}>
+                    {micTest.running ? "Testing…" : "Test"}
+                  </InlineButton>
+                }
+                fullWidthControl={
+                  micTest.running || micTest.checks.length ? (
+                    <div className="rounded-[12px] bg-elev-2 p-3">
+                      {micTest.running ? (
+                        <p className="text-[0.8125rem]/[1.125rem] text-secondary">{micTest.step}…</p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {micTest.checks.map((check) => (
+                            <li key={check.step} className="flex gap-2">
+                              <span className={`mt-[3px] shrink-0 text-[0.75rem] font-bold ${check.ok ? "text-success" : "text-danger"}`} aria-hidden="true">
+                                {check.ok ? "✓" : "✕"}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-[0.8125rem]/[1.125rem] font-semibold text-primary">{check.step}</span>
+                                <span className="block break-words text-[0.75rem]/[1.125rem] text-tertiary">{check.detail}</span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ) : undefined
                 }
               />
             </Group>
