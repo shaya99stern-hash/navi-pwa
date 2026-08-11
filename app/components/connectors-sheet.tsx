@@ -16,7 +16,7 @@ type Props = {
 };
 
 const MODES: Array<{ id: ConnectorAccessMode; title: string; detail: string }> = [
-  { id: "ask", title: "Ask every time", detail: "NaviSoul may inspect connector availability, but external access waits for your approval." },
+  { id: "ask", title: "Ask every time", detail: "Navi Soul may inspect connector availability, but external access waits for your approval." },
   { id: "auto", title: "Auto for reads", detail: "Read-only resources may be used automatically. Writes, deletes, sends, bookings, and purchases still require approval." },
   { id: "always", title: "Always available", detail: "Connected read-only resources stay available in this conversation. Sensitive actions still require explicit confirmation." }
 ];
@@ -70,7 +70,7 @@ const ACCOUNTS: AccountConnector[] = [
     writes: "Commit to a working branch and open pull requests",
     /* "Read only" with no way forward is the dead end this screen kept
        hitting: writes are a separate deliberate opt-in, so name the switch. */
-    unlockWrites: "Writes are off. Set NAVI_GITHUB_ALLOW_WRITES=true in Vercel and reconnect to let NaviSoul commit and open pull requests."
+    unlockWrites: "Writes are off. Set NAVI_GITHUB_ALLOW_WRITES=true in Vercel and reconnect to let Navi Soul commit and open pull requests."
   },
   {
     id: "vercel",
@@ -455,7 +455,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                     )}
                   </div>
                   {/* Connected but read-only is the state that looks broken:
-                      the account is linked and NaviSoul still refuses to
+                      the account is linked and Navi Soul still refuses to
                       commit. Name the switch instead of leaving a badge. */}
                   {connected && !status?.writesEnabled && account.unlockWrites ? (
                     <p className="ml-[52px] pb-3 text-[0.6875rem]/4 font-medium text-tertiary">{account.unlockWrites}</p>
@@ -478,7 +478,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                 <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Services NaviOS can connect</h2>
                 <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
                   {catalog.selfConfigurable
-                    ? "Pick one, paste the key, and NaviOS sets it up and redeploys itself. You can also just ask NaviSoul in chat."
+                    ? "Pick one, paste the key, and NaviOS sets it up and redeploys itself. You can also just ask Navi Soul in chat."
                     : catalog.setupHint ?? "Loading…"}
                 </p>
               </span>

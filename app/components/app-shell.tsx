@@ -97,7 +97,7 @@ function compactSummary(messages: UIMessage[]): string {
   if (messages.length <= 14) return "";
   const lines = messages
     .slice(0, -12)
-    .map((message) => `${message.role === "user" ? "User" : "NaviSoul"}: ${messageText(message).slice(0, 700)}`)
+    .map((message) => `${message.role === "user" ? "User" : "Navi Soul"}: ${messageText(message).slice(0, 700)}`)
     .filter((line) => !line.endsWith(": "));
   if (!lines.length) return "";
 
@@ -308,7 +308,7 @@ export function AppShell({
         && "Notification" in window && Notification.permission === "granted") {
         void navigator.serviceWorker?.getRegistration("/")
           .then((registration) => registration?.showNotification("NaviOS", {
-            body: "NaviSoul has finished a response.",
+            body: "Navi Soul has finished a response.",
             icon: "/pwa-icon-192-v5.png",
             badge: "/pwa-icon-192-v5.png",
             tag: "navi-response-complete"
@@ -317,7 +317,7 @@ export function AppShell({
       }
     },
     onError: (chatError) => {
-      console.error("NaviSoul chat error:", chatError);
+      console.error("Navi Soul chat error:", chatError);
       setStreamStatus(null);
       haptic("error", preferences.haptics);
     }
@@ -332,7 +332,7 @@ export function AppShell({
   const activeMode = NAVI_MODES.find((item) => item.id === preferences.mode) ?? NAVI_MODES[0];
   const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
-  const statusText = streamStatus?.detail ?? (generating ? "NaviSoul is working" : preferences.mode === "code" ? activeMode.label : "");
+  const statusText = streamStatus?.detail ?? (generating ? "Navi Soul is working" : preferences.mode === "code" ? activeMode.label : "");
 
   useEffect(() => {
     if (preferences.profile.displayName) return;
@@ -634,7 +634,7 @@ export function AppShell({
       ].slice(-40)
     }));
     /* Also into durable memory, which is the difference between a capability
-       that exists and one NaviSoul actually has. A playbook reaches the prompt
+       that exists and one Navi Soul actually has. A playbook reaches the prompt
        only when the request happens to match it; a learned skill is carried
        into every conversation. Installing one used to do only the first, which
        is why "save this skill" felt like it did nothing. Best-effort: signed
@@ -770,9 +770,12 @@ export function AppShell({
   }
 
   async function shareActiveChat() {
+    /* On the gesture. Both branches below are async — the share sheet and the
+       clipboard write — so a tick after either had no activation left. */
+    haptic("selection", preferences.haptics);
     const current = chats.find((chat) => chat.id === activeId);
     const transcript = messages
-      .map((message) => `${message.role === "user" ? "You" : "NaviSoul"}: ${messageText(message)}`)
+      .map((message) => `${message.role === "user" ? "You" : "Navi Soul"}: ${messageText(message)}`)
       .filter((line) => !line.endsWith(": "))
       .join("\n\n");
     if (!transcript) return;
@@ -785,7 +788,6 @@ export function AppShell({
       return;
     }
     await navigator.clipboard.writeText(transcript);
-    haptic("success", preferences.haptics);
   }
 
   function addProject(project: NaviProject) {
@@ -858,7 +860,11 @@ export function AppShell({
     };
     setMessages([...messages, question, answer]);
     setStreamStatus(null);
-    haptic("success", preferences.haptics);
+    /* No completion tick. `runSlash` is awaited above, so activation is gone
+       and this fired for the synchronous instant answers and not the rest —
+       the same command feeling different depending on how it resolved. The
+       send button already ticked on the tap, and the answer appearing is the
+       completion signal. */
     if (window.location.pathname === "/" || window.location.pathname === "/new") {
       window.history.replaceState(window.history.state, "", `/chat/${encodeURIComponent(activeId)}`);
     }
@@ -921,8 +927,10 @@ export function AppShell({
       await sendMessage({ text, files }, { body: requestBody(text) });
     } catch (submitError) {
       setAttachmentError(submitError instanceof Error ? submitError.message : "Could not prepare attachments.");
+      /* The status panel above carries this. A tick here lands after
+         `sendMessage` has been awaited, where there is no activation left to
+         fire it. */
       setStreamStatus({ stage: "error", detail: "Could not prepare or send this request." });
-      haptic("error", preferences.haptics);
     }
   }
 
@@ -946,7 +954,6 @@ export function AppShell({
         stage: "error",
         detail: voiceError instanceof Error ? voiceError.message : "Could not send the spoken request."
       });
-      haptic("error", preferences.haptics);
     }
   }
 

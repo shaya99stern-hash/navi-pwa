@@ -161,13 +161,13 @@ export const ROUTES = {
   deepseekFlash: {
     provider: "deepseek",
     model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
-    label: "NaviSoul quality",
+    label: "Navi Soul quality",
     capability: "reasoning"
   },
   deepseekPro: {
     provider: "deepseek",
     model: process.env.DEEPSEEK_PRO_MODEL ?? "deepseek-v4-pro",
-    label: "NaviSoul quality",
+    label: "Navi Soul quality",
     capability: "reasoning"
   },
   mistralBalanced: {
@@ -240,7 +240,7 @@ function configuredHfRoutes(): ProviderRoute[] {
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, 24)
-    .map((model, index) => hf(model, `NaviSoul · analysis ${index + 1}`, "balanced"));
+    .map((model, index) => hf(model, `Navi Soul · analysis ${index + 1}`, "balanced"));
   if (custom?.length) return custom;
 
   /* Capability-ordered so a council of any size still spans reasoning,

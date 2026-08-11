@@ -38,7 +38,7 @@ check("a token without a user does not offer it", "learn_skill" in buildToolset(
 
 /* ── Learning from itself, not only from instruction ────────────────────── */
 
-/* `learn_skill` stores what the user teaches. Nothing stored what NaviSoul
+/* `learn_skill` stores what the user teaches. Nothing stored what Navi Soul
    worked out on its own, so every conversation re-derived the same ground: the
    shape of this codebase, which provider is unreliable, what a particular
    phrasing always turns out to mean. */
@@ -60,7 +60,7 @@ check("the instruction reaches the prompt", routeSourceHasReflection(), true);
 
 /* Rendering both under "skills this user has taught you" would present every
    self-derived guess as a standing instruction from the user — a short path to
-   NaviSoul defending its own mistaken inference as something it was told. */
+   Navi Soul defending its own mistaken inference as something it was told. */
 const skillsSource = readFileSync(join(process.cwd(), "lib/memory/learned-skills.ts"), "utf8");
 check("the two are separated when rendered", skillsSource.includes("What you worked out for yourself"), true);
 check("lessons are marked as its own conclusions", /not instructions from the user/.test(skillsSource), true);

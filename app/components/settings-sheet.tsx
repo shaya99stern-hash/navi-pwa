@@ -380,7 +380,7 @@ export function SettingsSheet({
 
   const [evalState, setEvalState] = useState<{ phase: "idle" | "running" | "done" | "error"; message: string }>({
     phase: "idle",
-    message: "Scores NaviSoul against a fixed task set. Takes a couple of minutes."
+    message: "Scores Navi Soul against a fixed task set. Takes a couple of minutes."
   });
 
   const runEvals = async () => {
@@ -659,14 +659,14 @@ export function SettingsSheet({
             <SectionHeader>Profile</SectionHeader>
             <Group>
               <Row label="Full name" control={<TextField label="Full name" value={preferences.profile.fullName} onChange={(fullName) => updateProfile({ fullName })} />} />
-              <Row label="What should NaviSoul call you?" control={<TextField label="Display name" value={preferences.profile.displayName} onChange={(displayName) => updateProfile({ displayName })} />} />
+              <Row label="What should Navi Soul call you?" control={<TextField label="Display name" value={preferences.profile.displayName} onChange={(displayName) => updateProfile({ displayName })} />} />
               <Row label="What best describes your work?" control={<BareSelect label="Work" value={preferences.profile.work} options={WORK_OPTIONS} onChange={(work) => updateProfile({ work })} />} />
               <Row
-                label="Instructions for NaviSoul"
-                description="NaviSoul keeps these in mind across every chat on this device."
+                label="Instructions for Navi Soul"
+                description="Navi Soul keeps these in mind across every chat on this device."
                 fullWidthControl={
                   <textarea
-                    aria-label="Instructions for NaviSoul"
+                    aria-label="Instructions for Navi Soul"
                     value={preferences.profile.instructions}
                     onChange={(event) => updateProfile({ instructions: event.target.value.slice(0, 4_000) })}
                     placeholder="e.g. keep explanations brief and to the point"
@@ -758,7 +758,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Response completions"
-                description="Get notified when NaviSoul has finished a response. Useful for long-running tasks."
+                description="Get notified when Navi Soul has finished a response. Useful for long-running tasks."
                 control={<SettingsToggle label="Response completions" value={preferences.notifyOnComplete} onChange={() => void enableNotifications()} />}
               />
             </Group>
@@ -789,7 +789,7 @@ export function SettingsSheet({
               ) : (
                 <Row
                   label="Signed out"
-                  description="Chats stay on this device while signed out. Signing in lets NaviSoul answer and syncs your history to your private cloud memory."
+                  description="Chats stay on this device while signed out. Signing in lets Navi Soul answer and syncs your history to your private cloud memory."
                   control={<InlineButton onClick={signIn}>Sign in</InlineButton>}
                 />
               )}
@@ -854,7 +854,7 @@ export function SettingsSheet({
               />
               <Row
                 label="Memory"
-                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages NaviSoul actually uses are sent."
+                description="Let a new chat draw on relevant passages from your earlier ones. Matching happens on this device; only the passages Navi Soul actually uses are sent."
                 control={<SettingsToggle label="Memory" value={preferences.memory} onChange={() => update({ memory: !preferences.memory })} />}
               />
             </Group>
@@ -882,10 +882,10 @@ export function SettingsSheet({
                   <Row label="Facts about you" description="Listed below, and removable one by one." control={<Count value={memoryStatus.facts} />} />
                   <Row label="Skills you taught it" description="Applied in every conversation, not only when a request happens to match." control={<Count value={memoryStatus.skills} />} />
                   {/* Separate from the count above on purpose. These are
-                      conclusions NaviSoul drew on its own, so seeing them
+                      conclusions Navi Soul drew on its own, so seeing them
                       counted — and named below — is the only way to notice one
                       that is wrong before it quietly shapes every answer. */}
-                  <Row label="Lessons it worked out" description="Conclusions NaviSoul drew from experience and carries forward on its own." control={<Count value={memoryStatus.lessons} />} />
+                  <Row label="Lessons it worked out" description="Conclusions Navi Soul drew from experience and carries forward on its own." control={<Count value={memoryStatus.lessons} />} />
                 </>
               )}
             </Group>
@@ -960,7 +960,7 @@ export function SettingsSheet({
                 organisation; it is the taxonomy costing more than the thing
                 being classified, on a screen whose title already says what all
                 three are. */}
-            <SectionHeader>What NaviSoul can do</SectionHeader>
+            <SectionHeader>What Navi Soul can do</SectionHeader>
             <Group>
               <Row
                 label="Web search"
@@ -1007,7 +1007,7 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Pin an engine"
-                description="NaviSoul reads each request and routes it to whichever engine leads at that job. Pinning one disables that routing entirely, for every request, until it is set back to automatic."
+                description="Navi Soul reads each request and routes it to whichever engine leads at that job. Pinning one disables that routing entirely, for every request, until it is set back to automatic."
                 control={
                   <BareSelect
                     label="Pin an engine"
@@ -1066,7 +1066,7 @@ export function SettingsSheet({
         {page === "playbooks" ? (
           <>
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
-              Playbooks are methods NaviSoul applies when a request matches one — how to debug, how to review code,
+              Playbooks are methods Navi Soul applies when a request matches one — how to debug, how to review code,
               how to edit a document without disturbing it. They use Anthropic&apos;s SKILL.md format, so any skill
               published for Claude can be pasted in below and works here unchanged.
             </p>
@@ -1082,7 +1082,7 @@ export function SettingsSheet({
                       aria-label="Paste a SKILL.md file"
                       value={playbookDraft}
                       onChange={(event) => { setPlaybookDraft(event.target.value); setPlaybookNotice(null); }}
-                      placeholder={"---\nname: my-playbook\ndescription: When NaviSoul should use this\n---\n\n# Instructions…"}
+                      placeholder={"---\nname: my-playbook\ndescription: When Navi Soul should use this\n---\n\n# Instructions…"}
                       rows={5}
                       className="min-h-[128px] w-full resize-y rounded-[12px] bg-elev-2 px-3.5 py-3 font-mono text-[0.8125rem]/[1.125rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
                     />

@@ -6,7 +6,7 @@ import { getSpendStore, ledgerKey } from "./spend";
  *
  * The provider's free tier is a fixed number of calls a month. Without a
  * ceiling and a cache, a handful of real users exhausts it and search stops
- * working for everyone — which surfaces as NaviSoul quietly getting worse at
+ * working for everyone — which surfaces as Navi Soul quietly getting worse at
  * current events, with nothing to say why.
  *
  * Two mechanisms, in the order that matters:
@@ -15,7 +15,7 @@ import { getSpendStore, ledgerKey } from "./spend";
  *    two. This is the cheaper win by a wide margin: repeated and near-repeated
  *    queries are most of the traffic a chat app generates.
  * 2. **Then a ceiling.** At 90% of the month's allotment the tool switches off
- *    and NaviSoul answers from its own knowledge. Silently — a person asking
+ *    and Navi Soul answers from its own knowledge. Silently — a person asking
  *    about last week's news does not want a billing notice, and the answer
  *    without search is still an answer.
  */
@@ -84,7 +84,7 @@ export async function searchAllowed(): Promise<boolean> {
 /** Record one live call. Cached answers do not count, because they cost nothing. */
 export async function recordSearch(): Promise<void> {
   await getSpendStore().add(counterKey(), 1).catch((error) => {
-    console.warn("NaviSoul could not record a search against the monthly allowance:", error);
+    console.warn("Navi Soul could not record a search against the monthly allowance:", error);
   });
 }
 

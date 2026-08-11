@@ -1,7 +1,7 @@
 /**
- * How NaviSoul is supposed to move around its own models.
+ * How Navi Soul is supposed to move around its own models.
  *
- * NaviSoul is an orchestrator, but nothing ever told it how orchestration
+ * Navi Soul is an orchestrator, but nothing ever told it how orchestration
  * works here — so it behaved like a single model that happened to have tools,
  * and answered questions about its own routing from invention. This is the
  * missing brief: which engine suits which shape of work, when to spend more
@@ -88,7 +88,7 @@ identity you present.`;
 /**
  * Whether this turn wants the orchestration brief.
  *
- * Two cases: the user is asking how NaviSoul works, or the work is heavy
+ * Two cases: the user is asking how Navi Soul works, or the work is heavy
  * enough that routing judgement changes the outcome. Everything else pays no
  * tokens for it.
  */

@@ -1,7 +1,7 @@
 /**
- * How NaviSoul is expected to work on code — this codebase in particular.
+ * How Navi Soul is expected to work on code — this codebase in particular.
  *
- * The self-update tools let NaviSoul rewrite the app it is running inside. That
+ * The self-update tools let Navi Soul rewrite the app it is running inside. That
  * is exactly as dangerous as it sounds: a confident edit to a file it never
  * opened, or a "cleanup" that rewrites a component wholesale, ships straight to
  * production because every commit deploys. The tools were added without any of

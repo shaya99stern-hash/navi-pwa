@@ -10,7 +10,7 @@ export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 /**
- * What NaviSoul actually remembers, counted.
+ * What Navi Soul actually remembers, counted.
  *
  * The Privacy screen listed facts and nothing else, so there was no way to
  * tell whether a skill had really been stored or a conversation had really

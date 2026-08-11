@@ -52,6 +52,16 @@ export function useEdgeSwipe({
   const onPointerDown = useCallback((event: ReactPointerEvent) => {
     if (disabled || event.clientX > EDGE_ZONE) return;
     start.current = { x: event.clientX, y: event.clientY };
+    /* Capture, so the rest of the gesture is still ours once the finger
+       leaves this element — which on a 26px strip is immediately. Without it
+       `pointermove` stops arriving the moment the thumb crosses out of the
+       edge zone, the drawer freezes at whatever fraction it had reached, and
+       release is judged from a stale position. `useSheetDrag` has always
+       captured; this hook recorded the origin and never did.
+
+       `onPointerCancel` is already wired at the call site, so the capture is
+       released on interruption as well as on the normal up. */
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   }, [disabled]);
 
   const onPointerMove = useCallback((event: ReactPointerEvent) => {

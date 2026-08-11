@@ -32,7 +32,7 @@ export function GET() {
           </div>
         </div>
         <div style={{ padding: "28px 38px 46px", background: "linear-gradient(to top,#F4EEE6 75%,rgba(244,238,230,0))" }}>
-          <div style={{ minHeight: 120, display: "flex", alignItems: "center", padding: "20px 28px", borderRadius: 42, background: "#FFFDFC", border: "2px solid rgba(33,25,20,.14)", color: "#80736A", fontSize: 30 }}>Message NaviSoul</div>
+          <div style={{ minHeight: 120, display: "flex", alignItems: "center", padding: "20px 28px", borderRadius: 42, background: "#FFFDFC", border: "2px solid rgba(33,25,20,.14)", color: "#80736A", fontSize: 30 }}>Message Navi Soul</div>
         </div>
       </div>
     </div>,

@@ -35,14 +35,14 @@ export default function DeveloperSettings() {
   const [commitMessage, setCommitMessage] = useState("");
   const [loaded, setLoaded] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({ phase: "idle" });
-  /* What is actually switched on in this deployment. NaviSoul has told this
+  /* What is actually switched on in this deployment. Navi Soul has told this
      user it has no code sandbox, invented a SHOW_DEVELOPER flag, and named
      credentials that do not exist — all answerable from here. */
   const [capabilities, setCapabilities] = useState<{ loaded: boolean; items: Capability[] }>({ loaded: false, items: [] });
   const [askDraft, setAskDraft] = useState("");
 
   /**
-   * Hand the request to NaviSoul in Code mode.
+   * Hand the request to Navi Soul in Code mode.
    *
    * The prompt is shaped rather than passed through: "read the file first,
    * change the smallest thing that works, say what you changed" is the
@@ -138,7 +138,7 @@ export default function DeveloperSettings() {
                 <p className="mt-1 text-[0.75rem]/[1.125rem] font-medium text-secondary">
                   Edits commit straight to the app&apos;s own GitHub repository, and every commit triggers a Vercel
                   deployment — so a change made here becomes the running app within minutes. You can also just ask
-                  NaviSoul in Code mode: with GitHub connected it reads, edits, and commits the codebase itself.
+                  Navi Soul in Code mode: with GitHub connected it reads, edits, and commits the codebase itself.
                 </p>
               </span>
             </div>
@@ -185,7 +185,7 @@ export default function DeveloperSettings() {
               <span className="min-w-0 flex-1">
                 <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Just describe the change</h2>
                 <p className="mt-1 text-[0.75rem]/[1.125rem] font-medium text-secondary">
-                  Say what you want changed in your own words. NaviSoul reads the real files, works out what to edit,
+                  Say what you want changed in your own words. Navi Soul reads the real files, works out what to edit,
                   makes the change, and commits it — the same way you would ask a developer.
                 </p>
               </span>
@@ -204,10 +204,10 @@ export default function DeveloperSettings() {
               disabled={!askDraft.trim()}
               className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-[0.875rem]/5 font-semibold text-white active:bg-accent-pressed disabled:opacity-60"
             >
-              <Rocket size={17} />Ask NaviSoul to make this change
+              <Rocket size={17} />Ask Navi Soul to make this change
             </button>
             <p className="mt-2 text-[0.6875rem]/4 font-medium text-tertiary">
-              Opens a Code-mode chat with your request. NaviSoul will read the files before editing, and tell you what it changed.
+              Opens a Code-mode chat with your request. Navi Soul will read the files before editing, and tell you what it changed.
             </p>
           </section>
 

@@ -20,10 +20,10 @@ async function main() {
      anything, so committing on the first chunk showed an error card while two
      healthy lanes sat unused. Every one of these must fall through. */
   for (const [name, text] of [
-    ["rate limit", "NaviSoul is busy right now. Try again in a moment."],
-    ["auth 403", "NaviSoul is not configured correctly. Check the provider keys in Settings."],
-    ["timeout", "NaviSoul took too long on that. Try again, or lower the effort."],
-    ["generic 5xx", "NaviSoul could not complete the response. Please try again."]
+    ["rate limit", "Navi Soul is busy right now. Try again in a moment."],
+    ["auth 403", "Navi Soul is not configured correctly. Check the provider keys in Settings."],
+    ["timeout", "Navi Soul took too long on that. Try again, or lower the effort."],
+    ["generic 5xx", "Navi Soul could not complete the response. Please try again."]
   ] as const) {
     const result = await readUntilCommitted(readerOf([
       { type: "start" },

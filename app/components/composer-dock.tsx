@@ -32,7 +32,12 @@ import {
 import { suggest, type Skill } from "@/lib/skills";
 import type { ConnectorAccessMode } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
-import { startRecording, type RecordingSession } from "@/lib/ui/recorder";
+import {
+  describeRecordingSupport,
+  MAX_RECORDING_SECONDS,
+  startRecording,
+  type RecordingSession
+} from "@/lib/ui/recorder";
 import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 import { useOverlayRoute } from "@/lib/ui/overlay-route";
@@ -167,6 +172,8 @@ export function ComposerDock({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<RecordingSession | null>(null);
+  /** Recording diagnostics are logged once per session, not once per tap. */
+  const loggedSupport = useRef(false);
   /** Seconds recorded, so the composer shows progress rather than a lit icon. */
   const [recordedSeconds, setRecordedSeconds] = useState(0);
   const [sending, setSending] = useState(false);
@@ -294,6 +301,9 @@ export function ComposerDock({
         : attachmentCount
           ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready`
           : null);
+
+  /** What is left of the recording budget, floored at zero. */
+  const remainingSeconds = Math.max(0, MAX_RECORDING_SECONDS - recordedSeconds);
 
   /* Recording is a live state, not a warning: it gets the accent, so the
      composer reads as working rather than as complaining. */
@@ -446,10 +456,25 @@ export function ComposerDock({
        browser's user-activation window has closed and any haptic is
        silently refused. */
     haptic("selection", haptics);
+    /* One line of evidence per session, so a device where this fails leaves
+       something behind. Which containers the recorder claims, which one it
+       chose, and whether this is an installed app are the three facts every
+       previous attempt at this bug had to guess at. */
+    if (!loggedSupport.current) {
+      loggedSupport.current = true;
+      console.info("NaviOS recording support:", describeRecordingSupport());
+    }
     try {
       const session = await startRecording({
         onLevel: (level) => setInputLevel(level),
         onError: (message) => setVoiceMessage(message),
+        /* The cap stopped it, not the user. Saying so is the difference
+           between a limit and a bug: the transcript still arrives, and the
+           sentence explains why the waveform vanished mid-thought. */
+        onAutoStop: () => {
+          setVoiceMessage(`Recording stopped at ${MAX_RECORDING_SECONDS} seconds. Transcribing what you said.`);
+          void finishVoice();
+        },
         // The same dictation-language preference the voice sheet uses.
         language: voiceLanguage
       });
@@ -457,7 +482,9 @@ export function ComposerDock({
       setListening(true);
     } catch (error) {
       setVoiceMessage(error instanceof Error ? error.message : "Recording could not start.");
-      haptic("error", haptics);
+      /* No haptic here. This lands after getUserMedia, so activation has
+         expired and the call would be refused — the tick fired on the tap
+         above is the feedback for this gesture. The message is the outcome. */
     }
   }
 
@@ -469,7 +496,9 @@ export function ComposerDock({
     setListening(false);
     setInputLevel(0);
     setTranscribing(true);
-    /* Same reason: the transcription round trip outlives user activation. */
+    /* Fired on the tap that got here, before the round trip — the same tick
+       that used to sit after `await session.stop()`, where activation had
+       already expired and it was dropped every time. */
     haptic("selection", haptics);
     try {
       const text = await session.stop();
@@ -483,8 +512,11 @@ export function ComposerDock({
         setVoiceMessage("Nothing was recorded.");
       }
     } catch (error) {
+      /* The message carries this one. A haptic after a network round trip has
+         no activation left to fire on, so attempting it produced nothing but
+         an inconsistency with the errors that happen to be raised
+         synchronously — half the app ticking is what reads as broken. */
       setVoiceMessage(error instanceof Error ? error.message : "That recording could not be transcribed.");
-      haptic("error", haptics);
     } finally {
       setTranscribing(false);
     }
@@ -640,7 +672,7 @@ export function ComposerDock({
               spellCheck
               disabled={blocked}
               placeholder={placeholder}
-              aria-label="Chat with NaviSoul"
+              aria-label="Chat with Navi Soul"
               /* Stable hook for anything that needs to prefill the composer
                  from outside React — the artifact frame's edit button, for
                  one. Keying off the aria-label coupled that to copy, and the
@@ -739,8 +771,16 @@ export function ComposerDock({
                       );
                     })}
                   </span>
-                  <span className="shrink-0 tabular-nums text-[0.75rem]/4 font-semibold text-secondary">
-                    {Math.floor(recordedSeconds / 60)}:{String(recordedSeconds % 60).padStart(2, "0")}
+                  {/* Counting down, not up. The recording stops on its own at
+                      MAX_RECORDING_SECONDS, and a clock that only counts up
+                      gives no warning of it — the waveform would simply
+                      disappear mid-sentence. The last ten seconds turn amber
+                      so the limit is felt before it arrives. */}
+                  <span
+                    className={`shrink-0 tabular-nums text-[0.75rem]/4 font-semibold ${remainingSeconds <= 10 ? "text-warning" : "text-secondary"}`}
+                    aria-label={`${remainingSeconds} seconds left`}
+                  >
+                    {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}
                   </span>
                   <button
                     type="button"
@@ -807,7 +847,7 @@ export function ComposerDock({
             {footer ? (
               <span className={`block max-h-8 overflow-hidden pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
             ) : hasMessages ? (
-              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">NaviSoul is AI and can make mistakes. Double-check important answers.</span>
+              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">Navi Soul is AI and can make mistakes. Double-check important answers.</span>
             ) : null}
           </div>
 

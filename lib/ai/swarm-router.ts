@@ -107,7 +107,7 @@ function hfRoute(model: string, profile: SwarmProfile, index: number): ProviderR
     model: `${model}:${routingPolicy(profile)}`,
     /* Surfaces in the status stream, so it carries the product name and
        never a provider or a retired brand. */
-    label: `NaviSoul · analysis ${index + 1}`,
+    label: `Navi Soul · analysis ${index + 1}`,
     capability: "balanced"
   };
 }

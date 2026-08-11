@@ -21,9 +21,10 @@ export function MessageActionSheet({ text, canRetry, canEdit, haptics, onClose, 
   const sheet = useSheetDrag({ onDismiss: onClose, haptics });
 
   async function copy() {
+    // On the gesture, not after the clipboard write; see code-block.tsx.
+    haptic("selection", haptics);
     await navigator.clipboard.writeText(text);
     setCopied(true);
-    haptic("success", haptics);
     window.setTimeout(onClose, 500);
   }
 

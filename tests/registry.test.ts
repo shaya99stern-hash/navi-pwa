@@ -26,7 +26,7 @@ check("a small toolset is untouched", Object.keys(capToolset({ a: {} as never, b
 check("trimming keeps the earliest entries", Object.keys(capToolset(many, 3)), ["tool_0", "tool_1", "tool_2"]);
 /* Raised from twelve when self-editing landed: read, list, and commit are
    three tools that must coexist with the built-ins, and starving them
-   reproduces exactly the bug they fix — NaviSoul insisting it cannot reach
+   reproduces exactly the bug they fix — Navi Soul insisting it cannot reach
    the repository. Sixteen is still a ceiling, not an invitation. */
 check("the chat ceiling is sixteen", MAX_ACTIVE_TOOLS, 16);
 check("chat mode gets the chat ceiling", toolCeiling("chat"), MAX_ACTIVE_TOOLS);
@@ -44,7 +44,7 @@ check("a real chat toolset stays inside the chat ceiling", names(ctx({ policy: {
    self-update, three provisioning — and seventeen slots are gone before a
    single repository tool is reached. The cap trims from the end, so with a
    GitHub account connected `github_read_file` and `github_search_code` were
-   cut every turn, and the only symptom was NaviSoul saying it could not reach
+   cut every turn, and the only symptom was Navi Soul saying it could not reach
    a repository it held the token for. */
 const codeTools = names(everything);
 check("code mode can read a repository file", codeTools.includes("github_read_file"), true);

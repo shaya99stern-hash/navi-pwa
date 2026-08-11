@@ -12,7 +12,7 @@ through the steps yourself.
 ## What the app is
 
 NaviOS — a Next.js PWA on Vercel, deployed at **navikeep.org**, project
-**navisonnet**. Sign-in is Clerk. The assistant is called NaviSoul.
+**navisonnet**. Sign-in is Clerk. The assistant is called Navi Soul.
 
 ---
 
@@ -132,7 +132,7 @@ the things being tested are iOS-specific.
 Each of these is written and tested, but the build environment could not reach
 the service to prove it end to end.
 
-- **Python execution** — ask NaviSoul to write and run a Python function.
+- **Python execution** — ask Navi Soul to write and run a Python function.
 - **PDF reading** — attach a PDF and ask about its contents. It should quote
   the text rather than describe the page.
 - **Repository retrieval** — in Code mode, ask about a repo by `owner/name`.

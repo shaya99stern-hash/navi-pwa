@@ -36,8 +36,15 @@ check("a missing token is named, not guessed at", route.includes("Add HF_TOKEN i
 /* A cold model on the free tier succeeds seconds later. Reporting it as a
    failure sends the user away from something that was about to work. */
 check("a warming model is distinguished from a failure", route.includes("warming up"), true);
-check("oversized audio is refused with a reason", route.includes("under about two minutes"), true);
+check("oversized audio is refused with a reason", route.includes("under a minute"), true);
 check("the request is bounded", route.includes("AbortController"), true);
+
+/* The route's own limit has to sit under the platform's, or it is unreachable:
+   Vercel refuses a body over ~4.5 MB (4 MB on edge) before the handler runs,
+   so a larger MAX_AUDIO_BYTES means the 413 above never renders and the
+   failure looks like a hang. */
+const maxAudioBytes = Number(/MAX_AUDIO_BYTES = ([\d_]+)/.exec(route)?.[1].replace(/_/g, ""));
+check("the route's size cap is under the platform body limit", maxAudioBytes > 0 && maxAudioBytes < 4_000_000, true);
 
 /* ── The recorder releases the microphone ────────────────────────────────────
    A live MediaStream keeps the OS recording indicator lit after recording
@@ -56,6 +63,40 @@ check("a refused permission is distinguished from no microphone", recorder.inclu
 /* A stray tap produces a tiny blob the API would reject; silence is not an
    error worth showing. */
 check("silent recordings are not sent", recorder.includes("blob.size < 1_200"), true);
+
+/* ── The level meter actually runs on iOS ────────────────────────────────────
+   An AudioContext constructed without user activation is born suspended and
+   never produces samples, so the analyser reads a flat 128, the level stays 0,
+   and the composer draws a motionless row of dots for the whole recording.
+   getUserMedia is what spends the activation, so the context has to be built
+   before it is awaited — ordering is the entire fix, and a later refactor that
+   moves the construction below the await silently restores the dead meter. */
+const contextAt = recorder.indexOf("new Ctor()");
+const getUserMediaAt = recorder.indexOf("await navigator.mediaDevices.getUserMedia");
+check("the audio context is created before getUserMedia is awaited",
+  contextAt > 0 && getUserMediaAt > 0 && contextAt < getUserMediaAt, true);
+check("a suspended context is resumed anyway", recorder.includes("audio.resume()"), true);
+
+/* ── Stopping an already-stopped recorder must not hang ──────────────────────
+   `onstop` only fires for a recorder that was running. iOS stops one on its
+   own whenever the audio session is interrupted — a call, Siri, another app
+   taking the microphone — and awaiting a promise nothing will resolve left the
+   composer at "Transcribing…" forever, with no error and no way back. */
+check("stop() only waits when the recorder is running",
+  recorder.includes('if (recorder.state !== "inactive") {\n        await new Promise'), true);
+
+/* ── The recording is bounded on the device that makes it ────────────────── */
+check("recording has a duration cap", recorder.includes("MAX_RECORDING_SECONDS = 60"), true);
+check("the cap enforces itself rather than trusting the UI", recorder.includes("onAutoStop?.()"), true);
+check("an oversized body is refused before it is sent", recorder.includes("blob.size > MAX_UPLOAD_BYTES"), true);
+/* The client's ceiling must also sit under the platform's body limit. */
+const maxUploadBytes = Number(/MAX_UPLOAD_BYTES = ([\d_]+)/.exec(recorder)?.[1].replace(/_/g, ""));
+check("the client upload cap is under the platform body limit",
+  maxUploadBytes > 0 && maxUploadBytes < 4_000_000, true);
+
+/* An installed iOS app has no per-site permission pane, so the generic
+   "allow it in your browser settings" advice is wrong there. */
+check("a refused permission reads differently in an installed app", recorder.includes("isStandalone()"), true);
 
 /* ── The composer surrenders the row while recording ─────────────────────────
    The bar and the leftover flex spacer both claimed flex-1, so the waveform

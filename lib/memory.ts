@@ -97,7 +97,7 @@ export function recall(question: string, chats: StoredChat[], currentChatId: str
       if (!asked) continue;
       const answered = messages[index + 1]?.role === "assistant" ? messageText(messages[index + 1]) : "";
       const text = answered
-        ? `You asked: ${asked.slice(0, MAX_PASSAGE_CHARS / 2)}\nNaviSoul answered: ${answered.slice(0, MAX_PASSAGE_CHARS)}`
+        ? `You asked: ${asked.slice(0, MAX_PASSAGE_CHARS / 2)}\nNavi Soul answered: ${answered.slice(0, MAX_PASSAGE_CHARS)}`
         : `You asked: ${asked.slice(0, MAX_PASSAGE_CHARS)}`;
       candidates.push({
         passage: { chatId: chat.id, chatTitle: chat.title, updatedAt: chat.updatedAt, text },

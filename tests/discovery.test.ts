@@ -107,7 +107,7 @@ check("attachments force the multimodal route", routeForLane({ lane: 1, availabi
 
 /* Lane 4 is the one discovery serves, and it must be strictly additive: with a
    discovered route it is used, without one the lane still resolves. */
-const discovered = { provider: "openrouter" as const, model: "vendor/fresh-coder:free", label: "NaviSoul", capability: "coding" as const };
+const discovered = { provider: "openrouter" as const, model: "vendor/fresh-coder:free", label: "Navi Soul", capability: "coding" as const };
 check("lane 4 prefers a discovered route", routeForLane({ lane: 4, availability: all, tools: noTools, hasFiles: false, discovered })?.model, "vendor/fresh-coder:free");
 check("lane 4 works without discovery", Boolean(routeForLane({ lane: 4, availability: all, tools: noTools, hasFiles: false, discovered: null })?.model), true);
 check("a discovered route is ignored without its provider", routeForLane({ lane: 4, availability: { ...all, openrouter: false }, tools: noTools, hasFiles: false, discovered })?.model === discovered.model, false);
@@ -115,7 +115,7 @@ check("a discovered route is ignored without its provider", routeForLane({ lane:
 /* Route labels are internal — nothing streams them — but a discovered route's
    label is generated rather than authored, so it is the one that could drift
    into naming a model. It carries the product name instead. */
-check("a discovered route is labelled with the product", discovered.label, "NaviSoul");
+check("a discovered route is labelled with the product", discovered.label, "Navi Soul");
 check("a discovered route never carries the raw id as a label", /vendor|:free/.test(discovered.label), false);
 
 console.log(`\n${pass}/${pass + fail} passed`);

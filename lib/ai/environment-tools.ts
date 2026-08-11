@@ -7,10 +7,10 @@ import { hasWebSearch, searchProviderName } from "./web-tools";
 import { selfUpdateRepo, selfUpdateToken } from "./self-update-tools";
 
 /**
- * NaviSoul finding out what it can actually do, right now.
+ * Navi Soul finding out what it can actually do, right now.
  *
  * Every fabricated answer in this app's history has the same shape: asked
- * about itself, NaviSoul reasoned from what it assumed rather than looked.
+ * about itself, Navi Soul reasoned from what it assumed rather than looked.
  * It invented a Settings path, invented a SHOW_DEVELOPER flag, announced it
  * had no code sandbox when one was built in but unconfigured, and insisted it
  * could not reach the repository while holding repository tools.

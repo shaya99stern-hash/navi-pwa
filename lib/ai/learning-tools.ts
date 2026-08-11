@@ -19,7 +19,7 @@ function storageConfigured(): boolean {
 /**
  * The tool that makes "learn this and keep it" true.
  *
- * NaviSoul used to answer that request with a claim — "stored in durable
+ * Navi Soul used to answer that request with a claim — "stored in durable
  * memory" — backed by nothing. Now the claim has a write behind it: the skill
  * goes into the user's own Supabase rows and is injected into every future
  * conversation's prompt. The tool exists only when the user is signed in and
