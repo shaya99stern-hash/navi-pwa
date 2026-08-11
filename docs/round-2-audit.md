@@ -202,10 +202,23 @@ other**, and the app never distinguishes them:
   reinstall, **they are gone** unless you are signed in with cloud memory
   working — and cloud memory is the thing that appears to be broken (§6).
 
-**Recommendation:** route custom connectors through the same provisioning path
-so every key lands in Vercel, and show provenance on each row — "stored on this
-deployment" vs "this device only". You asked for exactly this: add it once, it
-goes to Vercel.
+**Partly fixed.** The screen now states where the keys actually are, checked
+rather than promised: "synced to your private account memory, so they survive
+reinstalling" when the mirror is running, and a warning that they are in this
+browser only — and will be lost on reinstall — when it is not.
+
+**Still open, and it is worth knowing why.** You asked for "add it here, it
+goes to Vercel automatically". For the catalog providers that already happens.
+For custom connectors it cannot use the same path: provisioning writes a *named*
+environment variable from the catalog, and a connector you define yourself has
+no such name — making one up per connector would invent a naming scheme that
+then has to be migrated forever.
+
+The natural durable home for them is the preferences mirror, which already
+syncs to your account. That is blocked on the same Supabase migration as
+§6. **So applying that migration fixes key durability and `learn_skill`
+together** — which moves it from "worth doing" to the single highest-value
+action available.
 
 Worth saying plainly: this is the second time the app has confidently told you
 something reassuring and wrong about your own data. The pattern — not the
