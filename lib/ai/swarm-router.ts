@@ -3,7 +3,7 @@ import type { ProviderAvailability } from "./providers";
 import { getHuggingFaceToken, ROUTES } from "./providers";
 import type { ProviderRoute, ToolPolicy } from "./types";
 
-export type SwarmProfile = "navi-fable" | "navi-sol";
+export type SwarmProfile = "navi-soul-deep" | "navi-soul-direct";
 export type SwarmEffort = "normal" | "complex" | "extreme";
 export type SwarmTask =
   | "coding"
@@ -67,12 +67,12 @@ const TASK_TERMS: Record<SwarmTask, RegExp> = {
 };
 
 const PROFILE_TERMS: Record<SwarmProfile, Array<[RegExp, number]>> = {
-  "navi-sol": [
+  "navi-soul-direct": [
     [/deepseek|gpt-oss|glm|qwen|kimi|minimax|inkling|reason|r1|math|science|coder|vl|vision/i, 8],
     [/70b|72b|120b|235b|400b|480b|671b|a35b/i, 5],
     [/instruct|chat|thinking|agent/i, 2]
   ],
-  "navi-fable": [
+  "navi-soul-deep": [
     [/coder|code|devstral|qwen|glm|kimi|deepseek|gpt-oss|minimax|agent|long|vision|vl|document/i, 8],
     [/70b|72b|120b|235b|400b|480b|671b|a35b/i, 5],
     [/instruct|chat|thinking|tool/i, 2]
@@ -91,12 +91,12 @@ const TASK_MODEL_TERMS: Record<SwarmTask, Array<[RegExp, number]>> = {
 };
 
 function routingPolicy(profile: SwarmProfile): "fastest" | "cheapest" | "preferred" {
-  const specific = profile === "navi-sol" ? process.env.HF_SOL_ROUTING_POLICY : process.env.HF_FABLE_ROUTING_POLICY;
+  const specific = profile === "navi-soul-direct" ? process.env.HF_SOL_ROUTING_POLICY : process.env.HF_FABLE_ROUTING_POLICY;
   const shared = process.env.HF_ROUTING_POLICY;
   const value = specific ?? shared;
   return value === "cheapest" || value === "preferred" || value === "fastest"
     ? value
-    : profile === "navi-sol"
+    : profile === "navi-soul-direct"
       ? "fastest"
       : "preferred";
 }
@@ -176,7 +176,7 @@ export function classifySwarmTask(text: string): SwarmTask {
 }
 
 function configuredModels(profile: SwarmProfile): string[] {
-  const value = profile === "navi-sol" ? process.env.HF_SOL_MODELS : process.env.HF_FABLE_MODELS;
+  const value = profile === "navi-soul-direct" ? process.env.HF_SOL_MODELS : process.env.HF_FABLE_MODELS;
   return value
     ?.split(",")
     .map((model) => model.trim())
@@ -188,7 +188,7 @@ function modelScore(model: RouterModel, profile: SwarmProfile, task: SwarmTask, 
   let score = 0;
   for (const [pattern, points] of PROFILE_TERMS[profile]) if (pattern.test(model.metadata)) score += points;
   for (const [pattern, points] of TASK_MODEL_TERMS[task]) if (pattern.test(model.metadata)) score += points;
-  if (model.contextLength >= 1_000_000) score += profile === "navi-fable" ? 8 : 5;
+  if (model.contextLength >= 1_000_000) score += profile === "navi-soul-deep" ? 8 : 5;
   else if (model.contextLength >= 250_000) score += 4;
   else if (model.contextLength >= 100_000) score += 2;
   if ((tools.code || tools.web) && model.toolCapable) score += 5;
@@ -231,11 +231,11 @@ function selectDiverseModels(models: RouterModel[], profile: SwarmProfile, task:
 }
 
 function desiredCouncils(profile: SwarmProfile, effort: SwarmEffort): number {
-  const base = profile === "navi-sol"
+  const base = profile === "navi-soul-direct"
     ? effort === "extreme" ? 10 : effort === "complex" ? 8 : 5
     : effort === "extreme" ? 8 : effort === "complex" ? 6 : 4;
-  const key = profile === "navi-sol" ? "NAVI_SOL_MAX_COUNCILS" : "NAVI_FABLE_MAX_COUNCILS";
-  return Math.min(base, numberEnvironment(key, profile === "navi-sol" ? 10 : 8, 3, 14));
+  const key = profile === "navi-soul-direct" ? "NAVI_SOL_MAX_COUNCILS" : "NAVI_FABLE_MAX_COUNCILS";
+  return Math.min(base, numberEnvironment(key, profile === "navi-soul-direct" ? 10 : 8, 3, 14));
 }
 
 function uniqueRoutes(routes: ProviderRoute[]): ProviderRoute[] {
@@ -249,7 +249,7 @@ function uniqueRoutes(routes: ProviderRoute[]): ProviderRoute[] {
 }
 
 function chooseSynthesisRoutes(profile: SwarmProfile, availability: ProviderAvailability, hfRoutes: ProviderRoute[]): ProviderRoute[] {
-  if (profile === "navi-fable") {
+  if (profile === "navi-soul-deep") {
     if (availability.gemini) return [ROUTES.geminiSynthesis];
     if (hfRoutes[0]) return [hfRoutes[0]];
     return [ROUTES.groqReasoning];
@@ -269,7 +269,7 @@ function chooseVerificationRoute(profile: SwarmProfile, availability: ProviderAv
   if (availability.gemini && !synthesisProviders.has("gemini")) return ROUTES.geminiSynthesis;
   if (availability.groq) return ROUTES.groqReasoning;
   if (hfRoutes[0]) return hfRoutes[0];
-  return profile === "navi-sol" ? ROUTES.geminiSynthesis : ROUTES.geminiSynthesis;
+  return profile === "navi-soul-direct" ? ROUTES.geminiSynthesis : ROUTES.geminiSynthesis;
 }
 
 export async function buildSwarmRoutePlan(options: {
@@ -290,7 +290,7 @@ export async function buildSwarmRoutePlan(options: {
   const hfRoutes = selectedModels.map((model, index) => hfRoute(model, profile, index));
 
   const routes: ProviderRoute[] = [];
-  if (profile === "navi-sol") {
+  if (profile === "navi-soul-direct") {
     if (availability.groq) routes.push(tools.web || tools.code ? ROUTES.groqTools : ROUTES.groqReasoning);
     if (hfRoutes[0]) routes.push(hfRoutes[0]);
     if (availability.gemini) routes.push(ROUTES.geminiSynthesis);
@@ -324,17 +324,17 @@ export async function buildSwarmRoutePlan(options: {
 export async function getSwarmCatalogStatus(signal: AbortSignal): Promise<{
   dynamicCatalog: boolean;
   routerModels: number;
-  fableCatalogCandidates: number;
-  solCatalogCandidates: number;
+  deepCatalogCandidates: number;
+  directCatalogCandidates: number;
 }> {
   const token = getHuggingFaceToken();
-  if (!token) return { dynamicCatalog: false, routerModels: 0, fableCatalogCandidates: 0, solCatalogCandidates: 0 };
+  if (!token) return { dynamicCatalog: false, routerModels: 0, deepCatalogCandidates: 0, directCatalogCandidates: 0 };
   const models = await discoverRouterModels(signal);
   const neutralTools: ToolPolicy = { web: false, code: false, artifacts: true };
   return {
     dynamicCatalog: true,
     routerModels: models.length,
-    fableCatalogCandidates: models.filter((model) => modelScore(model, "navi-fable", "general", neutralTools) > 0).length,
-    solCatalogCandidates: models.filter((model) => modelScore(model, "navi-sol", "general", neutralTools) > 0).length
+    deepCatalogCandidates: models.filter((model) => modelScore(model, "navi-soul-deep", "general", neutralTools) > 0).length,
+    directCatalogCandidates: models.filter((model) => modelScore(model, "navi-soul-direct", "general", neutralTools) > 0).length
   };
 }

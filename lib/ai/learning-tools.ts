@@ -38,7 +38,7 @@ export function buildLearningTools({ clerkToken, clerkUserId, onActivity = () =>
       description:
         "Permanently store a skill for this user — a distilled technique, workflow, reference, or set of instructions they want you to keep and apply in future conversations. Use it whenever the user asks you to learn, remember, save, or keep something reusable, especially content you just read from a link. Distill first: store the usable essence, not a raw page dump. Storing under an existing name updates that skill.",
       inputSchema: z.object({
-        name: z.string().describe("Short stable name, e.g. 'Claude Vision workflow' or 'Terraform review checklist'."),
+        name: z.string().describe("Short stable name, e.g. 'Invoice reconciliation' or 'Terraform review checklist'."),
         description: z.string().optional().describe("One sentence on when this skill applies."),
         instructions: z.string().describe("The skill itself, in markdown: the steps, patterns, code, or reference material to apply."),
         sourceUrl: z.string().optional().describe("Where this was learned from, when it came from a link.")

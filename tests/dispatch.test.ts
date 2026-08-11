@@ -23,8 +23,8 @@ function resolveHeadlinePreset(o: { preset: string; complexityBand: Effort; effo
   if (o.providerCount < 2 || o.hasFiles) return o.preset;
   if (o.needsLiveSources) return o.preset;
   if (o.effort !== "high" || o.complexityBand === "normal") return o.preset;
-  if (o.preset === "navi-soul" || o.preset === "auto") return "navi-sol";
-  if (o.preset === "navi-code") return "navi-fable";
+  if (o.preset === "navi-soul" || o.preset === "auto") return "navi-soul-direct";
+  if (o.preset === "navi-code") return "navi-soul-deep";
   return o.preset;
 }
 
@@ -52,14 +52,14 @@ check("'deep research on cows' stays on the direct route (can browse)", cows.pre
 
 // Without a search key there is nothing to browse, so deliberation is the better use of High.
 check("no search key at High still escalates to the swarm",
-  route("Can you do a deep research on cows", "high", true, false).preset, "navi-sol");
+  route("Can you do a deep research on cows", "high", true, false).preset, "navi-soul-direct");
 // Research mode off means the user did not ask for sources.
 check("research mode off at High still escalates",
-  route("Can you do a deep research on cows", "high", false, true).preset, "navi-sol");
+  route("Can you do a deep research on cows", "high", false, true).preset, "navi-soul-direct");
 
 // Non-research hard work should still get the swarm at High.
 check("architecture question at High escalates",
-  route("Compare the architecture tradeoffs of event sourcing", "high", true, true).preset, "navi-sol");
+  route("Compare the architecture tradeoffs of event sourcing", "high", true, true).preset, "navi-soul-direct");
 // Medium effort never escalates regardless.
 check("medium effort never escalates",
   route("Can you do a deep research on cows", "medium", true, true).preset, "navi-soul");

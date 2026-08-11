@@ -44,6 +44,13 @@ type Props = {
   initialSection?: MenuSection;
   durability: StorageDurability;
   preferences: NaviPreferences;
+  /* Conversations held in IndexedDB on this device — the same list the drawer
+     renders. The "What is stored" screen counted only the cloud mirror, so a
+     signed-out user, or any deployment without Supabase, read `Conversations 0`
+     while five of them sat visible in the drawer beside it. The number was
+     accurate about the cloud and wrong about the question being asked, on a
+     privacy screen, which is the worst place to be technically correct. */
+  localChatCount: number;
   onClose: () => void;
   onPreferences: (preferences: NaviPreferences) => void;
   onOpenConnectors: () => void;
@@ -317,6 +324,7 @@ export function SettingsSheet({
   initialSection,
   durability,
   preferences,
+  localChatCount,
   onClose,
   onPreferences,
   onOpenConnectors,
@@ -862,19 +870,35 @@ export function SettingsSheet({
             {/* Counted, not promised. "Saved" with nothing to check it against
                 is exactly the claim that stopped being believable — so this
                 reads the store and shows what is in it, by name. */}
-            <SectionHeader>What is stored</SectionHeader>
+            {/* Two questions, asked and answered separately, because they have
+                different answers and merging them is what made this screen
+                lie. "What is on this phone" is always answerable and is what
+                the drawer beside it shows. "What has reached my account" is
+                answerable only when a store is configured and someone is
+                signed in — and when it is not, the honest answer is a sentence
+                about sync, never a zero next to the word Conversations. */}
+            <SectionHeader>On this device</SectionHeader>
+            <Group>
+              <Row
+                label="Conversations"
+                description="Held in this browser. These are the chats in your drawer."
+                control={<Count value={localChatCount} />}
+              />
+            </Group>
+
+            <SectionHeader>Synced to your account</SectionHeader>
             <Group>
               {!memoryStatus.loaded ? (
                 <Row label="Reading your memory…" />
               ) : !memoryStatus.configured ? (
                 <Row
                   label="Cloud memory is off"
-                  description="Chats and skills stay on this device. Configure Supabase on the deployment to sync them across devices."
+                  description="Nothing leaves this device. Your conversations above are safe here; they are simply not mirrored anywhere, so they do not follow you to another device."
                 />
               ) : !memoryStatus.signedIn ? (
                 <Row
                   label="Signed out"
-                  description="Everything is on this device only. Sign in to sync chats, facts, and skills to your private cloud memory."
+                  description="Nothing is syncing. Your conversations above stay on this device. Sign in to mirror chats, facts, and skills to your private cloud memory."
                 />
               ) : (
                 <>
@@ -1066,9 +1090,20 @@ export function SettingsSheet({
         {page === "playbooks" ? (
           <>
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
+              {/* This used to promise that any published skill "works here
+                  unchanged". Measured against 35 real published SKILL.md
+                  files: all 35 parsed, but 22 had their instructions cut at
+                  4,000 characters — one kept only a fifth of its body — and
+                  the ones that ship companion scripts or reference files
+                  cannot bring them, because a playbook is prompt text and
+                  nothing else. "Unchanged" was true for a third of them.
+                  The sentence now says what the parser actually does, and
+                  truncation is reported at paste time rather than silently. */}
               Playbooks are methods Navi Soul applies when a request matches one — how to debug, how to review code,
-              how to edit a document without disturbing it. They use Anthropic&apos;s SKILL.md format, so any skill
-              published for Claude can be pasted in below and works here unchanged.
+              how to edit a document without disturbing it. They use the SKILL.md format — YAML frontmatter with a
+              name and description, then markdown instructions — so a skill file written for any tool that uses it
+              can be pasted in below. Only the instructions are read: a long file is trimmed to the first 4,000
+              characters, and bundled scripts or reference files do not come across.
             </p>
 
             <SectionHeader>Add a playbook</SectionHeader>
@@ -1095,7 +1130,12 @@ export function SettingsSheet({
                           const next = preferences.customPlaybooks.filter((entry) => entry.id !== result.playbook.id);
                           update({ customPlaybooks: [...next, result.playbook].slice(0, 40) });
                           setPlaybookDraft("");
-                          setPlaybookNotice(`Added “${result.playbook.name}”.`);
+                          /* Said out loud, because the alternative is a
+                             playbook that stops mid-sentence during a real
+                             request and no way to know why. */
+                          setPlaybookNotice(result.truncated
+                            ? `Added “${result.playbook.name}”, trimmed to the first 4,000 characters.`
+                            : `Added “${result.playbook.name}”.`);
                           haptic("success", preferences.haptics);
                         }}
                         disabled={!playbookDraft.trim()}

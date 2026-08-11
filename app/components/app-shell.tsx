@@ -1314,6 +1314,8 @@ export function AppShell({
         initialSection={settingsSection}
         durability={durability}
         preferences={preferences}
+        /* The same array the drawer renders, so the two cannot disagree. */
+        localChatCount={chats.length}
         onClose={() => { setSettingsOpen(false); setSettingsSection(undefined); }}
         onPreferences={updatePreferences}
         onOpenConnectors={() => setConnectorsOpen(true)}

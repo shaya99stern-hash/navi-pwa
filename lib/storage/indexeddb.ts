@@ -159,11 +159,18 @@ async function migrateUnscopedIndexedDbState(): Promise<void> {
 /* v4.2.0 shipped a model picker. v4.3.0 has one brain and two modes, so every
    stored preset collapses to the mode it was really expressing. Anyone on Code
    keeps Code; everyone else lands on Chat. Nobody is left unset. */
+/* Every key here is a string some device actually wrote to its own storage, so
+   these are historical records and not names this app still chooses. Renaming
+   one to match current naming would simply stop matching what is on the disk
+   it was written to, and that user would silently lose their mode. They are
+   spelled the way they were stored, permanently. */
 const LEGACY_PRESET_TO_MODE: Record<string, NaviMode> = {
   "navi-code": "code",
   "navi-fable": "code",
+  "navi-soul-deep": "code",
   "navi-soul": "chat",
   "navi-sol": "chat",
+  "navi-soul-direct": "chat",
   "navi-chat": "chat",
   auto: "chat",
   "gemini-direct": "chat",

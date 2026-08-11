@@ -43,6 +43,23 @@ function greetingForNow(now: Date): string {
   return lines[Math.floor(now.getTime() / 60_000) % lines.length];
 }
 
+/**
+ * Capitalise a name that arrived lowercase.
+ *
+ * The name falls back to the account handle when no display name is set, and a
+ * handle is whatever its owner typed — "shaya", not "Shaya". Printing it
+ * verbatim in a greeting produced "Evening, shaya", which reads as a database
+ * field rather than as being addressed.
+ *
+ * Only the leading letter of each word is raised, and only when the word
+ * starts lowercase: anything already capitalised is left exactly as it is, so
+ * "McDonald", "d'Angelo" and "van der Berg" survive a fallback that a blanket
+ * title-case would mangle. A name the user typed themselves is their business.
+ */
+function presentName(name: string): string {
+  return name.replace(/(^|[\s-])(\p{Ll})/gu, (_, boundary: string, letter: string) => boundary + letter.toUpperCase());
+}
+
 export function LaunchSurface({ online, name, children }: { online: boolean; name?: string; children?: ReactNode }) {
   const [greeting, setGreeting] = useState("Good evening");
 
@@ -54,7 +71,7 @@ export function LaunchSurface({ online, name, children }: { online: boolean; nam
     if (name) {
       const hour = new Date().getHours();
       const part = hour < 5 ? "Late night" : hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
-      setGreeting(`${part}, ${name}`);
+      setGreeting(`${part}, ${presentName(name)}`);
       return;
     }
     setGreeting(greetingForNow(new Date()));

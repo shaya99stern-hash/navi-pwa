@@ -150,8 +150,8 @@ const ALLOWED_PRESETS = new Set<ModelPreset>([
   "navi-soul",
   "navi-code",
   "auto",
-  "navi-fable",
-  "navi-sol",
+  "navi-soul-deep",
+  "navi-soul-direct",
   "gemini-direct",
   "groq-direct",
   "huggingface-direct"
@@ -178,17 +178,23 @@ const rateBuckets = globalRateState.__naviV4RateBuckets ?? (globalRateState.__na
 
 /** A v4.2.0 client still sends a preset; map it to the mode it expressed. */
 const LEGACY_PRESET_MODE: Record<string, NaviMode> = {
+  /* The pre-v4.2.0 spellings stay here and only here: this maps what an old
+     client sends onto a mode, so the keys have to match what those clients
+     actually put on the wire. */
   "navi-code": "code", "navi-fable": "code", "navi-5": "code", "fable-5": "code",
-  "navi-soul": "chat", "navi-sol": "chat", "navi-chat": "chat", auto: "chat",
+  "navi-soul-deep": "code",
+  "navi-soul": "chat", "navi-sol": "chat", "navi-soul-direct": "chat", "navi-chat": "chat", auto: "chat",
   "gemini-direct": "chat", "groq-direct": "chat", "huggingface-direct": "chat"
 };
 
 function normalizePreset(value: unknown): ModelPreset {
+  /* The aliases borrowed from other companies' model names are gone. They only
+     ever served clients from before v4.2.0, and `LEGACY_PRESET_MODE` above
+     already maps those same request bodies to a mode — while any preset this
+     function does not recognise falls through to `navi-soul`, which is where
+     such a client was heading anyway. What is left are this product's own
+     retired names. */
   const legacy: Record<string, ModelPreset> = {
-    "navi-5": "navi-fable",
-    "fable-5": "navi-fable",
-    "navi-sol-5-6": "navi-sol",
-    "opus-4-8": "navi-sol",
     "navi-chat": "navi-soul",
     auto: "navi-soul"
   };
@@ -870,9 +876,9 @@ function resolveHeadlinePreset(options: {
   // Escalation costs real latency, so it needs both signals: the user asked
   // for depth *and* the request itself is genuinely hard.
   if (effort !== "high" || complexityBand === "normal") return preset;
-  if (preset === "navi-soul" || preset === "auto") return "navi-sol";
-  // Fable is the long-horizon build swarm — the right escalation for code.
-  if (preset === "navi-code") return "navi-fable";
+  if (preset === "navi-soul" || preset === "auto") return "navi-soul-direct";
+  // The long-horizon build swarm — the right escalation for code.
+  if (preset === "navi-code") return "navi-soul-deep";
   return preset;
 }
 
@@ -1165,11 +1171,11 @@ export async function POST(request: Request): Promise<Response> {
 
       const modelMessages = await convertToModelMessages(redactGeneratedMedia(messages));
 
-      if (resolvedPreset === "navi-fable" || resolvedPreset === "navi-sol") {
+      if (resolvedPreset === "navi-soul-deep" || resolvedPreset === "navi-soul-direct") {
         const swarmProfile: SwarmPreset = resolvedPreset;
         writer.write(statusChunk({
           stage: "plan",
-          detail: swarmProfile === "navi-fable"
+          detail: swarmProfile === "navi-soul-deep"
             ? "Planning staged long-horizon work."
             : "Planning independent parallel workstreams."
         }));

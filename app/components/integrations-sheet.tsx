@@ -226,7 +226,7 @@ export function IntegrationsSheet({
                 !known ? "Checking…"
                   : status.vercel
                     ? "Navi Soul can read your deployments and build logs. Read-only — it cannot deploy or change settings."
-                    : "Add NAVI_VERCEL_TOKEN in Vercel, then redeploy. Scope it to the team that owns this project."
+                    : "Not connected on this deployment. Setting it up is an administrator step; the details are under Settings → Developer."
               }
               test={tests.vercel}
               onTest={() => void runTest("vercel")}

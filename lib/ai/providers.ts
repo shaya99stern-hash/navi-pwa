@@ -489,9 +489,9 @@ export function fallbackRoutes(options: {
   return ordered.slice(0, 2);
 }
 
-export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-sol-5-6"): ProviderRoute {
+export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-soul-direct-5-6"): ProviderRoute {
   if (availability.gemini) return ROUTES.geminiSynthesis;
-  if (profile === "navi-sol-5-6" && availability.huggingface) return ROUTES.hfGptOss;
+  if (profile === "navi-soul-direct-5-6" && availability.huggingface) return ROUTES.hfGptOss;
   if (profile === "navi-5" && availability.huggingface) return ROUTES.hfGlm;
   // Synthesis reads every specialist answer, so it wants headroom.
   if (availability.cerebras) return ROUTES.cerebrasLarge;
@@ -504,11 +504,11 @@ export function selectSynthesisRoute(availability: ProviderAvailability, profile
 export function selectVerificationRoute(
   availability: ProviderAvailability,
   synthesisProvider: ProviderName,
-  profile: "navi-5" | "navi-sol-5-6"
+  profile: "navi-5" | "navi-soul-direct-5-6"
 ): ProviderRoute {
   if (synthesisProvider !== "groq" && availability.groq) return ROUTES.groqReasoning;
   if (synthesisProvider !== "huggingface" && availability.huggingface) {
-    return profile === "navi-sol-5-6" ? ROUTES.hfDeepSeek : ROUTES.hfGptOss;
+    return profile === "navi-soul-direct-5-6" ? ROUTES.hfDeepSeek : ROUTES.hfGptOss;
   }
   if (synthesisProvider !== "gemini" && availability.gemini) return ROUTES.geminiSynthesis;
   // A checker that shares the writer's provider shares its blind spots.
