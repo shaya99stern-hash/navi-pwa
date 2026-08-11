@@ -37,7 +37,7 @@ import {
   architectPlan,
   constraintBlock,
   heuristicPlan,
-  reviewDraft,
+  reviewUntilSound,
   shouldConsultArchitect,
   type ExecutionPlan
 } from "@/lib/ai/architect";
@@ -1527,15 +1527,22 @@ export async function POST(request: Request): Promise<Response> {
           const spent = Date.now() - requestStartedAt;
           const reviewBudget = REQUEST_BUDGET_MS - spent - REVIEW_DELIVERY_RESERVE_MS;
           writer.write(statusChunk({ stage: "verify", detail: "Checking it against the constraints." }));
-          const review = await reviewDraft({
+          /* Loop, not a single pass. A revision used to go to the user
+             unchecked — the one output nobody verified was the one produced by
+             the step whose job is verification. */
+          const review = await reviewUntilSound({
             draft,
             request: lastUserText,
             plan,
             origin,
             budgetMs: reviewBudget,
-            abortSignal: request.signal
+            abortSignal: request.signal,
+            onPass: (round) => writer.write(statusChunk({
+              stage: "verify",
+              detail: round === 1 ? "Checking it against the constraints." : `Re-checking the correction (pass ${round}).`
+            }))
           });
-          const finalText = review.verdict === "revised" ? review.text : draft;
+          const finalText = review.text;
           const reviewedId = generateId();
           writer.write(statusChunk({ stage: "stream", detail: "Delivering the answer." }));
           writer.write({ type: "text-start", id: reviewedId });
