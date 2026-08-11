@@ -352,6 +352,28 @@ export function SettingsSheet({
     chats: number; facts: number; skills: number; lessons: number; skillNames: string[]; lessonNames: string[];
   }>({ loaded: false, configured: false, signedIn: false, chats: 0, facts: 0, skills: 0, lessons: 0, skillNames: [], lessonNames: [] });
   const lastTapAt = useRef(0);
+  /* The same checks `diagnose_self` runs, surfaced without a conversation. */
+  const [systemChecks, setSystemChecks] = useState<{ running: boolean; results: Array<{ area: string; ok: boolean; detail: string }> }>(
+    { running: false, results: [] }
+  );
+
+  async function runChecks() {
+    setSystemChecks({ running: true, results: [] });
+    try {
+      const response = await fetch("/api/system/diagnostics", { cache: "no-store" });
+      const data = (await response.json().catch(() => null)) as { checks?: Array<{ area: string; ok: boolean; detail: string }> } | null;
+      setSystemChecks({
+        running: false,
+        results: data?.checks ?? [{ area: "Diagnostics", ok: false, detail: `The check route answered ${response.status}.` }]
+      });
+    } catch (error) {
+      setSystemChecks({
+        running: false,
+        results: [{ area: "Diagnostics", ok: false, detail: error instanceof Error ? error.message : "The request never completed." }]
+      });
+    }
+  }
+
   /* Teaching a skill directly, bypassing the model's tool call entirely. */
   const [teach, setTeach] = useState<{ name: string; instructions: string; saving: boolean; status: { ok: boolean; message: string } | null }>(
     { name: "", instructions: "", saving: false, status: null }
@@ -1127,6 +1149,41 @@ export function SettingsSheet({
                 this: the deployment variables are real and someone has to be
                 able to look them up. They live here, with the other things
                 that exist to answer "why is it behaving like that". */}
+            {/* What is broken, without asking the assistant.
+                `diagnose_self` gives Navi Soul the same answer and that is the
+                one that stops it inventing a cause — but the turn where you
+                most need it is the turn where something in that path may be
+                the broken thing. This needs no model and no conversation. */}
+            <SectionHeader>Check everything</SectionHeader>
+            <Group>
+              <Row
+                label="Run all checks"
+                description="Cloud memory, transcription, this app's repository, providers, and search. Each one performs a real request."
+                control={
+                  <InlineButton onClick={() => { haptic("selection", preferences.haptics); void runChecks(); }}>
+                    {systemChecks.running ? "Checking…" : "Check"}
+                  </InlineButton>
+                }
+                fullWidthControl={
+                  systemChecks.results.length ? (
+                    <ul className="space-y-2 rounded-[12px] bg-elev-2 p-3">
+                      {systemChecks.results.map((entry) => (
+                        <li key={entry.area} className="flex gap-2">
+                          <span className={`mt-[3px] shrink-0 text-[0.75rem] font-bold ${entry.ok ? "text-success" : "text-danger"}`} aria-hidden="true">
+                            {entry.ok ? "✓" : "✕"}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[0.8125rem]/[1.125rem] font-semibold text-primary">{entry.area}</span>
+                            <span className="block break-words text-[0.75rem]/[1.125rem] text-tertiary">{entry.detail}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : undefined
+                }
+              />
+            </Group>
+
             <SectionHeader>Deployment variables</SectionHeader>
             <p className="px-4 text-[0.8125rem]/[1.25rem] text-tertiary">
               Set in the hosting project&apos;s environment, then redeploy. They apply to everyone using this
