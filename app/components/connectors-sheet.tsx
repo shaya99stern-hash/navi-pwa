@@ -6,6 +6,7 @@ import type { ConnectorAccessMode, CustomConnector, CustomConnectorKind, NaviPre
 import { createId } from "@/lib/chat";
 import type { PublicMcpServer } from "@/lib/mcp";
 import { haptic } from "@/lib/ui/haptics";
+import { cloudSyncActive } from "@/lib/memory/cloud-sync";
 
 type Props = {
   open: boolean;
@@ -146,6 +147,10 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
      These are the results of actually calling each service. */
   const [verified, setVerified] = useState<Record<string, { ok: boolean; reason: string }>>({});
   const [verifying, setVerifying] = useState<string | null>(null);
+  /* Whether the preference mirror is actually writing. Read once when the
+     sheet opens rather than at module scope, because signing in flips it. */
+  const [keysAreDurable, setKeysAreDurable] = useState(false);
+  useEffect(() => { if (open) setKeysAreDurable(cloudSyncActive()); }, [open]);
 
   async function verify(id: string) {
     setVerifying(id);
@@ -584,7 +589,23 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elev-2 text-secondary"><Plus size={21} /></span>
               <span className="min-w-0 flex-1">
                 <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Your connectors</h2>
-                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">APIs you add yourself, chosen from the drop-down. Keys live in your own private account memory, readable by your account alone, and travel only with your requests.</p>
+                {/* Where the key actually is, checked rather than promised.
+                    This said keys "live in your own private account memory" —
+                    true only while the mirror is running. Signed out, or on a
+                    deployment whose cloud memory is unreachable, they are in
+                    this browser and nowhere else, and reinstalling the app
+                    takes them with it. The owner asked directly whether keys
+                    survive a reinstall and was told yes; that answer was right
+                    about the provisioned providers above and wrong about
+                    these, and the screen gave them no way to tell which. */}
+                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
+                  APIs you add yourself, chosen from the drop-down. Keys travel only with your requests.
+                </p>
+                <p className={`mt-1 text-[0.6875rem]/4 font-medium ${keysAreDurable ? "text-tertiary" : "text-warning"}`}>
+                  {keysAreDurable
+                    ? "Synced to your private account memory, so they survive reinstalling the app."
+                    : "Stored in this browser only. Reinstalling NaviOS, or clearing site data, will delete them — sign in with cloud memory working to keep them."}
+                </p>
               </span>
             </div>
 

@@ -132,23 +132,42 @@ in my session needs authorising, so I have no way to inspect your live schema.
 Your export tells the whole story: one project, `{"name": "New project",
 "instructions": "", "knowledge": []}`, and **not one chat has a `projectId`**.
 
-The plumbing exists — `projectId` on chats, `setProject`, project instructions
-ride along in `requestBody`. What is missing is the entire flow:
+**Correction to an earlier draft of this document.** Two claims here were
+wrong, and both made the feature sound more broken than it is: project
+`knowledge[]` *is* used — it ships in `requestBody` and the server renders it
+into the prompt — and filing a chat into a project *does* exist, as "Move to
+project" in the chat menu. Both are now pinned by tests so the corrections
+cannot drift back.
 
-- `createProject()` immediately makes a project called "New project" with no
-  naming step.
-- Projects never appear in the sidebar; they live behind a sheet.
-- Nothing files a chat into a project from the chat itself.
-- `knowledge[]` is declared and never used.
+The real gaps were narrower, and they are exactly the two the owner named:
 
-**Plan** (you confirmed the target):
-1. Creation opens a sheet: name + instructions, then Create. No more "New project".
-2. Projects become their own sidebar section above Chats, each expanding to its chats.
-3. Starting a chat from inside a project files it there; the chat menu gains "Move to project".
-4. The header shows the project a chat belongs to.
-5. `knowledge[]` last — attach files once, every chat in the project can use them.
+- `createProject()` immediately made a project called "New project" with no
+  naming step, so the instructions field that gives a project its entire
+  purpose stayed empty. **Fixed:** creation opens a form asking for a name
+  (required) and instructions (optional), and creating also selects the project
+  for the current conversation.
+- Projects never appeared in the sidebar; they lived behind a sheet, so a
+  project was something you made once and never saw again. **Fixed:** a
+  Projects section in the drawer with a conversation count on each row, hidden
+  while searching so it cannot push results off screen.
 
-Steps 1–4 are a contained piece of work. Step 5 is its own project.
+**A third correction.** Starting a chat while a project is active *does*
+already file it there — the persist path stamps the active project onto the
+chat. That is now pinned by a test too.
+
+Three wrong claims in one section is worth naming as a pattern rather than
+three slips: I read the projects code for what was missing and found what I
+expected to find. The plumbing was almost entirely present; what was absent was
+any way to *reach* it. Diagnosing "unreachable" as "unbuilt" would have meant
+rewriting working code, which is the more expensive mistake.
+
+Still open on projects:
+
+- `knowledge[]` is text notes only. Attaching real files to a project — upload
+  once, every chat in it can draw on them — is its own piece of work.
+- A chat with no project can be adopted by whichever project was last active,
+  because the stamp is applied on every save rather than only at creation. Low
+  harm, but it is why a chat can appear in a project you did not put it in.
 
 ### 8. Navigation — you are right, and here is the actual rule
 
@@ -158,8 +177,19 @@ Memory, Capabilities, Skills, Playbooks, Connectors, Developer. "Customize" is
 a third thing that is really a shortcut into Settings — which is why it reads as
 meaningless.
 
-**The rule I would apply:** *the sidebar is things you have; Settings is things
+**Fixed.** The rule applied: *the sidebar is things you have; Settings is things
 you configure.*
+
+The sidebar is now New chat · Chats · Projects · Artifacts, in both modes.
+Code mode used to swap Projects out for Developer and "Connectors and keys" —
+configuration surfaces displacing the user's own content, which is exactly the
+"why is all this stuff in this side panel" complaint. Customize is gone; a menu
+whose only job is to shortcut into another menu is redundancy by definition.
+Both destinations remain in Settings, and Settings → Developer now opens
+instead of bouncing back, so nothing became unreachable.
+
+The original reasoning, kept because it is the rule to apply to the next row
+somebody wants to add:
 
 - **Sidebar:** New chat · Chats · Projects · Artifacts. Nothing else. That is
   your content.
@@ -183,10 +213,23 @@ other**, and the app never distinguishes them:
   reinstall, **they are gone** unless you are signed in with cloud memory
   working — and cloud memory is the thing that appears to be broken (§6).
 
-**Recommendation:** route custom connectors through the same provisioning path
-so every key lands in Vercel, and show provenance on each row — "stored on this
-deployment" vs "this device only". You asked for exactly this: add it once, it
-goes to Vercel.
+**Partly fixed.** The screen now states where the keys actually are, checked
+rather than promised: "synced to your private account memory, so they survive
+reinstalling" when the mirror is running, and a warning that they are in this
+browser only — and will be lost on reinstall — when it is not.
+
+**Still open, and it is worth knowing why.** You asked for "add it here, it
+goes to Vercel automatically". For the catalog providers that already happens.
+For custom connectors it cannot use the same path: provisioning writes a *named*
+environment variable from the catalog, and a connector you define yourself has
+no such name — making one up per connector would invent a naming scheme that
+then has to be migrated forever.
+
+The natural durable home for them is the preferences mirror, which already
+syncs to your account. That is blocked on the same Supabase migration as
+§6. **So applying that migration fixes key durability and `learn_skill`
+together** — which moves it from "worth doing" to the single highest-value
+action available.
 
 Worth saying plainly: this is the second time the app has confidently told you
 something reassuring and wrong about your own data. The pattern — not the
@@ -215,9 +258,13 @@ the interface you actually want.
 - **YouTube transcripts fail.** You asked four times to learn from a video. It
   cannot fetch transcripts; it should say so once, in one sentence, not
   three paragraphs of alternatives each time.
-- **Artifacts silently exceed a size limit.** The chat-history export failed
-  repeatedly with the model theorising about why. The limit should be checked
-  before emitting, with a real message.
+- **Artifacts silently exceeded a size limit.** **Fixed.** The cap is 180 KB and
+  the model was never told it existed — so it generated a large document, had it
+  rejected with no error it could read, invented an explanation, and retried at
+  the same size. The chat history has that loop three attempts deep on the
+  chat-history export. The budget is now stated in the artifact instruction,
+  with the instruction to narrow or split *before* emitting. A limit nobody is
+  told about is a trap rather than a limit.
 - **"Stop writing in code"** — you said it explicitly. Heavy bold/headers/code
   fences on every answer is a prompt default worth changing; the reference iOS
   client writes prose by default and reserves structure for when it helps.

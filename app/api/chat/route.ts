@@ -572,6 +572,13 @@ function artifactInstruction(requested: boolean): string {
   const contract = [
     "NaviOS artifacts are real interactive documents rendered in an isolated browser sandbox.",
     "Emit them as a fenced navi-artifact JSON block containing id, title, kind, html or svg, and height.",
+    /* The budget, stated up front. It is enforced at 180 KB and the model was
+       never told, so it would generate a large document, have it silently
+       rejected, and then — with no error to read — invent an explanation and
+       try again at the same size. The chat history has exactly that loop, three
+       attempts deep, over a chat-history export. A limit nobody is told about
+       is a trap rather than a limit. */
+    "An artifact must stay under 180 KB of content. Plan for that before you start: if the material will not fit, say so first and either narrow it or split it into several artifacts the user asks for one at a time. Do not emit one you expect to be over the limit.",
     "For documents, reports, and printable pages (including anything the user wants as a PDF), use kind html with a complete styled document in the html field; the viewer offers export from there.",
     "For interactive HTML, include all markup, CSS, and JavaScript inside the html field. Buttons, inputs, forms, tabs, counters, calculators, and other controls must actually work.",
     "Use inline script with addEventListener. Do not use onclick or other on* attributes because those are removed by the sanitizer.",

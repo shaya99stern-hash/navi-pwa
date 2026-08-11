@@ -47,8 +47,11 @@ export async function POST(request: Request) {
     instructions,
     sourceUrl: typeof body?.sourceUrl === "string" ? body.sourceUrl : undefined
   });
-  if (!stored) return NextResponse.json({ error: "The skill could not be stored." }, { status: 502 });
-  return NextResponse.json({ skill: stored });
+  /* The store's own reason, passed through. A 502 saying "could not be stored"
+     is what left everyone guessing; the caller can act on "the table does not
+     exist" and cannot act on "no". */
+  if ("error" in stored) return NextResponse.json({ error: stored.error }, { status: 502 });
+  return NextResponse.json({ skill: stored.skill });
 }
 
 export async function DELETE(request: Request) {
