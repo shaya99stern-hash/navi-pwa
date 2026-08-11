@@ -44,6 +44,31 @@ export type ProviderAdapter = {
   supportsVision: boolean;
   /** Tokens, for the smallest context window this provider's routes rely on. */
   contextWindow: number;
+  /**
+   * The largest single request this provider will actually accept, when that
+   * is smaller than the context window.
+   *
+   * These are different limits and the app conflated them, which is what took
+   * production down. Groq's free `on_demand` tier rations by *throughput* — 8,000
+   * tokens per minute on `openai/gpt-oss-120b` — and counts a single request's
+   * input plus its reserved `max_tokens` against that window. So the model
+   * advertises a 131,072-token context and refuses anything past 8,000:
+   *
+   *   AI_APICallError: Request too large ... service tier `on_demand`
+   *   on tokens per minute (TPM): Limit 8000, Requested 20805
+   *
+   * Sizing requests against `contextWindow` therefore built a request no route
+   * could take, and no amount of retrying or failing over could fix it — the
+   * request was structurally impossible before it was sent.
+   *
+   * Set only where there is evidence. Groq's 8,000 is quoted from a real
+   * refusal in the runtime logs. Every other provider is left undefined and
+   * falls back to its context window, because a limit invented from memory
+   * would re-create the original bug with a different number. An operator whose
+   * account has a different allowance sets `NAVI_<PROVIDER>_TOKEN_LIMIT`
+   * without waiting for a deploy; see `requestTokenCeiling`.
+   */
+  requestTokenLimit?: number;
   /** USD per million input tokens. Zero means a free tier. */
   costPerMTok: number;
   /** Headers beyond authorization. Attribution needs the request origin. */
@@ -78,6 +103,9 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     supportsTools: true,
     supportsVision: false,
     contextWindow: 131_072,
+    /* Quoted from the refusal, not estimated. The free tier's per-minute
+       allowance is the binding constraint here, never the context window. */
+    requestTokenLimit: 8_000,
     costPerMTok: 0
   },
   huggingface: {
@@ -273,4 +301,24 @@ export function providerApiKey(adapter: ProviderAdapter): string | undefined {
 
 export function providerHeaders(adapter: ProviderAdapter, origin: string): Record<string, string> | undefined {
   return adapter.headers?.(origin);
+}
+
+/**
+ * The largest request this provider will take, input plus reserved output.
+ *
+ * Three sources, narrowest wins: an operator's override, the measured
+ * `requestTokenLimit`, and the context window. The override exists because free
+ * tiers are per-account and change without notice — the deployment that hits a
+ * different allowance should be able to say so in an environment variable
+ * rather than wait for someone to edit this file. It can only narrow: a number
+ * larger than the model's context window is not a permission, it is a request
+ * that gets truncated.
+ *
+ * A ceiling, not a target. Callers subtract what they intend to reserve for the
+ * reply and treat what remains as the input budget.
+ */
+export function requestTokenCeiling(adapter: ProviderAdapter): number {
+  const override = Number.parseInt((process.env[`NAVI_${adapter.id.toUpperCase()}_TOKEN_LIMIT`] ?? "").trim(), 10);
+  const configured = Number.isFinite(override) && override > 0 ? override : adapter.requestTokenLimit;
+  return Math.min(configured ?? adapter.contextWindow, adapter.contextWindow);
 }

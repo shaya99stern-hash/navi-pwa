@@ -580,6 +580,32 @@ export function fallbackRoutes(options: {
   return ordered.slice(0, 2);
 }
 
+/**
+ * The route that answers when nothing else did.
+ *
+ * The cascade had no floor. A request that failed on every configured provider
+ * — Groq refusing it for size, Gemini rate-limited, a dead Cerebras key —
+ * ended at "Navi Soul has no working credential to answer with", which is both
+ * unhelpful and untrue: a frontier model was configured and reachable the whole
+ * time. Returning nothing is the one outcome worse than an expensive answer.
+ *
+ * Deliberately *not* gated on the spend ledger, and that is the one place in
+ * this file where the budget is overruled. The ledger's job is to stop routine
+ * escalation from quietly running up a bill, and it still does — `routeForLane`
+ * checks it before every lane 3 call. This is not routine: by the time it runs,
+ * every free route has already failed and the alternative is an app that cannot
+ * answer at all. The owner named this model in `NAVI_FRONTIER_MODEL`, so the
+ * charge is one they chose, not one the app invented.
+ *
+ * Null when no model is named, which is the default. An empty model id sent to
+ * a provider fails for a reason nobody can read, so an unconfigured frontier
+ * stays unreachable rather than becoming a confusing last request.
+ */
+export function lastResortRoute(availability: ProviderAvailability): ProviderRoute | null {
+  if (!frontierConfigured() || !availability.openrouter) return null;
+  return ROUTES.openRouterFrontier;
+}
+
 export function selectSynthesisRoute(availability: ProviderAvailability, profile: "navi-5" | "navi-soul-direct-5-6"): ProviderRoute {
   if (availability.gemini) return ROUTES.geminiSynthesis;
   if (profile === "navi-soul-direct-5-6" && availability.huggingface) return ROUTES.hfGptOss;
