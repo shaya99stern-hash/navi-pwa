@@ -53,7 +53,20 @@ import { needsAppKnowledge, stablePrefix } from "@/lib/ai/prompt/base";
 import { csvToMarkdown, documentBlock, extractPdfText } from "@/lib/ai/document-text";
 
 export const runtime = "edge";
-export const maxDuration = 60;
+/**
+ * How long one answer may take end to end.
+ *
+ * This was 60 seconds, which became the real ceiling the moment the output cap
+ * went from 1,900 tokens to 8,000: a long answer, or one that calls a few
+ * tools, streams for longer than a minute, and the platform then kills the
+ * function mid-sentence. The user sees the reply stop dead — the same symptom
+ * as the token cap, from a different cause, and the one that would have
+ * replaced it.
+ *
+ * 300 is not a guess: `app/api/eval/route.ts` already deploys at 300 on this
+ * project, so the plan permits it.
+ */
+export const maxDuration = 300;
 /**
  * Tool round trips share the request budget, so cap how many the model may take.
  *
@@ -64,7 +77,11 @@ export const maxDuration = 60;
  * the error, fix, run again is already four, so a repair loop could be cut off
  * at exactly the point it was about to succeed.
  */
-const MAX_TOOL_STEPS = 8;
+/* Tool steps are how much work one answer may do before it has to stop and
+   reply. Eight was tuned against a 60-second function; with five times the
+   wall clock, stopping at eight is the model abandoning a task it could have
+   finished, which reads as it giving up half way. */
+const MAX_TOOL_STEPS = 16;
 /**
  * Code mode earns more hops: finding a bug is list repos → list directory →
  * read file → check CI → read log → answer, and cutting that off at four
@@ -77,7 +94,7 @@ const MAX_TOOL_STEPS = 8;
  * Fourteen covers a real repair loop. Wall-clock is bounded separately by the
  * request budget, so a longer ceiling cannot run away with the request.
  */
-const MAX_CODE_TOOL_STEPS = 14;
+const MAX_CODE_TOOL_STEPS = 28;
 /**
  * The wall-clock the whole request has, kept under the 60s edge ceiling so a
  * review that starts late is skipped rather than started and killed.
@@ -989,7 +1006,13 @@ export async function POST(request: Request): Promise<Response> {
   const isOwner = Boolean(clerkUserId) && isClerkUserAllowed(clerkUserId!);
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) return refuse("There was no message to send.");
-  if (body.messages.length > MAX_MESSAGES) return refuse(`This conversation is too long to continue — over ${MAX_MESSAGES} messages. Start a new chat; Navi Soul will still remember the important parts.`);
+  /* A long conversation is trimmed, not refused.
+     This used to return an error telling the user to start a new chat, which
+     is the most complete stop the app can produce: the thread they were in the
+     middle of simply stopped accepting messages. The very next line already
+     slices to the last MAX_MESSAGES, and `threadSummary` carries a condensed
+     version of everything older — so the refusal was throwing away a
+     conversation the code was equipped to continue. */
   if (JSON.stringify(body.messages).length > MAX_SERIALIZED_CHARACTERS) return refuse("This conversation and its attachments are too large to send. Start a new chat, or remove an attachment.");
 
   const messages = body.messages.slice(-MAX_MESSAGES);
