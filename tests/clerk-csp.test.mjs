@@ -84,8 +84,11 @@ const globalRule = headers.find((entry) =>
 check("the global rule excludes the worker", /sandbox-worker/.test(globalRule.source), true);
 check("it is a negative lookahead, not a match", globalRule.source.includes("(?!"), true);
 
-/* Behaviour, not spelling: build the matcher and try both paths. */
-const matcher = new RegExp(`^${globalRule.source.replace(/^\//, "/")}$`);
+/* Behaviour, not spelling: build the matcher and try both paths. The source is
+   already the path pattern, so it is used as-is — an earlier version ran a
+   `replace(/^\//, "/")` over it, which CodeQL correctly flagged as swapping a
+   slash for itself. */
+const matcher = new RegExp(`^${globalRule.source}$`);
 check("the worker route escapes the strict policy", matcher.test("/sandbox-worker"), false);
 check("an ordinary page still gets it", matcher.test("/settings"), true);
 check("a nested path still gets it", matcher.test("/api/chat"), true);
