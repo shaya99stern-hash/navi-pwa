@@ -1,7 +1,8 @@
 import { SignUp } from "@clerk/nextjs";
 import type { Metadata } from "next";
 
-import { AuthShell, clerkAuthAppearance } from "@/app/components/auth-shell";
+import { AuthShell, clerkAppearance } from "@/app/components/auth-shell";
+import { readAuthTheme } from "@/lib/ui/auth-theme";
 import { describeClerkConfigGap, isClerkConfigured } from "@/lib/auth/config";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false }
 };
 
-export default function SignUpPage() {
+export default async function SignUpPage() {
+  const theme = await readAuthTheme();
   const configured = isClerkConfigured();
   const gap = configured ? null : describeClerkConfigGap();
   if (gap) console.error(`Navi sign-up unavailable. ${gap}`);
@@ -31,10 +33,10 @@ export default function SignUpPage() {
           fallbackRedirectUrl="/"
           forceRedirectUrl="/"
           oauthFlow="redirect"
-          appearance={clerkAuthAppearance}
+          appearance={clerkAppearance(theme)}
         />
       ) : (
-        <p className="text-center text-sm leading-6 text-[#bdb2a7]">
+        <p className="text-[0.875rem]/6 font-normal text-tertiary">
           This deployment is missing its authentication credentials, so no sign-up options can be shown. The deployment logs name what is absent.
         </p>
       )}

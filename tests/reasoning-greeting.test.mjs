@@ -57,26 +57,29 @@ check("both sit above the answer", body.indexOf("<PlanCard") < body.indexOf("<Ma
 
 check("the name is accepted", /name\?: string/.test(launch), true);
 
-/* ── Both were reported as visibly off-centre ────────────────────────── */
+/* ── One left edge, in the greeting and in the header ────────────────────── */
 
-/* An inline flex row centres as a block, so the spark to the left of the words
-   pushed them right of the screen's centre. */
-check("the greeting row spans the full width", /flex w-full items-center justify-center/.test(launch), true);
+/* Both used to be centred, and both sat above left-aligned content: the
+   greeting above the suggestion cards, the header title above the thread. Two
+   competing edges on one screen. Reading on a phone starts at the left, so
+   that is where both now begin. */
+check("the greeting row is left-aligned", /flex w-full items-center justify-center/.test(launch), false);
+check("the greeting keeps the spark beside it", /flex items-center gap-3 pl-0\.5/.test(launch), true);
 check("the greeting is no longer 2rem", launch.includes("text-[2rem]/[2.375rem]"), false);
 
-/* One button sits left of the title and two or three right of it, so a flex-1
-   middle centres inside the leftover space — about half a button off. */
-check("the header title is absolutely centred", /absolute bottom-0 left-1\/2 top-\[var\(--safe-top\)\][\s\S]{0,140}-translate-x-1\/2/.test(shell), true);
-/* `.navi-header` carries the notch in its padding, so centring against the
-   padded box lifts the title by half the inset and it lands in the status bar.
-   Spanning from the inset to the bottom centres it in the visible row. */
-check("it is not centred against the padded box", /top-1\/2[\s\S]{0,60}-translate-y-1\/2/.test(shell), false);
-check("it spans below the notch", shell.includes("top-[var(--safe-top)]"), true);
-check("it cannot overlap the buttons", /max-w-\[calc\(100%-184px\)\]/.test(shell), true);
-/* Absolute positioning lifts it out of flow, so the clusters need a spacer to
-   stay at the edges, and the title still has to be tappable. */
-check("a spacer keeps the clusters apart", shell.includes('<div className="flex-1" aria-hidden="true" />'), true);
-check("the centred title stays clickable", shell.includes("[&>*]:pointer-events-auto"), true);
+/* In flow and left-aligned. The absolute centring it replaced is what forced
+   the max width and the spacer: one button on the left against two or three on
+   the right means true centre is never the centre of the free space. */
+check("the header title sits in the flow", /flex min-w-0 flex-1 flex-col items-start/.test(shell), true);
+check("the title is no longer absolutely centred", /absolute bottom-0 left-1\/2 top-\[var\(--safe-top\)\]/.test(shell), false);
+check("no spacer is needed any more", shell.includes('<div className="flex-1" aria-hidden="true" />'), false);
+check("no width cap is needed any more", /max-w-\[calc\(100%-184px\)\]/.test(shell), false);
+/* The thread name is the second line and the only part that can run long, so
+   it is the only part that truncates. */
+check("the thread label truncates", /max-w-\[200px\] truncate/.test(shell), true);
+/* New chat is the outermost trailing button: it is the more destructive of the
+   two, so it takes the deliberate position rather than the thumb's. */
+check("chat actions come before new chat", shell.indexOf("<Ellipsis") < shell.indexOf("<SquarePen"), true);
 check("the shell passes the display name", shell.includes("preferences.profile.displayName || accountName"), true);
 /* Someone signed in has already told the app who they are. Making them type it
    again to be greeted by name asks twice for the same thing — so Clerk's name

@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  FileText,
   FolderKanban,
+  Image as ImageIcon,
   MessageCircle,
   Pin,
   PinOff,
@@ -12,6 +14,7 @@ import {
   SquarePen,
   Trash2,
   UserRound,
+  Wrench,
   X
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -44,6 +47,16 @@ type Props = {
   /** Open a project: makes it active and shows its conversations. */
   onOpenProject: (id: string) => void;
   onArtifacts: () => void;
+  /* Counts sit beside the rows they describe: a drawer that says "Files" tells
+     you the screen exists, one that says "Files 18" tells you it is worth
+     opening. Zero is rendered as no badge rather than as "0". */
+  fileCount: number;
+  imageCount: number;
+  /** Any tool enabled, shown as the green dot beside Tools. */
+  toolsOn: boolean;
+  onFiles: () => void;
+  onImages: () => void;
+  onTools: () => void;
   onSettings: () => void;
   onOpen: (chat: StoredChat) => void;
   onRename: (id: string, title: string) => void;
@@ -51,7 +64,7 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, projects, activeProjectId, onOpenProject, onArtifacts, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, projects, activeProjectId, onOpenProject, onArtifacts, fileCount, imageCount, toolsOn, onFiles, onImages, onTools, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
   /* Null until the user picks; the persisted value is the source of truth
@@ -259,6 +272,26 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
           <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <FolderKanban size={19} strokeWidth={1.8} className="text-secondary" />
             Projects
+            {projects.length ? <span className="ml-auto text-[0.71875rem]/[0.6875rem] font-semibold text-tertiary">{projects.length}</span> : null}
+          </button>
+          {/* Files and Images are the two things the manifest, the OG copy and
+              the app's own subtitle have always promised. They existed only
+              inside the conversation that produced them, which made "the PDF I
+              sent last Tuesday" findable only by remembering the thread. */}
+          <button type="button" onClick={() => openSheet(onFiles)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+            <FileText size={19} strokeWidth={1.8} className="text-secondary" />
+            Files
+            {fileCount ? <span className="ml-auto text-[0.71875rem]/[0.6875rem] font-semibold text-tertiary">{fileCount}</span> : null}
+          </button>
+          <button type="button" onClick={() => openSheet(onImages)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+            <ImageIcon size={19} strokeWidth={1.8} className="text-secondary" />
+            Images
+            {imageCount ? <span className="ml-auto text-[0.71875rem]/[0.6875rem] font-semibold text-tertiary">{imageCount}</span> : null}
+          </button>
+          <button type="button" onClick={() => openSheet(onTools)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+            <Wrench size={19} strokeWidth={1.8} className="text-secondary" />
+            Tools
+            {toolsOn ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-success" aria-label="Tools enabled" /> : null}
           </button>
           <button type="button" onClick={() => openSheet(onArtifacts)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <Shapes size={19} strokeWidth={1.8} className="text-secondary" />

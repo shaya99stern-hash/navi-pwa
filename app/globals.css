@@ -345,6 +345,47 @@ textarea {
   background: var(--bg-app);
 }
 
+/**
+ * The wrapper for every full-bleed page that sits outside the app shell:
+ * sign-in, not-found, error, loading and offline.
+ *
+ * Those five used to own their own insets, or none at all — AuthShell padded
+ * with `py-8` against a 59px top inset, and not-found, error and loading
+ * applied nothing — so with `black-translucent` the status bar overlaid the
+ * content and the wordmark landed under the Dynamic Island.
+ *
+ * The scroll is as load-bearing as the padding: `body` is
+ * `position:fixed; overflow:hidden`, so a card taller than the viewport had no
+ * reachable bottom, and at a large Dynamic Type size the "Try again" button
+ * could not be reached at all.
+ */
+.navi-page {
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  padding:
+    calc(var(--safe-top) + 24px)
+    calc(var(--safe-right) + 20px)
+    calc(var(--safe-bottom) + 24px)
+    calc(var(--safe-left) + 20px);
+}
+
+/* A screen inside the shell — Files, Images, Tools. The shell already owns the
+   safe areas, so this carries only the arrival. */
+.navi-screen {
+  animation: launch-in 220ms var(--navi-ease-standard) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navi-screen {
+    animation: none;
+  }
+}
+
 .suggestion-card {
   border-radius: var(--navi-radius-card);
   box-shadow: var(--navi-shadow-card);

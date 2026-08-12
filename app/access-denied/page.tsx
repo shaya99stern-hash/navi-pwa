@@ -20,7 +20,7 @@ export default function AccessDeniedPage() {
         <SignOutButton redirectUrl="/sign-in">
           <button
             type="button"
-            className="h-[52px] w-full rounded-2xl bg-[#c76740] text-sm font-semibold text-white hover:bg-[#b65734]"
+            className="min-h-[52px] w-full rounded-2xl bg-accent text-[0.9375rem] font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed"
           >
             Use a different account
           </button>
@@ -28,7 +28,7 @@ export default function AccessDeniedPage() {
       ) : (
         <Link
           href="/"
-          className="flex h-[52px] w-full items-center justify-center rounded-2xl bg-[#c76740] text-sm font-semibold text-white hover:bg-[#b65734]"
+          className="flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-accent text-[0.9375rem] font-semibold text-[var(--accent-on-primary)] active:bg-accent-pressed"
         >
           Return to NaviOS
         </Link>
