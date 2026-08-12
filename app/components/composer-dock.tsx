@@ -172,6 +172,28 @@ export function ComposerDock({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<RecordingSession | null>(null);
+
+  /* Publish the dock's real height so anything positioned above it can read a
+     measurement instead of a guess.
+     `--navi-composer-min-height` is the constant 52, and the dock grows with
+     the draft, the attachment strip and the status line — so the scroll pill,
+     which was positioned from that constant, went behind the composer at three
+     lines of text and off-screen at six. A constant standing in for a measured
+     value is only ever right at one size. */
+  useEffect(() => {
+    const dock = dockRef.current;
+    if (!dock) return;
+    const publish = () => {
+      document.documentElement.style.setProperty("--navi-composer-height", `${Math.round(dock.getBoundingClientRect().height)}px`);
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(dock);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty("--navi-composer-height");
+    };
+  }, []);
   /** Recording diagnostics are logged once per session, not once per tap. */
   const loggedSupport = useRef(false);
   /** Seconds recorded, so the composer shows progress rather than a lit icon. */
@@ -851,35 +873,10 @@ export function ComposerDock({
             ) : null}
           </div>
 
-          {/* Starter chips on a fresh chat only; they seed the draft and hand
-              focus back so the keyboard stays up. */}
-          {!hasMessages && !value.trim() && !attachmentCount && !generating ? (
-            <div className="scrollbar-none -mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
-              {/* "Visualize" seeds a phrasing the server's image-intent matcher
-                  already recognises, so the chip lands in the real image
-                  pipeline rather than a text description of a picture. */}
-              {[
-                ["Write", "Write a "],
-                ["Learn", "Explain how "],
-                ["Visualize", "Visualize "],
-                ["Plan", "Help me plan "],
-                ["Code", "Write code that "]
-              ].map(([label, starter]) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => {
-                    haptic("selection", haptics);
-                    onChange(starter);
-                    textareaRef.current?.focus();
-                  }}
-                  className="h-9 shrink-0 rounded-full border border-[var(--border-subtle)] bg-elev-1 px-4 text-[0.8125rem]/5 font-medium text-secondary active:bg-elev-2"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          {/* No starter chips. A row of five verbs under the field is the app
+              guessing at the task, and it guessed in front of the one control
+              that already accepts any task at all. The prototype's composer is
+              three things — attach, type, speak — and nothing else. */}
         </div>
       </div>
 

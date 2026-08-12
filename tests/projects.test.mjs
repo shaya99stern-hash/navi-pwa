@@ -33,20 +33,23 @@ check("creating also selects it for this conversation", /onCreate\(project\)[\s\
 /* ---- Projects are visible in the sidebar ------------------------------- */
 
 /* They lived only behind a sheet, so a project was something you made once and
-   never saw again. A project you cannot see is one you never file into. */
+   never saw again. A project you cannot see is one you never file into.
+
+   The drawer now names them once, with a count, and the Projects screen holds
+   the list: a second list inside the panel competed with the conversations for
+   the same scroll area, and pushed the matches off screen during a search. */
 check("the drawer takes projects", /projects: NaviProject\[\]/.test(drawer), true);
-check("the drawer lists them", /projects\.slice\(0, 6\)\.map/.test(drawer), true);
-check("each row shows its conversation count", drawer.includes("No conversations yet"), true);
-check("the active project is marked", /activeProjectId === project\.id/.test(drawer), true);
-/* Search ranks across everything; a pinned section above the results would
-   push the actual matches off screen. */
-check("the section hides while searching", /!normalized && projects\.length/.test(drawer), true);
+check("the drawer names them", /Projects\n/.test(drawer), true);
+check("the row carries the count", /projects\.length \? <span/.test(drawer), true);
+check("no second list competes for the scroll area", /projects\.slice\(0, 6\)\.map/.test(drawer), false);
 check("there is still a way to all projects", /openSheet\(onProjects\)/.test(drawer), true);
 
 /* ---- Opening one is a single act -------------------------------------- */
 
 check("the shell passes projects to the drawer", /projects=\{projects\}/.test(shell), true);
-check("opening a project selects it and shows it", /setActiveProjectId\(id\); setProjectsOpen\(true\)/.test(shell), true);
+/* Selecting one is the Projects screen's own job — it already carries the
+   active mark, the check and the "no project" row. */
+check("the projects sheet selects", /onSelect=\{/.test(shell), true);
 
 /* ---- What was already right, and must stay so -------------------------- */
 

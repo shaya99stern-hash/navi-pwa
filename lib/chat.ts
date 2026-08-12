@@ -36,9 +36,9 @@ export const RESPONSE_STYLES: Array<{ id: ResponseStyle; label: string }> = [
  * to the model — not a relabel of the same prompt.
  */
 export const EFFORT_LEVELS: Array<{ id: EffortLevel; label: string; detail: string; isDefault?: boolean }> = [
-  { id: "low", label: "Standard", detail: "Fastest route, direct answers" },
-  { id: "medium", label: "Extended", detail: "Balanced speed and depth", isDefault: true },
-  { id: "high", label: "Maximum", detail: "Strongest route, checks its own work" }
+  { id: "low", label: "Quick", detail: "One pass, no tools. Fastest." },
+  { id: "medium", label: "Considered", detail: "Research and repair. The default.", isDefault: true },
+  { id: "high", label: "Deep", detail: "Strongest route, checks its own work." }
 ];
 
 export const EFFORT_EXPLAINER = "Higher effort means more thorough responses, but takes longer.";

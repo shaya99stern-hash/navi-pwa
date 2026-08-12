@@ -4,13 +4,11 @@ import {
   FileText,
   FolderKanban,
   Image as ImageIcon,
-  MessageCircle,
   Pin,
   PinOff,
   Search,
   RefreshCw,
   Settings,
-  Shapes,
   SquarePen,
   Trash2,
   UserRound,
@@ -18,9 +16,8 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { NaviMode, NaviProject, StoredChat } from "@/lib/ai/types";
+import type { NaviProject, StoredChat } from "@/lib/ai/types";
 import { searchConversations } from "@/lib/memory";
-import { NAVI_MODES } from "@/lib/chat";
 import { PWA_UPDATE_STATUS_EVENT, requestPwaUpdate, type PwaUpdateStatus } from "@/lib/pwa-update";
 import { haptic } from "@/lib/ui/haptics";
 import { versionLabel } from "@/lib/version";
@@ -34,19 +31,12 @@ type Props = {
   activeId: string;
   /** Display name from the profile; falls back to the workspace label. */
   profileName?: string;
-  /** The active product mode. One brain; this chooses how it works. */
-  mode: NaviMode;
-  onMode: (mode: NaviMode) => void;
   haptics: boolean;
   onClose: () => void;
   onNew: () => void;
   onProjects: () => void;
-  /** Projects, listed in the sidebar rather than hidden behind a sheet. */
+  /** Count beside the Projects row. The list itself is a screen of its own. */
   projects: NaviProject[];
-  activeProjectId: string | null;
-  /** Open a project: makes it active and shows its conversations. */
-  onOpenProject: (id: string) => void;
-  onArtifacts: () => void;
   /* Counts sit beside the rows they describe: a drawer that says "Files" tells
      you the screen exists, one that says "Files 18" tells you it is worth
      opening. Zero is rendered as no badge rather than as "0". */
@@ -64,18 +54,9 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, mode, onMode, haptics, onClose, onNew, onProjects, projects, activeProjectId, onOpenProject, onArtifacts, fileCount, imageCount, toolsOn, onFiles, onImages, onTools, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, haptics, onClose, onNew, onProjects, projects, fileCount, imageCount, toolsOn, onFiles, onImages, onTools, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
-  /* Null until the user picks; the persisted value is the source of truth
-     everywhere else. Cleared once the prop catches up. */
-  const [optimisticMode, setOptimisticMode] = useState<NaviMode | null>(null);
-  const activeMode = optimisticMode ?? mode;
-
-  useEffect(() => {
-    if (optimisticMode && optimisticMode === mode) setOptimisticMode(null);
-  }, [mode, optimisticMode]);
-
   useEffect(() => {
     const receive = (event: Event) => {
       const detail = (event as CustomEvent<PwaUpdateStatus>).detail;
@@ -143,12 +124,6 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
     present();
   }
 
-  function showAllChats() {
-    haptic("selection", haptics);
-    setQuery("");
-    listRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
   function rename(chat: StoredChat) {
     const title = window.prompt("Rename chat", chat.title)?.trim();
     if (title) onRename(chat.id, title.slice(0, 100));
@@ -194,54 +169,31 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
         onClick={onClose}
       />
       <aside
-        className={`safe-top safe-bottom absolute inset-y-0 left-0 flex w-[85vw] max-w-[340px] flex-col bg-[var(--bg-sidebar)] shadow-menu ${dragging ? "" : "drawer-enter"}`}
+        className={`safe-top safe-bottom absolute inset-y-0 left-0 flex w-[314px] max-w-[86vw] flex-col bg-[var(--bg-sidebar)] shadow-menu ${dragging ? "" : "drawer-enter"}`}
         style={dragging ? { transform: `translateX(${((dragProgress ?? 0) - 1) * 100}%)`, transition: "none" } : undefined}
       >
-        {/* The product switch sits above everything, the way a side panel is
-            read: what am I working in, then what am I working on. It was in
-            the composer, which put a durable choice inside a per-message
-            control and meant checking the current mode required looking at
-            the send row. */}
-        <div className="shrink-0 px-3 pt-3" role="group" aria-label="Mode">
-          <div className="flex gap-1 rounded-[12px] bg-elev-1 p-1">
-            {NAVI_MODES.map((entry) => {
-              const active = entry.id === activeMode;
-              return (
-                <button
-                  key={entry.id}
-                  type="button"
-                  onClick={() => {
-                    haptic("selection", haptics);
-                    /* Switching routes the *next* message. The open
-                       conversation is untouched — clearing it would make a
-                       mode change feel like losing work. */
-                    if (entry.id !== mode) {
-                      /* Paint the new selection before persisting. The write
-                         lands asynchronously, and reopening the drawer before
-                         it settled read the old value back — so the control
-                         showed the mode the user had just left. */
-                      setOptimisticMode(entry.id);
-                      onMode(entry.id);
-                    }
-                    /* The drawer stays open. Closing it turned a segmented
-                       control into a one-way exit: you could not see the
-                       selection you had just made, and going back to check
-                       meant reopening the panel you were thrown out of. */
-                  }}
-                  aria-pressed={active}
-                  className={`min-h-11 flex-1 rounded-[9px] px-2 text-[0.8125rem]/5 font-semibold transition-colors ${active ? "bg-elev-2 text-primary" : "text-tertiary active:bg-elev-2/60"}`}
-                >
-                  {entry.label}
-                </button>
-              );
-            })}
-          </div>
+        {/* The panel names itself and offers the way out, then the search, then
+            navigation. The product switch that used to sit here has moved to
+            the chevron beside the product name in the header — which is what a
+            chevron beside a product name is for, and it stops a durable choice
+            from occupying the top of a panel that answers "what do I have". */}
+        <div className="flex min-h-[52px] shrink-0 items-center gap-2 px-3.5 pt-1">
+          <span className="navi-orb h-[26px] w-[26px] shrink-0 rounded-full" aria-hidden="true" />
+          <span className="text-[0.9375rem]/[1.125rem] font-semibold tracking-[-0.01em] text-primary">NaviOS</span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close sidebar"
+            className="ml-auto flex h-[38px] w-[38px] items-center justify-center rounded-full text-tertiary active:bg-elev-2"
+          >
+            <X size={18} strokeWidth={2} />
+          </button>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 px-4 pb-1 pt-3">
-          <label className="flex min-h-10 flex-1 items-center gap-2 rounded-full bg-elev-2 px-3.5">
-            <Search size={16} className="shrink-0 text-tertiary" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="min-w-0 flex-1 bg-transparent text-[0.9375rem]/5 text-primary outline-none placeholder:text-tertiary" />
+        <div className="flex shrink-0 items-center gap-2 px-3.5 pb-1 pt-1.5">
+          <label className="flex min-h-10 flex-1 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-surface px-3">
+            <Search size={16} className="shrink-0 text-disabled" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search every message" className="min-w-0 flex-1 bg-transparent text-[0.875rem]/5 text-primary outline-none placeholder:text-disabled" />
             {query ? (
               <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="flex h-6 w-6 items-center justify-center rounded-full bg-elev-3 text-secondary">
                 <X size={13} />
@@ -255,10 +207,8 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
             <SquarePen size={19} strokeWidth={1.8} className="text-secondary" />
             New chat
           </button>
-          <button type="button" onClick={showAllChats} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <MessageCircle size={19} strokeWidth={1.8} className="text-secondary" />
-            Chats
-          </button>
+          {/* No "Chats" row: the recents list is directly below it, so the row
+              navigated to what was already on screen. */}
           {/* Projects in both modes.
               The drawer used to swap this row out for Developer and
               "Connectors and keys" whenever Code mode was on — configuration
@@ -293,67 +243,26 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
             Tools
             {toolsOn ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-success" aria-label="Tools enabled" /> : null}
           </button>
-          <button type="button" onClick={() => openSheet(onArtifacts)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <Shapes size={19} strokeWidth={1.8} className="text-secondary" />
-            Artifacts
-          </button>
+          {/* Artifacts reached from the Tools screen, which is where the rest
+              of what Navi Soul can produce is listed. */}
         </nav>
 
+        <div className="mx-1.5 my-3 h-px shrink-0 bg-[var(--border-subtle)]" aria-hidden="true" />
+
         <div ref={listRef} className="scroll-area min-h-0 flex-1 overflow-y-auto px-2 pb-5 pt-3">
-          {/* Projects, in the sidebar where they belong.
-              They existed only behind a sheet, so a project was something you
-              made once and then never saw again — which is most of why the one
-              project in the exported data has no conversations in it. A project
-              you cannot see is a project you do not file anything into.
-
-              Hidden while searching: results are ranked across everything, and
-              a fixed section above them would push the matches off screen. */}
-          {!normalized && projects.length ? (
-            <>
-              <div className="flex items-center justify-between px-3 pb-1">
-                <span className="text-[0.75rem]/4 font-semibold text-tertiary">Projects</span>
-                <button
-                  type="button"
-                  onClick={() => openSheet(onProjects)}
-                  className="min-h-8 rounded-full px-2 text-[0.75rem]/4 font-semibold text-secondary active:bg-elev-2"
-                >
-                  All
-                </button>
-              </div>
-              {projects.slice(0, 6).map((project) => {
-                const count = chats.filter((chat) => chat.projectId === project.id).length;
-                return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    onClick={() => { haptic("selection", haptics); onClose(); onOpenProject(project.id); }}
-                    className={`flex min-h-[44px] w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left ${activeProjectId === project.id ? "bg-elev-2" : "active:bg-elev-2"}`}
-                  >
-                    <FolderKanban size={17} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[0.9375rem]/5 font-normal text-primary">{project.name}</span>
-                      {/* The count is what makes filing feel worthwhile, and
-                          what makes an empty project obvious. */}
-                      <span className="block text-[0.75rem]/4 font-normal text-tertiary">
-                        {count === 0 ? "No conversations yet" : `${count} conversation${count === 1 ? "" : "s"}`}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-              <div className="h-3" aria-hidden="true" />
-            </>
-          ) : null}
-
+          {/* Projects have their own row in the navigation above, so the
+              scroll area carries conversations and nothing else. Pinned keeps
+              its heading only while something is pinned — an always-present
+              empty section would be a second heading over one list. */}
           {pinned.length ? (
             <>
-              <div className="px-3 pb-1 text-[0.75rem]/4 font-semibold text-tertiary">Pinned</div>
+              <div className="mb-2 ml-3 text-[0.6875rem]/[0.6875rem] font-semibold uppercase tracking-[0.1em] text-disabled">Pinned</div>
               {pinned.map(chatRow)}
             </>
           ) : null}
           {recents.length ? (
             <>
-              <div className={`px-3 pb-1 text-[0.75rem]/4 font-semibold text-tertiary ${pinned.length ? "pt-4" : ""}`}>Recents</div>
+              <div className={`mb-2 ml-3 text-[0.6875rem]/[0.6875rem] font-semibold uppercase tracking-[0.1em] text-disabled ${pinned.length ? "mt-4" : ""}`}>Recents</div>
               {recents.map(chatRow)}
             </>
           ) : null}

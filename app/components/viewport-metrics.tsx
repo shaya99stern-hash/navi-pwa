@@ -39,7 +39,19 @@ export function ViewportMetrics() {
         const hasTextInput = activeElement instanceof HTMLInputElement
           || activeElement instanceof HTMLTextAreaElement
           || activeElement instanceof HTMLSelectElement
-          || (activeElement instanceof HTMLElement && activeElement.isContentEditable);
+          || (activeElement instanceof HTMLElement && activeElement.isContentEditable)
+          /* Focus inside a cross-origin frame reports the frame, not the field.
+             An artifact is a sandboxed iframe, so a form inside one raised the
+             keyboard while this test said no text input was focused,
+             `--navi-keyboard-inset` stayed at zero, and the field the user was
+             typing into sat behind the keyboard.
+
+             The frame's contents are unreadable from here by design, so the
+             frame counts as a possible text input and the inset measurement
+             below decides. That measurement is the reliable half: a viewport
+             that has shrunk by more than 80px has a keyboard in it, whoever
+             owns the field. */
+          || activeElement instanceof HTMLIFrameElement;
         const visibleBottom = visibleHeight + offsetTop;
 
         if (!hasTextInput && visibleBottom > stableLayoutHeight - 48) {

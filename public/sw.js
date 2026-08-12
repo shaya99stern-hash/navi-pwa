@@ -17,6 +17,16 @@ const SHELL = [
   "/pwa-icon-maskable-v5.png"
 ];
 
+/* The manifest launches the installed app at `/new?source=pwa`, and cache keys
+   include the query string — so storing only "/" meant the first offline cold
+   launch after a fresh install depended on some earlier navigation having
+   happened to store that exact URL. It usually had, which is worse than a clean
+   failure: the bug only ever appears on a brand-new install, and nowhere else.
+
+   Both are stored, from one response. `/new` mints a chat id on the client, so
+   the two documents are the same shell. */
+const START_URL = "/new?source=pwa";
+
 /**
  * Fetch the app shell and keep it for offline boots. This cannot wait for a
  * navigation to go through the worker: the worker does not control the first
@@ -30,7 +40,9 @@ async function cacheAppShell() {
     // on a login page they cannot complete while offline.
     if (!response.ok || response.redirected) return;
     const cache = await caches.open(SHELL_CACHE);
-    await cache.put("/", response);
+    // One body, two keys: a Response may only be read once.
+    await cache.put("/", response.clone());
+    await cache.put(START_URL, response);
   } catch {
     // Offline at install time; the next navigation refreshes it.
   }
@@ -126,9 +138,13 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(async () =>
-          // Prefer this exact route, then any cached route, so a deep link
-          // opened offline still lands in the app rather than the placeholder.
+          // Prefer this exact route, then the same path under any query, then
+          // any cached route, so a deep link opened offline still lands in the
+          // app rather than the placeholder. The `ignoreSearch` pass is what
+          // makes `/new?source=pwa` and a bare `/new` the same document: the
+          // query is a launch annotation, not a different page.
           (await caches.match(request, { cacheName: SHELL_CACHE }))
+          ?? (await caches.match(request, { cacheName: SHELL_CACHE, ignoreSearch: true }))
           ?? (await caches.match("/", { cacheName: SHELL_CACHE }))
           ?? (await caches.match(OFFLINE_URL))
         )
