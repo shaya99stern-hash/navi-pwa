@@ -37,6 +37,16 @@ const ALIAS_FENCES = [
   "```artifact"
 ];
 
+/**
+ * Any fence whose label mentions an artifact, not just the enumerated ones.
+ *
+ * A real reply arrived labelled `naviopi-artifact`, which no list would have
+ * contained, and it streamed to the reader as raw JSON. The list above stays
+ * because it also covers labels that do *not* contain the word — `navi-html`,
+ * `react-component` — but the general case is now the pattern.
+ */
+const FENCE_PATTERN = /```[a-z0-9_-]*artifact[a-z0-9_-]*/i;
+
 /** The earliest alias fence in the buffer, and which one it was. */
 function findFence(buffer: string): { index: number; fence: string } | null {
   let best: { index: number; fence: string } | null = null;
@@ -47,11 +57,18 @@ function findFence(buffer: string): { index: number; fence: string } | null {
       best = { index, fence };
     }
   }
+  const loose = FENCE_PATTERN.exec(buffer);
+  if (loose && (!best || loose.index < best.index || (loose.index === best.index && loose[0].length > best.fence.length))) {
+    best = { index: loose.index, fence: loose[0] };
+  }
   return best;
 }
 
-/** The longest alias, for deciding how much tail to hold across deltas. */
-const MAX_FENCE_LENGTH = Math.max(...ALIAS_FENCES.map((fence) => fence.length));
+/* The longest alias, for deciding how much tail to hold across deltas. The
+   pattern can match longer labels than any listed alias, so the bound is
+   generous rather than exact — holding a few extra characters costs a frame of
+   latency, while holding too few lets a split fence through unrecognised. */
+const MAX_FENCE_LENGTH = Math.max(...ALIAS_FENCES.map((fence) => fence.length)) + 12;
 
 export type ArtifactGate = {
   /** Text from this delta that is safe to show now. May be empty. */

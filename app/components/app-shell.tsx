@@ -240,6 +240,12 @@ export function AppShell({
      signed in has told the app who they are once already; making them type it
      again to be greeted by name is asking twice for the same thing. */
   const [accountName, setAccountName] = useState("");
+  /* The signed-in user's id, watched rather than merely read: a fresh install
+     opens signed-out, so the pull that matters is the one after sign-in. */
+  const [accountId, setAccountId] = useState<string | null>(null);
+  /* Whether this device arrived with nothing of its own. A ref because it
+     gates a one-time restore and must not itself cause a render. */
+  const freshDevice = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(initialLayer === "history");
   const [projectsOpen, setProjectsOpen] = useState(initialLayer === "projects");
   const [connectorsOpen, setConnectorsOpen] = useState(initialLayer === "connectors");
@@ -447,17 +453,19 @@ export function AppShell({
   const toolsOn = preferences.tools.web || preferences.tools.code || preferences.tools.artifacts;
 
   useEffect(() => {
-    if (preferences.profile.displayName) return;
-    type ClerkGlobal = { loaded?: boolean; user?: { firstName?: string | null } | null };
+    type ClerkGlobal = { loaded?: boolean; user?: { id?: string; firstName?: string | null } | null };
     const read = () => {
       const clerk = (window as unknown as { Clerk?: ClerkGlobal }).Clerk;
       if (!clerk?.loaded) return false;
-      setAccountName(clerk.user?.firstName?.trim() ?? "");
+      if (!preferences.profile.displayName) setAccountName(clerk.user?.firstName?.trim() ?? "");
+      setAccountId(clerk.user?.id ?? null);
       return true;
     };
     if (read()) return;
     /* Clerk loads asynchronously and the launch screen is the first thing
-       drawn, so a single read almost always runs too early. */
+       drawn, so a single read almost always runs too early. The poll keeps
+       going until it answers, which is also when a sign-in becomes visible
+       here without a reload. */
     const poll = window.setInterval(() => { if (read()) window.clearInterval(poll); }, 300);
     const stop = window.setTimeout(() => window.clearInterval(poll), 5_000);
     return () => { window.clearInterval(poll); window.clearTimeout(stop); };
@@ -522,6 +530,7 @@ export function AppShell({
         setProjects(state.projects);
         setActiveProjectId(state.activeProjectId);
         setPreferences(state.preferences);
+        freshDevice.current = state.fresh;
         setDraft(initialDraft ?? state.draft);
         const requestedChat = initialChatId
           ? state.chats.find((chat) => chat.id === initialChatId)
@@ -547,8 +556,31 @@ export function AppShell({
       .finally(() => {
         if (!cancelled) setHydrated(true);
       });
-    /* The cloud mirror arrives after local state so the UI never waits on the
-       network. Newer copy wins per chat; local-only chats always survive. */
+    return () => {
+      cancelled = true;
+    };
+  }, [initialChatId, initialDraft, setMessages]);
+
+  /**
+   * Bring the cloud copy back down.
+   *
+   * Runs after local state so the UI never waits on the network, and again
+   * whenever the signed-in identity changes — which is the reinstall case the
+   * one-shot version missed. A fresh install opens signed-out, the first pull
+   * returns nothing because there is nobody to pull for, and if that were the
+   * only attempt the user would sign in to an empty app and conclude their
+   * history was gone.
+   *
+   * Chats merge: newer copy wins per id, and a chat only one side knows about
+   * always survives. Preferences do not merge — there is no per-field
+   * timestamp to merge on — so they are restored only onto a device that had
+   * nothing of its own, where there is nothing to lose. That is exactly the
+   * reinstall, and it is what carries the profile, the standing instructions
+   * and the tool policy back.
+   */
+  useEffect(() => {
+    if (!hydrated) return;
+    let cancelled = false;
     void pullCloudMemory().then((cloud) => {
       if (cancelled || !cloud) return;
       if (cloud.chats.length) {
@@ -558,11 +590,19 @@ export function AppShell({
           return merged;
         });
       }
+      if (cloud.preferences && freshDevice.current) {
+        /* Once only. A second pull must not reapply the cloud copy over
+           changes the user has made since the first one landed. */
+        freshDevice.current = false;
+        setPreferences((current) => {
+          const restored = { ...current, ...cloud.preferences };
+          void setLocalValue("preferences", restored);
+          return restored;
+        });
+      }
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [initialChatId, initialDraft, setMessages]);
+    return () => { cancelled = true; };
+  }, [hydrated, accountId]);
 
   /* Sync mirrors history only when the user keeps history at all, and never
      from an incognito conversation. */

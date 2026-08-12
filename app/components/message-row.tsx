@@ -148,7 +148,7 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
       className={`navi-message-enter flex ${streaming || recent ? "" : "navi-message-row"} ${user ? "justify-end" : "justify-start"}`}
     >
       {user ? (
-        <div className="max-w-[85%] rounded-[18px] bg-[var(--bg-bubble-user)] px-4 py-2.5 text-[1rem]/[1.5rem] font-normal text-primary">
+        <div className="max-w-[85%] rounded-[20px] rounded-br-[6px] bg-[var(--bg-bubble-user)] px-4 py-2.5 text-[1rem]/[1.5rem] font-normal text-primary">
           {files.length ? <div className="mb-2 flex flex-wrap gap-1.5">{files.map((file, index) => <span key={`${file.filename}-${index}`} className="inline-flex min-h-7 items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-elev-3 px-2 text-[0.6875rem]/[0.875rem] font-semibold text-secondary"><FileText size={13} />{file.filename ?? file.mediaType ?? "Attachment"}</span>)}</div> : null}
           <div className="whitespace-pre-wrap">{text}</div>
         </div>
@@ -180,9 +180,24 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
             haptics={haptics}
           />
           <ExecutionTrace runs={executionRuns(message)} haptics={haptics} />
-          <div className={`navi-markdown text-[1rem]/[1.625rem] font-normal ${chatFont === "serif" ? "navi-chat-serif" : ""} ${streaming ? "streaming-cursor" : ""}`}>
-            {text ? <MarkdownRenderer text={text} theme={theme} haptics={haptics} capabilities={capabilities} /> : null}
-          </div>
+          {/* The reply sits in a bubble of its own, facing the user's.
+              A thread of bubbles on one side and bare prose on the other reads
+              as a document with your own remarks pasted into it; two bubbles
+              read as a conversation. The squared corner is the mirror of the
+              user's, so the two lean toward each other.
+
+              `w-fit` so a short answer hugs its text the way a sent message
+              does, `max-w-full` so a long one — or a code block, or an
+              artifact — still gets the whole measure. The cards above (plan,
+              reasoning, tools) stay outside it: they are apparatus, not
+              speech. */}
+          {text || streaming ? (
+            <div className="w-fit max-w-full rounded-[20px] rounded-bl-[6px] border border-[var(--border-subtle)] bg-surface px-4 py-3">
+              <div className={`navi-markdown text-[1rem]/[1.625rem] font-normal ${chatFont === "serif" ? "navi-chat-serif" : ""} ${streaming ? "streaming-cursor" : ""}`}>
+                {text ? <MarkdownRenderer text={text} theme={theme} haptics={haptics} capabilities={capabilities} /> : null}
+              </div>
+            </div>
+          ) : null}
           {!streaming && text ? (
             <>
               <div className="mt-1.5 flex min-h-9 items-center gap-1 opacity-100 transition-opacity duration-[120ms] md:opacity-0 md:group-hover:opacity-100">

@@ -20,6 +20,18 @@ export type ProviderAdapter = {
   baseURL: string;
   /** Listing models: the cheapest call that proves the key works. */
   modelsUrl: string;
+  /**
+   * How `modelsUrl` wants the credential.
+   *
+   * Almost every provider here speaks OpenAI's protocol end to end and takes a
+   * bearer token. Gemini is the exception: its chat endpoint is
+   * OpenAI-compatible but its model listing is not — there is no
+   * `/v1beta/openai/models`, and asking for one answers 404. So the listing
+   * uses Google's own endpoint and its own header, which is why this is a
+   * property of the adapter rather than an `if` at each call site. It had been
+   * written out three times, and the header was wrong in one of them.
+   */
+  modelsAuth?: "bearer" | "google";
   /** Environment variable names this key has been called, in priority order. */
   envKeys: string[];
   /**
@@ -83,7 +95,13 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     id: "gemini",
     label: "Gemini",
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    modelsUrl: "https://generativelanguage.googleapis.com/v1beta/openai/models",
+    /* Google's own path, not the OpenAI-compatible one. The compatibility
+       shim covers chat completions and stops there, so the `openai/models`
+       URL this used to hold answered 404 for every key ever tried — which
+       Connectors reported, accurately and uselessly, as "The service answered
+       404" against a key that was perfectly good. */
+    modelsUrl: "https://generativelanguage.googleapis.com/v1beta/models",
+    modelsAuth: "google",
     envKeys: ["GEMINI_API_KEY", "GEMINI_KEY", "GOOGLE_GEMINI_API_KEY", "GOOGLE_AI_API_KEY", "GOOGLE_API_KEY"],
     envHint: "GEMINI",
     keyPrefixes: ["AIza"],
@@ -321,4 +339,17 @@ export function requestTokenCeiling(adapter: ProviderAdapter): number {
   const override = Number.parseInt((process.env[`NAVI_${adapter.id.toUpperCase()}_TOKEN_LIMIT`] ?? "").trim(), 10);
   const configured = Number.isFinite(override) && override > 0 ? override : adapter.requestTokenLimit;
   return Math.min(configured ?? adapter.contextWindow, adapter.contextWindow);
+}
+
+/**
+ * The prepared model-listing request for a provider.
+ *
+ * One place that knows how each provider wants to be asked. The credential is
+ * carried in a header rather than a query string for every provider including
+ * Gemini, so a key cannot end up in a proxy log or an error message that
+ * quotes the URL.
+ */
+export function modelsProbe(adapter: ProviderAdapter, key: string): { url: string; headers: Record<string, string> } {
+  if (adapter.modelsAuth === "google") return { url: adapter.modelsUrl, headers: { "x-goog-api-key": key } };
+  return { url: adapter.modelsUrl, headers: { Authorization: `Bearer ${key}` } };
 }

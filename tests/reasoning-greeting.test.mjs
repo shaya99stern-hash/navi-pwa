@@ -87,8 +87,10 @@ check("the shell passes the display name", shell.includes("preferences.profile.d
 check("a signed-in name is the fallback", /displayName \|\| accountName \|\| undefined/.test(shell), true);
 check("the profile still takes precedence", shell.indexOf("preferences.profile.displayName ||") < shell.indexOf("accountName || undefined"), true);
 /* Clerk loads asynchronously and the launch screen is the first thing drawn,
-   so a single read runs too early to see a user. */
-check("it waits for Clerk to load", /if \(read\(\)\) return;[\s\S]{0,200}setInterval/.test(shell), true);
+   so a single read runs too early to see a user. The gap is generous because
+   what matters is that the early return is followed by a poll, not how much
+   comment sits between the two. */
+check("it waits for Clerk to load", /if \(read\(\)\) return;[\s\S]{0,600}setInterval/.test(shell), true);
 /* A name turns the line into an address, so the bare time-of-day form is the
    only one that reads correctly beside it. The name goes through `presentName`
    because it falls back to the account handle, which is whatever its owner

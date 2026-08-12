@@ -16,6 +16,16 @@ export type LocalState = {
   draft: string;
   projects: NaviProject[];
   activeProjectId: string | null;
+  /**
+   * Nothing of this user's was on the device.
+   *
+   * True on a first run and, more importantly, after a reinstall — which is
+   * the case that matters, because it is the only time the cloud copy of the
+   * preferences should be allowed to win. On a device that already has state,
+   * a pull arriving after the user has changed something would quietly undo
+   * that change, so the restore is deliberately limited to an empty device.
+   */
+  fresh: boolean;
 };
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -373,7 +383,9 @@ export async function loadLocalState(): Promise<LocalState> {
       preferences: mergePreferences(migrated.preferences),
       draft: storedDraft ?? "",
       projects: normalizeProjects(storedProjects ?? migrated.projects),
-      activeProjectId: storedActiveProjectId ?? migrated.activeProjectId ?? null
+      activeProjectId: storedActiveProjectId ?? migrated.activeProjectId ?? null,
+      // Legacy localStorage counts as state; only a device with neither is new.
+      fresh: !migrated.chats && !migrated.preferences
     };
   }
 
@@ -394,6 +406,7 @@ export async function loadLocalState(): Promise<LocalState> {
     preferences: normalizedPreferences,
     draft: storedDraft ?? "",
     projects,
-    activeProjectId
+    activeProjectId,
+    fresh: !storedChats && !storedPreferences
   };
 }

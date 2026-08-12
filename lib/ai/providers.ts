@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { PROVIDER_IDS, PROVIDERS, providerApiKey, type ProviderAdapter } from "./provider-registry";
+import { PROVIDER_IDS, PROVIDERS, providerApiKey, type ProviderAdapter, modelsProbe } from "./provider-registry";
 import type { ModelPreset, ProviderName, ProviderRoute, ToolCallingSupport, ToolPolicy } from "./types";
 
 export type ProviderAvailability = Record<ProviderName, boolean>;
@@ -51,7 +51,7 @@ export function providerProbes(): Array<{ provider: ProviderName; label: string;
     const adapter = PROVIDERS[id];
     const key = providerApiKey(adapter);
     if (!key) continue;
-    probes.push({ provider: id, label: adapter.label, url: adapter.modelsUrl, headers: { Authorization: `Bearer ${key}` } });
+    probes.push({ provider: id, label: adapter.label, ...modelsProbe(adapter, key) });
   }
   return probes;
 }

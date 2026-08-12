@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authorizeApiMutation } from "@/lib/auth/api";
-import { PROVIDERS, providerApiKey } from "@/lib/ai/provider-registry";
+import { PROVIDERS, providerApiKey, modelsProbe } from "@/lib/ai/provider-registry";
 import { findProvider, isEntryConfigured } from "@/lib/ai/provider-catalog";
 import type { ProviderName } from "@/lib/ai/types";
 
@@ -36,12 +36,10 @@ function probeFor(id: string): Probe | null {
   if (adapter) {
     const key = providerApiKey(PROVIDERS[adapter]);
     if (!key) return null;
-    /* Gemini takes its key in the query string rather than a header, which is
-       the kind of per-provider detail that makes a generic probe wrong. */
-    if (adapter === "gemini") {
-      return { url: `${PROVIDERS.gemini.modelsUrl}?key=${encodeURIComponent(key)}`, headers: {} };
-    }
-    return { url: PROVIDERS[adapter].modelsUrl, headers: { Authorization: `Bearer ${key}` } };
+    /* How each provider wants to be asked lives in the registry. It used to be
+       spelled out here, and separately in two other files, which is how one of
+       them ended up querying a Gemini URL that does not exist. */
+    return modelsProbe(PROVIDERS[adapter], key);
   }
 
   if (id === "tavily") {
