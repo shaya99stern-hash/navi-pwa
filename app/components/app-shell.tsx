@@ -59,6 +59,7 @@ import { MessageRow } from "./message-row";
 import { ArtifactsSheet } from "./artifacts-sheet";
 import { ChatMenuSheet } from "./chat-menu-sheet";
 import { EffortSheet } from "./effort-sheet";
+import { ModeSheet } from "./mode-sheet";
 import { ProjectsSheet } from "./projects-sheet";
 import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { SettingsSheet } from "./settings-sheet";
@@ -202,6 +203,7 @@ export function AppShell({
     initialSheet === "customize" ? "skills" : undefined
   );
   const [effortSheetOpen, setEffortSheetOpen] = useState(false);
+  const [modeSheetOpen, setModeSheetOpen] = useState(false);
   const [chatMenuOpen, setChatMenuOpen] = useState(false);
   /* Incognito: this conversation is never written to storage and never
      recalled by memory. It exists only while the screen is open. */
@@ -267,6 +269,7 @@ export function AppShell({
      back still closes them, which is the half that was actually missing. */
   useOverlayRoute({ open: chatMenuOpen, onClose: () => setChatMenuOpen(false), restore: restorePath });
   useOverlayRoute({ open: effortSheetOpen, onClose: () => setEffortSheetOpen(false), restore: restorePath });
+  useOverlayRoute({ open: modeSheetOpen, onClose: () => setModeSheetOpen(false), restore: restorePath });
   useOverlayRoute({ open: contextMessage !== null, onClose: () => setContextMessage(null), restore: restorePath });
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
@@ -1165,20 +1168,12 @@ export function AppShell({
         dragProgress={edgeSwipe.progress}
         chats={chats}
         activeId={activeId}
-        mode={preferences.mode}
-        onMode={(mode) => updatePreferences({ ...preferences, mode })}
         profileName={preferences.profile.displayName || preferences.profile.fullName}
         haptics={preferences.haptics}
         onClose={() => setHistoryOpen(false)}
         onNew={newChat}
         onProjects={() => setProjectsOpen(true)}
         projects={projects}
-        activeProjectId={activeProjectId}
-        /* Opening a project makes it active for the next message and shows it
-           in the sheet, so tapping one from the sidebar is a single act rather
-           than "find it, then remember to switch to it". */
-        onOpenProject={(id) => { setActiveProjectId(id); setProjectsOpen(true); }}
-        onArtifacts={() => setArtifactsOpen(true)}
         fileCount={fileCount}
         imageCount={imageCount}
         toolsOn={toolsOn}
@@ -1214,17 +1209,20 @@ export function AppShell({
             left edge anyway, so the title now simply begins where the eye
             already is, and the truncation has the whole middle to work with
             instead of `calc(100% - 184px)`. */}
+        {/* The chevron sits beside the product name, so it switches the
+            product. That is what it looked like it did all along, and it gives
+            the mode a home now that the drawer is navigation rather than
+            configuration. On a library screen it goes back to the chat. */}
         <button
           type="button"
           onClick={() => {
             haptic("selection", preferences.haptics);
             if (view !== "chat") setView("chat");
-            else if (messages.length > 0 && activeChat) setChatMenuOpen(true);
-            else setSettingsOpen(true);
+            else setModeSheetOpen(true);
           }}
           className="flex min-w-0 flex-1 flex-col items-start rounded-lg pl-1 text-left active:bg-elev-2"
-          aria-label={messages.length > 0 && activeChat ? "Chat actions" : "Settings"}
-          aria-haspopup="menu"
+          aria-label={view === "chat" ? "Switch product" : "Back to chat"}
+          aria-haspopup={view === "chat" ? "menu" : undefined}
         >
           <span className="flex max-w-full items-center gap-1.5">
             <span className="truncate text-[0.9375rem]/[1.125rem] font-semibold tracking-[-0.01em] text-primary">
@@ -1336,15 +1334,7 @@ export function AppShell({
             </div>
           </div>
         ) : messages.length === 0 ? (
-          <LaunchSurface
-            online={online}
-            name={preferences.profile.displayName || accountName || undefined}
-            onSuggestion={(prompt) => {
-              haptic("selection", preferences.haptics);
-              setDraft(prompt);
-              composerRef.current?.focus();
-            }}
-          >
+          <LaunchSurface online={online} name={preferences.profile.displayName || accountName || undefined}>
             <ProviderSetupNotice haptics={preferences.haptics} />
           </LaunchSurface>
         ) : (
@@ -1472,6 +1462,13 @@ export function AppShell({
         onOpenConnectors={() => setConnectorsOpen(true)}
         onClearData={() => void clearData()}
         onExport={exportData}
+      />
+
+      <ModeSheet
+        open={modeSheetOpen}
+        preferences={preferences}
+        onClose={() => setModeSheetOpen(false)}
+        onPreferences={updatePreferences}
       />
 
       <EffortSheet

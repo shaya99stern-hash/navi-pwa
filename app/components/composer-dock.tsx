@@ -851,35 +851,10 @@ export function ComposerDock({
             ) : null}
           </div>
 
-          {/* Starter chips on a fresh chat only; they seed the draft and hand
-              focus back so the keyboard stays up. */}
-          {!hasMessages && !value.trim() && !attachmentCount && !generating ? (
-            <div className="scrollbar-none -mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
-              {/* "Visualize" seeds a phrasing the server's image-intent matcher
-                  already recognises, so the chip lands in the real image
-                  pipeline rather than a text description of a picture. */}
-              {[
-                ["Write", "Write a "],
-                ["Learn", "Explain how "],
-                ["Visualize", "Visualize "],
-                ["Plan", "Help me plan "],
-                ["Code", "Write code that "]
-              ].map(([label, starter]) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => {
-                    haptic("selection", haptics);
-                    onChange(starter);
-                    textareaRef.current?.focus();
-                  }}
-                  className="h-9 shrink-0 rounded-full border border-[var(--border-subtle)] bg-elev-1 px-4 text-[0.8125rem]/5 font-medium text-secondary active:bg-elev-2"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          {/* No starter chips. A row of five verbs under the field is the app
+              guessing at the task, and it guessed in front of the one control
+              that already accepts any task at all. The prototype's composer is
+              three things — attach, type, speak — and nothing else. */}
         </div>
       </div>
 
