@@ -22,6 +22,18 @@ type Props = {
   streaming: boolean;
   /** Only the final response carries the brand mark under its action bar. */
   last: boolean;
+  /**
+   * Near the bottom of the thread, so kept out of `content-visibility`.
+   *
+   * `contain-intrinsic-size: auto 220px` remembers a row's height once it has
+   * been measured, but a row that has never been on screen only has the 220px
+   * guess. Scrolling up through a run of those makes WebKit correct its
+   * estimate mid-gesture, and the thread shifts under a moving finger — the
+   * one scroll artefact that reads as the app being broken rather than slow.
+   * The last stretch of the thread is what actually gets scrolled, so it opts
+   * out and pays full layout for a bounded number of rows.
+   */
+  recent: boolean;
   theme: "dark" | "light";
   chatFont: "serif" | "sans";
   haptics: boolean;
@@ -49,7 +61,7 @@ type Props = {
  * construction — `onRetry` is only present on the last row — and a shallow
  * compare would find them different every time and memoise nothing at all.
  */
-function MessageRowBase({ message, streaming, last, theme, chatFont, haptics, voiceLanguage, rating, onRate, onRetry, onLongPress, capabilities }: Props) {
+function MessageRowBase({ message, streaming, last, recent, theme, chatFont, haptics, voiceLanguage, rating, onRate, onRetry, onLongPress, capabilities }: Props) {
   const text = messageText(message);
   const files = messageFiles(message);
   const user = message.role === "user";
@@ -130,9 +142,10 @@ function MessageRowBase({ message, streaming, last, theme, chatFont, haptics, vo
       /* `navi-message-row` lets the browser skip rendering rows that are far
          off screen. Deliberately not applied while streaming: the row is
          growing a character at a time, and giving a changing element a guessed
-         intrinsic height is what makes scroll anchoring jump. The finished
-         rows above are the ones worth skipping anyway. */
-      className={`navi-message-enter flex ${streaming ? "" : "navi-message-row"} ${user ? "justify-end" : "justify-start"}`}
+         intrinsic height is what makes scroll anchoring jump. Nor near the
+         bottom, where scrolling actually happens — see `recent`. The finished
+         rows further up are the ones worth skipping anyway. */
+      className={`navi-message-enter flex ${streaming || recent ? "" : "navi-message-row"} ${user ? "justify-end" : "justify-start"}`}
     >
       {user ? (
         <div className="max-w-[85%] rounded-[18px] bg-[var(--bg-bubble-user)] px-4 py-2.5 text-[1rem]/[1.5rem] font-normal text-primary">
@@ -218,6 +231,10 @@ export const MessageRow = memo(MessageRowBase, (previous, next) => {
   if (previous.streaming || next.streaming) return false;
   return previous.message === next.message
     && previous.last === next.last
+    /* Rows fall out of the recent window as the thread grows, and that changes
+       the class they render — a comparator that ignored it would leave the
+       containment off for the whole history. */
+    && previous.recent === next.recent
     && previous.theme === next.theme
     && previous.chatFont === next.chatFont
     && previous.haptics === next.haptics

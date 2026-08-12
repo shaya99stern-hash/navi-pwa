@@ -546,6 +546,16 @@ export function SettingsSheet({
     return () => window.removeEventListener(PWA_UPDATE_STATUS_EVENT, receive);
   }, []);
 
+  /* Read after mount: `display-mode` is a client fact, and consulting it while
+     rendering on the server would hydrate against the wrong answer. */
+  const [standalone, setStandalone] = useState(false);
+  useEffect(() => {
+    setStandalone(
+      window.matchMedia("(display-mode: standalone)").matches
+      || Boolean((navigator as Navigator & { standalone?: boolean }).standalone)
+    );
+  }, []);
+
   /* Clerk exposes the signed-in user on `window`, but it loads asynchronously
      and this sheet can open first. Reading once left the row saying "Local
      workspace" on a deployment that had an account perfectly well — the state
@@ -757,6 +767,11 @@ export function SettingsSheet({
             <Group>
               <Row
                 label="Appearance"
+                /* Installed, changing this reloads: iOS reads the status-bar
+                   style once at launch, so the glyphs keep the old theme's
+                   colour until the app relaunches. Saying so turns an
+                   unexplained flash into an expected one. */
+                description={standalone ? "Relaunches to re-tint the status bar" : undefined}
                 control={
                   <IconSegmented
                     label="Appearance"

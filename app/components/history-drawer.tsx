@@ -178,7 +178,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
             chevron beside a product name is for, and it stops a durable choice
             from occupying the top of a panel that answers "what do I have". */}
         <div className="flex min-h-[52px] shrink-0 items-center gap-2 px-3.5 pt-1">
-          <span className="brand-orb h-[26px] w-[26px] shrink-0 rounded-full" aria-hidden="true" />
+          <span className="navi-orb h-[26px] w-[26px] shrink-0 rounded-full" aria-hidden="true" />
           <span className="text-[0.9375rem]/[1.125rem] font-semibold tracking-[-0.01em] text-primary">NaviOS</span>
           <button
             type="button"

@@ -77,8 +77,27 @@ export default function PWARegister() {
       if (!waiting) return false;
       applyingUpdate = true;
       emitPwaUpdateStatus({ phase: "downloading", message: "Installing the ready NaviOS update…" });
+
+      /* The new worker takes over and fires `controllerchange`, usually in well
+         under a second. Hard-waiting 4s regardless made every manual update
+         feel like the slowest possible one — the progress line sat at
+         "Installing…" long after the work was done.
+
+         The timer stays, demoted to a fallback: `controllerchange` does not
+         fire if the worker fails to activate, and without it the app would sit
+         on that line for good. Whichever arrives first wins, once. */
+      let restarted = false;
+      const restartOnce = () => {
+        if (restarted) return;
+        restarted = true;
+        navigator.serviceWorker.removeEventListener("controllerchange", restartOnce);
+        window.clearTimeout(fallback);
+        void restartWithFreshShell();
+      };
+      const fallback = window.setTimeout(restartOnce, 4_000);
+      navigator.serviceWorker.addEventListener("controllerchange", restartOnce);
+
       waiting.postMessage({ type: "SKIP_WAITING" });
-      window.setTimeout(() => void restartWithFreshShell(), 4_000);
       return true;
     };
 

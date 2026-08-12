@@ -293,7 +293,7 @@ textarea {
 }
 
 :root[data-keyboard-open="true"] [data-scroll-region="true"] {
-  scroll-padding-bottom: calc(var(--navi-composer-min-height) + 24px);
+  scroll-padding-bottom: calc(var(--navi-composer-height, var(--navi-composer-min-height)) + 24px);
   scroll-behavior: auto;
 }
 
@@ -339,6 +339,18 @@ textarea {
   background:
     radial-gradient(circle at 50% 42%, var(--brand-glow), transparent 64%),
     var(--bg-elev-1);
+}
+
+/* The small identity dot beside a name — in the drawer's brand row and on the
+   profile rows. Unlike `.brand-orb` it carries no surface underneath, so the
+   accent has to do the work on its own and is mixed far stronger; at 26px the
+   0.12 glow used by the large mark reads as a smudge. */
+.navi-orb {
+  background: radial-gradient(
+    circle at 50% 40%,
+    color-mix(in srgb, var(--accent-primary) 55%, transparent),
+    color-mix(in srgb, var(--accent-primary) 6%, transparent) 68%
+  );
 }
 
 .launch-surface {
@@ -391,17 +403,10 @@ textarea {
   box-shadow: var(--navi-shadow-card);
 }
 
-.composer-dock {
-  padding-right: var(--navi-page-gutter);
-  padding-bottom: calc(12px + var(--safe-bottom));
-  padding-left: var(--navi-page-gutter);
-  background: var(--bg-app);
-}
-
-.composer-surface {
-  min-height: var(--navi-composer-min-height);
-  border-radius: var(--navi-radius-composer);
-}
+/* `.composer-dock` and `.composer-surface` used to sit here beside
+   `.navi-composer-dock` and `.navi-composer`, with different bottom padding —
+   12px against 10px plus the inset. Nothing referenced them. Dead padding
+   rules are how a 2px shift arrives six months later with no author. */
 
 .composer-action {
   display: inline-flex;
@@ -527,6 +532,31 @@ aside .scroll-area {
   animation: launch-in 220ms var(--navi-ease-standard) both;
 }
 
+/* "Response complete", shown and then withdrawn.
+   This is the motion channel that replaced the completion haptic, which could
+   never fire: a reply lands seconds after the tap, and both vibration
+   mechanisms require transient user activation. The collapse is part of the
+   animation rather than a timer in React, so the line cannot survive a state
+   update that happens to land mid-fade, and it leaves no gap behind it. */
+.navi-status-settle {
+  overflow: hidden;
+  animation: status-settle 2s var(--navi-ease-standard) forwards;
+}
+
+@keyframes status-settle {
+  0% { opacity: 0; max-height: 0; margin-top: 0; transform: translateY(4px); }
+  12% { opacity: 1; max-height: 2rem; margin-top: 0.75rem; transform: translateY(0); }
+  70% { opacity: 1; max-height: 2rem; margin-top: 0.75rem; }
+  100% { opacity: 0; max-height: 0; margin-top: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navi-status-settle {
+    animation: none;
+    margin-top: 0.75rem;
+  }
+}
+
 .thinking-spark {
   display: inline-block;
   color: var(--accent-primary);
@@ -584,9 +614,10 @@ aside .scroll-area {
 /* Background only, no border: a boxed inline span breaks the line's rhythm and
    reads as a control rather than as a word set in another face. */
 .navi-markdown code:not(pre code) { border-radius: 0.35rem; background: var(--bg-elev-2); padding: 0.1rem 0.32rem; font-family: "SFMono-Regular", ui-monospace, Consolas, monospace; font-size: 0.875em; }
-/* Scrolls in its own box rather than pushing the page sideways. The header
-   sticks to the left edge while the body scrolls, so a wide table never leaves
-   the reader looking at unlabelled columns. */
+/* Scrolls in its own box rather than pushing the page sideways. The header row
+   sticks to the top while the body scrolls, so a long table never leaves the
+   reader looking at unlabelled columns. (`thead th` is what carries
+   `position: sticky` below — nothing pins the first column.) */
 .navi-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: separate; border-spacing: 0; margin: 1rem 0; -webkit-overflow-scrolling: touch; }
 .navi-markdown th,
 .navi-markdown td { border-bottom: 1px solid var(--border-subtle); padding: 0.5rem 0.7rem; text-align: left; white-space: nowrap; }
@@ -595,9 +626,11 @@ aside .scroll-area {
 
 
 /* Floating pill sits just above the composer, which is in flow below the
-   scroll region. */
+   scroll region. The height is measured and published by the dock itself; the
+   min-height is only the fallback for the frame before the first measurement,
+   and the dock already includes the safe-area inset in its own padding. */
 .scroll-to-bottom {
-  bottom: calc(var(--navi-composer-min-height) + var(--safe-bottom) + 58px);
+  bottom: calc(var(--navi-composer-height, calc(var(--navi-composer-min-height) + var(--safe-bottom))) + 12px);
   animation: pill-in 160ms var(--navi-ease-standard) both;
 }
 

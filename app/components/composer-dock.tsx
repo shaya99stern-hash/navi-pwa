@@ -172,6 +172,28 @@ export function ComposerDock({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<RecordingSession | null>(null);
+
+  /* Publish the dock's real height so anything positioned above it can read a
+     measurement instead of a guess.
+     `--navi-composer-min-height` is the constant 52, and the dock grows with
+     the draft, the attachment strip and the status line — so the scroll pill,
+     which was positioned from that constant, went behind the composer at three
+     lines of text and off-screen at six. A constant standing in for a measured
+     value is only ever right at one size. */
+  useEffect(() => {
+    const dock = dockRef.current;
+    if (!dock) return;
+    const publish = () => {
+      document.documentElement.style.setProperty("--navi-composer-height", `${Math.round(dock.getBoundingClientRect().height)}px`);
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(dock);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty("--navi-composer-height");
+    };
+  }, []);
   /** Recording diagnostics are logged once per session, not once per tap. */
   const loggedSupport = useRef(false);
   /** Seconds recorded, so the composer shows progress rather than a lit icon. */

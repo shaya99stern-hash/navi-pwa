@@ -66,6 +66,16 @@ import { SettingsSheet } from "./settings-sheet";
 import { VoiceModeSheet } from "./voice-mode-sheet";
 
 const MAX_CHATS = 40;
+/**
+ * Rows at the end of the thread that keep full layout.
+ *
+ * `content-visibility: auto` only remembers a row's height once that row has
+ * been on screen, so scrolling back up through never-measured rows makes
+ * WebKit revise its 220px guess mid-gesture and the thread moves under the
+ * finger. This is the stretch people actually scroll, so it pays full layout;
+ * everything above it stays skippable.
+ */
+const RECENT_ROWS = 20;
 /** Quiet period before a save, and the longest a save may ever be put off. */
 const PERSIST_DEBOUNCE = 360;
 const MAX_PERSIST_DEFER = 1_500;
@@ -134,12 +144,32 @@ function resolvedTheme(preference: NaviPreferences["theme"]): "dark" | "light" {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
+/** Installed to the Home Screen, where iOS owns the status bar. */
+function standaloneDisplay(): boolean {
+  return window.matchMedia("(display-mode: standalone)").matches
+    || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+}
+
 function stopSpeaking() {
   if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
-/** Which layer a deep link should open over the chat, rather than navigating. */
-export type InitialSheet = "history" | "projects" | "artifacts" | "connectors" | "settings" | "customize";
+/**
+ * Which layer a deep link opens over the chat, rather than navigating to.
+ *
+ * One prop, one union. There used to be two — `initialSheet` for six of these
+ * and `initialView` for voice — which was two names for one concept, and every
+ * one of the seven routes means the same thing: "home, with a layer on top".
+ * A second spelling of the same idea is where the next one comes from.
+ */
+export type InitialLayer =
+  | "history"
+  | "projects"
+  | "artifacts"
+  | "connectors"
+  | "settings"
+  | "customize"
+  | "voice";
 
 /**
  * Which screen the shell is showing.
@@ -177,13 +207,11 @@ function modeTitle(mode: NaviMode) {
 export function AppShell({
   initialChatId,
   initialDraft,
-  initialView = "chat",
-  initialSheet
+  initialLayer
 }: {
   initialChatId?: string;
   initialDraft?: string;
-  initialView?: "chat" | "voice";
-  initialSheet?: InitialSheet;
+  initialLayer?: InitialLayer;
 } = {}) {
   const router = useRouter();
   const initialChatRef = useRef(initialChatId ?? createId());
@@ -196,11 +224,11 @@ export function AppShell({
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [durability, setDurability] = useState<StorageDurability>("unavailable");
-  const [settingsOpen, setSettingsOpen] = useState(initialSheet === "settings" || initialSheet === "customize");
+  const [settingsOpen, setSettingsOpen] = useState(initialLayer === "settings" || initialLayer === "customize");
   // /settings lands on the root list; /customize lands inside the Customize
   // group, whose first page is Skills.
   const [settingsSection, setSettingsSection] = useState<MenuSection | undefined>(
-    initialSheet === "customize" ? "skills" : undefined
+    initialLayer === "customize" ? "skills" : undefined
   );
   const [effortSheetOpen, setEffortSheetOpen] = useState(false);
   const [modeSheetOpen, setModeSheetOpen] = useState(false);
@@ -212,11 +240,11 @@ export function AppShell({
      signed in has told the app who they are once already; making them type it
      again to be greeted by name is asking twice for the same thing. */
   const [accountName, setAccountName] = useState("");
-  const [historyOpen, setHistoryOpen] = useState(initialSheet === "history");
-  const [projectsOpen, setProjectsOpen] = useState(initialSheet === "projects");
-  const [connectorsOpen, setConnectorsOpen] = useState(initialSheet === "connectors");
-  const [artifactsOpen, setArtifactsOpen] = useState(initialSheet === "artifacts");
-  const [voiceOpen, setVoiceOpen] = useState(initialView === "voice");
+  const [historyOpen, setHistoryOpen] = useState(initialLayer === "history");
+  const [projectsOpen, setProjectsOpen] = useState(initialLayer === "projects");
+  const [connectorsOpen, setConnectorsOpen] = useState(initialLayer === "connectors");
+  const [artifactsOpen, setArtifactsOpen] = useState(initialLayer === "artifacts");
+  const [voiceOpen, setVoiceOpen] = useState(initialLayer === "voice");
   /* The chat is the ground state; the library screens sit beside it, not over
      it, so switching back does not have to rebuild the thread. */
   const [view, setView] = useState<ShellView>("chat");
@@ -240,7 +268,22 @@ export function AppShell({
   const priorAssistantId = useRef<string | null>(null);
 
   const openHistory = useCallback(() => setHistoryOpen(true), []);
-  const edgeSwipe = useEdgeSwipe({ disabled: historyOpen, haptics: preferences.haptics, onOpen: openHistory });
+  /* Concede the left edge when iOS owns it.
+   *
+   * Two correct mechanisms wanted the same 26 pixels. `use-edge-swipe` arms a
+   * drawer-open drag there; `overlay-route` makes every overlay a real history
+   * entry, which in standalone puts iOS's interactive back gesture on that same
+   * edge. One swipe, two meanings, and which one won came down to WebKit.
+   *
+   * Back wins, because that is what a user expects from the edge and it is what
+   * the overlay work bought. The drawer keeps its button, and swipe-to-close on
+   * the open drawer is unaffected — that gesture starts inside the drawer, not
+   * on the edge. In a browser tab there is no system gesture to collide with,
+   * so the drag stays.
+   */
+  const [systemOwnsEdge, setSystemOwnsEdge] = useState(false);
+  useEffect(() => { setSystemOwnsEdge(standaloneDisplay()); }, []);
+  const edgeSwipe = useEdgeSwipe({ disabled: historyOpen || systemOwnsEdge, haptics: preferences.haptics, onOpen: openHistory });
 
   /* Every overlay is a place you can be, and back is how you leave it.
    *
@@ -257,8 +300,27 @@ export function AppShell({
   /* Where a link-opened overlay closes to. The stored list rather than the
      live message array, because a conversation only has an address once it has
      been written down — closing to `/chat/<id>` for a chat that does not exist
-     yet would put a dead link in the address bar. */
-  const restorePath = chats.some((chat) => chat.id === activeId) ? `/chat/${encodeURIComponent(activeId)}` : "/";
+     yet would put a dead link in the address bar.
+
+     The fallback is the most recently updated stored chat, not `/`.
+     A cold PWA launch straight to /settings renders before IndexedDB has been
+     read: `chats` is empty, `activeId` is a brand-new id, and the `some` test
+     failed — so closing the sheet landed the user in a blank new chat instead
+     of the conversation they had been reading. The same applied to every
+     /recents, /projects and notification deep link. Once hydrated there is a
+     real answer available, and `useOverlayRoute` reads `restore` through a ref,
+     so it picks up the corrected value with no other change. */
+  /* Most recently updated, computed rather than `chats[0]`: the stored order
+     puts pinned conversations first, so the head of the list is whatever was
+     pinned longest ago, not what was last read. */
+  const lastReadChat = hydrated
+    ? chats.reduce<StoredChat | null>((newest, chat) => (!newest || chat.updatedAt > newest.updatedAt ? chat : newest), null)
+    : null;
+  const restorePath = chats.some((chat) => chat.id === activeId)
+    ? `/chat/${encodeURIComponent(activeId)}`
+    : lastReadChat
+      ? `/chat/${encodeURIComponent(lastReadChat.id)}`
+      : "/";
   useOverlayRoute({ open: historyOpen, onClose: () => setHistoryOpen(false), path: "/recents", restore: restorePath });
   useOverlayRoute({ open: settingsOpen, onClose: () => { setSettingsOpen(false); setSettingsSection(undefined); }, path: "/settings", restore: restorePath });
   useOverlayRoute({ open: connectorsOpen, onClose: () => setConnectorsOpen(false), path: "/connectors", restore: restorePath });
@@ -335,8 +397,15 @@ export function AppShell({
         setStreamStatus(null);
         return;
       }
+      /* No `haptic("success")` here, and none in `onError` below.
+         Both mechanisms need transient user activation, and a reply finishes
+         seconds after the tap that asked for it, so `haptics.ts` skipped the
+         call every single time — the two events most worth feeling were the
+         two that never fired, and nothing in the code said so.
+         Completion is carried by the channels that need no activation: the
+         status line settling in `conversation-state-panel`, and this
+         notification when the app is not being looked at. */
       setStreamStatus({ stage: "complete", detail: "Response complete." });
-      haptic("success", preferences.haptics);
       // Response-completion notification, only when the tab is not being
       // looked at — with it in view the finished text is its own signal.
       if (preferences.notifyOnComplete && document.visibilityState === "hidden"
@@ -353,8 +422,9 @@ export function AppShell({
     },
     onError: (chatError) => {
       console.error("Navi Soul chat error:", chatError);
-      setStreamStatus(null);
-      haptic("error", preferences.haptics);
+      /* The error card the stream renders is the signal; a haptic here would
+         be refused for the same reason the completion one was. */
+      setStreamStatus({ stage: "error", detail: "That didn't go through." });
     }
   });
 
@@ -503,11 +573,25 @@ export function AppShell({
   useEffect(() => {
     const apply = () => {
       const next = resolvedTheme(preferences.theme);
+      const changed = document.documentElement.dataset.theme !== next;
       setTheme(next);
       document.documentElement.dataset.theme = next;
       document.documentElement.classList.toggle("dark", next === "dark");
       localStorage.setItem("navi.theme.v3", next);
       persistThemeCookie(next);
+
+      /* iOS reads `apple-mobile-web-app-status-bar-style` once, at launch, and
+         ignores every later mutation of the meta tag. Settings flips the theme
+         live, so going dark → light left white glyphs on the ivory ground
+         until the next cold launch: the app looked broken along its top edge,
+         and nothing on screen explained why.
+
+         Installed, the only way to re-tint the bar is to relaunch, so write
+         the cookie and reload — the worker serves the shell, so it costs about
+         a frame. In a browser tab the bar is the browser's own furniture and a
+         reload would be an unexplained flash, so nothing happens there. The
+         Appearance control says which of the two you are getting. */
+      if (changed && standaloneDisplay()) window.location.reload();
     };
     apply();
     const media = window.matchMedia("(prefers-color-scheme: light)");
@@ -701,11 +785,10 @@ export function AppShell({
     };
   }, [generating]);
 
-  /* A light tick when the first token lands, so the reply announces itself
-     without needing to be looked at. */
-  useEffect(() => {
-    if (status === "streaming") haptic("selection", preferences.haptics);
-  }, [preferences.haptics, status]);
+  /* The first-token tick used to live here and had the same defect as the
+     completion haptic: by the time a stream opens, the activation the tap
+     granted has lapsed, so the call was skipped and the tick never happened.
+     The streaming cursor and the status line are what announce the reply. */
 
   useEffect(() => {
     if (!speakNextReply || generating || !("speechSynthesis" in window)) return;
@@ -1346,6 +1429,7 @@ export function AppShell({
                   message={message}
                   streaming={message.role === "assistant" && index === messages.length - 1 && status === "streaming"}
                   last={message.role === "assistant" && index === messages.length - 1 && !generating}
+                  recent={messages.length - index <= RECENT_ROWS}
                   theme={theme}
                   chatFont={preferences.chatFont}
                   haptics={preferences.haptics}
