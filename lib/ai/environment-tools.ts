@@ -1,6 +1,6 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
-import { PROVIDERS, PROVIDER_IDS, providerApiKey } from "./provider-registry";
+import { PROVIDERS, PROVIDER_IDS, providerApiKey, modelsProbe } from "./provider-registry";
 import { PROVIDER_CATALOG, findProvider, isEntryConfigured } from "./provider-catalog";
 import { coolingProviders } from "./provider-health";
 import { hasWebSearch, searchProviderName } from "./web-tools";
@@ -86,10 +86,7 @@ export function buildEnvironmentTools({ onActivity = () => {} }: {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
         try {
-          const url = adapter === "gemini"
-            ? `${PROVIDERS.gemini.modelsUrl}?key=${encodeURIComponent(key)}`
-            : PROVIDERS[adapter].modelsUrl;
-          const headers: Record<string, string> = adapter === "gemini" ? {} : { Authorization: `Bearer ${key}` };
+          const { url, headers } = modelsProbe(PROVIDERS[adapter], key);
           const response = await fetch(url, { headers, cache: "no-store", signal: controller.signal });
 
           if (response.status === 401 || response.status === 403) {

@@ -115,6 +115,40 @@ const canonicalStream = streamThrough([`\`\`\`navi-artifact\n${realPayload}\n\`\
 check("the canonical fence still passes through", canonicalStream.includes("```navi-artifact"), true);
 check("no stray notice on a valid payload", canonicalStream.includes("removed"), false);
 
+/* ── Wrappings observed on a real device ─────────────────────────────────────
+   Both of these arrived from the live app and both reached the reader as an
+   error: one as "The artifact payload could not be read as JSON", the other as
+   a wall of raw JSON under a NAVIOPI-ARTIFACT heading. In each case the
+   artifact itself was intact and only its packaging was wrong. */
+
+const doc = "<!DOCTYPE html>\n<html><body><h1>Hi</h1></body></html>";
+
+/* A label no enumerated list would have held. Matching the word rather than
+   the exact string is what covers the whole family. */
+check("a hallucinated label still reads as an artifact", isArtifactFenceLanguage("naviopi-artifact"), true);
+check("and does so case-insensitively", isArtifactFenceLanguage("NAVIOPI-ARTIFACT"), true);
+check("an ordinary language is untouched", isArtifactFenceLanguage("json"), false);
+check("so is typescript", isArtifactFenceLanguage("typescript"), false);
+
+/* The model wrapped the artifact one level too deep: an envelope whose single
+   key held a complete fence. */
+const doubleWrapped = recoverArtifactPayload(JSON.stringify({ artifact: `\`\`\`navi-artifact\n${doc}\n\`\`\`` }));
+check("a double-wrapped artifact recovers", doubleWrapped.ok, true);
+check("and keeps its document", doubleWrapped.ok && doubleWrapped.payload.html?.includes("<h1>Hi</h1>"), true);
+
+/* A correct payload fenced as ```json rather than ```navi-artifact. */
+const jsonFenced = recoverArtifactPayload("```json\n" + realPayload + "\n```");
+check("a json-fenced payload recovers", jsonFenced.ok, true);
+
+/* Envelope → fence → JSON. The inner object owns the metadata. */
+const nested = recoverArtifactPayload(JSON.stringify({ artifact: "```navi-artifact\n" + realPayload + "\n```" }));
+check("a fence nested in an envelope recovers", nested.ok, true);
+check("and the inner title wins", nested.ok && nested.payload.title, "Counter");
+
+const oddLabelStream = streamThrough([`\`\`\`naviopi-artifact\n${realPayload}\n\`\`\``]);
+check("the gate normalises a hallucinated label", oddLabelStream.includes("```navi-artifact"), true);
+check("and the odd label does not survive", /naviopi/.test(oddLabelStream), false);
+
 /* ── Dark-mode repair for model-authored light designs ──────────────────── */
 
 const darkDocument = buildArtifactDocument({ id: "a", title: "A", kind: "html", html: '<div style="background:#fff">x</div>' }, "dark");

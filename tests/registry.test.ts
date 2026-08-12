@@ -1,5 +1,6 @@
 import type { ToolSet } from "ai";
 import { activeGroups, buildToolset, capToolset, MAX_ACTIVE_CODE_TOOLS, MAX_ACTIVE_TOOLS, toolCeiling, type ToolsetContext } from "@/lib/tools/registry";
+import { PROVIDERS, modelsProbe } from "@/lib/ai/provider-registry";
 
 let pass = 0, fail = 0;
 const check = (n: string, a: unknown, e: unknown) => {
@@ -112,6 +113,26 @@ check("no tool name is empty", Object.keys(full).every((name) => name.trim().len
 /* Tool names reach the model and the activity chips. A provider name in one
    would leak through both. */
 check("no tool name names a provider", Object.keys(full).some((name) => /gemini|groq|cerebras|openrouter|mistral|deepseek|tavily/i.test(name)), false);
+
+/* ── How each provider wants to be asked for its models ──────────────────────
+   Gemini's chat endpoint is OpenAI-compatible and its model listing is not.
+   Pointing the listing at `/v1beta/openai/models` answered 404 for every key
+   ever tried, and Connectors reported that verbatim — so a working key read as
+   a broken service. The probe is built in one place now; these pin it. */
+
+check("Gemini lists models from Google's own path", PROVIDERS.gemini.modelsUrl, "https://generativelanguage.googleapis.com/v1beta/models");
+check("and not the OpenAI-compatible one", /openai\/models/.test(PROVIDERS.gemini.modelsUrl), false);
+check("its chat base stays OpenAI-compatible", PROVIDERS.gemini.baseURL, "https://generativelanguage.googleapis.com/v1beta/openai/");
+
+const geminiProbe = modelsProbe(PROVIDERS.gemini, "AIzaTESTKEY");
+check("Gemini authenticates with Google's header", geminiProbe.headers["x-goog-api-key"], "AIzaTESTKEY");
+check("and not with a bearer token", geminiProbe.headers.Authorization, undefined);
+/* A key in a query string ends up in proxy logs and in any error that quotes
+   the URL, so no provider may put one there. */
+check("no provider puts its key in the URL", Object.values(PROVIDERS).some((adapter) => modelsProbe(adapter, "SECRET").url.includes("SECRET")), false);
+
+const groqProbe = modelsProbe(PROVIDERS.groq, "gsk_TESTKEY");
+check("every other provider still uses a bearer token", groqProbe.headers.Authorization, "Bearer gsk_TESTKEY");
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
