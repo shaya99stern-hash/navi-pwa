@@ -26,6 +26,7 @@ import { ingestContent, learnFromMission, wantsLearning, type Lesson } from "@/l
 import { readUrlAsText } from "@/lib/ai/web-tools";
 import { LESSON_PREFIX } from "@/lib/memory/lesson";
 import { decideLocally } from "@/lib/ai/navi-soul/router";
+import { describePlan, planTurn } from "@/lib/ai/navi-soul/orchestrator";
 import { createArtifactGate } from "@/lib/ai/artifact-gate";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
@@ -1519,6 +1520,33 @@ export async function POST(request: Request): Promise<Response> {
           discovered: lane === 4 ? cachedRoute("coding") : null,
           meteredAllowed
         }) ?? generalRoute;
+      /* The same turn, planned in one call instead of assembled inline.
+         `planTurn` composes exactly what the lines above compose — lane, route,
+         health-ordered fallbacks, the metered floor, the optional prompt blocks
+         this turn earned — from the same functions in the same order.
+
+         Logged and not yet obeyed, deliberately. The cluster above decides real
+         turns today, and the way to find out whether a planner agrees with it
+         is to run both against production traffic and read the difference, not
+         to swap one for the other and watch the complaints. Once these lines
+         agree in the logs, the cluster above becomes `plan.route`,
+         `plan.fallbacks` and `plan.lastResort`, and the capability brief and
+         image pipeline hang off `plan.promptBlocks` and `plan.kind`. */
+      const turnPlan = planTurn({
+        request: lastUserText,
+        mode,
+        effort: effortLevel,
+        complex: complexRoute,
+        hasFiles,
+        hasImageAttachments: currentImageAttachments.length > 0,
+        longContext: modelMessages.length > LONG_CONTEXT_TURNS,
+        tools,
+        availability,
+        meteredAllowed,
+        discovered: lane === 4 ? cachedRoute("coding") : null
+      });
+      console.log(`Navi Soul plan: ${describePlan(turnPlan)} | in use: lane ${lane}, ${engineName(route)}`);
+
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
       /* The plan, shown rather than only acted on. Navi Soul has been making one
