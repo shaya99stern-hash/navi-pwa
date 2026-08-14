@@ -10,6 +10,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateId,
+  generateText,
   smoothStream,
   stepCountIs,
   streamText,
@@ -20,6 +21,12 @@ import { compactForBudget } from "@/lib/ai/compaction";
 import { PROVIDERS, requestTokenCeiling } from "@/lib/ai/provider-registry";
 import { describeRequestSize, estimateTextTokens, estimateToolTokens, measureRequest } from "@/lib/ai/request-size";
 import { preflightPayload, type PromptBlock } from "@/lib/ai/navi-soul/payload-preflight";
+import { runMission, shouldRunAsMission, type MissionReport } from "@/lib/ai/navi-soul/mission-loop";
+import { ingestContent, learnFromMission, wantsLearning, type Lesson } from "@/lib/ai/navi-soul/learning-loop";
+import { readUrlAsText } from "@/lib/ai/web-tools";
+import { LESSON_PREFIX } from "@/lib/memory/lesson";
+import { decideLocally } from "@/lib/ai/navi-soul/router";
+import { createArtifactGate } from "@/lib/ai/artifact-gate";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { classifyTask, createProviderModel, engineName, fallbackRoutes, getProviderAvailability, lastResortRoute, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
@@ -1597,6 +1604,210 @@ export async function POST(request: Request): Promise<Response> {
       const blocksFor = (attemptToolNames: string[], referenceBudget: number): PromptBlock[] => systemPromptBlocks({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, referenceBudget });
       const systemFor = (attemptToolNames: string[], referenceBudget: number): string =>
         blocksFor(attemptToolNames, referenceBudget).map((block) => block.text).join("\n\n");
+
+      /**
+       * One routed, preflighted, non-streaming call.
+       *
+       * The mission loop and the learning loop both need a model call that
+       * returns a whole string rather than a stream, and neither may own
+       * routing: a second router would be a second set of decisions about
+       * which providers cost money. So this is the same machinery an ordinary
+       * turn uses — the route this turn already chose, the same prompt blocks,
+       * the same preflight — with the stream taken off.
+       *
+       * Mechanical purposes take the fast route. Splitting a brief into steps
+       * and checking whether an answer satisfies its request are both work the
+       * cheapest configured model does as well as the strongest, and a mission
+       * that spent its strongest route on bookkeeping would be slower for no
+       * better answer.
+       */
+      const callEngineOnce = async (prompt: string, purpose: "decompose" | "step" | "verify" | "revise" | "fast"): Promise<string> => {
+        const subRoute = purpose === "step" || purpose === "revise"
+          ? route
+          : selectDirectRoute({ preset: resolvedPreset, availability, hasFiles: false, tools, complex: false });
+        const subCeiling = requestTokenCeiling(PROVIDERS[subRoute.provider]) - CEILING_SAFETY_MARGIN;
+        const subMessages: ModelMessage[] = [{ role: "user", content: prompt }];
+        /* Whatever the ceiling has left once the prompt is counted, floored at
+           the shortest reply worth making and capped like any other reply. */
+        const outputReserve = Math.max(
+          MIN_OUTPUT_TOKENS,
+          Math.min(MAX_OUTPUT_TOKENS, subCeiling - estimateTextTokens(prompt) - PROMPT_RESERVE_TOKENS)
+        );
+        const outcome = preflightPayload({
+          route: subRoute,
+          availability,
+          blocks: blocksFor([], Math.max(0, subCeiling - PROMPT_RESERVE_TOKENS)),
+          tools: {},
+          messages: subMessages,
+          outputReserve
+        });
+        if (!outcome.ok) throw new Error(outcome.reason);
+        const reply = await generateText({
+          model: createProviderModel(outcome.route, origin),
+          system: outcome.system,
+          messages: outcome.messages,
+          maxOutputTokens: outputReserve,
+          maxRetries: 1,
+          abortSignal: request.signal
+        });
+        return reply.text;
+      };
+
+      /**
+       * Lessons into the store the `learning` and `reflection` tools already
+       * write, behind the gate they already use.
+       *
+       * Not a second memory: `rememberSkill` is the write, and the
+       * `LESSON_PREFIX` naming convention is what makes a row render in future
+       * prompts as something Navi Soul worked out rather than as an instruction
+       * the user gave. Both belong to `learned-skills.ts`; this only adapts the
+       * loop's shape to them. Signed out there is nowhere to keep a lesson, so
+       * nothing is written and nothing is claimed.
+       */
+      const canKeepLessons = Boolean(mayRemember && clerkToken && clerkUserId && learnedSkillsConfigured());
+      const storeLessons = async (lessons: Lesson[]): Promise<number> => {
+        if (!canKeepLessons) return 0;
+        const { rememberSkill } = await import("@/lib/memory/learned-skills");
+        let stored = 0;
+        for (const lesson of lessons) {
+          const result = await rememberSkill(clerkToken!, clerkUserId!, {
+            name: `${LESSON_PREFIX} ${lesson.statement.slice(0, 60)}`.slice(0, 120),
+            description: `Learned from ${lesson.source}.`,
+            instructions: lesson.statement,
+            sourceUrl: /^https?:\/\//i.test(lesson.source) ? lesson.source : undefined
+          });
+          if ("skill" in result) stored += 1;
+          else console.warn("Navi Soul could not keep a lesson:", result.error);
+        }
+        return stored;
+      };
+
+      /* ── The learning path ──────────────────────────────────────────────
+         "Learn this:" and a pasted article, or a link. One engine call turns
+         the content into durable one-sentence lessons, which go to the store
+         above and reach future turns through the block that already renders it.
+
+         The reply says what was kept and repeats the loop's notes verbatim. The
+         YouTube note is the reason for that rule: when a video cannot be read it
+         asks for the transcript, which is the honest answer — nothing here
+         watches a video, a model reads text. */
+      const learningUrl = /https?:\/\/\S+/.exec(lastUserText)?.[0] ?? null;
+      if (wantsLearning(lastUserText) || (learningUrl && /\b(learn|remember|study|watch|read)\b/i.test(lastUserText))) {
+        writer.write(statusChunk({ stage: "gather", detail: "Reading what to learn." }));
+        const report = await ingestContent(
+          learningUrl
+            ? { kind: "url", value: learningUrl }
+            : { kind: "text", value: lastUserText },
+          {
+            runEngine: (prompt) => callEngineOnce(prompt, "fast"),
+            fetchPage: (url) => readUrlAsText(url, { signal: request.signal }),
+            storeLessons,
+            onProgress: (label) => writer.write(statusChunk({ stage: "draft", detail: label }))
+          }
+        );
+
+        const lines: string[] = [];
+        if (report.stored) {
+          lines.push(`Learned and kept ${report.stored} thing${report.stored === 1 ? "" : "s"}:`, "");
+          for (const lesson of report.lessons.slice(0, report.stored)) lines.push(`- ${lesson.statement}`);
+        } else if (report.lessons.length && !canKeepLessons) {
+          lines.push(`I found ${report.lessons.length} thing${report.lessons.length === 1 ? "" : "s"} worth keeping, but there is nowhere to keep them while you are signed out:`, "");
+          for (const lesson of report.lessons) lines.push(`- ${lesson.statement}`);
+        }
+        /* Verbatim, and never summarised into a cheerier sentence: a note here
+           is the difference between "I watched it" and "paste the transcript". */
+        for (const note of report.notes) lines.push(lines.length ? `\n${note}` : note);
+
+        const learningTextId = generateId();
+        writer.write({ type: "text-start", id: learningTextId });
+        for (const chunk of splitLargePayload(lines.join("\n") || "Nothing durable was found to keep.")) {
+          writer.write({ type: "text-delta", id: learningTextId, delta: chunk });
+        }
+        writer.write({ type: "text-end", id: learningTextId });
+        writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
+        return;
+      }
+
+      /* ── The mission path ───────────────────────────────────────────────
+         A request that is plainly several pieces of work is run as several
+         pieces of work: decomposed, executed with the on-device skills tried
+         before any engine, checked once, and combined into a single answer.
+
+         What the user gets is that answer. The steps appear as activity chips
+         while the mission runs and nowhere else — a reply that narrates its own
+         process is a transcript, not an answer, and the person asked for the
+         work rather than a report on it.
+
+         A mission that fails outright is not fatal: the turn falls through to
+         the ordinary streaming path below and is answered the usual way. */
+      if (shouldRunAsMission(lastUserText, effortLevel)) {
+        let report: MissionReport | null = null;
+        try {
+          report = await runMission(lastUserText, {
+            runEngine: (prompt, purpose) => callEngineOnce(prompt, purpose),
+            /* The zero-token layer. `decideLocally` rather than the full skill
+               library because this runs on the edge, where the library's
+               "use client" module must never be imported. */
+            runSkill: async (query) => {
+              const decision = decideLocally(query);
+              return decision.route === "local" ? { text: decision.response, skill: "navi-soul.local" } : null;
+            },
+            onProgress: (label) => writer.write(statusChunk({ stage: "draft", detail: label }))
+          }, {
+            /* High effort buys more steps, not unlimited ones. An autonomous
+               loop without a meter is how a free tier is spent on one message. */
+            maxEngineCalls: effortLevel === "high" ? 12 : 8
+          });
+        } catch (error) {
+          console.warn("Navi Soul mission failed; answering as an ordinary turn:", error);
+        }
+
+        if (report && report.answer.trim()) {
+          for (const note of report.notes) console.info("Navi Soul mission:", note);
+          console.info(`Navi Soul mission ${report.status}: ${report.engineCalls} engine calls, ${report.skillHits} answered on device, verified ${String(report.verified)}.`);
+
+          /* Mined from the report rather than from a model: it already says what
+             failed, what was revised, and what ran out of budget, so this costs
+             nothing. Signed out it is skipped in silence — there is nowhere to
+             keep a lesson, and saying so would be a notice about the app in the
+             middle of an answer about something else. */
+          const mined = learnFromMission({
+            status: report.status,
+            request: lastUserText,
+            engineCalls: report.engineCalls,
+            verified: report.verified,
+            notes: report.notes,
+            failedSteps: report.steps.filter((step) => step.source === "failed").map((step) => step.step.title)
+          });
+          if (mined.length && canKeepLessons) {
+            void storeLessons(mined).catch((error) => console.warn("Navi Soul could not keep its mission lessons:", error));
+          }
+
+          /* A spent budget is reported to the user, because the answer is
+             genuinely partial and silence would present it as complete. Every
+             other note is for the log — they are about how the answer was made,
+             not about what it says. */
+          const body = report.status === "budget-exhausted"
+            ? `${report.answer}\n\n> ${report.notes[report.notes.length - 1] ?? "The mission's engine budget was spent before every step finished."}`
+            : report.answer;
+
+          /* Through the same gate the streamed path uses: a mission can produce
+             an artifact, and an unvalidated payload is exactly what the gate
+             exists to hold back. */
+          const gate = createArtifactGate();
+          const missionTextId = generateId();
+          writer.write({ type: "text-start", id: missionTextId });
+          for (const chunk of splitLargePayload(body)) {
+            const safe = gate.push(chunk);
+            if (safe) writer.write({ type: "text-delta", id: missionTextId, delta: safe });
+          }
+          const held = gate.flush();
+          if (held) writer.write({ type: "text-delta", id: missionTextId, delta: held });
+          writer.write({ type: "text-end", id: missionTextId });
+          writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
+          return;
+        }
+      }
 
       /* Health-ordered: a provider that has been failing across recent
          requests goes to the back of the line instead of charging every turn
