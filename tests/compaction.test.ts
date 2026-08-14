@@ -54,7 +54,13 @@ const streamCall = body.slice(body.indexOf("const result = streamText({"));
 const streamArgs = streamCall.slice(0, streamCall.indexOf("\n      });"));
 check("the streamText call was located", streamArgs.length > 0 && streamArgs.length < 4_000, true);
 check("streamText is not handed the raw conversation", /messages:\s*modelMessages/.test(streamArgs), false);
-check("streamText receives the fitted conversation", /messages:\s*attemptMessages/.test(streamArgs), true);
+/* The fitted conversation now reaches the model through the preflight, which
+   may truncate it further to fit the route's own ceiling but can only ever be
+   handed what the compactor already produced. Both halves are checked, because
+   a preflight fed the raw conversation would pass the first on its own. */
+check("streamText receives the fitted conversation", /messages:\s*flight\.messages/.test(streamArgs), true);
+check("the preflight is handed the compacted conversation",
+  /preflightPayload\(\{[\s\S]{0,400}?messages:\s*attemptMessages/.test(body), true);
 
 /* Budgeted per attempt, because the window is a property of the model. A
    fallback lane can be far smaller than the primary, and compacting once to
