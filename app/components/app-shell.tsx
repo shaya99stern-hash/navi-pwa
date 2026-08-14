@@ -39,6 +39,8 @@ import {
 } from "@/lib/memory/cloud-sync";
 import { BUILT_IN_PLAYBOOKS, playbookBlock, selectPlaybook, type Playbook } from "@/lib/playbooks";
 import { instantAnswer, parseSlashCommand, runSlash } from "@/lib/skills";
+import { decideLocallyWithSkills } from "@/lib/ai/navi-soul/router";
+import { NAVI_VERSION } from "@/lib/version";
 import { haptic } from "@/lib/ui/haptics";
 import { collectFiles, collectImages } from "@/lib/ui/library";
 import { resolveVoiceLanguage, speak, whenVoicesReady } from "@/lib/ui/speech";
@@ -1083,7 +1085,26 @@ export function AppShell({
     // A question with exactly one right answer that a local function already
     // knows does not need a round trip, a network, or a model that might get
     // it wrong. Anything not recognised falls through untouched.
-    const instant = invocation ? null : await instantAnswer(draft);
+    //
+    // The gate runs the system commands and arithmetic first and only then
+    // consults the skill library, which is injected rather than imported so
+    // the same decision function can be reached from the edge without pulling
+    // a "use client" module into that bundle.
+    const decision = invocation
+      ? null
+      : await decideLocallyWithSkills(draft, { version: NAVI_VERSION, online }, instantAnswer);
+
+    /* Recognised on the device but not answerable as text: the conversation is
+       the client's to own, so `/clear` is performed here. Anything else the
+       gate hands back this way has no local action, and falls through to the
+       model rather than dying silently. */
+    if (decision?.route === "client-command") {
+      if (decision.command !== "/clear") return false;
+      newChat();
+      return true;
+    }
+
+    const instant = decision?.route === "local" ? decision : null;
     if (!invocation && !instant) return false;
     clearError();
     setAttachmentError(null);
@@ -1096,7 +1117,7 @@ export function AppShell({
     const answer: UIMessage = {
       id: createId(),
       role: "assistant",
-      parts: [{ type: "text", text: invocation ? await runSlash(invocation) : instant!.text }]
+      parts: [{ type: "text", text: invocation ? await runSlash(invocation) : instant!.response }]
     };
     setMessages([...messages, question, answer]);
     setStreamStatus(null);

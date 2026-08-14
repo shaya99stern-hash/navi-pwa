@@ -226,6 +226,70 @@ export function assertFetchableUrl(raw: string): URL {
  * configured; the rest need neither, so they work on every deployment
  * including a fully keyless one.
  */
+/**
+ * Read a link as text: the body of the `fetch_url` tool, lifted out so callers
+ * that are not a model can use it.
+ *
+ * The learning loop needs exactly this — the same redirects, the same PDF
+ * extraction, the same YouTube transcript path — and a second fetcher beside it
+ * would be a second set of answers to "can this link be read", which is the
+ * question the honest reply to "learn this video" depends on.
+ *
+ * Failures come back as text rather than thrown, because the caller is usually
+ * a model and a bad link should not end a response.
+ */
+export async function readUrlAsText(url: string, options: {
+  signal?: AbortSignal;
+  onActivity?: (label: string) => void;
+} = {}): Promise<string> {
+  const onActivity = options.onActivity ?? (() => {});
+  const signal = options.signal;
+  try {
+    const target = assertFetchableUrl(url);
+
+    const videoId = youTubeVideoId(target);
+    if (videoId) {
+      onActivity("Reading the video transcript");
+      const transcript = await withTimeout(
+        (inner) => fetchYouTubeTranscript(videoId, inner),
+        signal
+      );
+      return "text" in transcript ? transcript.text : TRANSCRIPT_FAILURE_TEXT[transcript.failure];
+    }
+
+    onActivity(`Reading ${target.hostname}`);
+    return await withTimeout(async (inner) => {
+      const response = await fetch(target, {
+        headers: { Accept: "text/html,application/pdf,text/plain,application/json;q=0.9", "User-Agent": "NaviOSHub/1.0" },
+        redirect: "follow",
+        signal: inner
+      });
+      if (!response.ok) return `That page returned ${response.status}.`;
+      const type = response.headers.get("content-type") ?? "";
+
+      if (/application\/pdf/i.test(type) || /\.pdf$/i.test(target.pathname)) {
+        const { extractPdfText } = await import("./document-text");
+        const extracted = await extractPdfText(new Uint8Array(await response.arrayBuffer()));
+        if (!extracted) return "That PDF has no text layer to extract — it is likely a scan.";
+        const clipped = extracted.text.length > MAX_DOCUMENT_FETCH_CHARS
+          ? `${extracted.text.slice(0, MAX_DOCUMENT_FETCH_CHARS)}\n\n[Truncated at ${MAX_DOCUMENT_FETCH_CHARS} characters.]`
+          : extracted.text;
+        return `PDF${extracted.pages ? ` (${extracted.pages} pages)` : ""}:\n\n${clipped}`;
+      }
+
+      if (!/text\/|json|xml/i.test(type)) return `That URL is ${type || "a binary file"}, which cannot be read as text.`;
+      const body = await response.text();
+      const text = /html/i.test(type) ? htmlToText(body) : body.trim();
+      return text.length > MAX_PAGE_CHARS
+        ? `${text.slice(0, MAX_PAGE_CHARS)}\n\n[Truncated at ${MAX_PAGE_CHARS} characters.]`
+        : text || "That page had no readable text.";
+    }, signal);
+  } catch (error) {
+    // Returned, not thrown: a bad link should not end the whole response.
+    return `Could not read that page: ${error instanceof Error ? error.message : "unknown error"}`;
+  }
+}
+
 export function buildWebTools({ search, signal, onActivity = () => {} }: {
   search: boolean;
   signal?: AbortSignal;
@@ -258,52 +322,7 @@ export function buildWebTools({ search, signal, onActivity = () => {} }: {
     fetch_url: tool({
       description: "Fetch an https link and return its readable content. Handles web pages, plain text, JSON, PDFs (text is extracted), and YouTube links (the video's transcript is returned). Use it to read a search result or any link the user gives you, rather than guessing at its contents.",
       inputSchema: z.object({ url: z.string().describe("The full https URL to read.") }),
-      execute: async ({ url }) => {
-        try {
-          const target = assertFetchableUrl(url);
-
-          const videoId = youTubeVideoId(target);
-          if (videoId) {
-            onActivity("Reading the video transcript");
-            const transcript = await withTimeout(
-              (inner) => fetchYouTubeTranscript(videoId, inner),
-              signal
-            );
-            return "text" in transcript ? transcript.text : TRANSCRIPT_FAILURE_TEXT[transcript.failure];
-          }
-
-          onActivity(`Reading ${target.hostname}`);
-          return await withTimeout(async (inner) => {
-            const response = await fetch(target, {
-              headers: { Accept: "text/html,application/pdf,text/plain,application/json;q=0.9", "User-Agent": "NaviOSHub/1.0" },
-              redirect: "follow",
-              signal: inner
-            });
-            if (!response.ok) return `That page returned ${response.status}.`;
-            const type = response.headers.get("content-type") ?? "";
-
-            if (/application\/pdf/i.test(type) || /\.pdf$/i.test(target.pathname)) {
-              const { extractPdfText } = await import("./document-text");
-              const extracted = await extractPdfText(new Uint8Array(await response.arrayBuffer()));
-              if (!extracted) return "That PDF has no text layer to extract — it is likely a scan.";
-              const clipped = extracted.text.length > MAX_DOCUMENT_FETCH_CHARS
-                ? `${extracted.text.slice(0, MAX_DOCUMENT_FETCH_CHARS)}\n\n[Truncated at ${MAX_DOCUMENT_FETCH_CHARS} characters.]`
-                : extracted.text;
-              return `PDF${extracted.pages ? ` (${extracted.pages} pages)` : ""}:\n\n${clipped}`;
-            }
-
-            if (!/text\/|json|xml/i.test(type)) return `That URL is ${type || "a binary file"}, which cannot be read as text.`;
-            const body = await response.text();
-            const text = /html/i.test(type) ? htmlToText(body) : body.trim();
-            return text.length > MAX_PAGE_CHARS
-              ? `${text.slice(0, MAX_PAGE_CHARS)}\n\n[Truncated at ${MAX_PAGE_CHARS} characters.]`
-              : text || "That page had no readable text.";
-          }, signal);
-        } catch (error) {
-          // Returned, not thrown: a bad link should not end the whole response.
-          return `Could not read that page: ${error instanceof Error ? error.message : "unknown error"}`;
-        }
-      }
+      execute: async ({ url }) => readUrlAsText(url, { signal, onActivity })
     })
   };
 

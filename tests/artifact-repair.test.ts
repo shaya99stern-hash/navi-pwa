@@ -72,7 +72,10 @@ function streamThrough(deltas: string[]): string {
   return out + gate.flush();
 }
 
-const salvaged = streamThrough(['```navi-artifact\n{"title": "Doc", "kind": "markdown", "content": "# Title\n\nBody",}\n```']);
+/* The bodies below carry real content because the gate now rejects a completed
+   fence holding fewer than 40 characters of it as a stub. These checks are
+   about salvage and normalisation, so their fixtures stay above that floor. */
+const salvaged = streamThrough(['```navi-artifact\n{"title": "Doc", "kind": "markdown", "content": "# Title\n\nBody text long enough to be a real document.",}\n```']);
 check("the gate salvages a sloppy artifact", salvaged.includes("```navi-artifact"), true);
 check("the salvaged artifact is canonical JSON", (() => {
   const inner = /```navi-artifact\n([\s\S]*?)\n```/.exec(salvaged)?.[1] ?? "";
@@ -98,14 +101,24 @@ check("case does not matter", isArtifactFenceLanguage("Artifact"), true);
 check("a real language is not an artifact fence", isArtifactFenceLanguage("ts"), false);
 check("html is not an artifact fence", isArtifactFenceLanguage("html"), false);
 
-const realPayload = JSON.stringify({ id: "counter", title: "Counter", kind: "html", html: "<p>hi</p>" });
+const realPayload = JSON.stringify({
+  id: "counter",
+  title: "Counter",
+  kind: "html",
+  html: "<p>hi</p><p>A body with enough content to clear the stub floor.</p>"
+});
 check("a payload body is detected", looksLikeArtifactFence(realPayload), true);
 check("ordinary code is not a payload", looksLikeArtifactFence("const a = 1;"), false);
 /* An object with no content field is config, not an artifact. */
 check("a config object is not a payload", looksLikeArtifactFence('{"id":"x","title":"y"}'), false);
 check("content without any identity is not a payload", looksLikeArtifactFence('{"html":"<p>x</p>"}'), false);
 
-const aliasStream = streamThrough([`\`\`\`artifact\n${JSON.stringify({ id: "omni", title: "Omni", kind: "react-component", html: "<p>x</p>" })}\n\`\`\``]);
+const aliasStream = streamThrough([`\`\`\`artifact\n${JSON.stringify({
+  id: "omni",
+  title: "Omni",
+  kind: "react-component",
+  html: "<p>x</p><p>A body with enough content to clear the stub floor.</p>"
+})}\n\`\`\``]);
 check("an aliased fence is normalised to the canonical one", aliasStream.includes("```navi-artifact"), true);
 check("the alias label does not survive", /```artifact\b/.test(aliasStream), false);
 check("the aliased payload becomes html", aliasStream.includes('"kind":"html"'), true);

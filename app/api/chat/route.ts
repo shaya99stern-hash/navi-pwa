@@ -10,6 +10,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateId,
+  generateText,
   smoothStream,
   stepCountIs,
   streamText,
@@ -19,6 +20,14 @@ import {
 import { compactForBudget } from "@/lib/ai/compaction";
 import { PROVIDERS, requestTokenCeiling } from "@/lib/ai/provider-registry";
 import { describeRequestSize, estimateTextTokens, estimateToolTokens, measureRequest } from "@/lib/ai/request-size";
+import { preflightPayload, type PromptBlock } from "@/lib/ai/navi-soul/payload-preflight";
+import { runMission, shouldRunAsMission, type MissionReport } from "@/lib/ai/navi-soul/mission-loop";
+import { ingestContent, learnFromMission, wantsLearning, type Lesson } from "@/lib/ai/navi-soul/learning-loop";
+import { readUrlAsText } from "@/lib/ai/web-tools";
+import { LESSON_PREFIX } from "@/lib/memory/lesson";
+import { decideLocally } from "@/lib/ai/navi-soul/router";
+import { describePlan, planTurn } from "@/lib/ai/navi-soul/orchestrator";
+import { createArtifactGate } from "@/lib/ai/artifact-gate";
 import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { classifyTask, createProviderModel, engineName, fallbackRoutes, getProviderAvailability, lastResortRoute, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
@@ -761,7 +770,18 @@ function codeModeInstruction(canCommit: boolean, canWriteRepos: boolean): string
   ].filter(Boolean).join(" ");
 }
 
-function systemPrompt(options: {
+/**
+ * The prompt as one string, for every caller that just wants to read it.
+ *
+ * The blocks below are the real assembly; this is the join. Both exist because
+ * the preflight needs to be able to drop a block without rebuilding the prompt
+ * from its inputs, and everything else needs a string.
+ */
+function systemPrompt(options: Parameters<typeof systemPromptBlocks>[0]): string {
+  return systemPromptBlocks(options).map((block) => block.text).join("\n\n");
+}
+
+function systemPromptBlocks(options: {
   effort: EffortLevel;
   /** The dispatch lane, which decides how the answer is shaped. */
   mode: "chat" | "code";
@@ -795,7 +815,7 @@ function systemPrompt(options: {
    * Omitted means unlimited, which is what every non-streaming caller wants.
    */
   referenceBudget?: number;
-}): string {
+}): PromptBlock[] {
   const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, productMode, referenceBudget = Number.POSITIVE_INFINITY } = options;
 
   /* The static reference material, in priority order, competing for whatever
@@ -808,14 +828,20 @@ function systemPrompt(options: {
      description follows, because inventing an answer about the product the
      user is holding is the next worst. Routing knowledge is last: describing
      its own lanes slightly less well is the cheapest thing to lose. */
-  const { kept: reference, dropped } = fitReferenceBlocks([
+  const referenceCandidates = [
     { name: "self-repo", text: toolNames.includes("commit_own_source") || needsAppKnowledge(request) ? selfRepoKnowledge() : "" },
     { name: "app-knowledge", text: needsAppKnowledge(request) ? APP_KNOWLEDGE : "" },
     { name: "engineering-discipline", text: needsEngineeringDiscipline(toolNames.includes("commit_own_source")) ? ENGINEERING_DISCIPLINE : "" },
     { name: "code-craft", text: needsCodeCraft(toolNames.includes("commit_own_source")) ? CODE_CRAFT : "" },
     { name: "mission", text: needsMission(request) ? NAVI_MISSION : "" },
     { name: "orchestration", text: needsOrchestrationKnowledge(request, effort) ? ORCHESTRATION_KNOWLEDGE : "" }
-  ], referenceBudget);
+  ];
+  const { dropped } = fitReferenceBlocks(referenceCandidates, referenceBudget);
+  /* The same blocks `fitReferenceBlocks` kept, still carrying their names: it
+     answers with text alone, and the preflight downstream needs to be able to
+     say which block it dropped. Order and membership are its decision, not a
+     second one made here. */
+  const reference = referenceCandidates.filter((block) => block.text && !dropped.includes(block.name));
   if (dropped.length) console.info(`Navi Soul trimmed reference blocks to fit ${referenceBudget} tokens: dropped ${dropped.join(", ")}.`);
   /* Ordered stable-first, volatile-last, and that ordering is load-bearing.
      The metered lane bills a cached prompt prefix at roughly one fiftieth of an
@@ -828,18 +854,28 @@ function systemPrompt(options: {
      nothing before the end of them could ever cache. It now sits with the other
      per-request material at the bottom. Do not move anything up this list
      without checking the hit rate. */
+  /* One addressable list rather than one string.
+     `preflightPayload` shrinks a turn that a route will not accept by dropping
+     optional blocks from the end, so the reference material — the only part of
+     this prompt a turn can lose and still be answered — is marked optional in
+     the order it is already prioritised in above. Everything else is required:
+     the prefix carries the constitution, and the per-request lines are what
+     make this turn this turn.
+
+     Joined, this is byte-for-byte the string it replaced. */
   return [
     /* Base plus mode body: one constant string per mode, assembled from parts
        rather than branched inside. Roughly 500 tokens where the old prompt
        spent 3,000, most of which was a description of the app that only
        mattered when someone asked about the app. */
-    stablePrefix(productMode === "code" ? "code" : "chat"),
+    { name: "stable-prefix", text: stablePrefix(productMode === "code" ? "code" : "chat") },
     /* The reference material, already trimmed to what this route can afford.
        Which blocks apply is decided by the predicates above; which of them fit
        is decided by `fitReferenceBlocks`. Both questions used to be answered by
        the first, which is how eight thousand tokens of background arrived at a
        route with an eight thousand token allowance. */
-    ...reference,
+    ...reference.map((block) => ({ name: block.name, text: block.text, optional: true })),
+    { name: "turn", text: [
     /* Keyed to the mode the user actually chose, not to how the dispatcher
        classified this message. Keying it to dispatch meant that picking Code
        and then asking something the classifier read as ordinary produced a
@@ -877,7 +913,8 @@ function systemPrompt(options: {
     /* Last, because it is the most volatile thing here and the most recent
        thing read before the request itself. Both reasons point the same way. */
     constraints || ""
-  ].filter(Boolean).join("\n\n");
+    ].filter(Boolean).join("\n\n") }
+  ].filter((block) => block.text);
 }
 
 /* An explicit ask to keep something for later. Deliberately narrow: the
@@ -1483,6 +1520,33 @@ export async function POST(request: Request): Promise<Response> {
           discovered: lane === 4 ? cachedRoute("coding") : null,
           meteredAllowed
         }) ?? generalRoute;
+      /* The same turn, planned in one call instead of assembled inline.
+         `planTurn` composes exactly what the lines above compose — lane, route,
+         health-ordered fallbacks, the metered floor, the optional prompt blocks
+         this turn earned — from the same functions in the same order.
+
+         Logged and not yet obeyed, deliberately. The cluster above decides real
+         turns today, and the way to find out whether a planner agrees with it
+         is to run both against production traffic and read the difference, not
+         to swap one for the other and watch the complaints. Once these lines
+         agree in the logs, the cluster above becomes `plan.route`,
+         `plan.fallbacks` and `plan.lastResort`, and the capability brief and
+         image pipeline hang off `plan.promptBlocks` and `plan.kind`. */
+      const turnPlan = planTurn({
+        request: lastUserText,
+        mode,
+        effort: effortLevel,
+        complex: complexRoute,
+        hasFiles,
+        hasImageAttachments: currentImageAttachments.length > 0,
+        longContext: modelMessages.length > LONG_CONTEXT_TURNS,
+        tools,
+        availability,
+        meteredAllowed,
+        discovered: lane === 4 ? cachedRoute("coding") : null
+      });
+      console.log(`Navi Soul plan: ${describePlan(turnPlan)} | in use: lane ${lane}, ${engineName(route)}`);
+
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
       /* The plan, shown rather than only acted on. Navi Soul has been making one
@@ -1565,7 +1629,213 @@ export async function POST(request: Request): Promise<Response> {
          attempt can actually call. Lifted out of the `streamText` call so its
          size can be measured before the request is sent — it is the largest
          single contributor to a turn and nothing could previously see it. */
-      const systemFor = (attemptToolNames: string[], referenceBudget: number): string => systemPrompt({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, referenceBudget });
+      const blocksFor = (attemptToolNames: string[], referenceBudget: number): PromptBlock[] => systemPromptBlocks({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, referenceBudget });
+      const systemFor = (attemptToolNames: string[], referenceBudget: number): string =>
+        blocksFor(attemptToolNames, referenceBudget).map((block) => block.text).join("\n\n");
+
+      /**
+       * One routed, preflighted, non-streaming call.
+       *
+       * The mission loop and the learning loop both need a model call that
+       * returns a whole string rather than a stream, and neither may own
+       * routing: a second router would be a second set of decisions about
+       * which providers cost money. So this is the same machinery an ordinary
+       * turn uses — the route this turn already chose, the same prompt blocks,
+       * the same preflight — with the stream taken off.
+       *
+       * Mechanical purposes take the fast route. Splitting a brief into steps
+       * and checking whether an answer satisfies its request are both work the
+       * cheapest configured model does as well as the strongest, and a mission
+       * that spent its strongest route on bookkeeping would be slower for no
+       * better answer.
+       */
+      const callEngineOnce = async (prompt: string, purpose: "decompose" | "step" | "verify" | "revise" | "fast"): Promise<string> => {
+        const subRoute = purpose === "step" || purpose === "revise"
+          ? route
+          : selectDirectRoute({ preset: resolvedPreset, availability, hasFiles: false, tools, complex: false });
+        const subCeiling = requestTokenCeiling(PROVIDERS[subRoute.provider]) - CEILING_SAFETY_MARGIN;
+        const subMessages: ModelMessage[] = [{ role: "user", content: prompt }];
+        /* Whatever the ceiling has left once the prompt is counted, floored at
+           the shortest reply worth making and capped like any other reply. */
+        const outputReserve = Math.max(
+          MIN_OUTPUT_TOKENS,
+          Math.min(MAX_OUTPUT_TOKENS, subCeiling - estimateTextTokens(prompt) - PROMPT_RESERVE_TOKENS)
+        );
+        const outcome = preflightPayload({
+          route: subRoute,
+          availability,
+          blocks: blocksFor([], Math.max(0, subCeiling - PROMPT_RESERVE_TOKENS)),
+          tools: {},
+          messages: subMessages,
+          outputReserve
+        });
+        if (!outcome.ok) throw new Error(outcome.reason);
+        const reply = await generateText({
+          model: createProviderModel(outcome.route, origin),
+          system: outcome.system,
+          messages: outcome.messages,
+          maxOutputTokens: outputReserve,
+          maxRetries: 1,
+          abortSignal: request.signal
+        });
+        return reply.text;
+      };
+
+      /**
+       * Lessons into the store the `learning` and `reflection` tools already
+       * write, behind the gate they already use.
+       *
+       * Not a second memory: `rememberSkill` is the write, and the
+       * `LESSON_PREFIX` naming convention is what makes a row render in future
+       * prompts as something Navi Soul worked out rather than as an instruction
+       * the user gave. Both belong to `learned-skills.ts`; this only adapts the
+       * loop's shape to them. Signed out there is nowhere to keep a lesson, so
+       * nothing is written and nothing is claimed.
+       */
+      const canKeepLessons = Boolean(mayRemember && clerkToken && clerkUserId && learnedSkillsConfigured());
+      const storeLessons = async (lessons: Lesson[]): Promise<number> => {
+        if (!canKeepLessons) return 0;
+        const { rememberSkill } = await import("@/lib/memory/learned-skills");
+        let stored = 0;
+        for (const lesson of lessons) {
+          const result = await rememberSkill(clerkToken!, clerkUserId!, {
+            name: `${LESSON_PREFIX} ${lesson.statement.slice(0, 60)}`.slice(0, 120),
+            description: `Learned from ${lesson.source}.`,
+            instructions: lesson.statement,
+            sourceUrl: /^https?:\/\//i.test(lesson.source) ? lesson.source : undefined
+          });
+          if ("skill" in result) stored += 1;
+          else console.warn("Navi Soul could not keep a lesson:", result.error);
+        }
+        return stored;
+      };
+
+      /* ── The learning path ──────────────────────────────────────────────
+         "Learn this:" and a pasted article, or a link. One engine call turns
+         the content into durable one-sentence lessons, which go to the store
+         above and reach future turns through the block that already renders it.
+
+         The reply says what was kept and repeats the loop's notes verbatim. The
+         YouTube note is the reason for that rule: when a video cannot be read it
+         asks for the transcript, which is the honest answer — nothing here
+         watches a video, a model reads text. */
+      const learningUrl = /https?:\/\/\S+/.exec(lastUserText)?.[0] ?? null;
+      if (wantsLearning(lastUserText) || (learningUrl && /\b(learn|remember|study|watch|read)\b/i.test(lastUserText))) {
+        writer.write(statusChunk({ stage: "gather", detail: "Reading what to learn." }));
+        const report = await ingestContent(
+          learningUrl
+            ? { kind: "url", value: learningUrl }
+            : { kind: "text", value: lastUserText },
+          {
+            runEngine: (prompt) => callEngineOnce(prompt, "fast"),
+            fetchPage: (url) => readUrlAsText(url, { signal: request.signal }),
+            storeLessons,
+            onProgress: (label) => writer.write(statusChunk({ stage: "draft", detail: label }))
+          }
+        );
+
+        const lines: string[] = [];
+        if (report.stored) {
+          lines.push(`Learned and kept ${report.stored} thing${report.stored === 1 ? "" : "s"}:`, "");
+          for (const lesson of report.lessons.slice(0, report.stored)) lines.push(`- ${lesson.statement}`);
+        } else if (report.lessons.length && !canKeepLessons) {
+          lines.push(`I found ${report.lessons.length} thing${report.lessons.length === 1 ? "" : "s"} worth keeping, but there is nowhere to keep them while you are signed out:`, "");
+          for (const lesson of report.lessons) lines.push(`- ${lesson.statement}`);
+        }
+        /* Verbatim, and never summarised into a cheerier sentence: a note here
+           is the difference between "I watched it" and "paste the transcript". */
+        for (const note of report.notes) lines.push(lines.length ? `\n${note}` : note);
+
+        const learningTextId = generateId();
+        writer.write({ type: "text-start", id: learningTextId });
+        for (const chunk of splitLargePayload(lines.join("\n") || "Nothing durable was found to keep.")) {
+          writer.write({ type: "text-delta", id: learningTextId, delta: chunk });
+        }
+        writer.write({ type: "text-end", id: learningTextId });
+        writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
+        return;
+      }
+
+      /* ── The mission path ───────────────────────────────────────────────
+         A request that is plainly several pieces of work is run as several
+         pieces of work: decomposed, executed with the on-device skills tried
+         before any engine, checked once, and combined into a single answer.
+
+         What the user gets is that answer. The steps appear as activity chips
+         while the mission runs and nowhere else — a reply that narrates its own
+         process is a transcript, not an answer, and the person asked for the
+         work rather than a report on it.
+
+         A mission that fails outright is not fatal: the turn falls through to
+         the ordinary streaming path below and is answered the usual way. */
+      if (shouldRunAsMission(lastUserText, effortLevel)) {
+        let report: MissionReport | null = null;
+        try {
+          report = await runMission(lastUserText, {
+            runEngine: (prompt, purpose) => callEngineOnce(prompt, purpose),
+            /* The zero-token layer. `decideLocally` rather than the full skill
+               library because this runs on the edge, where the library's
+               "use client" module must never be imported. */
+            runSkill: async (query) => {
+              const decision = decideLocally(query);
+              return decision.route === "local" ? { text: decision.response, skill: "navi-soul.local" } : null;
+            },
+            onProgress: (label) => writer.write(statusChunk({ stage: "draft", detail: label }))
+          }, {
+            /* High effort buys more steps, not unlimited ones. An autonomous
+               loop without a meter is how a free tier is spent on one message. */
+            maxEngineCalls: effortLevel === "high" ? 12 : 8
+          });
+        } catch (error) {
+          console.warn("Navi Soul mission failed; answering as an ordinary turn:", error);
+        }
+
+        if (report && report.answer.trim()) {
+          for (const note of report.notes) console.info("Navi Soul mission:", note);
+          console.info(`Navi Soul mission ${report.status}: ${report.engineCalls} engine calls, ${report.skillHits} answered on device, verified ${String(report.verified)}.`);
+
+          /* Mined from the report rather than from a model: it already says what
+             failed, what was revised, and what ran out of budget, so this costs
+             nothing. Signed out it is skipped in silence — there is nowhere to
+             keep a lesson, and saying so would be a notice about the app in the
+             middle of an answer about something else. */
+          const mined = learnFromMission({
+            status: report.status,
+            request: lastUserText,
+            engineCalls: report.engineCalls,
+            verified: report.verified,
+            notes: report.notes,
+            failedSteps: report.steps.filter((step) => step.source === "failed").map((step) => step.step.title)
+          });
+          if (mined.length && canKeepLessons) {
+            void storeLessons(mined).catch((error) => console.warn("Navi Soul could not keep its mission lessons:", error));
+          }
+
+          /* A spent budget is reported to the user, because the answer is
+             genuinely partial and silence would present it as complete. Every
+             other note is for the log — they are about how the answer was made,
+             not about what it says. */
+          const body = report.status === "budget-exhausted"
+            ? `${report.answer}\n\n> ${report.notes[report.notes.length - 1] ?? "The mission's engine budget was spent before every step finished."}`
+            : report.answer;
+
+          /* Through the same gate the streamed path uses: a mission can produce
+             an artifact, and an unvalidated payload is exactly what the gate
+             exists to hold back. */
+          const gate = createArtifactGate();
+          const missionTextId = generateId();
+          writer.write({ type: "text-start", id: missionTextId });
+          for (const chunk of splitLargePayload(body)) {
+            const safe = gate.push(chunk);
+            if (safe) writer.write({ type: "text-delta", id: missionTextId, delta: safe });
+          }
+          const held = gate.flush();
+          if (held) writer.write({ type: "text-delta", id: missionTextId, delta: held });
+          writer.write({ type: "text-end", id: missionTextId });
+          writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
+          return;
+        }
+      }
 
       /* Health-ordered: a provider that has been failing across recent
          requests goes to the back of the line instead of charging every turn
@@ -1656,6 +1926,40 @@ export async function POST(request: Request): Promise<Response> {
         if (attemptOutputTokens < MIN_OUTPUT_TOKENS) { tooSmall(input.total); continue; }
         console.info(`Navi Soul sending to ${attempt.label}: ${describeRequestSize({ ...input, output: attemptOutputTokens, total: input.total + attemptOutputTokens }, ceiling)}`);
 
+        /* The last measurement before the stream opens, and the only one that
+           can still change the payload. Everything above sizes the request for
+           this route; this checks the result against what the provider itself
+           will accept and, if it still does not fit, drops optional blocks,
+           trims tools, and truncates history in that order — then reroutes to
+           a roomier free lane rather than sending a request that cannot
+           succeed. Compaction upstream is untouched: it runs first and only
+           leaves this less to do. */
+        const outcome = preflightPayload({
+          route: attempt,
+          availability,
+          blocks: blocksFor(attemptToolNames, referenceBudget),
+          tools: attemptTools,
+          messages: attemptMessages,
+          outputReserve: attemptOutputTokens
+        });
+        if (!outcome.ok) {
+          /* The same friendly path a route too small for the turn already
+             takes: name the largest contributor in the log, keep the failure
+             for the final message, and let the next attempt try. */
+          console.warn("Navi Soul preflight refused:", outcome.reason);
+          lastFailure ??= new Error(`This turn needs more room than any configured route will accept (${outcome.size.total} tokens of prompt).`);
+          continue;
+        }
+        const flight = outcome;
+        const flightRoute = flight.route;
+        const flightMetered = flightRoute.provider === "deepseek";
+        if (flight.rerouted) {
+          console.info(`Navi Soul rerouted to ${flightRoute.label} for room: ${describeRequestSize(flight.size, ceiling)}`);
+        }
+        if (flight.droppedBlocks.length || flight.removedTools || flight.removedMessages || flight.clippedLastMessage) {
+          console.info(`Navi Soul shrank the request for ${flightRoute.label}: dropped ${flight.droppedBlocks.join(", ") || "no blocks"}, ${flight.removedTools} tools, ${flight.removedMessages} earlier messages${flight.clippedLastMessage ? ", and clipped the middle of the request itself" : ""}.`);
+        }
+
         /* Which engine is answering, said out loud. Written before the stream
            rather than after it, so a reply that fails halfway still carries the
            note explaining which engine produced the half — the case where
@@ -1665,15 +1969,18 @@ export async function POST(request: Request): Promise<Response> {
            the explanation. */
         writer.write({
           type: "data-engine",
-          data: { engine: engineName(attempt), effort: EFFORT_LABELS[effortLevel], recovered: index > 0 } satisfies NaviEngineNote
+          /* The engine that is actually answering. A preflight reroute changes
+             which one that is, and naming the route we intended rather than the
+             one we used would make the note a guess. */
+          data: { engine: engineName(flightRoute), effort: EFFORT_LABELS[effortLevel], recovered: index > 0 || flight.rerouted } satisfies NaviEngineNote
         } as never);
 
         const result = streamText({
-        model: createProviderModel(attempt, origin),
-        system: attemptSystem,
-        messages: attemptMessages,
+        model: createProviderModel(flightRoute, origin),
+        system: flight.system,
+        messages: flight.messages,
         ...(attemptToolNames.length
-          ? { tools: availableTools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
+          ? { tools: flight.tools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
           : {}),
         maxOutputTokens: attemptOutputTokens,
         maxRetries: 1,
@@ -1685,7 +1992,12 @@ export async function POST(request: Request): Promise<Response> {
       /* Billed from what the response actually reported, not from an estimate.
          Cache hits and misses differ in price by roughly fifty times, so a
          guess based on request counts would be wrong by orders of magnitude. */
-      if (metered) void meterSpend(result, attempt.model);
+      /* Keyed to the route that answered, not the one that was planned. The
+         preflight only ever reroutes onto a free lane, so this can turn a
+         metered turn free but never the reverse — and billing the ledger for a
+         model that was not called would be a spending record of a request that
+         never happened. */
+      if (flightMetered) void meterSpend(result, flightRoute.model);
       /* A provider that fails *mid-stream* never reaches the outer onError,
          and this inner stream's own default is the bare "An error occurred."
          that hid a hard model rejection behind three useless words. Route it
@@ -1712,10 +2024,10 @@ export async function POST(request: Request): Promise<Response> {
           let draft: string;
           try {
             draft = await result.text;
-            markProviderSuccess(attempt.provider);
+            markProviderSuccess(flightRoute.provider);
           } catch (error) {
             /* Nothing was shown, so another provider may still answer. */
-            markProviderFailure(attempt.provider, error);
+            markProviderFailure(flightRoute.provider, error);
             lastFailure = error;
             continue;
           }
@@ -1775,18 +2087,18 @@ export async function POST(request: Request): Promise<Response> {
           const { committed, preamble, failure } = await readUntilCommitted(reader);
 
           if (!committed) {
-            markProviderFailure(attempt.provider, failure);
+            markProviderFailure(flightRoute.provider, failure);
             lastFailure = failure ?? new Error("The provider produced no content.");
             continue;
           }
 
-          markProviderSuccess(attempt.provider);
+          markProviderSuccess(flightRoute.provider);
           reader.releaseLock();
           for (const chunk of preamble) writer.write(chunk as never);
           writer.merge(stream);
           return;
         } catch (error) {
-          markProviderFailure(attempt.provider, error);
+          markProviderFailure(flightRoute.provider, error);
           lastFailure = error;
           continue;
         }

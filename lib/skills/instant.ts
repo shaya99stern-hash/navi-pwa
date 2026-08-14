@@ -9,6 +9,8 @@ import * as text from "./impl/text";
 import * as data from "./impl/data";
 import * as analysis from "./impl/analysis";
 import type { SkillResult } from "./registry";
+import { EXTRA_PROSE_ROUTES } from "./instant-extra";
+import { EXTRA_MATH_TIME_ROUTES } from "./instant-extra-2";
 
 /**
  * Answers a narrow class of question on the device, before any request goes
@@ -251,7 +253,7 @@ export async function instantAnswer(input: string): Promise<InstantAnswer | null
      and letting the model handle it — so every one of these anchors both ends
      and requires its keyword, rather than merely looking for it somewhere in
      a sentence. */
-  for (const route of PROSE_ROUTES) {
+  for (const route of [...PROSE_ROUTES, ...EXTRA_PROSE_ROUTES, ...EXTRA_MATH_TIME_ROUTES]) {
     const match = route.pattern.exec(query);
     if (!match) continue;
     const text = render(await route.run(match));

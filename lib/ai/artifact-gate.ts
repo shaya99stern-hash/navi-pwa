@@ -1,4 +1,5 @@
-import { recoverArtifactPayload, validateArtifactPayload } from "../security/artifacts";
+import { validateArtifactPayload } from "../security/artifacts";
+import { assessArtifact } from "./navi-soul/artifact-quality";
 
 /**
  * Hold back artifact payloads while the rest of an answer streams.
@@ -84,16 +85,16 @@ function validateBlock(block: string, fence: string): string {
      byte-for-byte. An alias is always rewritten, even when its payload is
      perfect, because only the canonical fence renders as a card. */
   try {
-    if (validateArtifactPayload(JSON.parse(inner)).ok && fence === FENCE) return block;
+    if (validateArtifactPayload(JSON.parse(inner)).ok && fence === FENCE && assessArtifact(inner).ok) return block;
   } catch { /* fall through to salvage */ }
 
   /* Not exactly right: salvage what the model meant — sloppy JSON, aliased
      kinds, raw markup — and re-emit it as a canonical fence. Only when there
      is genuinely nothing renderable does the reader see a notice instead. */
-  const recovered = recoverArtifactPayload(inner);
-  if (recovered.ok) return `\`\`\`navi-artifact\n${JSON.stringify(recovered.payload)}\n\`\`\``;
+  const assessed = assessArtifact(inner);
+  if (assessed.ok) return `\`\`\`navi-artifact\n${JSON.stringify(assessed.payload)}\n\`\`\``;
   return tolerantlyParsed(inner)
-    ? `\n> Navi Soul removed an invalid artifact payload: ${recovered.error}\n`
+    ? `\n> Navi Soul removed an invalid artifact payload: ${assessed.error}\n`
     : "\n> Navi Soul removed a malformed artifact payload.\n";
 }
 
