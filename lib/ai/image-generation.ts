@@ -1,4 +1,5 @@
 import type { GeneratedImagePayload } from "./types";
+import { validateGeneratedImage } from "./navi-soul/image-preflight";
 
 export type ImageAttachment = {
   mimeType: "image/png" | "image/jpeg" | "image/webp";
@@ -465,13 +466,16 @@ export async function generateNaviImage(options: {
 
   if (geminiApiKey()) {
     try {
-      block = await generateWithGemini({
+      const candidate = await generateWithGemini({
         prompt: options.prompt,
         attachments,
         dimensions,
         request,
         abortSignal: options.abortSignal
       });
+      const checked = validateGeneratedImage(candidate);
+      if (!checked.ok) throw new Error(checked.error);
+      block = { data: candidate.data, mimeType: checked.mimeType };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(message);
@@ -482,12 +486,15 @@ export async function generateNaviImage(options: {
   if (!block && huggingFaceToken() && !(options.attachments?.length)) {
     try {
       const chosen = WANTS_TEXT_IN_IMAGE.test(options.prompt) ? IMAGE_ENGINES.text : IMAGE_ENGINES.studio;
-      block = await generateWithHuggingFace({
+      const candidate = await generateWithHuggingFace({
         prompt: options.prompt,
         model: chosen.model,
         dimensions,
         abortSignal: options.abortSignal
       });
+      const checked = validateGeneratedImage(candidate);
+      if (!checked.ok) throw new Error(checked.error);
+      block = { data: candidate.data, mimeType: checked.mimeType };
       engine = chosen.name;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

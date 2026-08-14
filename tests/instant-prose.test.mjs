@@ -57,7 +57,7 @@ check("a fired-but-empty route yields to the model",
    pattern was, so the gate, not the pattern, was the limit. It now applies
    only to the loose short-form handlers; anchored routes read the whole
    message. */
-const routeLoopAt = source.indexOf("for (const route of PROSE_ROUTES)");
+const routeLoopAt = source.indexOf("for (const route of [...PROSE_ROUTES");
 const lengthGateAt = source.indexOf("query.length > 120");
 check("anchored routes run before the length gate", routeLoopAt > 0 && routeLoopAt < lengthGateAt, true);
 check("the loose short-form handlers keep their cap", lengthGateAt > 0, true);

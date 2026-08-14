@@ -74,7 +74,17 @@ check("the correction never names the verifier", /verif|council|workstream|model
 
 /* ── Artifact payloads are never half-shown ──────────────────────────────── */
 
-const artifact = JSON.stringify({ id: "a1", title: "Counter", kind: "html", html: "<button>1</button>", height: 200 });
+/* The body is a real one rather than a token `<button>1</button>`: the artifact
+   gate now judges a completed fence for emptiness as well as validity, and a
+   payload carrying fewer than 40 characters of content is treated as a stub. A
+   fixture below that floor would be testing the stub rule, not the streaming. */
+const artifact = JSON.stringify({
+  id: "a1",
+  title: "Counter",
+  kind: "html",
+  html: "<button type='button' onclick='this.textContent++'>1</button>",
+  height: 200
+});
 const fenced = "```navi-artifact\n" + artifact + "\n```";
 
 function streamThrough(deltas: string[]): string {
