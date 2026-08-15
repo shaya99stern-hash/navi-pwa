@@ -49,7 +49,6 @@ import {
   isResizableImage
 } from "@/lib/ui/attachments";
 
-
 const DOCUMENT_ACCEPT = [
   "text/plain",
   "text/markdown",
@@ -60,11 +59,8 @@ const DOCUMENT_ACCEPT = [
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
-/* Fixed per-bar phase offsets for the recording waveform. Constant so the
-   row keeps its shape across renders instead of reshuffling every frame. */
 const WAVEFORM_BARS = [0.7, 1.3, 0.9, 1.7, 1.1, 0.6, 1.5, 0.8, 1.2, 1.6, 0.75, 1.35, 0.95, 1.45, 0.65];
 
-/** Shared row shape for the + menu: icon, label, optional trailing mark. */
 const menuRow = "flex min-h-[50px] w-full items-center gap-3 px-4 text-left text-[0.9375rem]/[1.375rem] font-medium text-primary active:bg-elev-3";
 
 type Props = {
@@ -73,17 +69,12 @@ type Props = {
   online: boolean;
   attachmentCount: number;
   statusText: string;
-  /** Current effort level label, shown gray beside the model name in the pill. */
   effortLabel: string;
-  /** Placeholder and disclaimer differ between a fresh chat and one under way. */
   hasMessages: boolean;
   research: boolean;
-  /** The draft is a slash command, which runs on-device and needs no network. */
   offlineCommand: boolean;
   haptics: boolean;
-  /** The voice-language preference, so dictation matches the voice sheet. */
   voiceLanguage: string;
-  /** Lets the shell focus the composer synchronously from a tap handler. */
   inputRef?: RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
   onSend: () => void;
@@ -95,7 +86,6 @@ type Props = {
   onOpenTools: () => void;
   onOpenProjects: () => void;
   onOpenConnectors: () => void;
-  /** For the Integrations sheet, which reports real state rather than guessing. */
   connectorCount: number;
   connectorAccessMode: ConnectorAccessMode;
   onOpenPlaybooks: () => void;
@@ -173,13 +163,6 @@ export function ComposerDock({
   const documentInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<RecordingSession | null>(null);
 
-  /* Publish the dock's real height so anything positioned above it can read a
-     measurement instead of a guess.
-     `--navi-composer-min-height` is the constant 52, and the dock grows with
-     the draft, the attachment strip and the status line — so the scroll pill,
-     which was positioned from that constant, went behind the composer at three
-     lines of text and off-screen at six. A constant standing in for a measured
-     value is only ever right at one size. */
   useEffect(() => {
     const dock = dockRef.current;
     if (!dock) return;
@@ -194,17 +177,12 @@ export function ComposerDock({
       document.documentElement.style.removeProperty("--navi-composer-height");
     };
   }, []);
-  /** Recording diagnostics are logged once per session, not once per tap. */
+
   const loggedSupport = useRef(false);
-  /** Seconds recorded, so the composer shows progress rather than a lit icon. */
   const [recordedSeconds, setRecordedSeconds] = useState(0);
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
-  /* Transcription is a visible state of its own: the recording has stopped
-     but the words have not arrived, and a composer that looks idle for two
-     seconds reads as having thrown the recording away. */
   const [transcribing, setTranscribing] = useState(false);
-  /** Live microphone level, 0–1, for the waveform drawn while recording. */
   const [inputLevel, setInputLevel] = useState(0);
   const [focused, setFocused] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -221,23 +199,14 @@ export function ComposerDock({
     loaded: false
   });
   const [touchKeyboard, setTouchKeyboard] = useState(false);
-  /* The draft as it stands right now. The transcription callback closes over
-     the `value` from the render that started recording, so appending through
-     the prop dropped anything typed while the microphone was open. */
+
   const valueRef = useRef(value);
   valueRef.current = value;
   const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
 
-  /* Back dismisses whatever is in front of you. These two are the composer's
-     own overlays, and leaving them out would have made the gesture work
-     everywhere except the sheet a thumb opens most often. Neither takes an
-     address: a menu is not a destination worth linking to. */
   useOverlayRoute({ open: sourceMenuOpen, onClose: () => setSourceMenuOpen(false) });
   useOverlayRoute({ open: integrationsOpen, onClose: () => setIntegrationsOpen(false) });
 
-  /* 82 on-device commands are useless if nobody can find them, so typing a
-     slash lists what it could still become. Ranking is a synchronous map
-     lookup, cheap enough to run per keystroke. */
   const commands: Skill[] = value.startsWith("/") && !value.includes("\n") ? suggest(value, 6) : [];
   const showCommands = commands.length > 0 && focused;
 
@@ -250,7 +219,6 @@ export function ComposerDock({
   useEffect(() => {
     setTouchKeyboard(window.matchMedia("(pointer: coarse)").matches);
   }, []);
-
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -268,22 +236,12 @@ export function ComposerDock({
     setSelectedFiles((current) => current.slice(0, attachmentCount));
   }, [attachmentCount]);
 
-  /* One shared read of what the server has configured. The setup notice wants
-     the same answer, and both used to fetch it independently on mount and on
-     every return to the foreground — two identical requests each time, neither
-     component aware of the other. Re-probing on return is still what picks up a
-     key added elsewhere without a reload; it now happens once. */
   useEffect(() => watchProviderStatus((data) => {
-    // A failed or unauthorized probe must not latch the UI into an error
-    // state; treat it as unknown and let sending report the real result.
     if (!data) {
       setProviderReady(null);
       return;
     }
-    // Any configured provider can answer; which one is the router's business.
     setProviderReady(Object.values(data.providers ?? {}).some(Boolean));
-    /* The same probe already tells us what Navi can reach, so the
-       Integrations sheet costs no extra request. */
     setIntegrations({
       github: Boolean(data.devTools?.github),
       vercel: Boolean(data.devTools?.vercel),
@@ -295,12 +253,6 @@ export function ComposerDock({
   useEffect(() => () => recorderRef.current?.cancel(), []);
 
   const available = providerReady !== false;
-  /* Typing, attaching, and dictating stay available even with no provider
-     configured or no network. Disabling the textarea prevents focus entirely,
-     which stops the on-screen keyboard from ever opening and makes the app
-     look dead; only sending is gated, and the reason is shown below. */
-  // A slash command is answered on this device, so being offline is no reason
-  // to grey out the send button for one.
   const canSend = (online || offlineCommand) && !generating && Boolean(value.trim() || attachmentCount);
   const blocked = false;
   const hiddenAttachmentCount = Math.max(0, attachmentCount - selectedFiles.length);
@@ -309,10 +261,6 @@ export function ComposerDock({
     ? "Add instructions for these files"
     : hasMessages ? "Write a message…" : "How can I help you today?";
 
-  /* Idle status is deliberately empty: the thinking indicator in the thread
-     already reports progress while generating. */
-  /* The recording bar already shows the level and the clock, so the footer
-     only speaks for the state that has no other indicator. */
   const footer = (transcribing ? "Transcribing…" : null)
     ?? voiceMessage
     ?? attachmentMessage
@@ -324,18 +272,11 @@ export function ComposerDock({
           ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready`
           : null);
 
-  /** What is left of the recording budget, floored at zero. */
   const remainingSeconds = Math.max(0, MAX_RECORDING_SECONDS - recordedSeconds);
-
-  /* Recording is a live state, not a warning: it gets the accent, so the
-     composer reads as working rather than as complaining. */
   const footerTone = transcribing
     ? "text-accent"
     : !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
 
-  /* A ticking timer while recording. A lit button says "something is on";
-     a running clock says "you are being heard", which is the difference
-     between trusting dictation and tapping it twice to check. */
   useEffect(() => {
     if (!listening) { setRecordedSeconds(0); return; }
     const started = Date.now();
@@ -344,10 +285,7 @@ export function ComposerDock({
   }, [listening]);
 
   function send() {
-    // Deliberately not gated on the provider probe: if it is wrong or stale the
-    // request should still go out and surface a real server error.
     if ((!value.trim() && attachmentCount === 0) || generating) return;
-    // Slash commands are computed on this device, so they send while offline.
     if (!online && !offlineCommand) return;
     setSending(true);
     setSourceMenuOpen(false);
@@ -362,9 +300,6 @@ export function ComposerDock({
   }
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    // On touch keyboards Return inserts a newline, exactly like a native
-    // messaging app; sending is the arrow button's job. Hardware keyboards
-    // keep Enter-to-send with Shift+Enter for newlines.
     if (touchKeyboard) return;
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
@@ -385,7 +320,6 @@ export function ComposerDock({
     }
 
     const nextCount = attachmentCount + incoming.length;
-    // Images get resized before sending, so only documents face the hard cap.
     const invalid = incoming.find(
       (file) => file.size > (isResizableImage(file) ? MAX_IMAGE_INPUT_BYTES : ATTACHMENT_BUDGET)
     );
@@ -402,8 +336,6 @@ export function ComposerDock({
       return;
     }
 
-    // Only what cannot be resized is checked against the budget here; the
-    // send path resizes images and reports if the result still does not fit.
     const fixedBytes = [...selectedFiles, ...incoming]
       .filter((file) => !isResizableImage(file))
       .reduce((total, file) => total + file.size, 0);
@@ -461,21 +393,10 @@ export function ComposerDock({
     onOpenTools();
   }
 
-  /**
-   * Record, then transcribe.
-   *
-   * This used to drive `webkitSpeechRecognition`, which is why the microphone
-   * "did not work at all": in an installed iOS PWA it is often absent with no
-   * error and no event to render, so the button did nothing observable. It
-   * also plays a system chime the page cannot suppress. Recording with
-   * MediaRecorder works wherever getUserMedia does, is silent, and gives us
-   * the audio level the waveform draws.
-   */
-    async function startVoice() {
+  async function startVoice() {
     setVoiceMessage(null);
     haptic("selection", haptics);
 
-    // Log recording support info once per session.
     if (!loggedSupport.current) {
       loggedSupport.current = true;
       const supportInfo = describeRecordingSupport();
@@ -495,31 +416,13 @@ export function ComposerDock({
       recorderRef.current = session;
       setListening(true);
     } catch (error) {
-      // Reset state if recording fails.
       setListening(false);
       setInputLevel(0);
       setTranscribing(false);
 
-      // Provide specific error messages and iOS Safari fallback.
       let message = "Recording could not start.";
       if (error instanceof Error) {
-        if (error.message.includes("format") || error.message.includes("mimeType")) {
-          message = "Your device does not support this audio format. Trying another format...";
-          // Retry with a fallback format for iOS
-          try {
-            const session = await startRecording({
-              onLevel: (level) => setInputLevel(level),
-              onError: (msg) => setVoiceMessage(msg),
-              onAutoStop: () => void finishVoice(),
-              language: voiceLanguage,
-            });
-            recorderRef.current = session;
-            setListening(true);
-            return;
-          } catch (fallbackError) {
-            message = "Recording failed. Try using voice mode instead.";
-          }
-        } else if (error.message.includes("permission") || error.name === "NotAllowedError") {
+        if (error.message.includes("permission") || error.name === "NotAllowedError") {
           message = "Microphone access denied. Check your browser or device settings.";
         } else if (error.message.includes("not supported") || error.name === "NotSupportedError") {
           message = "Your device does not support recording. Try using voice mode instead.";
@@ -545,17 +448,11 @@ export function ComposerDock({
     setListening(false);
     setInputLevel(0);
     setTranscribing(true);
-    
-    /* Fired on the tap that got here, before the round trip — the same tick
-       that used to sit after await session.stop(), where activation had
-       already expired and it was dropped every time. */
     haptic("selection", haptics);
     
     try {
       const text = await session.stop();
       if (text) {
-        /* Read through the ref so the transcript joins the draft as it stands
-           now, not as it stood when recording began. */
         const current = valueRef.current;
         onChange(`${current}${current.trim() ? " " : ""}${text}`);
         textareaRef.current?.focus();
@@ -563,10 +460,6 @@ export function ComposerDock({
         setVoiceMessage("Nothing was recorded.");
       }
     } catch (error) {
-      /* The message carries this one. A haptic after a network round trip has
-         no activation left to fire on, so attempting it produced nothing but
-         an inconsistency with the errors that happen to be raised
-         synchronously — half the app ticking is what reads as broken. */
       setVoiceMessage(error instanceof Error ? error.message : "That recording could not be transcribed.");
     } finally {
       setTranscribing(false);
@@ -676,7 +569,6 @@ export function ComposerDock({
                   type="button"
                   role="option"
                   aria-selected="false"
-                  // Pointer-down beats blur, which would close the list first.
                   onPointerDown={(event) => { event.preventDefault(); completeCommand(skill); }}
                   className="flex min-h-[52px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-3 text-left last:border-b-0 active:bg-elev-2"
                 >
@@ -712,10 +604,6 @@ export function ComposerDock({
               }}
               onBlur={() => setFocused(false)}
               rows={1}
-              /* Always request the plain Return key: rendering this after
-                 hydration left the server's value in place, so iOS kept
-                 showing the send/checkmark key. Hardware keyboards still send
-                 on Enter via the keydown handler, where the hint is unused. */
               enterKeyHint="enter"
               inputMode="text"
               autoCapitalize="sentences"
@@ -724,19 +612,11 @@ export function ComposerDock({
               disabled={blocked}
               placeholder={placeholder}
               aria-label="Chat with Navi Soul"
-              /* Stable hook for anything that needs to prefill the composer
-                 from outside React — the artifact frame's edit button, for
-                 one. Keying off the aria-label coupled that to copy, and the
-                 copy changed. */
               data-navi-composer=""
               className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[1rem]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
             <div className="mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
-              {/* Recording takes the whole row. Leaving the other controls in
-                  place squeezed the waveform into a sliver competing with a
-                  flex spacer, and none of them is reachable one-handed while
-                  the other hand is holding the phone up to speak. */}
               {listening ? null : (
               <button
                 type="button"
@@ -755,8 +635,6 @@ export function ComposerDock({
                 type="button"
                 onClick={onOpenEffort}
                 className="flex min-h-9 min-w-0 max-w-[180px] items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2"
-                /* Effort only. There is one brain, so a model name here would
-                   be offering an implementation detail as a choice. */
                 aria-label={`Effort: ${effortLabel}. Change effort`}
               >
                 <span className="truncate font-semibold text-primary">{effortLabel}</span>
@@ -764,13 +642,6 @@ export function ComposerDock({
               </button>
               )}
 
-              {/* Research, in the composer where it is decided.
-                  It lived one level down inside the plus menu, so turning
-                  search on for the next question meant opening a sheet to
-                  find a checkbox — for the control most likely to change
-                  between one message and the next. It sits beside effort
-                  because they are the same kind of choice: how this message
-                  should be answered. */}
               {listening ? null : (
               <button
                 type="button"
@@ -788,14 +659,6 @@ export function ComposerDock({
 
               {listening ? null : <span className="min-w-0 flex-1" />}
 
-              {/* Mic and voice mode stay put while typing — the send button
-                  joins them instead of replacing them, so nothing under a
-                  finger disappears mid-thought. Both are icon-weight peers. */}
-              {/* While recording, the mic and voice buttons give way to a
-                  cancel / waveform / confirm bar. A lit icon says "something
-                  is on"; a moving waveform says "you are being heard", which
-                  is the difference between trusting dictation and tapping it
-                  twice to check. */}
               {listening ? (
                 <span className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1">
                   <button
@@ -808,9 +671,6 @@ export function ComposerDock({
                   </button>
                   <span className="flex min-w-0 flex-1 items-center justify-center gap-[3px]" aria-hidden="true">
                     {WAVEFORM_BARS.map((seed, index) => {
-                      /* Each bar reacts to the live level with its own phase,
-                         so the row moves like sound rather than pulsing as a
-                         block. Idle level leaves a row of dots. */
                       const wave = 0.35 + 0.65 * Math.abs(Math.sin((recordedSeconds * 4 + index) * seed));
                       const height = Math.max(3, Math.round(3 + inputLevel * wave * 19));
                       return (
@@ -822,11 +682,6 @@ export function ComposerDock({
                       );
                     })}
                   </span>
-                  {/* Counting down, not up. The recording stops on its own at
-                      MAX_RECORDING_SECONDS, and a clock that only counts up
-                      gives no warning of it — the waveform would simply
-                      disappear mid-sentence. The last ten seconds turn amber
-                      so the limit is felt before it arrives. */}
                   <span
                     className={`shrink-0 tabular-nums text-[0.75rem]/4 font-semibold ${remainingSeconds <= 10 ? "text-warning" : "text-secondary"}`}
                     aria-label={`${remainingSeconds} seconds left`}
@@ -845,16 +700,6 @@ export function ComposerDock({
               ) : (
               <button
                 type="button"
-                /* Tap to start, tap to stop.
-                 *
-                 * This was press-and-hold: pointerdown started recording and
-                 * pointerup stopped it. A normal tap is a pointerdown and a
-                 * pointerup a few milliseconds apart, so tapping the mic
-                 * started and instantly stopped it — the button did nothing at
-                 * all unless you held it perfectly still for the whole
-                 * sentence, and any scroll or permission prompt cancelled the
-                 * gesture. Toggling is also what a phone user actually expects
-                 * from a dictation button, and it leaves the hand free. */
                 onClick={toggleVoice}
                 disabled={blocked || generating || transcribing}
                 className={`composer-action ${transcribing ? "opacity-60" : ""}`}
@@ -888,24 +733,13 @@ export function ComposerDock({
             </div>
           </form>
 
-          {/* Actionable warnings first; otherwise, once a conversation is under
-              way, the standing accuracy disclaimer takes this line. */}
           <div className="flex items-center justify-center px-3 text-center" role="status" aria-live="polite">
-            {/* The footer is capped at two lines. A provider error can run to
-                several hundred characters, and letting it wrap freely turned
-                this line into a wall of text that shoved the composer up the
-                screen. */}
             {footer ? (
               <span className={`block max-h-8 overflow-hidden pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
             ) : hasMessages ? (
               <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">Navi Soul is AI and can make mistakes. Double-check important answers.</span>
             ) : null}
           </div>
-
-          {/* No starter chips. A row of five verbs under the field is the app
-              guessing at the task, and it guessed in front of the one control
-              that already accepts any task at all. The prototype's composer is
-              three things — attach, type, speak — and nothing else. */}
         </div>
       </div>
 
@@ -941,9 +775,6 @@ export function ComposerDock({
               </button>
             </div>
 
-            {/* A list, not a grid of tiles: the actions here are of different
-                kinds — attach, navigate, toggle — and a grid implies they are
-                all the same kind of thing. Dividers group them. */}
             <div className="overflow-hidden rounded-card border border-[var(--border-subtle)] bg-elev-2">
               <button type="button" onClick={() => imageInputRef.current?.click()} className={menuRow}>
                 <ImageIcon size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
@@ -970,9 +801,6 @@ export function ComposerDock({
                 <span className="flex-1">Playbooks</span>
                 <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
               </button>
-              {/* Integrations replaces what would otherwise be a row of loose
-                  icons for GitHub, Vercel, search, and connectors. One entry,
-                  one sheet, and nothing added to the main interface. */}
               <button type="button" onClick={() => { setSourceMenuOpen(false); setIntegrationsOpen(true); }} className={menuRow}>
                 <Link2 size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
                 <span className="flex-1">Integrations</span>
@@ -981,8 +809,6 @@ export function ComposerDock({
 
               <div className="h-2 bg-[var(--bg-app)]" aria-hidden="true" />
 
-              {/* A checkable row, not a switch: it reads as "this is on for the
-                  next message" rather than as a settings change. */}
               <button
                 type="button"
                 role="menuitemcheckbox"
@@ -1015,3 +841,4 @@ export function ComposerDock({
     </>
   );
 }
+
