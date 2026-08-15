@@ -24,30 +24,7 @@ export type RecordingSession = {
   cancel: () => void;
 };
 
-/**
- * How long a single dictation may run.
- *
- * Not a stylistic cap. The request body has to cross a serverless platform
- * that refuses large uploads before the route ever runs, so a recording that
- * grows past that ceiling fails with no response the app can render — the
- * composer simply sits at "Transcribing…" until the fetch gives up. Bounding
- * the recording is what turns that silent class of failure into an outcome
- * the user can see coming, which is what the countdown in the composer is for.
- */
 export const MAX_RECORDING_SECONDS = 60;
-
-/**
- * The largest body worth sending.
- *
- * Vercel refuses request bodies above roughly 4.5 MB (4 MB on the edge
- * runtime) at the platform edge, before any handler executes — so the route's
- * own 413 can never be the thing that renders. Staying under 3.5 MB keeps the
- * decision on this side of the wire, where there is a UI to show it in.
- *
- * At the bitrates browsers actually record speech at (32–128 kbps) sixty
- * seconds lands between 240 KB and 1 MB, so this bound is not reachable by
- * normal dictation; it exists to catch the recorder that ignores the cap.
- */
 export const MAX_UPLOAD_BYTES = 3_500_000;
 
 export function recordingSupported(): boolean {
@@ -56,21 +33,12 @@ export function recordingSupported(): boolean {
     && typeof MediaRecorder !== "undefined";
 }
 
-/** Running as an installed app rather than in a browser tab. */
 export function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
   return window.matchMedia?.("(display-mode: standalone)").matches === true
     || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 }
 
-/**
- * Whether the microphone has already been granted, where the browser will say.
- *
- * Safari has historically not implemented the `microphone` permission name,
- * so `null` means "no answer available", not "denied" — the caller must treat
- * it as unknown and let getUserMedia be the judge. Guessing "denied" here
- * would put a dead-button warning in front of a microphone that works.
- */
 export async function microphonePermission(): Promise<PermissionState | null> {
   try {
     const query = navigator.permissions?.query;
@@ -82,15 +50,6 @@ export async function microphonePermission(): Promise<PermissionState | null> {
   }
 }
 
-/**
- * What this device will actually record, reported rather than assumed.
- *
- * `MediaRecorder.isTypeSupported` returning true does not mean the recorder
- * produces that container, and it does not mean the transcription service
- * accepts what it produces. Those three can disagree, and every previous
- * attempt at this bug guessed which one was lying. Logged once per session so
- * a device that fails leaves evidence behind instead of a shrug.
- */
 export function describeRecordingSupport(): Record<string, unknown> {
   const candidates = ["audio/mp4", "audio/mpeg", "audio/ogg;codecs=opus", "audio/ogg", "audio/webm;codecs=opus", "audio/webm"];
   return {
@@ -105,57 +64,22 @@ export function describeRecordingSupport(): Record<string, unknown> {
   };
 }
 
-/**
- * The first container this browser will record *that transcription accepts*.
- *
- * Order matters and was wrong. WebM/Opus came first because it is the best
- * supported recording format on the web — and the transcription endpoint
- * rejects it outright: `Content type "audio/webm; codecs=opus" not
- * supported`. Recording in the format the recorder prefers rather than the
- * one the consumer accepts made every transcription fail at the last step.
- *
- * MP4/AAC first: Safari records it natively, Whisper accepts it everywhere,
- * and it is the format an iPhone would have produced anyway. WebM stays last
- * as a genuine fallback for a browser that supports nothing else — the
- * multipart path handles it where the raw-bytes path cannot.
- */
 function preferredMimeType(): string | undefined {
   const candidates = ["audio/mp4", "audio/mpeg", "audio/ogg;codecs=opus", "audio/ogg", "audio/webm;codecs=opus", "audio/webm"];
   return candidates.find((type) => MediaRecorder.isTypeSupported?.(type));
 }
 
 /**
- * Start recording. Rejects if the microphone is unavailable or refused, so the
- * caller can say which of those happened rather than showing a dead button.
+ * Start recording. Iterates silently through fallback audio formats before throwing.
  */
 export async function startRecording({ onLevel, onError, onAutoStop, language }: {
   onLevel?: RecorderLevels;
   onError?: (message: string) => void;
-  /** Fired when the duration cap stops the recording on its own. */
   onAutoStop?: () => void;
-  /* The user's dictation-language preference, passed straight through. Voice
-     mode has offered this picker all along and nothing ever sent it anywhere,
-     so it changed a stored value and nothing else. `auto` means no hint. */
   language?: string;
 } = {}): Promise<RecordingSession> {
   if (!recordingSupported()) throw new Error("This browser cannot record audio.");
 
-  /**
-   * The AudioContext is constructed *before* the getUserMedia await, and this
-   * ordering is the whole fix for the dead level meter.
-   *
-   * On iOS an AudioContext created without transient user activation is born
-   * `suspended` and never runs. `getUserMedia` is what spends the activation:
-   * it takes hundreds of milliseconds and may raise a permission sheet, so a
-   * context constructed after it is always too late. The analyser then read a
-   * flat 128 forever, the level stayed 0, and the composer drew a motionless
-   * row of dots for the entire recording — which is precisely what "the
-   * microphone doesn't hear me" looks like from the outside. The audio was
-   * being captured correctly the whole time; only the meter was dead.
-   *
-   * Constructing it here, still inside the activation the tap granted, starts
-   * it `running`. The source is attached once the stream arrives.
-   */
   let audio: AudioContext | undefined;
   if (onLevel) {
     try {
@@ -163,7 +87,7 @@ export async function startRecording({ onLevel, onError, onAutoStop, language }:
         ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (Ctor) audio = new Ctor();
     } catch {
-      /* Level metering is decoration. Losing it must not lose the recording. */
+      /* Level metering decoration failure must not break recording */
     }
   }
 
@@ -175,9 +99,6 @@ export async function startRecording({ onLevel, onError, onAutoStop, language }:
   } catch (error) {
     void audio?.close().catch(() => {});
     const denied = error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "SecurityError");
-    /* An installed iOS app has no per-site permission pane to send anyone to,
-       so the browser-settings advice is wrong there and reads as the app
-       blaming the user for a setting that does not exist. */
     throw new Error(denied
       ? isStandalone()
         ? "Microphone access was refused. iOS does not remember this for an installed app — reopen NaviOS from the home screen and allow it when asked, or open the site in Safari once to grant it."
@@ -185,22 +106,43 @@ export async function startRecording({ onLevel, onError, onAutoStop, language }:
       : "No microphone is available.");
   }
 
-  const mimeType = preferredMimeType();
-  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  // SILENT FALLBACK LOOP FOR MEDIA RECORDER FORMATS
+  const candidates = ["audio/mp4", "audio/mpeg", "audio/ogg;codecs=opus", "audio/ogg", "audio/webm;codecs=opus", "audio/webm"];
+  let recorder: MediaRecorder | null = null;
+  let activeMimeType: string | undefined = undefined;
+
+  for (const candidate of candidates) {
+    if (candidate && MediaRecorder.isTypeSupported && !MediaRecorder.isTypeSupported(candidate)) {
+      continue; 
+    }
+    try {
+      recorder = new MediaRecorder(stream, candidate ? { mimeType: candidate } : undefined);
+      activeMimeType = candidate;
+      break; 
+    } catch {
+      // Try next format silently without showing error message
+    }
+  }
+
+  // Last resort absolute default fallback
+  if (!recorder) {
+    try {
+      recorder = new MediaRecorder(stream);
+      activeMimeType = undefined;
+    } catch (err) {
+      for (const t of stream.getTracks()) t.stop();
+      void audio?.close().catch(() => {});
+      throw new Error("Audio format was rejected and no fallback formats worked.");
+    }
+  }
+
   const chunks: Blob[] = [];
   recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
   recorder.onerror = () => onError?.("Recording stopped unexpectedly.");
 
-  /* A live level, so the composer can show that speech is being picked up.
-     Everything here is torn down with the stream; an AudioContext left running
-     holds the microphone indicator on after recording ends. */
   let raf = 0;
   if (onLevel && audio) {
     try {
-      /* Belt and braces for the case above: a context that still came back
-         suspended is asked to run. This resolves on its own where the
-         construction happened in time, and is the only recovery where it did
-         not — a suspended context produces silence, not an error. */
       if (audio.state === "suspended") void audio.resume().catch(() => {});
       const source = audio.createMediaStreamSource(stream);
       const analyser = audio.createAnalyser();
@@ -209,8 +151,6 @@ export async function startRecording({ onLevel, onError, onAutoStop, language }:
       const data = new Uint8Array(analyser.frequencyBinCount);
       const tick = () => {
         analyser.getByteTimeDomainData(data);
-        /* Peak deviation from silence, normalised. Cheaper than RMS and reads
-           the same once it is a few pixels of bar height. */
         let peak = 0;
         for (const value of data) peak = Math.max(peak, Math.abs(value - 128));
         onLevel(Math.min(1, peak / 96));
@@ -218,7 +158,7 @@ export async function startRecording({ onLevel, onError, onAutoStop, language }:
       };
       raf = requestAnimationFrame(tick);
     } catch {
-      /* Level metering is decoration. Losing it must not lose the recording. */
+      /* Level metering decoration */
     }
   }
 
@@ -232,11 +172,8 @@ export async function startRecording({ onLevel, onError, onAutoStop, language }:
 
   recorder.start();
 
-  /* The cap enforces itself rather than trusting the UI to do it. The composer
-     shows the countdown, but a backgrounded tab does not run its timers
-     reliably and the ceiling has to hold regardless of what is on screen. */
   capTimer = window.setTimeout(() => {
-    if (recorder.state !== "inactive") {
+    if (recorder && recorder.state !== "inactive") {
       recorder.stop();
       onAutoStop?.();
     }
@@ -244,23 +181,16 @@ export async function startRecording({ onLevel, onError, onAutoStop, language }:
 
   return {
     async stop() {
-      /* `onstop` only ever fires for a recorder that was running. Waiting on it
-         unconditionally is what turned an already-stopped recorder into a
-         permanent hang: the promise had nothing left to resolve it, so the
-         composer sat at "Transcribing…" forever with no error and no way back.
-         A recorder reaches `inactive` on its own whenever iOS interrupts the
-         audio session — a call, Siri, another app taking the microphone — so
-         this is a state the app reaches in ordinary use, not a corner case. */
-      if (recorder.state !== "inactive") {
-        await new Promise<void>((resolve) => { recorder.onstop = () => resolve(); recorder.stop(); });
+      if (recorder && recorder.state !== "inactive") {
+        await new Promise<void>((resolve) => { 
+          if (recorder) recorder.onstop = () => resolve(); 
+          recorder?.stop(); 
+        });
       }
       teardown();
 
-      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
-      // Below this it is a stray tap, not speech, and the API would 400.
+      const blob = new Blob(chunks, { type: recorder?.mimeType || activeMimeType || "audio/webm" });
       if (blob.size < 1_200) return "";
-      /* Refused here, with a sentence, rather than at the platform edge, where
-         the rejection never reaches the handler and so never reaches the user. */
       if (blob.size > MAX_UPLOAD_BYTES) {
         throw new Error("That recording is too large to send. Record a shorter message.");
       }
@@ -273,17 +203,13 @@ export async function startRecording({ onLevel, onError, onAutoStop, language }:
       });
       const data = (await response.json().catch(() => null)) as { text?: string; error?: string; detail?: string; sentAs?: string } | null;
       if (!response.ok || typeof data?.text !== "string") {
-        /* The full per-model detail goes to the console rather than the
-           composer: the footer needs one readable sentence, but a failure
-           nobody can inspect is one that gets reported as "still broken"
-           with nothing to act on. */
         if (data?.detail) console.error("Navi Soul transcription detail:", data.detail, "sent as", data.sentAs ?? blob.type);
         throw new Error(data?.error || "That recording could not be transcribed.");
       }
       return data.text;
     },
     cancel() {
-      if (recorder.state !== "inactive") recorder.stop();
+      if (recorder && recorder.state !== "inactive") recorder.stop();
       teardown();
     }
   };
@@ -291,22 +217,6 @@ export async function startRecording({ onLevel, onError, onAutoStop, language }:
 
 export type MicCheck = { step: string; ok: boolean; detail: string };
 
-/**
- * Run the whole dictation pipeline once and report which step fails.
- *
- * Three rounds of this bug have been diagnosed by reading source and guessing,
- * and the guesses were wrong twice: first the transcription container, then
- * the suspended AudioContext. Both were real defects; neither was the whole
- * story, because "the mic doesn't work" describes six different failures and
- * the app never said which one it hit.
- *
- * So this stops guessing. It exercises permission, capture, *actual measured
- * signal*, encoding, and the network round trip in order, and names the first
- * thing that breaks along with what it really returned. The signal check
- * matters most: a recorder can produce a perfectly valid file of silence, and
- * from the outside that is indistinguishable from a recorder that never
- * started — which is exactly the "records but hears nothing" report.
- */
 export async function diagnoseMicrophone(onProgress?: (step: string) => void): Promise<MicCheck[]> {
   const checks: MicCheck[] = [];
   const note = (step: string, ok: boolean, detail: string) => {
@@ -366,8 +276,7 @@ export async function diagnoseMicrophone(onProgress?: (step: string) => void): P
       }
     } catch { /* reported by the check below */ }
   }
-  /* 4 of 128 is the floor of real room noise. Below it the stream is silent,
-     whatever the file size says. */
+
   note("Signal", peak > 4, peak > 4
     ? `Picked up sound (peak ${Math.round((peak / 128) * 100)}%).`
     : `Heard nothing (peak ${Math.round((peak / 128) * 100)}%). The microphone opened but no audio is reaching the app.`);
