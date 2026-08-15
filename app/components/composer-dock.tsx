@@ -471,89 +471,105 @@ export function ComposerDock({
    * MediaRecorder works wherever getUserMedia does, is silent, and gives us
    * the audio level the waveform draws.
    */
-  async function startVoice() {
-  setVoiceMessage(null);
-  haptic("selection", haptics);
+    async function startVoice() {
+    setVoiceMessage(null);
+    haptic("selection", haptics);
 
-  // Log recording support info once per session.
-  if (!loggedSupport.current) {
-    loggedSupport.current = true;
-    const supportInfo = describeRecordingSupport();
-    console.info("NaviOS recording support:", supportInfo);
-  }
+    // Log recording support info once per session.
+    if (!loggedSupport.current) {
+      loggedSupport.current = true;
+      const supportInfo = describeRecordingSupport();
+      console.info("NaviOS recording support:", supportInfo);
+    }
 
-  try {
-    const session = await startRecording({
-      onLevel: (level) => setInputLevel(level),
-      onError: (message) => setVoiceMessage(message),
-      onAutoStop: () => {
-        setVoiceMessage(`Recording stopped at ${MAX_RECORDING_SECONDS} seconds. Transcribing what you said.`);
-        void finishVoice();
-      },
-      language: voiceLanguage,
-    });
-    recorderRef.current = session;
-    setListening(true);
-  } catch (error) {
-    // Reset state if recording fails.
-    setListening(false);
-    setInputLevel(0);
-    setTranscribing(false);
+    try {
+      const session = await startRecording({
+        onLevel: (level) => setInputLevel(level),
+        onError: (message) => setVoiceMessage(message),
+        onAutoStop: () => {
+          setVoiceMessage(`Recording stopped at ${MAX_RECORDING_SECONDS} seconds. Transcribing what you said.`);
+          void finishVoice();
+        },
+        language: voiceLanguage,
+      });
+      recorderRef.current = session;
+      setListening(true);
+    } catch (error) {
+      // Reset state if recording fails.
+      setListening(false);
+      setInputLevel(0);
+      setTranscribing(false);
 
-    // Provide specific error messages.
-    let message = "Recording could not start.";
-    if (error instanceof Error) {
-      if (error.message.includes("permission") || error.name === "NotAllowedError") {
-        message = "Microphone access denied. Check your browser or device settings.";
-      } else if (error.message.includes("not supported") || error.name === "NotSupportedError") {
-        message = "Your device does not support recording. Try using voice mode instead.";
-      } else {
-        message = error.message;
+      // Provide specific error messages and iOS Safari fallback.
+      let message = "Recording could not start.";
+      if (error instanceof Error) {
+        if (error.message.includes("format") || error.message.includes("mimeType")) {
+          message = "Your device does not support this audio format. Trying another format...";
+          // Retry with a fallback format for iOS
+          try {
+            const session = await startRecording({
+              onLevel: (level) => setInputLevel(level),
+              onError: (msg) => setVoiceMessage(msg),
+              onAutoStop: () => void finishVoice(),
+              language: voiceLanguage,
+            });
+            recorderRef.current = session;
+            setListening(true);
+            return;
+          } catch (fallbackError) {
+            message = "Recording failed. Try using voice mode instead.";
+          }
+        } else if (error.message.includes("permission") || error.name === "NotAllowedError") {
+          message = "Microphone access denied. Check your browser or device settings.";
+        } else if (error.message.includes("not supported") || error.name === "NotSupportedError") {
+          message = "Your device does not support recording. Try using voice mode instead.";
+        } else {
+          message = error.message;
+        }
       }
+      setVoiceMessage(message);
     }
-    setVoiceMessage(message);
   }
-}
 
-async function finishVoice() {
-  const session = recorderRef.current;
-  recorderRef.current = null;
-  if (!session) {
+  async function finishVoice() {
+    const session = recorderRef.current;
+    recorderRef.current = null;
+    if (!session) {
+      setListening(false);
+      setInputLevel(0);
+      setTranscribing(false);
+      setVoiceMessage("Recording was cancelled.");
+      return;
+    }
+
     setListening(false);
     setInputLevel(0);
-    setTranscribing(false);
-    setVoiceMessage("Recording was cancelled.");
-    return;
-  }
-
-  setListening(false);
-  setInputLevel(0);
-  setTranscribing(true);
-  /* Fired on the tap that got here, before the round trip — the same tick
-     that used to sit after `await session.stop()`, where activation had
-     already expired and it was dropped every time. */
-  haptic("selection", haptics);
-  try {
-    const text = await session.stop();
-    if (text) {
-      /* Read through the ref so the transcript joins the draft as it stands
-         now, not as it stood when recording began. */
-      const current = valueRef.current;
-      onChange(`${current}${current.trim() ? " " : ""}${text}`);
-      textareaRef.current?.focus();
-    } else {
-      setVoiceMessage("Nothing was recorded.");
-    }
-  } catch (error) {
-    /* The message carries this one. A haptic after a network round trip has
-       no activation left to fire on, so attempting it produced nothing but
-       an inconsistency with the errors that happen to be raised
-       synchronously — half the app ticking is what reads as broken. */
-    setVoiceMessage(error instanceof Error ? error.message : "That recording could not be transcribed.");
-  } finally {
-    setTranscribing(false);
-
-
+    setTranscribing(true);
+    
+    /* Fired on the tap that got here, before the round trip — the same tick
+       that used to sit after await session.stop(), where activation had
+       already expired and it was dropped every time. */
+    haptic("selection", haptics);
+    
+    try {
+      const text = await session.stop();
+      if (text) {
+        /* Read through the ref so the transcript joins the draft as it stands
+           now, not as it stood when recording began. */
+        const current = valueRef.current;
+        onChange(`${current}${current.trim() ? " " : ""}${text}`);
+        textareaRef.current?.focus();
+      } else {
+        setVoiceMessage("Nothing was recorded.");
+      }
+    } catch (error) {
+      /* The message carries this one. A haptic after a network round trip has
+         no activation left to fire on, so attempting it produced nothing but
+         an inconsistency with the errors that happen to be raised
+         synchronously — half the app ticking is what reads as broken. */
+      setVoiceMessage(error instanceof Error ? error.message : "That recording could not be transcribed.");
+    } finally {
+      setTranscribing(false);
     }
   }
 
