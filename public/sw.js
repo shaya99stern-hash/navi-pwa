@@ -7,7 +7,11 @@ const STATIC_CACHE = `${VERSION}-static`;
 const SHELL_CACHE = `${VERSION}-shell`;
 /* Assets that ship in /public and carry no account data. Anything outside this
    set is fetched from the network so it cannot outlive a sign-out. */
-const PUBLIC_ASSET = /^\/(?:splash\/|favicon\.ico$|apple-touch-icon|pwa-icon-|brand-spark\.png$|offline)/;
+/* `navi-capture-worklet.js` is here because dictation loads it at the moment
+   the microphone button is pressed, and a round trip at that moment is a
+   round trip the person is waiting through. It carries no account data — it
+   is a signal processor — so it belongs in the shared cache with the icons. */
+const PUBLIC_ASSET = /^\/(?:splash\/|favicon\.ico$|apple-touch-icon|pwa-icon-|brand-spark\.png$|navi-capture-worklet\.js$|offline)/;
 const OFFLINE_URL = "/offline-shell.html";
 const SHELL = [
   OFFLINE_URL,

@@ -21,10 +21,27 @@ import { join } from "node:path";
  * mean code.
  */
 
-/** File contents with block and line comments removed. Use for absence checks. */
+/**
+ * File contents with block and line comments removed. Use for absence checks.
+ *
+ * A block comment is only recognised where one can actually begin: at the
+ * start of a line or after whitespace or an opening delimiter. The plain
+ * `/\*` this used to look for also matched inside string literals — and one
+ * such string has been sitting in the composer since it was written:
+ *
+ *     accept="image/\*"
+ *
+ * That is a false opener, and it stays harmless only until the number of real
+ * `*​/` terminators after it changes. Adding one comment further down the file
+ * re-pairs every delimiter after that point, and eleven kilobytes of JSX
+ * silently disappear from what the tests are reading. The assertions that
+ * broke were about the research switch — nowhere near either edit — and they
+ * broke by passing a check for absence, which is the failure mode with no
+ * symptom at all.
+ */
 export function stripComments(source) {
   return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[\s(){}[\],;=:?])\/\*[\s\S]*?\*\//g, "$1")
     .replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 

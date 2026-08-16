@@ -36,8 +36,13 @@ check("a missing token is named, not guessed at", route.includes("Add HF_TOKEN i
 /* A cold model on the free tier succeeds seconds later. Reporting it as a
    failure sends the user away from something that was about to work. */
 check("a warming model is distinguished from a failure", route.includes("warming up"), true);
-check("oversized audio is refused with a reason", route.includes("under a minute"), true);
+check("oversized audio is refused with a reason", route.includes("too long to send at once"), true);
 check("the request is bounded", route.includes("AbortController"), true);
+/* A body is now one segment of speech rather than a whole recording, so a
+   request still running after twenty seconds is stuck rather than slow — and
+   failing fast lets the retry happen while the person is still talking. */
+check("and bounded to a segment's worth of patience, not a recording's",
+  Number(/TIMEOUT_MS = ([\d_]+)/.exec(route)?.[1].replace(/_/g, "")) <= 20_000, true);
 
 /* The route's own limit has to sit under the platform's, or it is unreachable:
    Vercel refuses a body over ~4.5 MB (4 MB on edge) before the handler runs,
@@ -46,49 +51,100 @@ check("the request is bounded", route.includes("AbortController"), true);
 const maxAudioBytes = Number(/MAX_AUDIO_BYTES = ([\d_]+)/.exec(route)?.[1].replace(/_/g, ""));
 check("the route's size cap is under the platform body limit", maxAudioBytes > 0 && maxAudioBytes < 4_000_000, true);
 
+/* ── No container is negotiated any more ─────────────────────────────────────
+   Most of the route above exists because MediaRecorder hands back whatever
+   container the browser prefers, and "that audio format was rejected" was the
+   most common way dictation failed. The client writes its own WAV now, so
+   there is nothing to guess at — and WAV has to be the format the route
+   reaches for first, or the guessing comes back in through the extension. */
+
+check("WAV is what the route expects", route.includes('type.includes("wav") ? "wav"'), true);
+check("and what it assumes when nothing is said", route.includes('"audio/wav"'), true);
+check("the recorder writes its own header rather than asking for one",
+  read("lib/ui/audio/pcm.ts").body.includes("export function encodeWav"), true);
+check("at the rate the transcriber works in", read("lib/ui/audio/pcm.ts").body.includes("TARGET_SAMPLE_RATE = 16_000"), true);
+/* A slice of a WebM or MP4 stream has no header and cannot be decoded, which
+   is the specific technical reason the old version had to wait for the end of
+   the recording before it could send anything. */
+check("no MediaRecorder container is produced", stripComments(read("lib/ui/recorder.ts").source).includes("MediaRecorder"), false);
+
 /* ── The recorder releases the microphone ────────────────────────────────────
    A live MediaStream keeps the OS recording indicator lit after recording
    ends, which looks exactly like the app listening when it is not. */
 
-check("tracks are stopped", recorder.includes("track.stop()"), true);
-check("the audio context is closed", recorder.includes("audio?.close()"), true);
-check("the analyser loop is cancelled", recorder.includes("cancelAnimationFrame"), true);
-check("teardown runs on cancel as well as stop", (recorder.match(/teardown\(\)/g) ?? []).length >= 2, true);
-
-/* Safari does not support webm; without a fallback the recorder throws on
-   construction and the button appears broken on exactly one platform. */
-check("a container fallback exists for Safari", recorder.includes("audio/mp4"), true);
+check("tracks are stopped", recorder.includes("item.stop()"), true);
+check("the audio context is closed", recorder.includes("audio.close()"), true);
+check("the capture node is retired, not merely disconnected", recorder.includes('postMessage("stop")'), true);
+check("teardown runs on cancel as well as stop",
+  (recorder.match(/releaseMicrophone\(\)/g) ?? []).length >= 3, true);
 check("support is checked before use", recorder.includes("export function recordingSupported"), true);
 check("a refused permission is distinguished from no microphone", recorder.includes("NotAllowedError"), true);
-/* A stray tap produces a tiny blob the API would reject; silence is not an
-   error worth showing. */
-check("silent recordings are not sent", recorder.includes("blob.size < 1_200"), true);
+/* Silence is not an error worth showing, and it is now told apart from a
+   failure by whether any segment was ever produced rather than by a byte
+   count on a blob. */
+check("silence resolves as silence rather than as a failure",
+  /if \(!segments\.length\) return "";/.test(recorder), true);
 
-/* ── The level meter actually runs on iOS ────────────────────────────────────
+/* ── Capture actually runs on iOS ────────────────────────────────────────────
    An AudioContext constructed without user activation is born suspended and
-   never produces samples, so the analyser reads a flat 128, the level stays 0,
-   and the composer draws a motionless row of dots for the whole recording.
-   getUserMedia is what spends the activation, so the context has to be built
-   before it is awaited — ordering is the entire fix, and a later refactor that
-   moves the construction below the await silently restores the dead meter. */
+   never produces a sample, so the waveform sits flat and every recording is
+   silence. getUserMedia is what spends the activation, so the context has to
+   be built before it is awaited — ordering is the entire fix, and a later
+   refactor that moves the construction below the await restores the bug with
+   no visible symptom other than empty transcripts. */
 const contextAt = recorder.indexOf("new Ctor()");
 const getUserMediaAt = recorder.indexOf("await navigator.mediaDevices.getUserMedia");
 check("the audio context is created before getUserMedia is awaited",
   contextAt > 0 && getUserMediaAt > 0 && contextAt < getUserMediaAt, true);
 check("a suspended context is resumed anyway", recorder.includes("audio.resume()"), true);
+/* iOS suspends the context on an interruption or a trip to the background and
+   does not always resume it, which silently turns the rest of the recording
+   into a flat line. */
+check("and again whenever it is suspended later", recorder.includes('audio.addEventListener("statechange"'), true);
+check("including on return from the background", recorder.includes('"visibilitychange"'), true);
+/* A node with no route to the destination is never pulled, so `process` is
+   never called and the recording is empty — but routing it at full gain puts
+   the microphone through the speaker. */
+check("the capture node has a silent path to the destination", /sink\.gain\.value = 0/.test(recorder), true);
 
-/* ── Stopping an already-stopped recorder must not hang ──────────────────────
-   `onstop` only fires for a recorder that was running. iOS stops one on its
-   own whenever the audio session is interrupted — a call, Siri, another app
-   taking the microphone — and awaiting a promise nothing will resolve left the
-   composer at "Transcribing…" forever, with no error and no way back. */
-check("stop() only waits when the recorder is running",
-  recorder.includes('if (recorder.state !== "inactive") {\n        await new Promise'), true);
+/* ── An interrupted recording ends rather than hangs ─────────────────────────
+   A call, Siri, another app, or an unplugged headset ends the track. The old
+   version awaited an `onstop` that would never fire and left the composer at
+   "Transcribing…" for ever, with no error and no way back. Everything up to
+   the interruption has already been transcribed, so this finishes rather than
+   discards. */
+check("losing the microphone is an ending, not a hang", /onAutoStop\?\.\("interrupted"\)/.test(recorder), true);
+check("and it is reported", recorder.includes("was taken by another app"), true);
 
-/* ── The recording is bounded on the device that makes it ────────────────── */
-check("recording has a duration cap", recorder.includes("MAX_RECORDING_SECONDS = 60"), true);
-check("the cap enforces itself rather than trusting the UI", recorder.includes("onAutoStop?.()"), true);
-check("an oversized body is refused before it is sent", recorder.includes("blob.size > MAX_UPLOAD_BYTES"), true);
+/* ── The recording is bounded on the device that makes it ────────────────────
+   Sixty seconds was a real limit that cut people off mid-thought, and it
+   existed only because a whole recording had to fit in one request. Nothing is
+   held whole now, so what remains is a safety stop for a microphone left open
+   by accident. */
+check("recording has a safety ceiling", /MAX_RECORDING_SECONDS = 900/.test(recorder), true);
+check("but not a felt one", /MAX_RECORDING_SECONDS = 60;/.test(recorder), false);
+check("the ceiling enforces itself rather than trusting the UI",
+  /maxRecordingMs: MAX_RECORDING_SECONDS \* 1_000/.test(recorder), true);
+check("an oversized body is refused before it is sent", recorder.includes("audioBytes.byteLength > MAX_UPLOAD_BYTES"), true);
+
+/* ── Words arrive while they are still being spoken ──────────────────────────
+   The whole reason for the rewrite. Segments upload as they close, so the
+   wait after Stop is the last sentence rather than the whole recording. */
+check("segments upload while the microphone is still open", /function enqueue\(/.test(recorder), true);
+check("more than one at a time, so a fast talker is not queued behind himself",
+  /MAX_CONCURRENT_UPLOADS = 2/.test(recorder), true);
+/* Segments settle out of order — a short one queued behind a long one comes
+   back first — but text may only be shown in the order it was spoken, and may
+   only ever grow, or it rewrites itself under the reader. */
+check("the live transcript is the settled prefix, so it only ever grows",
+  /if \(onlySettledPrefix\) break;/.test(recorder), true);
+check("and is only emitted when it changed", /if \(next === emitted\) return;/.test(recorder), true);
+/* Losing one sentence to a rate limit must not throw away the four before
+   it. */
+check("a partial failure keeps the part that worked", /const text = assemble\(false\);\n {6}if \(text\) return text;/.test(recorder), true);
+/* A segment that never started has no request to abort, so nothing would move
+   it out of `pending` and a `stop()` racing a `cancel()` would wait for ever. */
+check("cancelling settles segments that never started", /segment\.status = "failed";\n {8}segment\.failure = "Cancelled\.";/.test(recorder), true);
 /* The client's ceiling must also sit under the platform's body limit. */
 const maxUploadBytes = Number(/MAX_UPLOAD_BYTES = ([\d_]+)/.exec(recorder)?.[1].replace(/_/g, ""));
 check("the client upload cap is under the platform body limit",

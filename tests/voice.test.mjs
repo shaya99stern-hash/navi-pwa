@@ -51,11 +51,20 @@ check("the composer records instead of recognising", composer.body.includes("sta
 check("the composer does not use recognition", composer.body.includes("startSpeechRecognition"), false);
 check("the sheet records too", sheet.body.includes("startRecording"), true);
 check("the sheet does not use recognition either", sheet.body.includes("startSpeechRecognition"), false);
-/* Recognition streamed words as they were spoken; recording can only produce
-   them at the end. An empty panel across that gap reads as the recording
-   having been thrown away, so the wait is shown. */
-check("the sheet shows the wait for the transcript", sheet.body.includes("transcribing"), true);
-check("it says what is happening", sheet.source.includes("Writing down what you said"), true);
+/* The one thing recognition did better has been recovered.
+ *
+ * It streamed words as they were spoken; the first recording version could
+ * only produce them at the end, so this sheet had to show a spinner across
+ * the whole gap — an empty panel there reads as the recording having been
+ * thrown away. The recorder transcribes segment by segment while the
+ * microphone is still open, so the text builds up as it is spoken and the
+ * spinner now covers only the last unfinished sentence. */
+check("the transcript arrives while it is being spoken", sheet.body.includes("onTranscript: setLive"), true);
+check("the pass in flight is kept apart from the passes already finished",
+  /const \[live, setLive\]/.test(sheet.body), true);
+check("and shown as provisional until it settles", /listening \? "text-secondary" : undefined/.test(sheet.body), true);
+check("the sheet still shows the wait for the last sentence", sheet.body.includes("transcribing"), true);
+check("and says what is happening", sheet.source.includes("Writing down what you said"), true);
 /* Start / Stop / Start again is how a long thought gets spoken. */
 check("a second pass adds to the turn",
   /const merged = `\$\{current\}\$\{current\.trim\(\) \? " " : ""\}\$\{text\}`/.test(sheet.body), true);
@@ -174,8 +183,23 @@ check("the sheet can run hands-free", /const \[conversation, setConversation\]/.
 /* Off by default. Holding the microphone open across a whole exchange is not
    something to start on someone's behalf. */
 check("and it is off until asked for", /useState\(false\);/.test(sheet.body), true);
+/* Detected by the recorder, which is the one place that knows. This sheet
+   used to run a second detector of its own over the level meter, with a fixed
+   threshold — so hands-free worked in a quiet room and nowhere else, while the
+   recorder was separately deciding, against a measured noise floor, where
+   speech began and ended. Two answers to one question is how two surfaces
+   drift apart, and the level-meter one was the worse answer. */
 check("the end of a turn is detected rather than pressed",
-  /createTurnDetector/.test(sheet.body), true);
+  /handsFree: conversation/.test(sheet.body), true);
+check("by the detector that also decides where segments are cut",
+  /onAutoStop: \(reason: AutoStopReason\)/.test(sheet.body), true);
+check("and the sheet keeps no second detector of its own",
+  stripComments(sheet.source).includes("createTurnDetector"), false);
+/* Hands-free is decided when the recorder is opened, so a switch flipped
+   mid-turn has to restart it — otherwise turning it on looks like it did
+   nothing until the turn after next. */
+check("flipping the switch mid-turn restarts rather than doing nothing",
+  /if \(listening\) void stop\(\{ discard: true \}\);/.test(sheet.body), true);
 check("and the turn is sent without a review step",
   /if \(conversation && online && !busy\) send\(merged\);/.test(sheet.body), true);
 
@@ -183,9 +207,15 @@ check("and the turn is sent without a review step",
    reply is still playing out of the speaker, transcribing it, and sending it
    back as the next question. */
 check("listening waits for the request to finish",
-  /if \(busy \|\| speaking \|\| listening \|\| transcribing \|\| restarting\.current\) return;/.test(sheet.body), true);
+  /if \(busy \|\| reading \|\| listening \|\| transcribing \|\| restarting\.current\) return;/.test(sheet.body), true);
 check("and for the reply to stop being spoken",
-  /setSpeaking\(window\.speechSynthesis\.speaking\)/.test(sheet.body), true);
+  /setReading\(window\.speechSynthesis\.speaking\)/.test(sheet.body), true);
+/* Two different things were both called `speaking`: the app reading a reply
+   aloud, and the detector hearing a voice. Hands-free is the feature that
+   depends on telling them apart — confusing them is the app transcribing its
+   own voice back as the next question — so they are named apart. */
+check("the app talking and the person talking are named apart",
+  /const \[reading, setReading\]/.test(sheet.body) && /const \[speaking, setSpeaking\]/.test(sheet.body), true);
 check("with a beat before reopening, so the speaker's tail is not the next turn",
   /}, 450\);/.test(sheet.body), true);
 /* busy, speaking and listening settle at different moments; without the guard
@@ -195,7 +225,7 @@ check("a guard stops two recorders opening on one gap",
 
 /* A turn with no words in it costs a transcription and returns nothing. */
 check("a silent turn is discarded rather than transcribed",
-  /if \(ended === "silent"\) void stop\(\{ discard: true \}\);/.test(sheet.body), true);
+  /if \(reason === "silent"\) void stop\(\{ discard: true \}\);/.test(sheet.body), true);
 /* Saying "nothing was picked up" every few seconds, hands-free, is its own
    kind of broken. */
 check("and it does not nag about it while hands-free",
