@@ -116,10 +116,19 @@ check("progress appears only once there is some", card.includes("done > 0"), tru
 
 const page = { url: "https://county.example.gov/rates", text: "The 2026 rate is $68.40 per unit." };
 
+/* Attributions are compared as a set rather than probed with
+   `material.includes(url)`. Substring-matching a URL passes on a mangled
+   address or on one turning up for any unrelated reason, and CodeQL flags the
+   shape on sight because the same expression used for an authorisation
+   decision is a genuine vulnerability. Comparing the extracted set is both
+   stronger and unambiguous: these addresses, exactly, in this order. */
+const attributions = (material: string): string[] =>
+  [...material.matchAll(/^--- Retrieved from (\S+) ---$/gm)].map((match) => match[1]);
+
 const sourced = groundingFor({ sources: [page] });
 check("a fetched page grounds the turn", sourced.kind, "sources");
 check("its content becomes the material", sourced.material.includes("$68.40"), true);
-check("attributed to where it came from", sourced.material.includes("https://county.example.gov/rates"), true);
+check("attributed to where it came from", attributions(sourced.material), ["https://county.example.gov/rates"]);
 /* The half that is the point: an answer may only cite what was really read. */
 check("the critique is told to check citations against what was retrieved",
   /citation|cites/i.test(sourced.instruction), true);
@@ -144,7 +153,8 @@ check("a source with no url is ignored",
 /* Several pages are one body of material, each labelled with its address. */
 const many = groundingFor({ sources: [page, { url: "https://other.example/a", text: "Second page." }] });
 check("every retrieved page appears", many.material.includes("Second page."), true);
-check("each with its own address", many.material.includes("https://other.example/a"), true);
+check("each with its own address, in the order they were read",
+  attributions(many.material), ["https://county.example.gov/rates", "https://other.example/a"]);
 check("and the instruction is plural when there are several", /pages below were/.test(many.instruction), true);
 check("singular when there is one", /page below was/.test(sourced.instruction), true);
 

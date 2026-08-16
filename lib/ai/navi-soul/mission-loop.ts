@@ -64,7 +64,28 @@ export type MissionOptions = {
   verify?: boolean;
 };
 
-const DEFAULTS = { maxSteps: 6, maxEngineCalls: 8, verify: true } as const;
+/**
+ * Calls held back so the answer can always be checked.
+ *
+ * Verification was unreachable by arithmetic. The budget was eight and the
+ * work spends 1 decompose + 6 steps + 1 synthesis = 8, so `engineCalls <
+ * maxEngineCalls` was false by the time the check was reached and it silently
+ * did not happen — on precisely the long missions where compounding error makes
+ * it matter most. A fourteen-step chain of ninety-percent-reliable steps is
+ * right about a quarter of the time, and the check is the only thing standing
+ * between that and a confident wrong answer.
+ *
+ * Reserved at the budget rather than fixed by raising the ceiling, so the
+ * guarantee survives someone lowering `maxEngineCalls` later: steps shrink,
+ * verification does not vanish. Two calls — the check, and the one revision it
+ * may trigger.
+ */
+const VERIFY_RESERVE = 2;
+
+/* Raised from eight so a six-step mission still fits beside the reserve:
+   1 decompose + 6 steps + 1 synthesis + 2 held back. The old figure was set
+   against a 52-second request budget that is now 240. */
+const DEFAULTS = { maxSteps: 6, maxEngineCalls: 10, verify: true } as const;
 
 /** How much prior-step context a step prompt may carry. Newest survives. */
 const CONTEXT_CHARS = 4_000;
@@ -155,8 +176,15 @@ export async function runMission(
   let engineCalls = 0;
   let skillHits = 0;
 
+  /* The reserve is enforced here, at the one place calls are counted, rather
+     than at each call site. A step loop that respects it by convention is one
+     edit away from not respecting it, and the failure is silent — the check
+     simply stops happening and the report still says the answer is complete. */
+  const stepCeiling = verify ? Math.max(1, maxEngineCalls - VERIFY_RESERVE) : maxEngineCalls;
+
   const engine = async (prompt: string, purpose: Parameters<MissionExecutors["runEngine"]>[1]): Promise<string | null> => {
-    if (engineCalls >= maxEngineCalls) return null;
+    const ceiling = purpose === "verify" || purpose === "revise" ? maxEngineCalls : stepCeiling;
+    if (engineCalls >= ceiling) return null;
     engineCalls += 1;
     return executors.runEngine(prompt, purpose);
   };
@@ -231,16 +259,22 @@ export async function runMission(
      cannot afford it: an unverified answer beats no answer, and the report
      says which one was delivered. */
   let verified: boolean | null = null;
-  if (verify && engineCalls < maxEngineCalls) {
+  if (verify) {
     progress("Checking the result");
+    const checkPrompt = (draft: string): string =>
+      `Does the ANSWER completely and correctly satisfy the REQUEST? Reply "PASS", or one line naming the single most important defect.\n\nREQUEST:\n${request}\n\nANSWER:\n${draft.slice(0, 6_000)}`;
+    /* A weak model often agrees at length before committing — "Looks correct.
+       PASS" failed an anchored match and bought a rewrite of a sound answer. A
+       verdict anywhere in a short reply is still a verdict; a long one that
+       merely mentions the word is not. */
+    const passed = (reply: string): boolean => /\bPASS\b/i.test(reply) && reply.trim().length < 400;
+
     try {
-      const check = await engine(
-        `Does the ANSWER completely and correctly satisfy the REQUEST? Reply "PASS", or one line naming the single most important defect.\n\nREQUEST:\n${request}\n\nANSWER:\n${answer.slice(0, 6_000)}`,
-        "verify"
-      );
+      const check = await engine(checkPrompt(answer), "verify");
       if (check !== null) {
-        verified = /^\s*PASS\b/i.test(check);
-        if (!verified && engineCalls < maxEngineCalls) {
+        verified = passed(check);
+
+        if (!verified) {
           progress("Revising");
           const revised = await engine(
             `Revise the ANSWER to fix this defect, changing nothing else. Reply with the full revised answer only.\n\nDEFECT: ${check.trim().slice(0, 300)}\n\nREQUEST:\n${request}\n\nANSWER:\n${answer.slice(0, 6_000)}`,
@@ -248,8 +282,33 @@ export async function runMission(
           );
           if (revised !== null && revised.trim()) {
             answer = revised;
-            verified = true;
-            notes.push("The first draft failed its own check and was revised once.");
+            /* Re-checked, not assumed.
+               This used to set `verified = true` on the strength of the
+               revision being a non-empty string — the flag asserted a check
+               that never ran, on the one answer known to have failed one. That
+               is the compounding-error failure in miniature: a step reports
+               success, the report carries it, and everything downstream trusts
+               it. A revision that cannot be re-checked is `null`, which means
+               unknown, and unknown is said rather than dressed up. */
+            /* Guarded separately from the outer try. A re-check that throws
+               must still leave a note saying the answer was revised: the
+               revision already replaced the draft, and losing the record of it
+               because the *checker* broke hands back a silently altered answer
+               with nothing said about it. */
+            let recheck: string | null = null;
+            try {
+              recheck = await engine(checkPrompt(answer), "verify");
+            } catch {
+              recheck = null;
+            }
+            verified = recheck === null ? null : passed(recheck);
+            notes.push(
+              verified === true ? "The first draft failed its own check; the revision passed."
+                : verified === false ? "The first draft failed its own check, and the revision did not fix it."
+                  : "The first draft failed its own check and was revised, but the revision could not be re-checked within budget."
+            );
+          } else if (revised === null) {
+            notes.push("The answer failed its own check and there was no budget left to revise it.");
           }
         }
       }
