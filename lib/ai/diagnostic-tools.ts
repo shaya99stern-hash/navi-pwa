@@ -1,6 +1,7 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
-import { providerProbes } from "./providers";
+import { configuredRouteModels, providerProbes } from "./providers";
+import { PROVIDERS, modelsProbe, providerApiKey } from "./provider-registry";
 
 /**
  * Letting Navi Soul find out what is actually wrong with itself.
@@ -63,28 +64,55 @@ async function checkCloudMemory(clerkToken?: string): Promise<DiagnosticResult> 
   if (!url || !key) return { area: "Cloud memory", ok: false, detail: "Not configured on this deployment: no Supabase URL or anon key." };
   if (!clerkToken) return { area: "Cloud memory", ok: false, detail: "Nobody is signed in, so there is no account to read memory for." };
 
+  /* Both tables, not one.
+     This probed only `navi_learned_skills` and reported the result as "Cloud
+     memory". The two tables are created by different migrations, and until this
+     commit `navi_memory_facts` had no migration in the repository at all — so
+     the single likeliest real-world state was skills working, facts 404ing, and
+     this check cheerfully reporting that memory was fine. A diagnostic that
+     covers one of the two things it is named after is worse than none, because
+     it is trusted. */
+  const probe = async (table: string, signal: AbortSignal) => {
+    const response = await fetch(`${url}/rest/v1/${table}?select=*&limit=1`, {
+      headers: { apikey: key, Authorization: `Bearer ${clerkToken}` },
+      signal,
+      cache: "no-store"
+    });
+    if (response.ok) return { table, ok: true, why: "" };
+    const body = (await response.text().catch(() => "")).slice(0, 200);
+    /* The three failures, each with a different fix, and none of them
+       guessable from the status code alone. */
+    const why = response.status === 404
+      ? `does not exist — its migration in supabase/migrations has not been applied (404 ${body})`
+      : response.status === 401 || response.status === 403
+        ? `refused the sign-in token (${response.status})`
+        : `answered ${response.status} ${body}`;
+    return { table, ok: false, why };
+  };
+
   return withTimeout(
     async (signal) => {
-      const response = await fetch(`${url}/rest/v1/navi_learned_skills?select=id&limit=1`, {
-        headers: { apikey: key, Authorization: `Bearer ${clerkToken}` },
-        signal,
-        cache: "no-store"
-      });
-      if (response.ok) return { area: "Cloud memory", ok: true, detail: "Readable and writable. Skills, chats, and preferences will persist." };
-      const body = (await response.text().catch(() => "")).slice(0, 240);
-      /* The three failures, each with a different fix, and none of them
-         guessable from the status code alone. */
-      if (response.status === 404) {
-        return { area: "Cloud memory", ok: false, detail: `The tables do not exist on this Supabase project — the migration in supabase/migrations has not been applied. (404 ${body})` };
+      const results = await Promise.all(
+        ["navi_learned_skills", "navi_memory_facts"].map((table) => probe(table, signal))
+      );
+      const broken = results.filter((entry) => !entry.ok);
+      if (!broken.length) {
+        return { area: "Cloud memory", ok: true, detail: "Readable and writable. Skills, facts, chats, and preferences will persist." };
       }
-      if (response.status === 401 || response.status === 403) {
-        return {
-          area: "Cloud memory",
-          ok: false,
-          detail: `Supabase rejected the sign-in token (${response.status}). The tables exist, so this is Supabase not trusting Clerk: add Clerk as a third-party auth provider in the Supabase project, and enable the Supabase integration in Clerk so the token carries the expected claims. Until then every policy compares against a null user and refuses everything. (${body})`
-        };
-      }
-      return { area: "Cloud memory", ok: false, detail: `Supabase answered ${response.status}. ${body}` };
+
+      /* Named once rather than per table: when the token is the problem it is
+         the problem for every table, and repeating the paragraph twice reads as
+         two faults. */
+      const unauthorised = broken.filter((entry) => /refused the sign-in token/.test(entry.why));
+      const clerkNote = unauthorised.length === results.length
+        ? " The tables exist, so this is Supabase not trusting Clerk: add Clerk as a third-party auth provider in the Supabase project, and enable the Supabase integration in Clerk so the token carries the expected claims. Until then every policy compares against a null user and refuses everything."
+        : "";
+
+      return {
+        area: "Cloud memory",
+        ok: false,
+        detail: `${broken.length} of ${results.length} memory tables are not usable: ${broken.map((entry) => `${entry.table} ${entry.why}`).join("; ")}.${clerkNote}`
+      };
     },
     () => ({ area: "Cloud memory", ok: false, detail: "Supabase did not answer within 10 seconds." })
   );
@@ -220,6 +248,109 @@ async function checkProviders(): Promise<DiagnosticResult> {
 }
 
 /**
+ * Do the model ids this deployment would actually send still exist?
+ *
+ * `checkProviders` above proves the keys work. That is the smaller half. A
+ * valid key aimed at a retired model id fails on every request, and this app is
+ * built to hide exactly that: failover is silent by design, a council's 404s
+ * are absorbed by `Promise.allSettled`, and what reaches the user is a slightly
+ * slower answer from whichever route happened to survive. An operator watching
+ * that would reasonably conclude the providers are poor, when the providers are
+ * fine and the routing table has rotted.
+ *
+ * Reported as a fact about *this deployment's configuration*, never surfaced to
+ * an end user mid-answer — the silent-failover rule is about the answer path,
+ * and this is not the answer path.
+ *
+ * The safety property is the inverse of `model-discovery.ts`'s default-deny: a
+ * model id is reported missing **only** when a catalogue was fetched, parsed,
+ * and came back non-empty without it. Anything else — a listing that would not
+ * parse, a shape we did not expect, a provider that does not publish one — is
+ * inconclusive and says so. A false "your models are dead" would send someone
+ * rewriting a routing table that was never broken.
+ */
+async function checkModelRoutes(): Promise<DiagnosticResult> {
+  const configured = configuredRouteModels();
+  if (!configured.length) {
+    return { area: "Model routes", ok: false, detail: "No provider credentials are set, so no model route could be checked." };
+  }
+
+  const checked = await Promise.all(configured.map(async (entry) => withTimeout(
+    async (signal) => {
+      const adapter = PROVIDERS[entry.provider];
+      const key = providerApiKey(adapter);
+      if (!key) return { label: entry.label, status: "unverified" as const, detail: "no credential" };
+      const probe = modelsProbe(adapter, key);
+      const response = await fetch(probe.url, { headers: probe.headers, signal, cache: "no-store" });
+      if (!response.ok) return { label: entry.label, status: "unverified" as const, detail: `the catalogue answered ${response.status}` };
+
+      const payload = (await response.json()) as unknown;
+      const listed = catalogueModelIds(payload);
+      /* An empty or unparseable catalogue proves nothing about the ids. */
+      if (!listed.size) return { label: entry.label, status: "unverified" as const, detail: "the catalogue could not be read" };
+
+      const missing = entry.models.filter((model) => !listed.has(model));
+      return missing.length
+        ? { label: entry.label, status: "missing" as const, detail: missing.join(", ") }
+        : { label: entry.label, status: "ok" as const, detail: `${entry.models.length} ids` };
+    },
+    () => ({ label: entry.label, status: "unverified" as const, detail: "the catalogue did not answer within 10 seconds" })
+  )));
+
+  const missing = checked.filter((entry) => entry.status === "missing");
+  const unverified = checked.filter((entry) => entry.status === "unverified");
+  const verified = checked.filter((entry) => entry.status === "ok");
+
+  if (!missing.length) {
+    return {
+      area: "Model routes",
+      ok: true,
+      detail: [
+        `Every configured model id was found on ${verified.length} of ${checked.length} providers.`,
+        unverified.length ? `Could not check: ${unverified.map((entry) => `${entry.label} (${entry.detail})`).join("; ")} — unchecked is not the same as broken.` : ""
+      ].filter(Boolean).join(" ")
+    };
+  }
+
+  return {
+    area: "Model routes",
+    ok: false,
+    detail: [
+      `${missing.length} provider${missing.length === 1 ? "" : "s"} do not list a model id this deployment is configured to send:`,
+      missing.map((entry) => `${entry.label} — ${entry.detail}`).join("; ") + ".",
+      "Every request routed to one of those fails and is absorbed by the silent failover, which reads as the app being weak rather than misconfigured.",
+      "Fix by repointing the route's model environment variable at an id the provider actually serves.",
+      unverified.length ? `Not checked: ${unverified.map((entry) => entry.label).join(", ")}.` : ""
+    ].filter(Boolean).join(" ")
+  };
+}
+
+/**
+ * Model ids out of a catalogue, across the two shapes the providers here use.
+ *
+ * OpenAI-compatible listings are `{ data: [{ id }] }`; Google's is
+ * `{ models: [{ name: "models/<id>" }] }`. Both are read defensively — an
+ * unrecognised shape yields an empty set, which the caller treats as "could not
+ * check" rather than as "nothing is there".
+ */
+function catalogueModelIds(payload: unknown): Set<string> {
+  const ids = new Set<string>();
+  if (!payload || typeof payload !== "object") return ids;
+  const record = payload as { data?: unknown; models?: unknown };
+
+  for (const entry of Array.isArray(record.data) ? record.data : []) {
+    const id = (entry as { id?: unknown })?.id;
+    if (typeof id === "string" && id) ids.add(id);
+  }
+  for (const entry of Array.isArray(record.models) ? record.models : []) {
+    const name = (entry as { name?: unknown })?.name;
+    /* Google prefixes every id with `models/`; the routes hold the bare id. */
+    if (typeof name === "string" && name) ids.add(name.replace(/^models\//, ""));
+  }
+  return ids;
+}
+
+/**
  * Whether the hardest requests can reach a frontier model.
  *
  * Worth its own row because it is the one setting that changes how good the
@@ -276,6 +407,7 @@ export async function runAllChecks(clerkToken?: string, hasUserGithub = false): 
     checkRepository(),
     Promise.resolve(checkUserRepoWrites(hasUserGithub)),
     checkProviders(),
+    checkModelRoutes(),
     Promise.resolve(checkFrontier()),
     Promise.resolve(checkSearch())
   ]);
@@ -292,9 +424,9 @@ export function buildDiagnosticTools({ clerkToken, hasUserGithub = false, onActi
       description:
         "Check what is actually working in this deployment right now: cloud memory (whether skills and chats can really be saved), voice transcription, the app's own GitHub repository, whether the user's other repositories can be edited, answering providers, and web search. Each check performs a real request and reports what came back, including the exact failure. Use this whenever the user asks what is broken, why something is not working, whether a capability is available, or why you could not save, remember, commit, transcribe, or search — and before telling them a capability does not exist. Never guess at the cause of a failure when this tool can measure it.",
       inputSchema: z.object({
-        area: z.enum(["all", "memory", "voice", "repository", "providers", "search"])
+        area: z.enum(["all", "memory", "voice", "repository", "providers", "routes", "search"])
           .optional()
-          .describe("Which area to check. Defaults to all, which is usually right.")
+          .describe("Which area to check. Defaults to all, which is usually right. Use routes when answers seem weak or oddly slow rather than failing outright — that is what a dead model id looks like from the outside.")
       }),
       execute: async ({ area = "all" }) => {
         onActivity("Checking what is working");
@@ -305,6 +437,9 @@ export function buildDiagnosticTools({ clerkToken, hasUserGithub = false, onActi
           wanted("repository") ? checkRepository() : null,
           wanted("repository") ? Promise.resolve(checkUserRepoWrites(hasUserGithub)) : null,
           wanted("providers") ? checkProviders() : null,
+          /* Either name reaches it, exactly once: someone asking about
+             providers is asking the same question this answers. */
+          wanted("providers") || wanted("routes") ? checkModelRoutes() : null,
           wanted("providers") ? Promise.resolve(checkFrontier()) : null,
           wanted("search") ? Promise.resolve(checkSearch()) : null
         ].filter(Boolean) as Array<Promise<DiagnosticResult> | DiagnosticResult>);

@@ -23,7 +23,7 @@ import { describeRequestSize, estimateTextTokens, estimateToolTokens, measureReq
 import { preflightPayload, type PromptBlock } from "@/lib/ai/navi-soul/payload-preflight";
 import { runMission, shouldRunAsMission, type MissionReport } from "@/lib/ai/navi-soul/mission-loop";
 import { ingestContent, learnFromMission, wantsLearning, type Lesson } from "@/lib/ai/navi-soul/learning-loop";
-import { readUrlAsText } from "@/lib/ai/web-tools";
+import { readUrl } from "@/lib/ai/web-tools";
 import { LESSON_PREFIX } from "@/lib/memory/lesson";
 import { decideLocally } from "@/lib/ai/navi-soul/router";
 import { describePlan, planTurn } from "@/lib/ai/navi-soul/orchestrator";
@@ -114,10 +114,23 @@ const MAX_TOOL_STEPS = 16;
  */
 const MAX_CODE_TOOL_STEPS = 28;
 /**
- * The wall-clock the whole request has, kept under the 60s edge ceiling so a
- * review that starts late is skipped rather than started and killed.
+ * The wall-clock the whole request has, kept under `maxDuration` so a review
+ * that starts late is skipped rather than started and killed.
+ *
+ * This read 52 seconds for a long time, against a comment describing a 60s edge
+ * ceiling. That ceiling moved to 300 when `maxDuration` did, and this constant
+ * did not follow — so the app spent months discarding its own best work against
+ * a limit that no longer existed. Everything gated on the remaining budget is
+ * expensive and optional by construction: the review rounds, the mission steps,
+ * the later tool hops. Those are exactly the things a too-tight budget drops
+ * first, which made the most sophisticated paths in the app the least likely to
+ * run.
+ *
+ * 240s leaves a full minute under `maxDuration` for the answer to finish
+ * streaming and the stream to close. The reserve below is separate and smaller:
+ * it only protects delivery of an answer already in hand.
  */
-const REQUEST_BUDGET_MS = 52_000;
+const REQUEST_BUDGET_MS = 240_000;
 const REVIEW_DELIVERY_RESERVE_MS = 2_000;
 /** Past this many turns a conversation is a context problem, not a hard one. */
 const LONG_CONTEXT_TURNS = 14;
@@ -890,11 +903,18 @@ function systemPromptBlocks(options: {
     toolNames.length
       ? `You can call these tools and their results are real: ${toolNames.join(", ")}. Call one whenever it would answer better than recalling — anything current, factual, personal, or specific to the user's own data. Never do arithmetic, unit conversion, date maths, or counting in your head when a tool will do it exactly; approximating those is the most common way you are wrong. Prefer searching and reading a source over answering from memory, and cite the URLs you actually read.`
       : "You have no callable tools in this request. Answer from your own knowledge, and say plainly when something needs live data you cannot reach.",
+    /* Read off the toolset itself rather than off the search key, because
+       searching and reading are two different capabilities and conflating them
+       produced a flat lie. Both branches here used to deny browsing whenever no
+       search provider was configured — while `fetch_url` sat in the very list
+       printed two lines above, needing no key, working, and able to chain a
+       dozen hops. The app talked its own model out of the one web capability it
+       always has. */
     toolNames.includes("web_search")
       ? ""
-      : tools.web
-        ? "Web search is switched on but unavailable on this route, so you cannot browse. Say so rather than implying you looked something up."
-        : "You cannot browse the web in this request.",
+      : toolNames.includes("fetch_url")
+        ? "You have no search engine on this request, but fetch_url reads any URL directly and its results are real. Use it on links the user gives you and on addresses you already know; follow links out of a page you fetched when the answer is a hop away. Only say you could not look something up when you also could not read a page that would have answered it."
+        : "You cannot search or read web pages in this request. Say so plainly rather than implying you looked something up.",
     /* The capability is the app's own now, not the route's. It used to be
        described as available "only when the selected route actually supplies
        it", which made a core ability hostage to whichever provider answered. */
@@ -1471,7 +1491,10 @@ export async function POST(request: Request): Promise<Response> {
 
       const complexRoute = effortLevel === "high" || (effortLevel === "medium" && effort !== "normal");
 
-      const lane = selectLane({
+      /* Kept only as the safety net for a non-model plan below. The lane that
+         actually serves the turn comes from `planTurn`, which reclassifies the
+         mode before choosing one. */
+      const laneFromInputs = selectLane({
         mode,
         effort: effortLevel,
         complex: complexRoute,
@@ -1503,35 +1526,25 @@ export async function POST(request: Request): Promise<Response> {
         complex: complexRoute
       });
 
-      /* A pinned diagnostic route is an explicit instruction and outranks the
-         lane; everything else lets the lane decide, falling back to the general
-         selector whenever the lane has no provider configured. */
-      const pinned = resolvedPreset !== "navi-soul" && resolvedPreset !== "navi-code";
-      const route = pinned
-        ? generalRoute
-        : routeForLane({
-          lane,
-          /* Classified from the request, not from the lane. Mechanical work
-             takes the fast route however hard the lane thought it was. */
-          taskKind: classifyTask(lastUserText),
-          availability,
-          tools,
-          hasFiles,
-          discovered: lane === 4 ? cachedRoute("coding") : null,
-          meteredAllowed
-        }) ?? generalRoute;
-      /* The same turn, planned in one call instead of assembled inline.
-         `planTurn` composes exactly what the lines above compose — lane, route,
-         health-ordered fallbacks, the metered floor, the optional prompt blocks
-         this turn earned — from the same functions in the same order.
+      /* Obeyed, at last.
+         `planTurn` composes exactly what this route used to assemble inline —
+         lane, route, health-ordered fallbacks, the metered floor, the optional
+         prompt blocks this turn earned — from the same functions in the same
+         order. It has been computing all of that for a while and sending it to
+         a `console.log`.
 
-         Logged and not yet obeyed, deliberately. The cluster above decides real
-         turns today, and the way to find out whether a planner agrees with it
-         is to run both against production traffic and read the difference, not
-         to swap one for the other and watch the complaints. Once these lines
-         agree in the logs, the cluster above becomes `plan.route`,
-         `plan.fallbacks` and `plan.lastResort`, and the capability brief and
-         image pipeline hang off `plan.promptBlocks` and `plan.kind`. */
+         The note that stood here said the switch would be flipped "once these
+         lines agree in the logs". They could not have: `TurnContext` had no
+         `preset`, and this route branches on exactly that, so no volume of
+         production traffic would ever have produced agreement. Two smaller
+         divergences sat underneath it. The gate now lives in
+         `tests/orchestrator-parity.test.ts`, which reimplements the old cluster
+         from the same primitives and asserts both choose identically across
+         6,480 turn shapes — a CI failure rather than weeks of log-reading, and
+         it caught a real defect on its first run.
+
+         One difference is intended and asserted there: a coding question typed
+         in Chat mode now takes a code lane. */
       const turnPlan = planTurn({
         request: lastUserText,
         mode,
@@ -1542,10 +1555,26 @@ export async function POST(request: Request): Promise<Response> {
         longContext: modelMessages.length > LONG_CONTEXT_TURNS,
         tools,
         availability,
+        /* The input whose absence made the comparison above meaningless: the
+           cluster branches on the pinned preset, so a planner that could not
+           see it could never agree with the cluster. */
+        preset: resolvedPreset,
         meteredAllowed,
-        discovered: lane === 4 ? cachedRoute("coding") : null
+        /* Unconditional now. Gating on `lane === 4` here used *this* lane to
+           filter an input to a planner that picks its own; the gate belongs
+           inside, against the lane actually chosen. */
+        discovered: cachedRoute("coding")
       });
-      console.log(`Navi Soul plan: ${describePlan(turnPlan)} | in use: lane ${lane}, ${engineName(route)}`);
+      /* The two non-model plan kinds, neither of which should reach here: the
+         image pipeline returned several hundred lines above, and an
+         unconfigured deployment is refused before any of this runs. They are
+         handled rather than asserted away, because "should be unreachable" is a
+         claim about code that changes, and the cost of being wrong is a thrown
+         request where a working answer was available. `generalRoute` is what
+         this route chose for itself before the planner existed. */
+      const route = turnPlan.kind === "model" ? turnPlan.route : generalRoute;
+      const lane = turnPlan.kind === "model" ? turnPlan.lane : laneFromInputs;
+      console.log(`Navi Soul plan: ${describePlan(turnPlan)} | serving: lane ${lane}, ${engineName(route)}`);
 
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
@@ -1728,7 +1757,9 @@ export async function POST(request: Request): Promise<Response> {
             : { kind: "text", value: lastUserText },
           {
             runEngine: (prompt) => callEngineOnce(prompt, "fast"),
-            fetchPage: (url) => readUrlAsText(url, { signal: request.signal }),
+            /* `readUrl`, not `readUrlAsText`: the learning loop has to be able
+               to tell a page from an explanation of why there is no page. */
+            fetchPage: (url) => readUrl(url, { signal: request.signal }),
             storeLessons,
             onProgress: (label) => writer.write(statusChunk({ stage: "draft", detail: label }))
           }
@@ -1839,16 +1870,24 @@ export async function POST(request: Request): Promise<Response> {
 
       /* Health-ordered: a provider that has been failing across recent
          requests goes to the back of the line instead of charging every turn
-         its timeout. Deprioritized, never dropped. */
-      const attempts = orderRoutesByHealth([
-        route,
-        ...fallbackRoutes({ primary: route, availability, complex: complexRoute })
-      ]);
+         its timeout. Deprioritized, never dropped.
+
+         Taken from the plan when there is one — `planTurn` orders the primary
+         and its alternates together, in one pass over the same health store, so
+         recomputing it here would be a second answer to a question already
+         answered. The inline form stays as the safety net for a non-model plan,
+         matching the `route` fallback above. */
+      const attempts = turnPlan.kind === "model"
+        ? [turnPlan.route, ...turnPlan.fallbacks]
+        : orderRoutesByHealth([
+          route,
+          ...fallbackRoutes({ primary: route, availability, complex: complexRoute })
+        ]);
       /* The floor, appended after the health ordering rather than inside it:
          it is the answer of last resort, so it must stay last however badly the
          free routes have been behaving. Skipped when it is already in the list,
          and absent entirely unless a frontier model is named. */
-      const floor = lastResortRoute(availability, meteredAllowed);
+      const floor = turnPlan.kind === "model" ? turnPlan.lastResort : lastResortRoute(availability, meteredAllowed);
       if (floor && !attempts.some((candidate) => candidate.model === floor.model)) attempts.push(floor);
       let lastFailure: unknown = null;
 

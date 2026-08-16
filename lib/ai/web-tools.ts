@@ -238,15 +238,60 @@ export function assertFetchableUrl(raw: string): URL {
  * Failures come back as text rather than thrown, because the caller is usually
  * a model and a bad link should not end a response.
  */
-export async function readUrlAsText(url: string, options: {
+/**
+ * Why a URL could not be read, as distinct from what it said.
+ *
+ * Only `no-captions` is a fact about the source. The rest are facts about this
+ * request — the same distinction `TranscriptFailure` above draws, carried out
+ * to every caller instead of stopping at the transcript.
+ */
+export type UrlReadFailure =
+  | "blocked"
+  | "unreachable"
+  | "no-transcript"
+  | "no-captions"
+  | "unreadable"
+  | "empty";
+
+/**
+ * The result of reading a URL, with failure kept out of the content channel.
+ *
+ * This used to be one `string`: the page text on success, an explanatory
+ * sentence on failure. That reads fine when a model is the consumer — it can
+ * tell prose about a page from the page — but it is indistinguishable to code,
+ * and one caller is code. The learning loop asked for a URL, received
+ * "The page came back without a caption list, which usually means YouTube
+ * served a consent or bot-check page…", measured it at 319 characters, decided
+ * that was enough content to be worth learning from, and fed the sentence to an
+ * extraction model as the thing to extract lessons about. Those lessons were
+ * then stored permanently and injected into every later prompt.
+ *
+ * A failure that is shaped like success will eventually be treated as success.
+ * So failure gets its own shape, and the string form survives only as the
+ * wrapper the model-facing tool needs.
+ */
+export type UrlReadResult =
+  | { ok: true; text: string }
+  | { ok: false; reason: UrlReadFailure; guidance: string };
+
+export async function readUrl(url: string, options: {
   signal?: AbortSignal;
   onActivity?: (label: string) => void;
-} = {}): Promise<string> {
+} = {}): Promise<UrlReadResult> {
   const onActivity = options.onActivity ?? (() => {});
   const signal = options.signal;
-  try {
-    const target = assertFetchableUrl(url);
+  const why = (error: unknown): string => (error instanceof Error ? error.message : "unknown error");
 
+  /* Hoisted out of the fetch below so a URL we refuse to touch is reported as
+     refused, rather than as a host that would not answer. */
+  let target: URL;
+  try {
+    target = assertFetchableUrl(url);
+  } catch (error) {
+    return { ok: false, reason: "blocked", guidance: `Could not read that page: ${why(error)}` };
+  }
+
+  try {
     const videoId = youTubeVideoId(target);
     if (videoId) {
       onActivity("Reading the video transcript");
@@ -254,40 +299,66 @@ export async function readUrlAsText(url: string, options: {
         (inner) => fetchYouTubeTranscript(videoId, inner),
         signal
       );
-      return "text" in transcript ? transcript.text : TRANSCRIPT_FAILURE_TEXT[transcript.failure];
+      if ("text" in transcript) return { ok: true, text: transcript.text };
+      return {
+        ok: false,
+        reason: transcript.failure === "no-captions" ? "no-captions" : "no-transcript",
+        guidance: TRANSCRIPT_FAILURE_TEXT[transcript.failure]
+      };
     }
 
     onActivity(`Reading ${target.hostname}`);
-    return await withTimeout(async (inner) => {
+    return await withTimeout(async (inner): Promise<UrlReadResult> => {
       const response = await fetch(target, {
         headers: { Accept: "text/html,application/pdf,text/plain,application/json;q=0.9", "User-Agent": "NaviOSHub/1.0" },
         redirect: "follow",
         signal: inner
       });
-      if (!response.ok) return `That page returned ${response.status}.`;
+      if (!response.ok) return { ok: false, reason: "unreachable", guidance: `That page returned ${response.status}.` };
       const type = response.headers.get("content-type") ?? "";
 
       if (/application\/pdf/i.test(type) || /\.pdf$/i.test(target.pathname)) {
         const { extractPdfText } = await import("./document-text");
         const extracted = await extractPdfText(new Uint8Array(await response.arrayBuffer()));
-        if (!extracted) return "That PDF has no text layer to extract — it is likely a scan.";
+        if (!extracted) return { ok: false, reason: "unreadable", guidance: "That PDF has no text layer to extract — it is likely a scan." };
         const clipped = extracted.text.length > MAX_DOCUMENT_FETCH_CHARS
           ? `${extracted.text.slice(0, MAX_DOCUMENT_FETCH_CHARS)}\n\n[Truncated at ${MAX_DOCUMENT_FETCH_CHARS} characters.]`
           : extracted.text;
-        return `PDF${extracted.pages ? ` (${extracted.pages} pages)` : ""}:\n\n${clipped}`;
+        return { ok: true, text: `PDF${extracted.pages ? ` (${extracted.pages} pages)` : ""}:\n\n${clipped}` };
       }
 
-      if (!/text\/|json|xml/i.test(type)) return `That URL is ${type || "a binary file"}, which cannot be read as text.`;
+      if (!/text\/|json|xml/i.test(type)) {
+        return { ok: false, reason: "unreadable", guidance: `That URL is ${type || "a binary file"}, which cannot be read as text.` };
+      }
       const body = await response.text();
       const text = /html/i.test(type) ? htmlToText(body) : body.trim();
-      return text.length > MAX_PAGE_CHARS
-        ? `${text.slice(0, MAX_PAGE_CHARS)}\n\n[Truncated at ${MAX_PAGE_CHARS} characters.]`
-        : text || "That page had no readable text.";
+      if (!text) return { ok: false, reason: "empty", guidance: "That page had no readable text." };
+      return {
+        ok: true,
+        text: text.length > MAX_PAGE_CHARS
+          ? `${text.slice(0, MAX_PAGE_CHARS)}\n\n[Truncated at ${MAX_PAGE_CHARS} characters.]`
+          : text
+      };
     }, signal);
   } catch (error) {
     // Returned, not thrown: a bad link should not end the whole response.
-    return `Could not read that page: ${error instanceof Error ? error.message : "unknown error"}`;
+    return { ok: false, reason: "unreachable", guidance: `Could not read that page: ${why(error)}` };
   }
+}
+
+/**
+ * The string-returning face of `readUrl`, for the model-facing `fetch_url`.
+ *
+ * A model reads the guidance and does the right thing with it, so this side of
+ * the boundary is unchanged on purpose — every sentence it can return is the
+ * one it returned before. Code should call `readUrl` instead.
+ */
+export async function readUrlAsText(url: string, options: {
+  signal?: AbortSignal;
+  onActivity?: (label: string) => void;
+} = {}): Promise<string> {
+  const result = await readUrl(url, options);
+  return result.ok ? result.text : result.guidance;
 }
 
 export function buildWebTools({ search, signal, onActivity = () => {} }: {

@@ -39,11 +39,25 @@ export type Lesson = {
   confidence: "stated" | "inferred";
 };
 
+/**
+ * What a page fetcher hands back.
+ *
+ * Structurally identical to `UrlReadResult` in `web-tools.ts`, declared here
+ * rather than imported so this module keeps its no-imports discipline — the
+ * caller supplies the fetcher, and TypeScript checks the shapes agree.
+ *
+ * The `ok` flag is the whole point. A fetcher that reports failure as text
+ * cannot be distinguished from one that succeeded, and this module used to
+ * treat any sufficiently long string as something to learn from. That is how a
+ * bot-check page became permanent knowledge.
+ */
+export type PageRead = { ok: true; text: string } | { ok: false; guidance: string };
+
 export type LearningExecutors = {
   /** One routed, preflighted model call — the fast lane is plenty. */
   runEngine: (prompt: string, purpose: "extract") => Promise<string>;
   /** The route's existing web fetch tool. Absent = URLs cannot be read. */
-  fetchPage?: (url: string) => Promise<string>;
+  fetchPage?: (url: string) => Promise<PageRead>;
   /** The existing learned-skills / memory store. Returns how many were kept. */
   storeLessons: (lessons: Lesson[]) => Promise<number>;
   onProgress?: (label: string) => void;
@@ -121,17 +135,27 @@ export async function ingestContent(
       return { lessons: [], stored: 0, notes: ["No page fetcher is available on this turn, so the URL could not be read. Paste the content or transcript instead."] };
     }
     progress("Reading the page");
+    let read: PageRead;
     try {
-      content = (await executors.fetchPage(source.value)).trim();
+      read = await executors.fetchPage(source.value);
     } catch (error) {
-      const why = error instanceof Error ? error.message : "fetch failed";
+      /* A fetcher that throws is still a fetcher that failed. Kept because the
+         contract does not forbid throwing, not because anything does today. */
+      read = { ok: false, guidance: `The page could not be read (${error instanceof Error ? error.message : "fetch failed"}).` };
+    }
+    /* Checked before length, and this order is the fix: a failure is never
+       content, however long its explanation happens to be. The consent-page
+       message alone runs to 319 characters, which cleared the length gate below
+       and was extracted into permanent lessons about a video nobody read. */
+    if (!read.ok) {
       return {
         lessons: [], stored: 0,
         notes: [YOUTUBE.test(source.value)
-          ? `The video page could not be read (${why}). Navi Soul learns from a video's transcript — open the transcript and paste it here.`
-          : `The page could not be read (${why}).`]
+          ? `${read.guidance} Navi Soul learns from a video's transcript — paste it here and it will learn from that.`
+          : read.guidance]
       };
     }
+    content = read.text.trim();
   }
 
   if (content.length < 200) {

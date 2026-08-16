@@ -57,6 +57,56 @@ export function providerProbes(): Array<{ provider: ProviderName; label: string;
 }
 
 /**
+ * Hugging Face route ids carry a `:cheapest` / `:fastest` routing policy that
+ * is an instruction to their router, not part of the model's name. No
+ * catalogue lists it, so it has to come off before an id is compared to one.
+ */
+export function baseModelId(model: string): string {
+  return model.replace(/:(?:cheapest|fastest)$/, "");
+}
+
+/**
+ * Every model id this deployment would actually send, grouped by provider.
+ *
+ * `providerProbes` above proves a *credential* works, and for a long time that
+ * was the only thing verified anywhere. It is the smaller half of the question.
+ * A live key pointed at a model id the provider has never heard of fails on
+ * every single request — and this app is built to make that invisible: the
+ * failover rule says a lane that fails hands off silently, `Promise.allSettled`
+ * swallows a whole council's worth of 404s, and the user is shown a slightly
+ * slower answer with no indication that most of the routing table is dead.
+ *
+ * Model ids are exactly the kind of string that rots. They get renamed,
+ * versioned, and retired upstream on someone else's schedule, and several in
+ * `ROUTES` are pinned to specific versions. So the ids are worth checking on
+ * their own, and the check belongs in diagnostics — where an operator is asking
+ * what is broken — rather than in the answer path, where the silent-failover
+ * rule still holds.
+ *
+ * Only providers holding a credential are listed: an id cannot be verified
+ * against a catalogue we are not allowed to fetch, and reporting it as
+ * unverified would be noise on every deployment that simply does not use that
+ * provider.
+ */
+export function configuredRouteModels(): Array<{ provider: ProviderName; label: string; models: string[] }> {
+  const byProvider = new Map<ProviderName, Set<string>>();
+  for (const route of Object.values(ROUTES) as ProviderRoute[]) {
+    /* The frontier route ships deliberately unset — an empty id is "no route
+       configured", not a broken one. */
+    if (!route.model) continue;
+    if (!providerApiKey(PROVIDERS[route.provider])) continue;
+    const models = byProvider.get(route.provider) ?? new Set<string>();
+    models.add(baseModelId(route.model));
+    byProvider.set(route.provider, models);
+  }
+  return [...byProvider.entries()].map(([provider, models]) => ({
+    provider,
+    label: PROVIDERS[provider].label,
+    models: [...models].sort()
+  }));
+}
+
+/**
  * One factory for every provider, because every provider speaks the same
  * protocol. What differs is a base URL, a credential, and sometimes an
  * attribution header — all three of which are rows in the registry.

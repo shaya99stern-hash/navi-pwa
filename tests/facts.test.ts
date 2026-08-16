@@ -73,6 +73,50 @@ async function main() {
   if (fail) process.exit(1);
 }
 
+/* ---- The table the code has always assumed existed ---------------------- */
+
+/**
+ * `facts.ts` has referenced `navi_memory_facts` since facts shipped, and no
+ * migration for it existed in this repository. The other migration's header
+ * even described its RLS as "same as navi_memory_facts" — a table nothing here
+ * created. Anyone rebuilding the database from these files got a deployment
+ * where every fact read and write failed silently, forever.
+ *
+ * These assert the schema against what the code actually sends, because a
+ * migration that disagrees with its caller is the same outage with more steps.
+ */
+function migrations(): string {
+  const { readdirSync, readFileSync } = require("node:fs") as typeof import("node:fs");
+  const { join } = require("node:path") as typeof import("node:path");
+  const dir = join(process.cwd(), "supabase/migrations");
+  return readdirSync(dir).map((name) => readFileSync(join(dir, name), "utf8")).join("\n");
+}
+
+const sql = migrations();
+
+check("a migration creates the facts table",
+  /create table if not exists public\.navi_memory_facts/.test(sql), true);
+/* `rememberFact` sends `on_conflict=user_id,fact`. ON CONFLICT can only use an
+   index covering exactly those columns in that order, so this pairing is not
+   style — a mismatch fails every write with a 42P10 and nothing else explains
+   it. The unique index and the query string have to be read together. */
+check("its unique constraint matches the on_conflict the code sends",
+  /unique \(user_id, fact\)/.test(sql), true);
+check("and that is the string the code sends",
+  /on_conflict=user_id,fact/.test(require("node:fs").readFileSync(require("node:path").join(process.cwd(), "lib/memory/facts.ts"), "utf8")), true);
+check("row-level security is enabled on it",
+  /alter table public\.navi_memory_facts enable row level security/.test(sql), true);
+check("with a policy per operation, keyed to the Clerk subject",
+  (sql.match(/on public\.navi_memory_facts for (?:select|insert|update|delete)/g) ?? []).length, 4);
+
+/* The gap that made this invisible: diagnostics probed one of the two memory
+   tables and reported the answer as "Cloud memory". Skills had a migration and
+   facts did not, so the single likeliest broken state was the one state the
+   check could not see. */
+const diagnostics = require("node:fs").readFileSync(require("node:path").join(process.cwd(), "lib/ai/diagnostic-tools.ts"), "utf8");
+check("the cloud memory check probes the skills table", /navi_learned_skills/.test(diagnostics), true);
+check("and the facts table too", /navi_memory_facts/.test(diagnostics), true);
+
 main().then(() => {}).catch((error) => { console.error(error); process.exit(1); });
 
 /* A module, not a script. With only `require` and no import or export,
