@@ -16,6 +16,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { describeExpectation, grade } from "./grade.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tasks = JSON.parse(readFileSync(join(here, "tasks.json"), "utf8"));
@@ -84,35 +85,63 @@ async function ask(prompt) {
   return text.trim();
 }
 
-function grade(task, answer) {
-  const { type, value } = task.expect;
-  if (type === "regex") return new RegExp(value, "i").test(answer);
-  return answer.toLowerCase().includes(String(value).toLowerCase());
-}
 
 const results = [];
 let passed = 0;
 let errored = 0;
 
-for (const task of tasks) {
-  process.stdout.write(`  ${task.id.padEnd(22)}`);
+const only = flag("category", "");
+const selected = only ? tasks.filter((task) => (task.category ?? "deterministic") === only) : tasks;
+if (only && !selected.length) {
+  console.error(`No tasks in category "${only}". Known: ${[...new Set(tasks.map((task) => task.category ?? "deterministic"))].join(", ")}`);
+  process.exit(2);
+}
+
+let currentCategory = "";
+for (const task of selected) {
+  const category = task.category ?? "deterministic";
+  if (category !== currentCategory) {
+    currentCategory = category;
+    process.stdout.write(`\n  ── ${category} ${"─".repeat(Math.max(0, 46 - category.length))}\n`);
+  }
+  process.stdout.write(`  ${task.id.padEnd(30)}`);
   try {
     const started = Date.now();
     const answer = await ask(task.prompt);
-    const ok = grade(task, answer);
+    const ok = grade(task.expect, answer);
     if (ok) passed += 1;
-    results.push({ id: task.id, ok, ms: Date.now() - started, answer: answer.slice(0, 160) });
+    results.push({ id: task.id, category, ok, ms: Date.now() - started, answer: answer.slice(0, 160) });
     process.stdout.write(`${ok ? "pass" : "FAIL"}  ${Date.now() - started}ms\n`);
-    if (!ok) process.stdout.write(`      expected ${task.expect.type} ${JSON.stringify(task.expect.value)}\n      got: ${answer.slice(0, 160)}\n`);
+    if (!ok) process.stdout.write(`      expected ${describeExpectation(task.expect)}\n      got: ${answer.slice(0, 200)}\n`);
   } catch (error) {
     errored += 1;
-    results.push({ id: task.id, ok: false, error: error.message });
+    results.push({ id: task.id, category, ok: false, error: error.message });
     process.stdout.write(`ERROR  ${error.message.slice(0, 90)}\n`);
   }
 }
 
-const scored = tasks.length - errored;
-console.log(`\n${passed}/${tasks.length} passed  (tools ${withTools ? "on" : "off"}, preset ${preset})`);
+/* Per category, because one number hides the thing worth knowing.
+   The deterministic tasks were the whole set for a long time, and they were
+   already the app's strongest area — an on-device skill answers them exactly.
+   Averaging them with the honesty and synthesis tasks would let a strong tool
+   layer mask a model that invents statutes, which is the failure that ends a
+   long autonomous mission. */
+const byCategory = new Map();
+for (const result of results) {
+  const bucket = byCategory.get(result.category) ?? { passed: 0, ran: 0, errored: 0 };
+  if (result.error) bucket.errored += 1;
+  else { bucket.ran += 1; if (result.ok) bucket.passed += 1; }
+  byCategory.set(result.category, bucket);
+}
+
+console.log("\n  ── by category ──────────────────────────────────");
+for (const [category, bucket] of byCategory) {
+  const share = bucket.ran ? Math.round((bucket.passed / bucket.ran) * 100) : 0;
+  console.log(`  ${category.padEnd(16)} ${String(bucket.passed).padStart(2)}/${String(bucket.ran).padEnd(2)}  ${String(share).padStart(3)}%${bucket.errored ? `   (${bucket.errored} never ran)` : ""}`);
+}
+
+const scored = selected.length - errored;
+console.log(`\n${passed}/${selected.length} passed  (tools ${withTools ? "on" : "off"}, preset ${preset})`);
 if (errored) {
   console.log(`${errored} task(s) never reached the model — check that ${base} is running, signed in, and has provider credentials.`);
   console.log("Those are not scored as wrong answers; the run is inconclusive until they succeed.");
