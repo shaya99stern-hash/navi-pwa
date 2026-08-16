@@ -24,16 +24,23 @@ const check = (n: string, a: unknown, e: unknown) => {
    href went with it: a model could read that a page mentioned a filing and had
    no way to learn where it linked. Multi-hop crawling was blind by
    construction — hop one could never discover the address of hop two. */
+/* Asserted as the whole markdown link rather than as a substring of the output.
+   Substring-matching a URL is a weak check — it passes on a mangled target, or
+   on the address appearing anywhere for any reason — and CodeQL flags the shape
+   on sight, because the same expression used for an authorisation decision is a
+   real vulnerability. What this test actually cares about is the pair: this
+   text, resolved to exactly this address. */
+const linkOf = (output: string): string | null => /\[([^\]]+)\]\(([^)]+)\)/.exec(output)?.[0] ?? null;
+
 const linked = extractReadable(
   `<p>See the <a href="/records/2026">county records</a> for detail.</p>`,
   { baseUrl: "https://county.example.gov/property/index.html" }
 );
-check("a link keeps its text", linked.includes("county records"), true);
-check("and becomes an absolute, fetchable address",
-  linked.includes("https://county.example.gov/records/2026"), true);
+check("a link keeps its text and resolves to an absolute, fetchable address",
+  linkOf(linked), "[county records](https://county.example.gov/records/2026)");
 
 check("an absolute href is left alone",
-  extractReadable(`<a href="https://a.example/x">x</a>`).includes("https://a.example/x"), true);
+  linkOf(extractReadable(`<a href="https://a.example/x">x</a>`)), "[x](https://a.example/x)");
 /* Without a base there is nothing to resolve against, and emitting a bare path
    would hand the model an address it cannot fetch. The text is kept. */
 const noBase = extractReadable(`<p>see <a href="/only/a/path">the filing</a></p>`);
