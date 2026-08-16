@@ -1,6 +1,7 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { isPrivateHostname } from "../mcp";
+import { extractReadable } from "./readable";
 import { cacheSearch, readCachedSearch, recordSearch, searchAllowed } from "./search-budget";
 
 /** Enough context to answer from, without swamping the prompt. */
@@ -98,25 +99,16 @@ async function runSearch(query: string, signal?: AbortSignal): Promise<SearchHit
   }, signal);
 }
 
-/** Crude but dependency-free: models read prose fine, they just cannot read markup. */
-export function htmlToText(html: string): string {
-  return html
-    .replace(/<script\b[\s\S]*?<\/script\b[^>]*>/gi, " ")
-    .replace(/<style\b[\s\S]*?<\/style\b[^>]*>/gi, " ")
-    .replace(/<noscript\b[\s\S]*?<\/noscript\b[^>]*>/gi, " ")
-    .replace(/<!--[\s\S]*?--!?>/g, " ")
-    .replace(/<\/(?:p|div|section|article|li|h[1-6]|tr)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&amp;/gi, "&")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+/**
+ * A page as text a model can reason over.
+ *
+ * The implementation moved to `readable.ts`; this stays as the name the fetch
+ * path calls. Passing the page's own URL is what lets relative links resolve
+ * into addresses that can actually be fetched — without it, the second hop of
+ * any crawl is a path with no host.
+ */
+export function htmlToText(html: string, baseUrl?: string): string {
+  return extractReadable(html, { baseUrl });
 }
 
 /** The video id, when a URL is a YouTube watch page in any of its shapes. */
@@ -331,7 +323,11 @@ export async function readUrl(url: string, options: {
         return { ok: false, reason: "unreadable", guidance: `That URL is ${type || "a binary file"}, which cannot be read as text.` };
       }
       const body = await response.text();
-      const text = /html/i.test(type) ? htmlToText(body) : body.trim();
+      /* `response.url` rather than the requested one: redirects are followed,
+         so the address that served the body is the base its relative links are
+         relative to. Using the original would resolve every link on a
+         redirected page against the wrong host. */
+      const text = /html/i.test(type) ? htmlToText(body, response.url || target.toString()) : body.trim();
       if (!text) return { ok: false, reason: "empty", guidance: "That page had no readable text." };
       return {
         ok: true,
