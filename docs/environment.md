@@ -34,7 +34,8 @@ nothing to search with, and Navi will tell you so rather than pretending.
 | --- | --- |
 | `EXA_API_KEY` | Returns page text, which suits a model well. |
 | `TAVILY_API_KEY` | Returns extracted prose. Preferred when several are set. |
-| `BRAVE_SEARCH_API_KEY` | Returns short descriptions. |
+Brave is deliberately absent: its perpetual free tier ended in February 2026 and
+`BRAVE_SEARCH_API_KEY` is read by no code in this repository.
 
 ## Repository and deployment reads
 

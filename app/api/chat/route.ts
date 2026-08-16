@@ -23,7 +23,7 @@ import { describeRequestSize, estimateTextTokens, estimateToolTokens, measureReq
 import { preflightPayload, type PromptBlock } from "@/lib/ai/navi-soul/payload-preflight";
 import { runMission, shouldRunAsMission, type MissionReport } from "@/lib/ai/navi-soul/mission-loop";
 import { ingestContent, learnFromMission, wantsLearning, type Lesson } from "@/lib/ai/navi-soul/learning-loop";
-import { readUrlAsText } from "@/lib/ai/web-tools";
+import { readUrl } from "@/lib/ai/web-tools";
 import { LESSON_PREFIX } from "@/lib/memory/lesson";
 import { decideLocally } from "@/lib/ai/navi-soul/router";
 import { describePlan, planTurn } from "@/lib/ai/navi-soul/orchestrator";
@@ -114,10 +114,23 @@ const MAX_TOOL_STEPS = 16;
  */
 const MAX_CODE_TOOL_STEPS = 28;
 /**
- * The wall-clock the whole request has, kept under the 60s edge ceiling so a
- * review that starts late is skipped rather than started and killed.
+ * The wall-clock the whole request has, kept under `maxDuration` so a review
+ * that starts late is skipped rather than started and killed.
+ *
+ * This read 52 seconds for a long time, against a comment describing a 60s edge
+ * ceiling. That ceiling moved to 300 when `maxDuration` did, and this constant
+ * did not follow — so the app spent months discarding its own best work against
+ * a limit that no longer existed. Everything gated on the remaining budget is
+ * expensive and optional by construction: the review rounds, the mission steps,
+ * the later tool hops. Those are exactly the things a too-tight budget drops
+ * first, which made the most sophisticated paths in the app the least likely to
+ * run.
+ *
+ * 240s leaves a full minute under `maxDuration` for the answer to finish
+ * streaming and the stream to close. The reserve below is separate and smaller:
+ * it only protects delivery of an answer already in hand.
  */
-const REQUEST_BUDGET_MS = 52_000;
+const REQUEST_BUDGET_MS = 240_000;
 const REVIEW_DELIVERY_RESERVE_MS = 2_000;
 /** Past this many turns a conversation is a context problem, not a hard one. */
 const LONG_CONTEXT_TURNS = 14;
@@ -890,11 +903,18 @@ function systemPromptBlocks(options: {
     toolNames.length
       ? `You can call these tools and their results are real: ${toolNames.join(", ")}. Call one whenever it would answer better than recalling — anything current, factual, personal, or specific to the user's own data. Never do arithmetic, unit conversion, date maths, or counting in your head when a tool will do it exactly; approximating those is the most common way you are wrong. Prefer searching and reading a source over answering from memory, and cite the URLs you actually read.`
       : "You have no callable tools in this request. Answer from your own knowledge, and say plainly when something needs live data you cannot reach.",
+    /* Read off the toolset itself rather than off the search key, because
+       searching and reading are two different capabilities and conflating them
+       produced a flat lie. Both branches here used to deny browsing whenever no
+       search provider was configured — while `fetch_url` sat in the very list
+       printed two lines above, needing no key, working, and able to chain a
+       dozen hops. The app talked its own model out of the one web capability it
+       always has. */
     toolNames.includes("web_search")
       ? ""
-      : tools.web
-        ? "Web search is switched on but unavailable on this route, so you cannot browse. Say so rather than implying you looked something up."
-        : "You cannot browse the web in this request.",
+      : toolNames.includes("fetch_url")
+        ? "You have no search engine on this request, but fetch_url reads any URL directly and its results are real. Use it on links the user gives you and on addresses you already know; follow links out of a page you fetched when the answer is a hop away. Only say you could not look something up when you also could not read a page that would have answered it."
+        : "You cannot search or read web pages in this request. Say so plainly rather than implying you looked something up.",
     /* The capability is the app's own now, not the route's. It used to be
        described as available "only when the selected route actually supplies
        it", which made a core ability hostage to whichever provider answered. */
@@ -1728,7 +1748,9 @@ export async function POST(request: Request): Promise<Response> {
             : { kind: "text", value: lastUserText },
           {
             runEngine: (prompt) => callEngineOnce(prompt, "fast"),
-            fetchPage: (url) => readUrlAsText(url, { signal: request.signal }),
+            /* `readUrl`, not `readUrlAsText`: the learning loop has to be able
+               to tell a page from an explanation of why there is no page. */
+            fetchPage: (url) => readUrl(url, { signal: request.signal }),
             storeLessons,
             onProgress: (label) => writer.write(statusChunk({ stage: "draft", detail: label }))
           }

@@ -77,11 +77,15 @@ export function describeFactsConfigGap(): string | null {
 async function request(
   clerkToken: string,
   path: string,
-  init: { method?: string; body?: unknown; prefer?: string } = {}
+  init: { method?: string; body?: unknown; prefer?: string } = {},
+  onFailure?: (reason: string) => void
 ): Promise<unknown> {
   const url = supabaseUrl();
   const key = supabaseKey();
-  if (!url || !key) return null;
+  if (!url || !key) {
+    onFailure?.("Cloud memory is not configured on this deployment (no Supabase URL or key).");
+    return null;
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -98,13 +102,39 @@ async function request(
       signal: controller.signal,
       cache: "no-store"
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => "")).slice(0, 300);
+      /* The same three failures `learned-skills.ts` already names, because this
+         module has exactly the same ones and used to report none of them: a
+         bare `return null` that made "the table was never created" and "the
+         write succeeded and there was nothing to return" the same value.
+
+         404: the table is not there. Until this commit there was no migration
+         for `navi_memory_facts` in the repository at all, so a deployment that
+         followed the repo has never had one.
+
+         401/403: the table exists and Supabase does not trust the Clerk token.
+         `auth.jwt() ->> 'sub'` evaluates to null, every policy compares against
+         null, and every read and write is refused — indistinguishable from a
+         missing table unless the status code is actually read. */
+      onFailure?.(response.status === 404
+        ? `The ${TABLE} table does not exist on this Supabase project — the migration in supabase/migrations has not been applied. (404: ${detail || "not found"})`
+        : response.status === 401 || response.status === 403
+          ? `Supabase rejected the request as unauthorised (${response.status}). The table exists, so this is almost certainly the Clerk token not being trusted: add Clerk as a third-party auth provider in the Supabase project, or every policy will compare against a null user and refuse everything. (${detail || "no detail"})`
+          : `Supabase refused the request: ${response.status}${detail ? ` ${detail}` : ""}`);
+      return null;
+    }
     if (response.status === 204) return null;
     return await response.json();
-  } catch {
+  } catch (error) {
     /* Memory is an enhancement, never a precondition. A storage outage must
        cost the recalled context and nothing else — an answer without a
-       remembered preference is worth far more than an error card. */
+       remembered preference is worth far more than an error card. What changed
+       is that the failure is now *reported* on the way past, so diagnostics can
+       say what happened instead of the model guessing at it. */
+    onFailure?.(error instanceof Error && error.name === "AbortError"
+      ? "Cloud memory timed out."
+      : `Cloud memory could not be reached: ${error instanceof Error ? error.message : "unknown error"}`);
     return null;
   } finally {
     clearTimeout(timer);
@@ -118,10 +148,15 @@ function toFact(row: Row): MemoryFact {
 }
 
 /** This person's facts, newest first. Empty when storage is off or unreachable. */
-export async function listFacts(clerkToken: string): Promise<MemoryFact[]> {
+export async function listFacts(
+  clerkToken: string,
+  onFailure?: (reason: string) => void
+): Promise<MemoryFact[]> {
   const rows = await request(
     clerkToken,
-    `${TABLE}?select=id,fact,source_chat_id,updated_at&order=updated_at.desc&limit=${MAX_FACTS}`
+    `${TABLE}?select=id,fact,source_chat_id,updated_at&order=updated_at.desc&limit=${MAX_FACTS}`,
+    {},
+    onFailure
   );
   return Array.isArray(rows) ? (rows as Row[]).map(toFact) : [];
 }
@@ -137,7 +172,8 @@ export async function rememberFact(
   clerkToken: string,
   userId: string,
   fact: string,
-  sourceChatId?: string
+  sourceChatId?: string,
+  onFailure?: (reason: string) => void
 ): Promise<MemoryFact | null> {
   const text = fact.trim().slice(0, MAX_FACT_CHARS);
   if (!text) return null;
@@ -145,10 +181,17 @@ export async function rememberFact(
   const rows = await request(clerkToken, `${TABLE}?on_conflict=user_id,fact`, {
     method: "POST",
     body: { user_id: userId, fact: text, source_chat_id: sourceChatId ?? null },
-    /* `merge-duplicates` against the case-insensitive unique index, so saying
-       the same thing twice refreshes the fact rather than accumulating it. */
+    /* `merge-duplicates` against `unique (user_id, fact)`, so saying the same
+       thing twice refreshes the fact rather than accumulating it.
+
+       That index is case-*sensitive*, and this comment claimed the opposite for
+       as long as the table had no migration to check the claim against. ON
+       CONFLICT can only use an index covering exactly the columns named in
+       `on_conflict`, so a `lower(fact)` index would not be targetable here — it
+       would fail every write rather than fold case. The live cost is small and
+       real: "Ships on Tuesdays" and "ships on Tuesdays" become two rows. */
     prefer: "resolution=merge-duplicates,return=representation"
-  });
+  }, onFailure);
   const row = Array.isArray(rows) ? (rows[0] as Row | undefined) : undefined;
   return row ? toFact(row) : null;
 }

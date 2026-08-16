@@ -65,10 +65,38 @@ async function main() {
 
   const video = await ingestContent({ kind: "url", value: "https://youtube.com/watch?v=abc" }, {
     runEngine: async () => "[]",
-    fetchPage: async () => { throw new Error("blocked"); },
+    fetchPage: async () => ({ ok: false, guidance: "The page came back without a caption list." }),
     storeLessons: async () => 0
   });
   check("a video that cannot be read asks for its transcript", video.notes[0].includes("transcript"), true);
+
+  /* The regression that matters most in this file.
+     `readUrl` reports a failed transcript as guidance prose, and the real
+     `no-caption-list` sentence in `web-tools.ts` runs to 319 characters — well
+     past the 200-character "is this worth learning from?" gate. Before the
+     `ok` flag existed, that sentence became `content`, went to the extraction
+     model as the thing to learn about, and its invented lessons were stored
+     permanently and injected into every later prompt, under the reply
+     "Learned and kept N things."
+     A fetcher that fails must cost zero model calls and store zero lessons,
+     no matter how long its explanation is. */
+  const consentPage =
+    "The page came back without a caption list, which usually means YouTube served a consent or bot-check page "
+    + "rather than the video. Say that the transcript could not be retrieved and that this is not evidence the "
+    + "video lacks subtitles. Offer once to work from a summary the user pastes; do not list alternatives at length.";
+  let extractionCalls = 0;
+  const poisoned = await ingestContent({ kind: "url", value: "https://youtube.com/watch?v=abc" }, {
+    runEngine: async () => {
+      extractionCalls += 1;
+      return '[{"kind":"fact","statement":"This video explains that consent pages block caption lists.","confidence":"stated"}]';
+    },
+    fetchPage: async () => ({ ok: false, guidance: consentPage }),
+    storeLessons: async (batch) => batch.length
+  });
+  check("the failure text is long enough to have cleared the old gate", consentPage.length > 200, true);
+  check("a failed fetch stores nothing", poisoned.stored, 0);
+  check("a failed fetch produces no lessons", poisoned.lessons.length, 0);
+  check("a failed fetch spends no model call", extractionCalls, 0);
 
   const stored = await ingestContent(
     { kind: "transcript", value: ("Edge functions cold-start per region. ").repeat(20), title: "talk" },

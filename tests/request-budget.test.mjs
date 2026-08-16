@@ -131,5 +131,43 @@ check("it carries the name AbortError checks read",
 check("and leaves a working runtime alone",
   /if \(constructible\(scope\.DOMException\)\) return;/.test(shim.code), true);
 
+/* ── The budget tracks the platform ceiling ─────────────────────────────── */
+
+/* `REQUEST_BUDGET_MS` sat at 52 seconds under a comment describing a 60-second
+   edge ceiling, long after `maxDuration` moved to 300. Nothing failed, because
+   everything the budget gates is optional: the review rounds, the mission
+   steps, the later tool hops all just quietly stopped happening. A stale
+   constant with no assertion behind it is invisible until someone reads it.
+
+   These two do not pin a value — they pin the relationship, so the next time
+   `maxDuration` moves, the budget has to be considered rather than forgotten. */
+const durationMatch = /export const maxDuration = (\d+)/.exec(chat.code);
+const budgetMatch = /const REQUEST_BUDGET_MS = ([\d_]+)/.exec(chat.code);
+const maxDurationMs = Number(durationMatch?.[1]) * 1_000;
+const budgetMs = Number(budgetMatch?.[1].replace(/_/g, ""));
+
+check("both the platform ceiling and the request budget are readable",
+  Number.isFinite(maxDurationMs) && Number.isFinite(budgetMs), true);
+check("the budget fits inside the ceiling it is measured against",
+  budgetMs < maxDurationMs, true);
+/* The failure this catches is the budget drifting far below the ceiling, not
+   above it — 52s against 300s wasted five sixths of the available wall clock. */
+check("and uses most of it, rather than a fraction left over from an old ceiling",
+  budgetMs >= maxDurationMs * 0.6, true);
+
+/* ── The prompt does not deny a tool the model is holding ───────────────── */
+
+/* `fetch_url` is registered unconditionally — no key, no toggle. The prompt
+   nonetheless told the model "You cannot browse the web in this request"
+   whenever no search provider was configured, which is every turn on a
+   deployment without a search key. The app spent its own prompt budget talking
+   the model out of the one web capability it always has. */
+check("the browse instruction is chosen by what is in the toolset",
+  /toolNames\.includes\("fetch_url"\)/.test(chat.code), true);
+check("no prompt string flatly denies browsing",
+  /You cannot browse the web in this request/.test(chat.code), false);
+check("the remaining denial covers search and reading together",
+  /You cannot search or read web pages in this request/.test(chat.code), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
