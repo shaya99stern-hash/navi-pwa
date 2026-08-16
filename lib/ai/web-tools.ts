@@ -470,11 +470,23 @@ export async function readUrlAsText(url: string, options: {
   return result.ok ? result.text : result.guidance;
 }
 
-export function buildWebTools({ search, signal, onActivity = () => {} }: {
+export function buildWebTools({ search, signal, onActivity = () => {}, onSource = () => {} }: {
   search: boolean;
   signal?: AbortSignal;
   /** Announces work as it starts, so a pause in the stream has a visible reason. */
   onActivity?: (label: string) => void;
+  /**
+   * Records a page that was genuinely retrieved, with the address it came from.
+   *
+   * The tool's return value goes to the model and nowhere else, so nothing
+   * outside this call ever knew which pages were actually read — which made a
+   * real citation and an invented one identical from the app's side. This is
+   * the thread that lets a later pass tell them apart.
+   *
+   * Only successful reads are reported. A failure explains itself to the model
+   * and must never become material an answer can be checked against.
+   */
+  onSource?: (source: { url: string; text: string }) => void;
 }): ToolSet {
   const tools: ToolSet = {
     current_datetime: tool({
@@ -502,7 +514,14 @@ export function buildWebTools({ search, signal, onActivity = () => {} }: {
     fetch_url: tool({
       description: "Fetch an https link and return its readable content. Handles web pages, plain text, JSON, PDFs (text is extracted), and YouTube links (the video's transcript is returned). Use it to read a search result or any link the user gives you, rather than guessing at its contents.",
       inputSchema: z.object({ url: z.string().describe("The full https URL to read.") }),
-      execute: async ({ url }) => readUrlAsText(url, { signal, onActivity })
+      execute: async ({ url }) => {
+        const result = await readUrl(url, { signal, onActivity });
+        /* Recorded before the string is handed back, and only on success: the
+           model gets exactly the sentences it got before, while the turn keeps
+           a record of what was really read. */
+        if (result.ok) onSource({ url, text: result.text });
+        return result.ok ? result.text : result.guidance;
+      }
     })
   };
 

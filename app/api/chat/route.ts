@@ -48,7 +48,7 @@ import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { buildToolset } from "@/lib/tools/registry";
 import { detectRepo, retrieveFiles } from "@/lib/ai/repo-retrieval";
-import { critiqueAllowed, groundingFor, skipReason } from "@/lib/ai/grounding";
+import { critiqueAllowed, groundingFor, skipReason, type FetchedSource } from "@/lib/ai/grounding";
 import { runComposite } from "@/lib/ai/swarm";
 import {
   architectPlan,
@@ -134,6 +134,14 @@ const REQUEST_BUDGET_MS = 240_000;
 const REVIEW_DELIVERY_RESERVE_MS = 2_000;
 /** Past this many turns a conversation is a context problem, not a hard one. */
 const LONG_CONTEXT_TURNS = 14;
+/**
+ * How many fetched pages one turn keeps as grounding material.
+ *
+ * A crawl can read a dozen pages, and the critique needs enough of them to
+ * check a claim without the material itself becoming the budget. `groundingFor`
+ * clips the total anyway; this bounds the array before it gets there.
+ */
+const MAX_TRACKED_SOURCES = 8;
 /**
  * How much of a model's window the conversation may occupy.
  *
@@ -1393,9 +1401,26 @@ export async function POST(request: Request): Promise<Response> {
          It also enforces the ceiling on how many tools go out — past roughly a
          dozen, selection accuracy falls and every turn pays the schema cost of
          the ones the model will not call. */
+      /* What the model genuinely read this turn, in the order it read it.
+         Filled by the fetch tool itself, because that is the only place that
+         knows a read succeeded — the tool's return value goes to the model and
+         nowhere else, so until now a real citation and an invented one were
+         indistinguishable from outside the conversation. */
+      const fetchedSources: FetchedSource[] = [];
+
       const availableTools = buildToolset({
         mode,
         policy: tools,
+        onSource: (source) => {
+          /* Capped, and first-read wins. A crawl that reads the same page twice
+             should not weigh it twice, and a turn that reads forty pages should
+             not hand the critique forty — `groundingFor` clips the material
+             anyway, and the earliest reads are the ones the answer was actually
+             built on. */
+          if (fetchedSources.length >= MAX_TRACKED_SOURCES) return;
+          if (fetchedSources.some((seen) => seen.url === source.url)) return;
+          fetchedSources.push(source);
+        },
         githubToken: userGithubToken,
         googleAccessToken: userGoogleToken ?? undefined,
         /* Lets the repository group be offered when the turn is about repos or
@@ -2053,7 +2078,12 @@ export async function POST(request: Request): Promise<Response> {
            That is worse than no pass, because it spends the budget and adds a
            step where an error can be introduced. Retrieval and code execution
            are what finally make real grounding available. */
-        const grounding = groundingFor({ retrieved: retrieval?.block });
+        /* Pages read this turn now count. They rank below files deliberately —
+           a repository file is what this app holds, a fetched page is somebody
+           else's claim — but for a research turn they are the only grounding
+           there has ever been, and before this the critique had nothing to
+           check a cited URL against. */
+        const grounding = groundingFor({ retrieved: retrieval?.block, sources: fetchedSources });
         const shouldCritique = plan.needsReview && critiqueAllowed({ lane, grounding });
         if (plan.needsReview && !shouldCritique) {
           console.info("Navi Soul skipped the critique pass:", skipReason({ lane, grounding }));

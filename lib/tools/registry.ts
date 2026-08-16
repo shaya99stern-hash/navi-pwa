@@ -77,6 +77,14 @@ export type ToolsetContext = {
   cookie?: string;
   /** Reports what is being done, for the activity chips. */
   onActivity?: (label: string) => void;
+  /**
+   * Collects pages the model actually retrieved this turn.
+   *
+   * Threaded through the toolset rather than read off the stream, because the
+   * only place that knows a fetch succeeded is the tool that performed it. The
+   * turn uses it to tell a real citation from an invented one.
+   */
+  onSource?: (source: { url: string; text: string }) => void;
   /** Tools contributed by connected MCP servers, already namespaced. */
   mcpTools?: ToolSet;
   /** Connectors the user added from the Connectors screen on this device. */
@@ -282,7 +290,7 @@ export function wantsSelfUpdate(request: string | undefined): boolean {
  * `when` predicates be read at a glance.
  */
 export function buildToolset(context: ToolsetContext): ToolSet {
-  const { policy, mode, githubToken, googleAccessToken, githubWritesEnabled, clerkToken, clerkUserId, customConnectors = [], signal, origin, cookie, onActivity = () => {}, mcpTools = {} } = context;
+  const { policy, mode, githubToken, googleAccessToken, githubWritesEnabled, clerkToken, clerkUserId, customConnectors = [], signal, origin, cookie, onActivity = () => {}, onSource = () => {}, mcpTools = {} } = context;
 
   const active = (name: string) => GROUPS.find((group) => group.name === name)?.when(context) ?? false;
 
@@ -294,7 +302,7 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...buildDiagnosticTools({ clerkToken, hasUserGithub: Boolean(githubToken), onActivity }),
     ...buildSkillTools(onActivity),
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
-    ...buildWebTools({ search: policy.web, signal, onActivity }),
+    ...buildWebTools({ search: policy.web, signal, onActivity, onSource }),
     ...buildEnvironmentTools({ onActivity }),
     ...(active("learning") ? buildLearningTools({ clerkToken, clerkUserId, onActivity }) : {}),
     ...(active("reflection") ? buildReflectionTools({ clerkToken, clerkUserId, onActivity }) : {}),
