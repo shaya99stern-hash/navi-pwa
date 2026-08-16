@@ -17,7 +17,13 @@ const architect = read("lib/ai/architect.ts").body;
    and — on the metered lane — the frontier route could be billed for it. */
 
 check("work is classified by kind", /export function classifyTask/.test(providers), true);
-check("the route classifies from the request", /taskKind: classifyTask\(lastUserText\)/.test(route), true);
+/* Route selection moved into `planTurn`, and the task classification went with
+   it. The rule being protected is unchanged — the kind of work is read off the
+   request text, never off the lane — so this now checks it where it lives. The
+   chat route passes that same text in as `request`. */
+const orchestrator = read("lib/ai/navi-soul/orchestrator.ts").body;
+check("the planner classifies from the request", /taskKind: classifyTask\(context\.request\)/.test(orchestrator), true);
+check("and the request it is given is the user's last message", /request: lastUserText,/.test(route), true);
 check("mechanical work takes the fast route", /taskKind === "mechanical" && !hasFiles/.test(providers), true);
 /* It sits with the capability checks, not inside the lane switch: it is the
    same kind of rule — a property of the work outranking the difficulty guess. */

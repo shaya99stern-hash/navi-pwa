@@ -1491,7 +1491,10 @@ export async function POST(request: Request): Promise<Response> {
 
       const complexRoute = effortLevel === "high" || (effortLevel === "medium" && effort !== "normal");
 
-      const lane = selectLane({
+      /* Kept only as the safety net for a non-model plan below. The lane that
+         actually serves the turn comes from `planTurn`, which reclassifies the
+         mode before choosing one. */
+      const laneFromInputs = selectLane({
         mode,
         effort: effortLevel,
         complex: complexRoute,
@@ -1523,35 +1526,25 @@ export async function POST(request: Request): Promise<Response> {
         complex: complexRoute
       });
 
-      /* A pinned diagnostic route is an explicit instruction and outranks the
-         lane; everything else lets the lane decide, falling back to the general
-         selector whenever the lane has no provider configured. */
-      const pinned = resolvedPreset !== "navi-soul" && resolvedPreset !== "navi-code";
-      const route = pinned
-        ? generalRoute
-        : routeForLane({
-          lane,
-          /* Classified from the request, not from the lane. Mechanical work
-             takes the fast route however hard the lane thought it was. */
-          taskKind: classifyTask(lastUserText),
-          availability,
-          tools,
-          hasFiles,
-          discovered: lane === 4 ? cachedRoute("coding") : null,
-          meteredAllowed
-        }) ?? generalRoute;
-      /* The same turn, planned in one call instead of assembled inline.
-         `planTurn` composes exactly what the lines above compose — lane, route,
-         health-ordered fallbacks, the metered floor, the optional prompt blocks
-         this turn earned — from the same functions in the same order.
+      /* Obeyed, at last.
+         `planTurn` composes exactly what this route used to assemble inline —
+         lane, route, health-ordered fallbacks, the metered floor, the optional
+         prompt blocks this turn earned — from the same functions in the same
+         order. It has been computing all of that for a while and sending it to
+         a `console.log`.
 
-         Logged and not yet obeyed, deliberately. The cluster above decides real
-         turns today, and the way to find out whether a planner agrees with it
-         is to run both against production traffic and read the difference, not
-         to swap one for the other and watch the complaints. Once these lines
-         agree in the logs, the cluster above becomes `plan.route`,
-         `plan.fallbacks` and `plan.lastResort`, and the capability brief and
-         image pipeline hang off `plan.promptBlocks` and `plan.kind`. */
+         The note that stood here said the switch would be flipped "once these
+         lines agree in the logs". They could not have: `TurnContext` had no
+         `preset`, and this route branches on exactly that, so no volume of
+         production traffic would ever have produced agreement. Two smaller
+         divergences sat underneath it. The gate now lives in
+         `tests/orchestrator-parity.test.ts`, which reimplements the old cluster
+         from the same primitives and asserts both choose identically across
+         6,480 turn shapes — a CI failure rather than weeks of log-reading, and
+         it caught a real defect on its first run.
+
+         One difference is intended and asserted there: a coding question typed
+         in Chat mode now takes a code lane. */
       const turnPlan = planTurn({
         request: lastUserText,
         mode,
@@ -1562,10 +1555,26 @@ export async function POST(request: Request): Promise<Response> {
         longContext: modelMessages.length > LONG_CONTEXT_TURNS,
         tools,
         availability,
+        /* The input whose absence made the comparison above meaningless: the
+           cluster branches on the pinned preset, so a planner that could not
+           see it could never agree with the cluster. */
+        preset: resolvedPreset,
         meteredAllowed,
-        discovered: lane === 4 ? cachedRoute("coding") : null
+        /* Unconditional now. Gating on `lane === 4` here used *this* lane to
+           filter an input to a planner that picks its own; the gate belongs
+           inside, against the lane actually chosen. */
+        discovered: cachedRoute("coding")
       });
-      console.log(`Navi Soul plan: ${describePlan(turnPlan)} | in use: lane ${lane}, ${engineName(route)}`);
+      /* The two non-model plan kinds, neither of which should reach here: the
+         image pipeline returned several hundred lines above, and an
+         unconfigured deployment is refused before any of this runs. They are
+         handled rather than asserted away, because "should be unreachable" is a
+         claim about code that changes, and the cost of being wrong is a thrown
+         request where a working answer was available. `generalRoute` is what
+         this route chose for itself before the planner existed. */
+      const route = turnPlan.kind === "model" ? turnPlan.route : generalRoute;
+      const lane = turnPlan.kind === "model" ? turnPlan.lane : laneFromInputs;
+      console.log(`Navi Soul plan: ${describePlan(turnPlan)} | serving: lane ${lane}, ${engineName(route)}`);
 
       /* Auto-routing has to be visible or it is a black box: when it picks
          badly there is otherwise no way to tell that it did. */
@@ -1861,16 +1870,24 @@ export async function POST(request: Request): Promise<Response> {
 
       /* Health-ordered: a provider that has been failing across recent
          requests goes to the back of the line instead of charging every turn
-         its timeout. Deprioritized, never dropped. */
-      const attempts = orderRoutesByHealth([
-        route,
-        ...fallbackRoutes({ primary: route, availability, complex: complexRoute })
-      ]);
+         its timeout. Deprioritized, never dropped.
+
+         Taken from the plan when there is one — `planTurn` orders the primary
+         and its alternates together, in one pass over the same health store, so
+         recomputing it here would be a second answer to a question already
+         answered. The inline form stays as the safety net for a non-model plan,
+         matching the `route` fallback above. */
+      const attempts = turnPlan.kind === "model"
+        ? [turnPlan.route, ...turnPlan.fallbacks]
+        : orderRoutesByHealth([
+          route,
+          ...fallbackRoutes({ primary: route, availability, complex: complexRoute })
+        ]);
       /* The floor, appended after the health ordering rather than inside it:
          it is the answer of last resort, so it must stay last however badly the
          free routes have been behaving. Skipped when it is already in the list,
          and absent entirely unless a frontier model is named. */
-      const floor = lastResortRoute(availability, meteredAllowed);
+      const floor = turnPlan.kind === "model" ? turnPlan.lastResort : lastResortRoute(availability, meteredAllowed);
       if (floor && !attempts.some((candidate) => candidate.model === floor.model)) attempts.push(floor);
       let lastFailure: unknown = null;
 

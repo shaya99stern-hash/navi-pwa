@@ -78,8 +78,17 @@ check("the size branch is tested before the rate-limit branch",
 
 /* ── The cascade ends somewhere ─────────────────────────────────────────── */
 
+/* The floor moved into the planner along with the rest of route selection, so
+   this follows it rather than asserting the line that used to hold it. Both
+   halves still matter: the planner has to compute a floor, and the route has to
+   append it last. The inline form survives only as the non-model safety net. */
+const orchestrator = read("lib/ai/navi-soul/orchestrator.ts");
+check("the planner computes the metered floor",
+  /lastResort: lastResortRoute\(context\.availability, context\.meteredAllowed\)/.test(orchestrator.code), true);
 check("a floor is appended after the health ordering",
-  /const floor = lastResortRoute\(availability, meteredAllowed\);/.test(chat.code), true);
+  /const floor = turnPlan\.kind === "model" \? turnPlan\.lastResort : lastResortRoute\(availability, meteredAllowed\);/.test(chat.code), true);
+check("and it is still pushed onto the end of the attempt list",
+  /attempts\.push\(floor\)/.test(chat.code), true);
 /* The deployment is to be free to run, so the one route that bills cannot be
    what rescues it — the free routes now fit instead. */
 check("and it cannot spend without the ledger's permission",

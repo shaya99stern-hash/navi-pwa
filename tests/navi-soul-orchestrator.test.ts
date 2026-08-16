@@ -43,7 +43,8 @@ async function main() {
   const context = {
     request: "prove this inequality holds for all n", mode: "chat" as const, effort: "high" as const,
     complex: true, hasFiles: false, hasImageAttachments: false, longContext: false,
-    tools: { web: false, code: false, artifacts: true }, availability: avail({ groq: true, gemini: true }), meteredAllowed: false
+    tools: { web: false, code: false, artifacts: true }, availability: avail({ groq: true, gemini: true }),
+    preset: "navi-soul" as const, meteredAllowed: false
   };
   const plan = planTurn(context);
   check("high effort lands in lane 3", plan.kind === "model" && plan.lane, 3);
