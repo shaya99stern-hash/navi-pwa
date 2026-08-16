@@ -36,6 +36,7 @@ import {
   describeRecordingSupport,
   MAX_RECORDING_SECONDS,
   startRecording,
+  type AutoStopReason,
   type RecordingSession
 } from "@/lib/ui/recorder";
 import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
@@ -59,7 +60,18 @@ const DOCUMENT_ACCEPT = [
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
-const WAVEFORM_BARS = [0.7, 1.3, 0.9, 1.7, 1.1, 0.6, 1.5, 0.8, 1.2, 1.6, 0.75, 1.35, 0.95, 1.45, 0.65];
+/**
+ * The waveform is a record of what was heard, not a decoration.
+ *
+ * It used to be fifteen fixed weights driven through a sine of the elapsed
+ * second — so it moved identically whether the microphone was picking up a
+ * voice or picking up nothing, which is precisely the question the person
+ * watching it is asking. Now each bar is the loudest moment of a real 60ms
+ * window and they scroll leftwards, which makes silence look like silence and
+ * a dead microphone look dead.
+ */
+const WAVEFORM_BAR_COUNT = 34;
+const WAVEFORM_BAR_MS = 60;
 
 const menuRow = "flex min-h-[50px] w-full items-center gap-3 px-4 text-left text-[0.9375rem]/[1.375rem] font-medium text-primary active:bg-elev-3";
 
@@ -183,7 +195,18 @@ export function ComposerDock({
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [inputLevel, setInputLevel] = useState(0);
+  /**
+   * The transcript as it arrives, which is now during the recording rather
+   * than after it.
+   *
+   * Kept apart from the draft until the recording is accepted. The words
+   * appear in the composer as they are spoken — that is the whole point — but
+   * they are a preview until then, so discarding a recording actually
+   * discards it instead of leaving half a sentence behind in the box.
+   */
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [speaking, setSpeaking] = useState(false);
+  const [waveform, setWaveform] = useState<number[]>([]);
   const [focused, setFocused] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
@@ -202,6 +225,12 @@ export function ComposerDock({
 
   const valueRef = useRef(value);
   valueRef.current = value;
+  /* Levels arrive fifty times a second. Held in refs and drained on an
+     animation frame, because fifty React renders a second to move a row of
+     bars is measurable on a phone — and the bars only refresh sixty times a
+     second anyway. */
+  const peakRef = useRef(0);
+  const waveformRef = useRef<number[]>([]);
   const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
 
   useOverlayRoute({ open: sourceMenuOpen, onClose: () => setSourceMenuOpen(false) });
@@ -209,6 +238,23 @@ export function ComposerDock({
 
   const commands: Skill[] = value.startsWith("/") && !value.includes("\n") ? suggest(value, 6) : [];
   const showCommands = commands.length > 0 && focused;
+
+  /**
+   * The draft as it will read if this recording is kept.
+   *
+   * Shown in the composer itself rather than in a panel above it, because
+   * that is where the text is going to end up and watching it land there is
+   * what makes dictation feel like typing rather than like filing a request.
+   * Read-only while it is a preview: an editable box whose contents are being
+   * rewritten underneath the caret is a box that eats what you type.
+   *
+   * It stays out of `value` until the recording is accepted, which is what
+   * makes discarding one an actual discard rather than an undo.
+   */
+  const dictating = listening || transcribing;
+  const previewValue = dictating && liveTranscript
+    ? `${value}${value.trim() ? " " : ""}${liveTranscript}`
+    : value;
 
   function completeCommand(skill: Skill) {
     haptic("selection", haptics);
@@ -220,12 +266,15 @@ export function ComposerDock({
     setTouchKeyboard(window.matchMedia("(pointer: coarse)").matches);
   }, []);
 
+  /* Measured against what is displayed, not against the draft. While dictation
+     is running the box shows the live transcript, and sizing to `value` would
+     leave a growing paragraph scrolled out of sight inside a one-line box. */
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = "0px";
     textarea.style.height = `${Math.min(168, Math.max(28, textarea.scrollHeight))}px`;
-  }, [value]);
+  }, [previewValue]);
 
   useEffect(() => {
     if (attachmentCount === 0) {
@@ -272,16 +321,44 @@ export function ComposerDock({
           ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready`
           : null);
 
-  const remainingSeconds = Math.max(0, MAX_RECORDING_SECONDS - recordedSeconds);
   const footerTone = transcribing
     ? "text-accent"
     : !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
 
+  /* Counts up rather than down. The old clock counted towards a sixty-second
+     ceiling that existed because a whole recording had to fit in one request;
+     nothing is held whole now, so there is no deadline to show and a deadline
+     shown is a thought cut short. */
   useEffect(() => {
     if (!listening) { setRecordedSeconds(0); return; }
     const started = Date.now();
     const timer = window.setInterval(() => setRecordedSeconds(Math.floor((Date.now() - started) / 1000)), 250);
     return () => window.clearInterval(timer);
+  }, [listening]);
+
+  /* One place the waveform advances, at the display's own rate. A bar is the
+     peak of the window it covers rather than the last sample in it, so a
+     short loud syllable cannot fall between two frames and vanish. */
+  useEffect(() => {
+    if (!listening) {
+      waveformRef.current = [];
+      peakRef.current = 0;
+      setWaveform([]);
+      return;
+    }
+    let frame = 0;
+    let lastBar = 0;
+    const tick = (now: number) => {
+      if (now - lastBar >= WAVEFORM_BAR_MS) {
+        lastBar = now;
+        waveformRef.current = [...waveformRef.current, peakRef.current].slice(-WAVEFORM_BAR_COUNT);
+        setWaveform(waveformRef.current);
+        peakRef.current = 0;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
   }, [listening]);
 
   function send() {
@@ -395,6 +472,7 @@ export function ComposerDock({
 
   async function startVoice() {
     setVoiceMessage(null);
+    setLiveTranscript("");
     haptic("selection", haptics);
 
     if (!loggedSupport.current) {
@@ -405,32 +483,42 @@ export function ComposerDock({
 
     try {
       const session = await startRecording({
-        onLevel: (level) => setInputLevel(level),
+        /* Recorded into a ref rather than into state; the effect above turns
+           it into bars at the display's rate. */
+        onLevel: (level) => { peakRef.current = Math.max(peakRef.current, level); },
+        onSpeaking: setSpeaking,
+        /* The words, while they are still being said. Each call is the whole
+           transcript so far and it only ever grows, so this can be rendered
+           straight through without the text reordering itself as later pieces
+           of the recording come back. */
+        onTranscript: setLiveTranscript,
         onError: (message) => setVoiceMessage(message),
-        onAutoStop: () => {
-          setVoiceMessage(`Recording stopped at ${MAX_RECORDING_SECONDS} seconds. Transcribing what you said.`);
+        onAutoStop: (reason: AutoStopReason) => {
+          /* Only two of these can reach the composer: the fifteen-minute
+             safety stop, and the microphone being taken away by a call or
+             another app. Both mean "this recording is over" rather than "this
+             recording is lost" — everything up to the interruption has
+             already been transcribed, so it is finished rather than
+             discarded. */
+          if (reason === "too-long") {
+            setVoiceMessage(`Recording stopped at ${Math.round(MAX_RECORDING_SECONDS / 60)} minutes. Keeping what you said.`);
+          }
           void finishVoice();
         },
-        language: voiceLanguage,
+        language: voiceLanguage
       });
       recorderRef.current = session;
       setListening(true);
     } catch (error) {
       setListening(false);
-      setInputLevel(0);
+      setSpeaking(false);
       setTranscribing(false);
 
-      let message = "Recording could not start.";
-      if (error instanceof Error) {
-        if (error.message.includes("permission") || error.name === "NotAllowedError") {
-          message = "Microphone access denied. Check your browser or device settings.";
-        } else if (error.message.includes("not supported") || error.name === "NotSupportedError") {
-          message = "Your device does not support recording. Try using voice mode instead.";
-        } else {
-          message = error.message;
-        }
-      }
-      setVoiceMessage(message);
+      /* Whatever the recorder threw, said as it was thrown. It already tells a
+         refused permission apart from a missing device, and an installed iOS
+         app apart from a browser tab — replacing that with a generic line here
+         would throw away the only part of the message that names the remedy. */
+      setVoiceMessage(error instanceof Error ? error.message : "Recording could not start.");
     }
   }
 
@@ -439,30 +527,33 @@ export function ComposerDock({
     recorderRef.current = null;
     if (!session) {
       setListening(false);
-      setInputLevel(0);
+      setSpeaking(false);
       setTranscribing(false);
-      setVoiceMessage("Recording was cancelled.");
       return;
     }
 
     setListening(false);
-    setInputLevel(0);
+    setSpeaking(false);
     setTranscribing(true);
     haptic("selection", haptics);
-    
+
     try {
+      /* Usually a short wait now, and often none at all: everything up to the
+         last pause has been transcribing while the person was still talking,
+         so this only has to finish the final segment. */
       const text = await session.stop();
       if (text) {
         const current = valueRef.current;
         onChange(`${current}${current.trim() ? " " : ""}${text}`);
         textareaRef.current?.focus();
       } else {
-        setVoiceMessage("Nothing was recorded.");
+        setVoiceMessage("Nothing was picked up.");
       }
     } catch (error) {
       setVoiceMessage(error instanceof Error ? error.message : "That recording could not be transcribed.");
     } finally {
       setTranscribing(false);
+      setLiveTranscript("");
     }
   }
 
@@ -470,7 +561,10 @@ export function ComposerDock({
     recorderRef.current?.cancel();
     recorderRef.current = null;
     setListening(false);
-    setInputLevel(0);
+    setSpeaking(false);
+    /* The preview goes with it. It was never written into the draft, so
+       discarding is a discard rather than an undo. */
+    setLiveTranscript("");
     setVoiceMessage(null);
     haptic("selection", haptics);
   }
@@ -594,7 +688,7 @@ export function ComposerDock({
                 textareaRef.current = node;
                 if (inputRef) inputRef.current = node;
               }}
-              value={value}
+              value={previewValue}
               onChange={(event) => onChange(event.target.value)}
               onKeyDown={keyDown}
               onPaste={paste}
@@ -610,7 +704,8 @@ export function ComposerDock({
               autoCorrect="on"
               spellCheck
               disabled={blocked}
-              placeholder={placeholder}
+              readOnly={dictating}
+              placeholder={listening ? "Listening — speak naturally" : placeholder}
               aria-label="Chat with Navi Soul"
               data-navi-composer=""
               className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[1rem]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
@@ -660,7 +755,17 @@ export function ComposerDock({
               {listening ? null : <span className="min-w-0 flex-1" />}
 
               {listening ? (
-                <span className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1">
+                <span
+                  /* The detector's own answer, not a level threshold read off
+                     the bars. It is the same judgement that decides where a
+                     segment is cut, so the ring lighting up means the words
+                     inside it are on their way — and a ring that never lights
+                     is the clearest possible statement that the microphone is
+                     open but hearing nothing. */
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${speaking ? "ring-accent" : "ring-transparent"}`}
+                  role="status"
+                  aria-label={speaking ? "Listening, speech detected" : "Listening"}
+                >
                   <button
                     type="button"
                     onClick={cancelVoice}
@@ -669,24 +774,28 @@ export function ComposerDock({
                   >
                     <X size={17} strokeWidth={2} />
                   </button>
-                  <span className="flex min-w-0 flex-1 items-center justify-center gap-[3px]" aria-hidden="true">
-                    {WAVEFORM_BARS.map((seed, index) => {
-                      const wave = 0.35 + 0.65 * Math.abs(Math.sin((recordedSeconds * 4 + index) * seed));
-                      const height = Math.max(3, Math.round(3 + inputLevel * wave * 19));
+                  <span className="flex min-w-0 flex-1 items-center justify-end gap-[3px] overflow-hidden" aria-hidden="true">
+                    {Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
+                      /* Right-aligned and padded on the left, so the first
+                         bars scroll in from the empty side instead of the row
+                         growing outwards from the middle. */
+                      const offset = index - (WAVEFORM_BAR_COUNT - waveform.length);
+                      const level = offset >= 0 ? waveform[offset] : 0;
+                      const height = Math.max(3, Math.round(3 + level * 19));
                       return (
                         <span
                           key={index}
-                          className="w-[3px] shrink-0 rounded-full bg-accent transition-[height] duration-100"
+                          className={`w-[3px] shrink-0 rounded-full transition-[height,background-color] duration-100 ${level > 0.02 ? "bg-accent" : "bg-[var(--border-strong)]"}`}
                           style={{ height: `${height}px` }}
                         />
                       );
                     })}
                   </span>
                   <span
-                    className={`shrink-0 tabular-nums text-[0.75rem]/4 font-semibold ${remainingSeconds <= 10 ? "text-warning" : "text-secondary"}`}
-                    aria-label={`${remainingSeconds} seconds left`}
+                    className="shrink-0 tabular-nums text-[0.75rem]/4 font-semibold text-secondary"
+                    aria-label={`Recording, ${recordedSeconds} seconds`}
                   >
-                    {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}
+                    {Math.floor(recordedSeconds / 60)}:{String(recordedSeconds % 60).padStart(2, "0")}
                   </span>
                   <button
                     type="button"

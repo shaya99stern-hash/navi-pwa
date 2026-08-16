@@ -78,7 +78,7 @@ check("the old dispatch-keyed form is gone", /\bmode === "code" \? codeModeInstr
    not re-announce the start. Every one of them was scaffolding around an API
    that does not work in an installed PWA.
 
-   Recording has none of those problems by construction. The microphone is held
+   Capture has none of those problems by construction. The microphone is held
    for exactly as long as the button says it is, a pause is just quiet audio,
    and there is nothing to restart — so the property to protect is no longer
    "it recovers well" but "it is not used at all". */
@@ -87,17 +87,34 @@ const speech = readFileSync(join(process.cwd(), "lib/ui/speech.ts"), "utf8");
 const recorder = readFileSync(join(process.cwd(), "lib/ui/recorder.ts"), "utf8");
 
 check("nothing recognises speech any more", /SpeechRecognition/.test(speech), false);
-check("dictation records instead", recorder.includes("new MediaRecorder"), true);
-/* A pause is silence in the middle of one recording, not the end of it. */
-check("the recording runs until it is stopped", /recorder\.start\(\)/.test(recorder), true);
+/* And nothing encodes a container any more either. MediaRecorder hands back
+   WebM, MP4 or Ogg depending on the browser, only the first chunk of which
+   carries a header — so a slice of one cannot be decoded, and transcribing
+   while someone is still speaking is impossible with it. Raw samples can be
+   cut anywhere. */
+check("dictation captures samples rather than a container", /new MediaRecorder/.test(recorder), false);
+check("through the audio graph", /audioWorklet\.addModule/.test(recorder), true);
+/* Deprecated, main-thread, and present on every device the worklet is not.
+   A slightly worse recording beats a microphone that does nothing. */
+check("with a fallback where the worklet will not load", /createScriptProcessor/.test(recorder), true);
+/* A pause is silence in the middle of one recording, not the end of it: the
+   detector closes a *segment* on a pause, and the recording carries on. */
+check("a pause closes a segment, not the recording", /createSegmenter/.test(recorder), true);
+check("and the recording only ends when it is stopped", /finished = true;\n {6}releaseMicrophone\(\)/.test(recorder), true);
 /* The microphone must be released on every exit, or the browser's recording
    indicator stays lit after the sheet is gone — the same failure `continuous`
    was rejected for. */
-check("stopping releases the microphone", /for \(const track of stream\.getTracks\(\)\) track\.stop\(\)/.test(recorder), true);
-check("abandoning it releases the microphone too", /cancel\(\) \{[\s\S]{0,120}teardown\(\)/.test(recorder), true);
-/* A stray tap is not speech, and sending it produces a 400 rather than a
-   transcript. */
-check("a too-short recording is not sent", /blob\.size < 1_200/.test(recorder), true);
+check("stopping releases the microphone", /for \(const item of stream\.getTracks\(\)\) item\.stop\(\)/.test(recorder), true);
+check("abandoning it releases the microphone too", /cancel\(\) \{[\s\S]{0,200}releaseMicrophone\(\)/.test(recorder), true);
+/* Disconnecting an AudioWorkletNode does not retire it — only `process`
+   returning false does — so a disconnected node stays scheduled on the audio
+   thread for the life of the context. */
+check("and retires the capture node rather than only unplugging it",
+  /postMessage\("stop"\)/.test(recorder), true);
+/* A stray tap is not speech. The guard used to be a byte count on the whole
+   blob; it is now a duration of detected speech inside the segment, which is
+   the thing actually being asked about. */
+check("a stray tap is not sent", /minSpeechMs/.test(readFileSync(join(process.cwd(), "lib/ui/audio/vad.ts"), "utf8")), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

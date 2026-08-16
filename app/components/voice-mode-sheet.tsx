@@ -4,8 +4,12 @@ import { Check, Keyboard, LoaderCircle, Mic, Send, Square, Volume2, X } from "lu
 import { useEffect, useMemo, useRef, useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
 import { resolveVoiceLanguage } from "@/lib/ui/speech";
-import { recordingSupported, startRecording, type RecordingSession } from "@/lib/ui/recorder";
-import { createTurnDetector } from "@/lib/ui/conversation";
+import {
+  recordingSupported,
+  startRecording,
+  type AutoStopReason,
+  type RecordingSession
+} from "@/lib/ui/recorder";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 /**
@@ -19,10 +23,19 @@ import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
  * microphone worked or did not depending on which button was pressed, which is
  * worse than either answer on its own.
  *
- * One consequence is visible and worth stating: recognition streamed words as
- * you spoke, and recording cannot. The transcript arrives when you stop. So the
- * waiting is shown rather than hidden — an empty panel between speaking and
- * text reads as the recording having been thrown away.
+ * The one thing recognition did better has since been recovered. It streamed
+ * words as they were spoken, and the first recording version could only
+ * produce them at the end — so this sheet had to show the wait rather than the
+ * words. The recorder now transcribes segment by segment while the microphone
+ * is still open, so the text builds up as it is spoken and the spinner only
+ * covers the last unfinished sentence.
+ *
+ * Endpointing is the recorder's too. This sheet used to run its own detector
+ * over the level meter, with a fixed threshold that meant hands-free worked in
+ * a quiet room and nowhere else — while the recorder was separately deciding,
+ * with a measured noise floor, where speech began and ended. Two answers to
+ * one question is how the two surfaces drift apart, so there is one now, and
+ * it is the better one.
  */
 
 const LANGUAGES = [
@@ -76,12 +89,27 @@ export function VoiceModeSheet({
    * thing that sets either, so they cannot drift.
    */
   const transcriptRef = useRef("");
-  /** Between stopping and the words arriving. Its own state, because it is its
-      own thing to look at — not a variety of idle. */
+  /**
+   * The current pass's words, as they arrive.
+   *
+   * Separate from `transcript`, which holds the passes already finished. Start
+   * / Stop / Start again is how a long thought gets spoken, and only a
+   * completed pass is committed — so this is the sentence in flight and that
+   * is everything before it.
+   */
+  const [live, setLive] = useState("");
+  /** Between stopping and the last sentence arriving. Its own state, because it
+      is its own thing to look at — not a variety of idle. */
   const [transcribing, setTranscribing] = useState(false);
   const [listening, setListening] = useState(false);
+  /** Whether the detector is hearing a voice, rather than merely a level. */
+  const [speaking, setSpeaking] = useState(false);
   /** Live microphone level, so the bars respond to the voice rather than a timer. */
   const [level, setLevel] = useState(0);
+  /* Levels arrive fifty times a second and the bars redraw sixty; holding the
+     peak in a ref and draining it on a timer keeps a seven-bar row from
+     costing fifty React renders a second. */
+  const peakRef = useRef(0);
   const [speakReply, setSpeakReply] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -90,15 +118,26 @@ export function VoiceModeSheet({
    * something to switch on for someone without asking.
    */
   const [conversation, setConversation] = useState(false);
-  /** True while the reply is being read aloud, so listening waits for it. */
-  const [speaking, setSpeaking] = useState(false);
-  const detector = useRef(createTurnDetector());
-  /* Guards the restart. `busy`, `speaking` and `listening` all settle at
+  /**
+   * True while the reply is being read aloud, so listening waits for it.
+   *
+   * Named for the app talking, not for the person: `speaking` above is the
+   * detector's answer about the microphone, and hands-free depends on telling
+   * those two apart — the whole failure it exists to prevent is the app
+   * transcribing its own voice back as the next question.
+   */
+  const [reading, setReading] = useState(false);
+  /* Guards the restart. `busy`, `reading` and `listening` all settle at
      slightly different moments, and without this the effect that restarts
      listening can fire twice on the same gap and open two recorders. */
   const restarting = useRef(false);
 
-  const combined = useMemo(() => transcript.trim(), [transcript]);
+  /* What is shown, and what Send would send: the finished passes plus the one
+     still being spoken. */
+  const combined = useMemo(
+    () => `${transcript}${transcript.trim() && live ? " " : ""}${live}`.trim(),
+    [transcript, live]
+  );
 
   /* Swipe down to dismiss, like every other bottom sheet in the app.
      This one was the exception — same shape, same position, and the gesture
@@ -157,20 +196,30 @@ export function VoiceModeSheet({
     if (!online || busy || listening || transcribing) return;
 
     setError(null);
+    setLive("");
     try {
-      detector.current.reset(Date.now());
       recorderRef.current = await startRecording({
-        onLevel: (value) => {
-          setLevel(value);
-          /* In conversation mode the level is not only a waveform, it is the
-             end-of-turn signal. Pressing Stop is the step that makes this a
-             dictation box rather than a conversation. */
-          if (!conversation) return;
-          const ended = detector.current.push(value, Date.now());
-          if (!ended) return;
+        onLevel: (value) => { peakRef.current = Math.max(peakRef.current, value); },
+        onSpeaking: setSpeaking,
+        /* The words as they are spoken. This is what the sheet used to have
+           with recognition, lose with recording, and show a spinner in place
+           of. */
+        onTranscript: setLive,
+        /**
+         * Hands-free, decided by the same detector that decides where a
+         * segment is cut rather than by a second one reading the level meter.
+         *
+         * Passed at start time and not read from a closure afterwards, which
+         * is why toggling the switch mid-turn restarts the recording instead
+         * of quietly having no effect until the next one.
+         */
+        handsFree: conversation,
+        onAutoStop: (reason: AutoStopReason) => {
           /* Nothing was said, so there is no clip worth transcribing — stop
-             and let the restart effect open a fresh turn. */
-          if (ended === "silent") void stop({ discard: true });
+             and let the restart effect open a fresh turn. Every other reason
+             means there is something worth keeping: a finished turn, the
+             safety ceiling, or the microphone being taken by a call. */
+          if (reason === "silent") void stop({ discard: true });
           else void stop();
         },
         onError: (message) => setError(message),
@@ -196,11 +245,16 @@ export function VoiceModeSheet({
     recorderRef.current = null;
     haptic("impact-light", haptics);
     setListening(false);
+    setSpeaking(false);
     setLevel(0);
-    if (discard) { session.cancel(); return; }
+    if (discard) { session.cancel(); setLive(""); return; }
     setTranscribing(true);
     try {
       const text = (await session.stop()).trim();
+      /* The pass is over, so its words stop being provisional and become part
+         of the turn below. Cleared before the merge rather than after, so the
+         sentence is never counted in both places for a frame. */
+      setLive("");
       if (!text) {
         /* In conversation mode this is a non-event: the room was noisy enough
            to open a turn and there were no words in it. Saying so every few
@@ -228,7 +282,7 @@ export function VoiceModeSheet({
    * Open the next turn once the exchange has fully settled.
    *
    * Three things have to be finished, and they finish at different moments:
-   * the request (`busy`), the reply being read aloud (`speaking`), and this
+   * the request (`busy`), the reply being read aloud (`reading`), and this
    * sheet's own recorder. Restarting on any one of them alone is how a
    * conversation ends up listening to itself — the microphone opens while the
    * reply is still playing out of the speaker, transcribes it, and sends it
@@ -236,7 +290,7 @@ export function VoiceModeSheet({
    */
   useEffect(() => {
     if (!open || !conversation || !online) return;
-    if (busy || speaking || listening || transcribing || restarting.current) return;
+    if (busy || reading || listening || transcribing || restarting.current) return;
     restarting.current = true;
     /* A beat before reopening. Without it the microphone catches the tail of
        the speaker and the first syllable of the reply becomes the next turn. */
@@ -245,10 +299,10 @@ export function VoiceModeSheet({
       void start();
     }, 450);
     return () => { window.clearTimeout(timer); restarting.current = false; };
-  }, [busy, conversation, listening, online, open, speaking, transcribing]);
+  }, [busy, conversation, listening, online, open, reading, transcribing]);
 
   /**
-   * Whether the reply is still being spoken.
+   * Whether the reply is still being read aloud.
    *
    * `speechSynthesis` has no reliable end event across engines — the same
    * reason `message-row` polls it rather than listening for one. Polled only
@@ -256,16 +310,28 @@ export function VoiceModeSheet({
    */
   useEffect(() => {
     if (!open || !conversation || !speakReply || typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const poll = window.setInterval(() => setSpeaking(window.speechSynthesis.speaking), 300);
-    return () => { window.clearInterval(poll); setSpeaking(false); };
+    const poll = window.setInterval(() => setReading(window.speechSynthesis.speaking), 300);
+    return () => { window.clearInterval(poll); setReading(false); };
   }, [conversation, open, speakReply]);
+
+  /* The microphone level, drained at the rate the bars actually redraw. */
+  useEffect(() => {
+    if (!listening) { peakRef.current = 0; setLevel(0); return; }
+    const timer = window.setInterval(() => {
+      setLevel(peakRef.current);
+      peakRef.current = 0;
+    }, 60);
+    return () => window.clearInterval(timer);
+  }, [listening]);
 
   function resetAndClose() {
     recorderRef.current?.cancel();
     recorderRef.current = null;
     setListening(false);
+    setSpeaking(false);
     setTranscribing(false);
     setLevel(0);
+    setLive("");
     writeTranscript("");
     setError(null);
     onClose();
@@ -297,8 +363,10 @@ export function VoiceModeSheet({
     recorderRef.current?.cancel();
     recorderRef.current = null;
     setListening(false);
+    setSpeaking(false);
     setTranscribing(false);
     setLevel(0);
+    setLive("");
     writeTranscript("");
     setError(null);
     onSendTranscript(text, speakReply);
@@ -365,12 +433,20 @@ export function VoiceModeSheet({
           <div className="mt-5 rounded-[24px] border border-[var(--border-subtle)] bg-elev-2 p-4">
             <div className="flex min-h-[132px] items-center justify-center">
               {combined ? (
-                <p className="w-full whitespace-pre-wrap text-[1.125rem]/7 font-medium tracking-[-0.01em] text-primary">{combined}</p>
+                /* The text builds up here while it is still being spoken, so
+                   this is the ordinary case rather than the after-the-fact
+                   one. The tail of the current pass is dimmed: it can still
+                   change as the last segment settles, and showing that is
+                   better than having a settled-looking sentence rewrite
+                   itself. */
+                <p className="w-full whitespace-pre-wrap text-[1.125rem]/7 font-medium tracking-[-0.01em] text-primary">
+                  {transcript}
+                  {transcript.trim() && live ? " " : ""}
+                  <span className={listening ? "text-secondary" : undefined}>{live}</span>
+                </p>
               ) : transcribing ? (
-                /* The gap recognition never had. Words used to appear as they
-                   were spoken; recording can only produce them at the end, and
-                   an empty panel in between reads as the recording having been
-                   thrown away. */
+                /* Only reachable now when the very first sentence has not come
+                   back yet. It used to cover every recording end to end. */
                 <div className="text-center" role="status">
                   <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-elev-3 text-accent">
                     <LoaderCircle size={26} className="animate-spin" />
@@ -391,12 +467,21 @@ export function VoiceModeSheet({
               /* Driven by the microphone rather than a CSS animation. A bar row
                  that pulses on a timer looks identical whether it is hearing
                  you or hearing nothing, which is exactly the question someone
-                 watching it is asking. */
-              <div className="mt-4 flex h-8 items-end justify-center gap-1" role="status" aria-label="Listening">
+                 watching it is asking.
+
+                 The colour carries the detector's own answer, which is a
+                 stronger statement than the height: bars can move on room
+                 noise, and this only lights when what is being heard is going
+                 to be transcribed. */
+              <div
+                className="mt-4 flex h-8 items-end justify-center gap-1"
+                role="status"
+                aria-label={speaking ? "Listening, speech detected" : "Listening"}
+              >
                 {VOICE_BARS.map((weight, index) => (
                   <span
                     key={index}
-                    className="w-1.5 rounded-full bg-accent transition-[height] duration-100"
+                    className={`w-1.5 rounded-full transition-[height,background-color] duration-100 ${speaking ? "bg-accent" : "bg-[var(--border-strong)]"}`}
                     style={{ height: `${Math.max(5, Math.min(30, 5 + level * weight * 34))}px` }}
                   />
                 ))}
@@ -423,7 +508,13 @@ export function VoiceModeSheet({
                    this on turns that on rather than leaving someone in a
                    hands-free conversation with a silent partner. */
                 if (next) setSpeakReply(true);
-                else if (listening) void stop({ discard: true });
+                /* Either direction ends the current recording, because
+                   hands-free is decided when the recorder is opened. Switching
+                   it on mid-turn without this looks like it did nothing: the
+                   open recording keeps waiting for Stop, and only the turn
+                   after it listens for itself. Discarding lets the restart
+                   effect reopen with the setting that is now switched on. */
+                if (listening) void stop({ discard: true });
                 return next;
               });
               haptic("selection", haptics);

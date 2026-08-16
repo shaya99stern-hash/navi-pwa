@@ -8,14 +8,29 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Transcription, so dictation stops depending on the browser's speech API.
+ * Transcription for one segment of speech.
  *
- * `webkitSpeechRecognition` is why the microphone "doesn't work at all": it is
- * absent or unreliable in an installed iOS PWA, it plays a system chime the
- * page cannot suppress, and it silently stops in ways nothing can observe.
- * Recording audio and transcribing it here avoids all three — the recorder is
- * plain MediaRecorder, which works everywhere, makes no sound, and gives the
- * app a real waveform to draw.
+ * Two earlier shapes are worth knowing about, because the current one is
+ * defined by what went wrong with them.
+ *
+ * The first was `webkitSpeechRecognition` in the browser, which in an
+ * installed iOS PWA is frequently absent with no error and no event, plays a
+ * system chime the page cannot suppress, and stops in ways nothing can
+ * observe.
+ *
+ * The second recorded a whole utterance with MediaRecorder and posted the
+ * container the browser happened to produce — WebM on Chrome, MP4 on Safari,
+ * Ogg on Firefox. Most of the code below existed to survive that: a raw-bytes
+ * call that rejected WebM outright, a multipart call that inferred the
+ * container from a filename, and a list of formats to guess between. "That
+ * audio format was rejected" was the most common way dictation failed, and it
+ * reached the user as a broken microphone.
+ *
+ * Now the client sends 16 kHz 16-bit mono WAV that it writes itself, one
+ * request per segment of speech, while the person is still talking. Nothing
+ * about the format is negotiated, the bodies are small and uniform, and the
+ * fallbacks that remain are about *which model* will answer rather than about
+ * what it will accept.
  *
  * Whisper runs on the Hugging Face inference API, which is the token this app
  * already uses for image and audio generation, so this costs no new
@@ -32,12 +47,23 @@ export const maxDuration = 60;
  * the browser saw an opaque failure and the composer looked like it had hung.
  * A limit above the platform's is not a limit, it is a comment.
  *
- * The client caps recording at 60 seconds and refuses to upload past
- * MAX_UPLOAD_BYTES, so this is the second of two guards rather than the only
- * one — but it has to sit under the platform number to ever be reachable.
+ * Segments are capped at fourteen seconds, which at 32 kB a second is under
+ * half a megabyte, so in practice nothing comes close. This is the second of
+ * two guards rather than the only one — but it still has to sit under the
+ * platform number to ever be reachable.
  */
 const MAX_AUDIO_BYTES = 3_500_000;
-const TIMEOUT_MS = 45_000;
+
+/**
+ * A segment is seconds of audio, not minutes.
+ *
+ * The old ceiling was 45 seconds because a request could carry a whole
+ * recording. Now the longest body is fourteen seconds of speech, which a
+ * warm model returns in one or two — so a request still running after twenty
+ * is not slow, it is stuck, and failing fast lets the retry happen while the
+ * person is still talking rather than after they have stopped.
+ */
+const TIMEOUT_MS = 20_000;
 
 function transcriptionModel(): string {
   return process.env.NAVI_TRANSCRIBE_MODEL?.trim() || "openai/whisper-large-v3-turbo";
@@ -57,14 +83,16 @@ export async function POST(request: Request) {
   const audio = await request.arrayBuffer();
   if (!audio.byteLength) return NextResponse.json({ error: "No audio was received." }, { status: 400 });
   if (audio.byteLength > MAX_AUDIO_BYTES) {
-    return NextResponse.json({ error: "That recording is too long. Keep it under a minute." }, { status: 413 });
+    return NextResponse.json({ error: "That stretch of audio is too long to send at once." }, { status: 413 });
   }
 
-  /* Strip codec parameters. `audio/webm; codecs=opus` is rejected by name
-     even where the container itself would be read, so the parameter alone can
-     be the whole failure. */
-  const rawContentType = request.headers.get("content-type") || "audio/webm";
-  const contentType = rawContentType.split(";")[0].trim() || "audio/webm";
+  /* WAV unless told otherwise, because that is what the recorder writes.
+     Codec parameters are still stripped: `audio/webm; codecs=opus` is rejected
+     by name even where the container itself would be read, so the parameter
+     alone can be the whole failure — and this route still answers older
+     clients running from a cached service worker. */
+  const rawContentType = request.headers.get("content-type") || "audio/wav";
+  const contentType = rawContentType.split(";")[0].trim() || "audio/wav";
 
   /* The dictation language the user chose.
    *
@@ -92,11 +120,12 @@ export async function POST(request: Request) {
    * which is why every recording failed at the final step.
    */
   const extensionFor = (type: string) =>
-    type.includes("mp4") ? "m4a"
-      : type.includes("mpeg") ? "mp3"
-        : type.includes("ogg") ? "ogg"
-          : type.includes("wav") ? "wav"
-            : "webm";
+    type.includes("wav") ? "wav"
+      : type.includes("mp4") ? "m4a"
+        : type.includes("mpeg") ? "mp3"
+          : type.includes("ogg") ? "ogg"
+            : type.includes("webm") ? "webm"
+              : "wav";
 
   async function viaOpenAiCompatible(model: string): Promise<{ text?: string; failure?: string }> {
     const form = new FormData();
@@ -193,7 +222,12 @@ export async function POST(request: Request) {
        the whole interface around. The full reason still travels in `detail`
        and reaches the console, which is where diagnosis belongs. */
     const summary = /not supported/i.test(failures.join(" "))
-      ? "That audio format was rejected. Try again — a different format will be used."
+      /* Kept as a distinct message, but it no longer means what it used to.
+         The client writes plain 16 kHz WAV, so this is a model that will not
+         take audio at all rather than a container to be guessed at again —
+         and telling someone to retry would be telling them to wait for
+         something that is not going to change. */
+      ? "The transcription model would not accept audio. Check NAVI_TRANSCRIBE_MODEL."
       : "No transcription model would answer. The detail is in the console.";
     return NextResponse.json({
       error: summary,
