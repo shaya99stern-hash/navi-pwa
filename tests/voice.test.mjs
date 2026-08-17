@@ -235,5 +235,45 @@ check("and it does not nag about it while hands-free",
 check("turning it on turns on reading the reply aloud",
   /if \(next\) setSpeakReply\(true\);/.test(sheet.body), true);
 
+/* ── Writing for an ear, wired end to end ───────────────────────────────────
+   The largest single win on how a spoken answer sounds is not the voice, it is
+   the sentences. A premium voice reading a bulleted report still sounds like a
+   machine, because cadence lives in clause length and structure rather than in
+   timbre. This block is therefore load-bearing for the whole voice mode — and
+   it is only worth anything if all four links exist, which is what these check.
+   A prompt block nobody sets, or a flag nobody reads, is the dead-code shape
+   this repository keeps finding in itself. */
+
+const spokenShell = read("app/components/app-shell.tsx");
+const spokenRoute = read("app/api/chat/route.ts");
+
+/* 1. The client can ask for it, and only the spoken path does. */
+check("the request body carries a voice flag", /voice: spoken,/.test(spokenShell.code), true);
+check("the spoken submit path sets it", /requestBody\(text, speakReply\)/.test(spokenShell.code), true);
+/* Dictating into the composer produces an answer the person reads; shortening
+   that would be a loss. What earns the shorter form is the reply being heard. */
+check("the typed path does not", /body: requestBody\(text\) \}/.test(spokenShell.code), true);
+
+/* 2. The route reads it, strictly. A client that has not reloaded sends
+   nothing, which must read as a written answer rather than as undefined. */
+check("the route reads the flag as a strict boolean", /body\.voice === true/.test(spokenRoute.code), true);
+
+/* 3. It reaches the prompt builder. */
+check("the flag is passed to the prompt builder", /spoken: spokenReply/.test(spokenRoute.code), true);
+check("the builder accepts it", /spoken = false/.test(spokenRoute.code), true);
+
+/* 4. And it produces instructions that are actually about being heard. */
+check("the block forbids markup a voice cannot pronounce",
+  /no headings, no bullets, no bold, no code fences/i.test(spokenRoute.source), true);
+check("it asks for one idea at a time", /One idea at a time/.test(spokenRoute.source), true);
+check("it pushes the answer before the preamble", /Open with the answer, not a preamble/.test(spokenRoute.source), true);
+/* The pillar most likely to be lost: the work stays the same, only the writing
+   changes. A voice mode that quietly thinks less is a worse product than one
+   that talks like a document. */
+check("depth is not traded away for brevity, only the full detail is deferred",
+  /the rest is on screen/.test(spokenRoute.source), true);
+check("and a long task is acknowledged rather than narrated step by step",
+  /say so in a sentence and get on with it/.test(spokenRoute.source), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
