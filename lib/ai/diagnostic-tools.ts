@@ -365,9 +365,21 @@ async function checkModelRoutes(): Promise<DiagnosticResult> {
       if (!listed.size) return { label: entry.label, status: "unverified" as const, detail: "the catalogue could not be read" };
 
       const missing = entry.models.filter((model) => !listed.has(model));
-      return missing.length
-        ? { label: entry.label, status: "missing" as const, detail: missing.join(", ") }
-        : { label: entry.label, status: "ok" as const, detail: `${entry.models.length} ids` };
+      if (!missing.length) return { label: entry.label, status: "ok" as const, detail: `${entry.models.length} ids` };
+
+      /* Named replacements, from the catalogue already in hand.
+         Reporting only that six ids are wrong leaves the operator to go and
+         fetch six catalogues by hand — which is exactly the errand that let
+         this table rot in the first place. The listing needed to *detect* the
+         mismatch also contains the answer, so it is spent on saying what to
+         set rather than only what is broken. */
+      const detail = missing
+        .map((model) => {
+          const options = suggestReplacements(model, listed);
+          return options.length ? `${model} → try ${options.join(" or ")}` : model;
+        })
+        .join("; ");
+      return { label: entry.label, status: "missing" as const, detail };
     },
     () => ({ label: entry.label, status: "unverified" as const, detail: "the catalogue did not answer within 10 seconds" })
   )));
@@ -394,7 +406,7 @@ async function checkModelRoutes(): Promise<DiagnosticResult> {
       `${missing.length} provider${missing.length === 1 ? "" : "s"} do not list a model id this deployment is configured to send:`,
       missing.map((entry) => `${entry.label} — ${entry.detail}`).join("; ") + ".",
       "Every request routed to one of those fails and is absorbed by the silent failover, which reads as the app being weak rather than misconfigured.",
-      "Fix by repointing the route's model environment variable at an id the provider actually serves.",
+      "Where a replacement is suggested it is an id that provider does serve and whose name resembles the configured one — check it, then set the route's model environment variable to it.",
       unverified.length ? `Not checked: ${unverified.map((entry) => entry.label).join(", ")}.` : ""
     ].filter(Boolean).join(" ")
   };
@@ -408,6 +420,47 @@ async function checkModelRoutes(): Promise<DiagnosticResult> {
  * unrecognised shape yields an empty set, which the caller treats as "could not
  * check" rather than as "nothing is there".
  */
+/**
+ * Ids from the catalogue that most resemble one it does not serve.
+ *
+ * Deliberately lexical and deliberately modest. A provider renaming
+ * `llama-3.3-70b` to `llama3.3-70b`, or moving `deepseek-ai/deepseek-r1` under
+ * a different namespace, is the overwhelmingly common shape of this failure —
+ * the model is still there and the string moved. Overlapping name fragments
+ * find that in one pass, with no second model call and no judgement about
+ * whether two models are *equivalent*, which nothing here could honestly claim.
+ *
+ * So these are candidates a person picks from, and the wording says so. An
+ * operator reading "try X or Y" checks them; an operator reading "use X" would
+ * paste it in. Only the first is a promise this can keep.
+ */
+export function suggestReplacements(missing: string, listed: Set<string>): string[] {
+  /* Dots are kept inside fragments, and that is the difference between a
+     useful suggestion and a confidently wrong one. Splitting on every
+     non-alphanumeric turned `llama-3.3-70b` into "llama", "3", "3", "70b" —
+     and the single characters were then dropped as noise, taking the version
+     with them. `llama-3.3-70b` duly suggested `llama-3.1-70b`, which is a
+     different model, offered to someone who would have pasted it in. */
+  const fragments = [...new Set(
+    missing.toLowerCase().split(/[^a-z0-9.]+/).map((part) => part.replace(/^\.+|\.+$/g, ""))
+  )].filter((part) => part.length > 1);
+  if (!fragments.length) return [];
+
+  const scored: Array<{ id: string; score: number }> = [];
+  for (const candidate of listed) {
+    const lower = candidate.toLowerCase();
+    const score = fragments.reduce((total, fragment) => total + (lower.includes(fragment) ? fragment.length : 0), 0);
+    /* Two shared fragments, or one substantial one — enough to be a rename
+       rather than a coincidence of the word "llama" appearing somewhere. */
+    if (score >= 6) scored.push({ id: candidate, score });
+  }
+
+  return scored
+    .sort((left, right) => right.score - left.score || left.id.length - right.id.length)
+    .slice(0, 2)
+    .map((entry) => entry.id);
+}
+
 function catalogueModelIds(payload: unknown): Set<string> {
   const ids = new Set<string>();
   if (!payload || typeof payload !== "object") return ids;
