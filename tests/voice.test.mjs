@@ -275,5 +275,35 @@ check("depth is not traded away for brevity, only the full detail is deferred",
 check("and a long task is acknowledged rather than narrated step by step",
   /say so in a sentence and get on with it/.test(spokenRoute.source), true);
 
+/* ── The diagnostic and the code must read the same list ────────────────────
+   `checkTranscription` fetched the provider's catalogue, saw a 200, and
+   reported "the token is valid and the router answered" — a fact about the
+   credential that says nothing about whether any model that transcribes speech
+   can be reached. A valid token aimed at models the account cannot serve fails
+   every dictation while the diagnostic reports success, and it reaches the
+   person as a microphone that does not work. Same credential-versus-model gap
+   `checkModelRoutes` closes for chat, left open on the surface where it hurts
+   most. */
+
+const transcribeRoute = read("app/api/voice/transcribe/route.ts");
+const diagnostics = read("lib/ai/diagnostic-tools.ts");
+const sharedModels = read("lib/ai/voice/transcription-models.ts");
+
+check("the candidate list lives in one module", /export function transcriptionModels/.test(sharedModels.code), true);
+check("the route that calls them reads it", /transcriptionModels\(\)/.test(transcribeRoute.code), true);
+check("and the diagnostic that checks them reads the same one",
+  /transcriptionModels\(\)/.test(diagnostics.code), true);
+/* Two copies would drift, and the drifted one would be the diagnostic —
+   reporting on models nobody calls while silent about the ones failing. */
+check("no second hardcoded whisper list survives in the route",
+  /"openai\/whisper-large-v3"/.test(transcribeRoute.code), false);
+
+check("the diagnostic compares the candidates against the catalogue",
+  /reachable = wanted\.filter/.test(diagnostics.code), true);
+check("an unreadable catalogue is reported as unconfirmed, not as failure",
+  /unconfirmed/.test(diagnostics.source), true);
+check("and a token that reaches none of them fails the check with the fix named",
+  /Point NAVI_TRANSCRIBE_MODEL at a speech-to-text model/.test(diagnostics.source), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
