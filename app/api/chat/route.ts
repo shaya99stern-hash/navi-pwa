@@ -900,6 +900,24 @@ function systemPromptBlocks(options: {
        the first, which is how eight thousand tokens of background arrived at a
        route with an eight thousand token allowance. */
     ...reference.map((block) => ({ name: block.name, text: block.text, optional: true })),
+    /* Memory, lifted out of the turn block and made droppable.
+       It used to sit inside `turn`, which is required, so `preflightPayload`
+       could not touch it — and its trim order is optional blocks, then tools,
+       then conversation history. A turn too large for its route therefore
+       deleted what the user had just said in order to keep repeating what it
+       learned about them months ago. That is backwards on any reading: the
+       remembered facts are worth less than the sentence they are being
+       remembered during.
+
+       Placed after the reference material rather than before it, which is the
+       conservative half of a real trade. Dropping from the end means memory now
+       goes before generic background does, and a case can be made that facts
+       about this person outrank a description of the app. Moving it up would
+       also move a per-user string ahead of the two largest stable blocks, and
+       the note above is explicit that the metered lane bills an uncached prefix
+       at roughly fifty times a cached one. Fixing the ordering against a
+       measured cache-hit rate is worth doing; guessing at it here is not. */
+    { name: "memory", text: memoryContext || "", optional: true },
     { name: "turn", text: [
     /* Keyed to the mode the user actually chose, not to how the dispatcher
        classified this message. Keying it to dispatch meant that picking Code
@@ -951,7 +969,9 @@ function systemPromptBlocks(options: {
         "If a task will take a while, say so in a sentence and get on with it rather than narrating each step."
       ].join(" ")
       : "",
-    memoryContext || "",
+    /* Memory moved out of this block and into its own optional one above.
+       Inside here it was un-droppable, which made the conversation the first
+       thing sacrificed to an oversized request. */
     /* With the other per-request material, never above the stable prefix. File
        contents are the most volatile thing in the prompt — they differ on every
        question — so placing them early would invalidate the cached prefix for
