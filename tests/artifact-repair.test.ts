@@ -171,5 +171,39 @@ const lightDocument = buildArtifactDocument({ id: "a", title: "A", kind: "html",
 check("light artifacts are left alone", lightDocument.includes("!important"), false);
 check("light artifacts still get the variables", lightDocument.includes("--navi-fg"), true);
 
+/* ── The frame must not grow itself ─────────────────────────────────────────
+   The bridge reported `documentElement.scrollHeight` and observed the same
+   element. Inside an iframe that element *is* the viewport, so its height is
+   whatever the parent last set — and body carries 16px of padding, so every
+   observation reported 32px more than the last. The frame ratcheted upward
+   until it hit its 900px clamp and sat there with a large dead region below
+   content that had never grown at all. On a phone that is most of the screen.
+
+   Nothing errored. It looked like an artifact that renders badly. */
+
+const bridgeSource = (require("node:fs") as typeof import("node:fs"))
+  .readFileSync((require("node:path") as typeof import("node:path")).join(process.cwd(), "lib/security/artifacts.ts"), "utf8");
+
+check("the bridge no longer reports the document's own box",
+  /height: Math\.ceil\(document\.documentElement\.scrollHeight\)/.test(bridgeSource), false);
+check("it measures the content's furthest edge instead",
+  /getBoundingClientRect\(\)\.bottom \+ window\.scrollY/.test(bridgeSource), true);
+/* Content sized in viewport units fills whatever it is given and can never
+   report a natural height, so it is reported unchanged rather than with
+   padding added. That is what stops the loop at its source. */
+check("viewport-filling content is reported without padding added",
+  /content <= viewport \+ 4 \? viewport : content \+ 16/.test(bridgeSource), true);
+check("and the observer watches the body, not the viewport",
+  /new ResizeObserver\(resize\)\.observe\(document\.body\)/.test(bridgeSource), true);
+
+const frameSource = (require("node:fs") as typeof import("node:fs"))
+  .readFileSync((require("node:path") as typeof import("node:path")).join(process.cwd(), "app/components/artifact-frame.tsx"), "utf8");
+
+/* The half that reaches a client running a service-worker-cached build, which
+   still sends the old report and would still ratchet without this. */
+check("the frame ignores a report that merely echoes its own height",
+  /next - current <= 40/.test(frameSource), true);
+check("while a genuine jump is still honoured", /echo \? current : next/.test(frameSource), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

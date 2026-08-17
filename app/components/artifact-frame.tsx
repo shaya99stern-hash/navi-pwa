@@ -58,7 +58,20 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
       const data = event.data as { type?: string; id?: string; height?: number };
       if (data.id !== payload.id) return;
       if ((data.type === "artifact:ready" || data.type === "artifact:resize") && typeof data.height === "number") {
-        setHeight(Math.min(900, Math.max(180, data.height)));
+        const next = Math.min(900, Math.max(180, data.height));
+        setHeight((current) => {
+          /* Ignore a report that merely echoes the height we just set, plus the
+             body padding. That is the signature of content sized in viewport
+             units: it fills whatever it is given, so honouring the report grows
+             the frame, which grows the report, and the frame ratchets to its
+             clamp with a dead region below content that never changed.
+
+             The bridge no longer produces that report — but a client running a
+             service-worker-cached build still does, and this is the half of the
+             fix that reaches them without a reload. */
+          const echo = next > current && next - current <= 40;
+          return echo ? current : next;
+        });
       }
       if (data.type === "artifact:interaction") haptic("selection", haptics);
     }
