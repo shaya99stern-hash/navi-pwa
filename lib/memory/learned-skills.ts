@@ -228,18 +228,41 @@ export function learnedSkillsBlock(skills: LearnedSkill[]): string {
      which heading a paragraph sat under. Skills are rendered first so that when
      the budget runs out it is a lesson that gets clipped, not an instruction. */
   let used = 0;
+  let omitted = 0;
+
+  /**
+   * Enough body to be worth a heading.
+   *
+   * The bug this replaces: the header was pushed unconditionally and only the
+   * body counted against the budget. So forty skills contributed roughly four
+   * thousand uncounted characters to a six-thousand-character allowance, and
+   * once `used` reached the ceiling the body became an empty string, `if (body)`
+   * was false, and the skill rendered as a bare title with no instructions and
+   * no clipping notice.
+   *
+   * That is worse than dropping it. The model reads a capability it is told is
+   * "yours, apply it without being reminded", cannot see what it does, and has
+   * nothing telling it anything is missing — so it either ignores an
+   * instruction the user gave it or invents what the title must have meant. A
+   * skill that cannot be shown is now counted and named, never mimed.
+   */
+  const MIN_BODY_CHARS = 80;
 
   const render = (skill: LearnedSkill) => {
     const header = `### ${skill.name}${skill.description ? ` — ${skill.description}` : ""}`;
-    const body = used + skill.instructions.length <= PROMPT_BUDGET_CHARS
+    const room = PROMPT_BUDGET_CHARS - used;
+    /* The header costs budget too, which is the whole of the arithmetic error. */
+    if (header.length + MIN_BODY_CHARS > room) { omitted += 1; return; }
+
+    const bodyRoom = Math.min(PER_SKILL_PROMPT_CHARS, room - header.length);
+    const body = skill.instructions.length <= bodyRoom
       ? skill.instructions
-      : skill.instructions.slice(0, Math.max(0, Math.min(PER_SKILL_PROMPT_CHARS, PROMPT_BUDGET_CHARS - used)));
+      : skill.instructions.slice(0, bodyRoom);
+
     lines.push(header);
-    if (body) {
-      lines.push(body + (body.length < skill.instructions.length ? "\n[Clipped for space; the full skill is stored.]" : ""));
-      used += body.length;
-    }
+    lines.push(body + (body.length < skill.instructions.length ? "\n[Clipped for space; the full skill is stored.]" : ""));
     lines.push("");
+    used += header.length + body.length;
   };
 
   if (taught.length) {
@@ -253,6 +276,16 @@ export function learnedSkillsBlock(skills: LearnedSkill[]): string {
       ""
     );
     for (const skill of learned) render(skill);
+  }
+
+  /* Said rather than hidden. "You have more stored than fits here" is a fact
+     the model can act on — by asking, or by not claiming this is everything —
+     where a silent truncation just makes the memory look smaller than it is. */
+  if (omitted) {
+    lines.push(
+      `[${omitted} further stored ${omitted === 1 ? "item does" : "items do"} not fit in this turn's memory budget. `
+      + `${omitted === 1 ? "It is" : "They are"} kept and may apply; say so rather than claiming the list above is everything you know.]`
+    );
   }
 
   return lines.join("\n").trim();
