@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { PROVIDERS, providerApiKey } from "@/lib/ai/provider-registry";
+import { transcriptionModels } from "@/lib/ai/voice/transcription-models";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -65,9 +66,6 @@ const MAX_AUDIO_BYTES = 3_500_000;
  */
 const TIMEOUT_MS = 20_000;
 
-function transcriptionModel(): string {
-  return process.env.NAVI_TRANSCRIBE_MODEL?.trim() || "openai/whisper-large-v3-turbo";
-}
 
 export async function POST(request: Request) {
   const refusal = await authorizeApiMutation(request);
@@ -157,11 +155,10 @@ export async function POST(request: Request) {
    * microphone is broken". Trying a short list costs one extra round trip in
    * the bad case and removes a whole class of dead end.
    */
-  const models = [
-    transcriptionModel(),
-    "openai/whisper-large-v3",
-    "openai/whisper-small"
-  ].filter((model, index, all) => all.indexOf(model) === index);
+  /* The same list the diagnostic checks. Two copies would drift, and the
+     drifted one would be the diagnostic — reporting on models nobody calls
+     while staying quiet about the ones that are failing. */
+  const models = transcriptionModels();
 
   try {
     /* Every failure is recorded rather than collapsed, because the useful

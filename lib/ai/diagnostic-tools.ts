@@ -2,6 +2,7 @@ import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { configuredRouteModels, providerProbes } from "./providers";
 import { PROVIDERS, modelsProbe, providerApiKey } from "./provider-registry";
+import { transcriptionModels } from "./voice/transcription-models";
 
 /**
  * Letting Navi Soul find out what is actually wrong with itself.
@@ -129,13 +130,48 @@ async function checkTranscription(): Promise<DiagnosticResult> {
         signal,
         cache: "no-store"
       });
-      if (response.ok) return { area: "Voice transcription", ok: true, detail: "The Hugging Face token is valid and the router answered." };
+      if (!response.ok) {
+        return {
+          area: "Voice transcription",
+          ok: false,
+          detail: response.status === 401 || response.status === 403
+            ? "Hugging Face rejected the token. Recreate it with the 'Make calls to Inference Providers' permission."
+            : `Hugging Face answered ${response.status}.`
+        };
+      }
+
+      /* The half this check was missing.
+         It stopped here and reported "the token is valid and the router
+         answered", which is a fact about the credential and says nothing about
+         whether any model that transcribes speech can actually be reached. A
+         valid token pointed at models the account cannot serve fails every
+         dictation while this check reports success — the same credential-versus-
+         model gap `checkModelRoutes` exists to close for chat, left open on the
+         one surface where the failure reaches a person as a broken microphone. */
+      const wanted = transcriptionModels();
+      const listed = catalogueModelIds(await response.json());
+      if (!listed.size) {
+        return { area: "Voice transcription", ok: true, detail: "The token works. The model catalogue could not be read, so which transcription models are reachable is unconfirmed." };
+      }
+
+      const reachable = wanted.filter((model) => listed.has(model));
+      if (reachable.length) {
+        return {
+          area: "Voice transcription",
+          ok: true,
+          detail: `${reachable.length} of ${wanted.length} transcription models are reachable: ${reachable.join(", ")}.`
+        };
+      }
+
       return {
         area: "Voice transcription",
         ok: false,
-        detail: response.status === 401 || response.status === 403
-          ? "Hugging Face rejected the token. Recreate it with the 'Make calls to Inference Providers' permission."
-          : `Hugging Face answered ${response.status}.`
+        detail: [
+          `The token works, but none of the ${wanted.length} configured transcription models are served to this account:`,
+          `${wanted.join(", ")}.`,
+          "Every dictation fails on the model rather than on the audio, which reaches the user as a microphone that does not work.",
+          "Point NAVI_TRANSCRIBE_MODEL at a speech-to-text model this token can actually reach."
+        ].join(" ")
       };
     },
     () => ({ area: "Voice transcription", ok: false, detail: "Hugging Face did not answer within 10 seconds." })

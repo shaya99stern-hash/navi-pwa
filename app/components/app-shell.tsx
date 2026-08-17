@@ -486,8 +486,16 @@ export function AppShell({
     ...preferences.customPlaybooks.map((entry) => ({ ...entry, source: "custom" as const }))
   ], [preferences.customPlaybooks]);
 
-  const requestBody = useCallback((question?: string) => ({
+  const requestBody = useCallback((question?: string, spoken = false) => ({
     mode: preferences.mode,
+    /* Whether this answer is going to be *heard* rather than read.
+       The server cannot infer it — a spoken turn and a typed one are the same
+       shape by the time they arrive — and it changes how the answer should be
+       written rather than how it is routed: shorter sentences, one idea at a
+       time, no structure that only works on a page. A voice reading a bulleted
+       report aloud is the single thing that makes a premium voice still sound
+       like a machine. */
+    voice: spoken,
     routeOverride: preferences.routeOverride,
     effort: preferences.effort,
     tools: preferences.tools,
@@ -1208,7 +1216,12 @@ export function AppShell({
     setSpeakNextReply(speakReply);
     try {
       repairRounds.current = 0;
-      await sendMessage({ text: text.trim() }, { body: requestBody(text) });
+      /* The one call site that asks for a spoken answer, and the flag is
+         `speakReply` rather than "this came from the microphone": dictating
+         into the composer produces a written answer the person reads, and
+         shortening that would be a loss. What changes the writing is that the
+         reply is going to be heard. */
+      await sendMessage({ text: text.trim() }, { body: requestBody(text, speakReply) });
     } catch (voiceError) {
       setSpeakNextReply(false);
       setStreamStatus({

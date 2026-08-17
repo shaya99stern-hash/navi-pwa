@@ -209,6 +209,8 @@ type ChatRequestBody = {
   mode?: unknown;
   /** Diagnostics-only route pin. Absent for every ordinary request. */
   routeOverride?: unknown;
+  /** The answer to this turn is going to be spoken aloud rather than read. */
+  voice?: unknown;
   /** Accepted so a client that has not reloaded since v4.2.0 still works. */
   preset?: unknown;
   style?: ResponseStyle;
@@ -822,6 +824,8 @@ function systemPromptBlocks(options: {
   playbookContext?: string;
   /** The request asked Navi to learn something, so it may offer a capability. */
   capabilityRequested?: boolean;
+  /** This answer is going to be spoken aloud rather than read. */
+  spoken?: boolean;
   /** Repository files fetched before generating, when the repo was knowable. */
   retrieved?: string;
   /** Attached documents, extracted as text rather than shown as pages. */
@@ -837,7 +841,7 @@ function systemPromptBlocks(options: {
    */
   referenceBudget?: number;
 }): PromptBlock[] {
-  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, productMode, referenceBudget = Number.POSITIVE_INFINITY } = options;
+  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, spoken = false, productMode, referenceBudget = Number.POSITIVE_INFINITY } = options;
 
   /* The static reference material, in priority order, competing for whatever
      room the route has. Each predicate is unchanged — this decides which of
@@ -929,6 +933,24 @@ function systemPromptBlocks(options: {
     tools.code && toolNames.includes("run_javascript") ? executionInstruction() : "",
     tools.artifacts ? artifactInstruction(artifactRequested) : "",
     capabilityRequested ? capabilityInstruction() : "",
+    /* How to write for an ear rather than an eye.
+       This changes the writing, never the work: the reasoning, the tools, and
+       the depth are identical to a typed turn. What changes is that markdown a
+       voice cannot pronounce becomes noise, a list read aloud is a drone, and a
+       sentence built to be re-read is unfollowable the first time through. A
+       premium voice reading a bulleted report still sounds like a machine —
+       cadence lives in the sentences, not the timbre. */
+    spoken
+      ? [
+        "This answer will be spoken aloud, so write it to be heard once, not read.",
+        "Short sentences. One idea at a time. No headings, no bullets, no bold, no code fences, no emoji, no markdown of any kind — a voice cannot pronounce them and they arrive as noise.",
+        "Open with the answer, not a preamble. Lead with the thing they asked for and let the detail follow.",
+        "Say numbers, dates and units the way a person would speak them.",
+        "Be unhurried and plain. Contractions are natural; a clause that needs re-reading is one that cannot be followed the first time.",
+        "Keep it to a few sentences unless more was clearly asked for, and if the full detail matters, say the short version aloud and note that the rest is on screen.",
+        "If a task will take a while, say so in a sentence and get on with it rather than narrating each step."
+      ].join(" ")
+      : "",
     memoryContext || "",
     /* With the other per-request material, never above the stable prefix. File
        contents are the most volatile thing in the prompt — they differ on every
@@ -1231,6 +1253,10 @@ export async function POST(request: Request): Promise<Response> {
   const mode: NaviMode = body.mode === "code" ? "code" : body.mode === "chat" ? "chat" : LEGACY_PRESET_MODE[String(body.preset ?? "")] ?? "chat";
   const preset = normalizePreset(body.routeOverride ?? (mode === "code" ? "navi-code" : "navi-soul"));
   const effortLevel = effortFromBody(body);
+  /* Strictly boolean. A client that has not reloaded since this shipped sends
+     nothing at all, which reads as a written answer — the behaviour it has
+     always had. */
+  const spokenReply = body.voice === true;
   // The swarm pipeline still thinks in the old three-way style; derive it.
   const style = body.style && ALLOWED_STYLES.has(body.style)
     ? body.style
@@ -1683,7 +1709,7 @@ export async function POST(request: Request): Promise<Response> {
          attempt can actually call. Lifted out of the `streamText` call so its
          size can be measured before the request is sent — it is the largest
          single contributor to a turn and nothing could previously see it. */
-      const blocksFor = (attemptToolNames: string[], referenceBudget: number): PromptBlock[] => systemPromptBlocks({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, referenceBudget });
+      const blocksFor = (attemptToolNames: string[], referenceBudget: number): PromptBlock[] => systemPromptBlocks({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, spoken: spokenReply, referenceBudget });
       const systemFor = (attemptToolNames: string[], referenceBudget: number): string =>
         blocksFor(attemptToolNames, referenceBudget).map((block) => block.text).join("\n\n");
 

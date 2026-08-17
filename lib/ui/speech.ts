@@ -80,6 +80,113 @@ export function speak(text: string, language: string): void {
   window.speechSynthesis.speak(utterance);
 }
 
+/** A voice that is speaking, and the one thing a caller needs to do to it. */
+export type SpokenHandle = {
+  stop: () => void;
+  /** Resolves when the audio finishes, is stopped, or fails. Never rejects. */
+  done: Promise<void>;
+};
+
+/**
+ * Speak with the premium voice when it is available, the device's when it is not.
+ *
+ * The fallback is the *expected* path, not the sad one. A deployment with no
+ * ElevenLabs credential takes it on every utterance and is working correctly,
+ * so nothing here treats it as an error or tells anyone about it — the server
+ * answers 204 to mean "use the local voice" precisely so this cannot be
+ * mistaken for a fault.
+ *
+ * Must be called from a user gesture the first time on iOS, which is what
+ * unlocks audio playback for the rest of the session. Every current caller is a
+ * button, and the hands-free loop inherits the unlock from the tap that starts
+ * it.
+ *
+ * The audio is collected before it plays rather than played as it arrives.
+ * Chunked playback needs MediaSource and a codec the browser will accept
+ * mid-stream, which is a real piece of work; at the 800-character ceiling an
+ * utterance is a few seconds of speech, and the server already abandons a
+ * request that has not started within 2.5 seconds. So the wait is bounded and
+ * short, and this stays honest about being a buffer rather than a stream.
+ */
+export async function speakBest(text: string, language: string): Promise<SpokenHandle> {
+  /**
+   * The device voice, wrapped so `done` means the same thing it does for
+   * premium audio: this utterance has stopped.
+   *
+   * `speechSynthesis` has no end event that fires reliably across engines, so
+   * it is polled — but the polling lives here rather than in the caller. A
+   * component that has to know which engine is speaking in order to know when
+   * it stopped is a component that will get it wrong, and the first version of
+   * this had exactly that bug: a poll watching `speechSynthesis.speaking`,
+   * which premium audio leaves false for its entire duration, racing a promise
+   * that resolved immediately.
+   */
+  const local = (): SpokenHandle => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return { stop: () => {}, done: Promise.resolve() };
+    }
+    let settle: () => void = () => {};
+    const done = new Promise<void>((resolve) => { settle = resolve; });
+    let poll = 0;
+    const finish = () => { window.clearInterval(poll); settle(); };
+
+    whenVoicesReady(() => {
+      speak(text, language);
+      /* Started after the utterance is queued, and tolerant of the gap before
+         `speaking` flips true — a poll that fires in that window would end the
+         turn before a word was said. */
+      let started = false;
+      poll = window.setInterval(() => {
+        if (window.speechSynthesis.speaking) { started = true; return; }
+        if (started) finish();
+      }, 300);
+    });
+
+    return { stop: () => { window.speechSynthesis.cancel(); finish(); }, done };
+  };
+
+  if (typeof window === "undefined") return local();
+
+  try {
+    const response = await fetch("/api/voice/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    /* 204 is the server saying "use the local voice" — unconfigured, over
+       budget, or slower than waiting for it was worth. */
+    if (response.status !== 200 || !response.body) return local();
+
+    const blob = await response.blob();
+    if (!blob.size) return local();
+
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    let settle: () => void = () => {};
+    const done = new Promise<void>((resolve) => { settle = resolve; });
+    const finish = () => { URL.revokeObjectURL(url); settle(); };
+    audio.addEventListener("ended", finish, { once: true });
+    audio.addEventListener("error", finish, { once: true });
+
+    try {
+      await audio.play();
+    } catch {
+      /* Playback refused — almost always the gesture requirement on iOS when
+         this was reached without one. The device voice is subject to the same
+         rule but fails more gracefully, so it is still the better answer. */
+      finish();
+      return local();
+    }
+
+    return {
+      stop: () => { audio.pause(); finish(); },
+      done
+    };
+  } catch {
+    return local();
+  }
+}
+
 /**
  * The stored preference resolved to a real BCP-47 tag. `auto` means the
  * device's own language; anything else is an explicit choice, honoured as given.
