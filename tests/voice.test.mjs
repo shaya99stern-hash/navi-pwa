@@ -289,21 +289,37 @@ const transcribeRoute = read("app/api/voice/transcribe/route.ts");
 const diagnostics = read("lib/ai/diagnostic-tools.ts");
 const sharedModels = read("lib/ai/voice/transcription-models.ts");
 
-check("the candidate list lives in one module", /export function transcriptionModels/.test(sharedModels.code), true);
-check("the route that calls them reads it", /transcriptionModels\(\)/.test(transcribeRoute.code), true);
+check("the candidate list lives in one module", /export function transcriptionCandidates/.test(sharedModels.code), true);
+check("the route that calls them reads it", /transcriptionCandidates\(\)/.test(transcribeRoute.code), true);
 check("and the diagnostic that checks them reads the same one",
-  /transcriptionModels\(\)/.test(diagnostics.code), true);
+  /transcriptionCandidates\(\)/.test(diagnostics.code), true);
 /* Two copies would drift, and the drifted one would be the diagnostic —
    reporting on models nobody calls while silent about the ones failing. */
 check("no second hardcoded whisper list survives in the route",
   /"openai\/whisper-large-v3"/.test(transcribeRoute.code), false);
 
-check("the diagnostic compares the candidates against the catalogue",
-  /reachable = wanted\.filter/.test(diagnostics.code), true);
+/* Each attempt carries its own endpoint and credential. Capturing a token from
+   the enclosing scope is precisely what pinned this route to one provider —
+   the raw-bytes fallback still used a Hugging Face token by assumption. */
+check("every attempt uses the candidate's own credential",
+  /Bearer \$\{candidate\.token\}/.test(transcribeRoute.code), true);
+check("and the candidate's own endpoint", /fetch\(candidate\.endpoint/.test(transcribeRoute.code), true);
+check("no lingering hardcoded transcription host in the multipart call",
+  /fetch\("https:\/\/router\.huggingface\.co\/v1\/audio\/transcriptions"/.test(transcribeRoute.code), false);
+
+/* The catalogue read is the chat-completions listing, while transcription
+   posts to the audio endpoint — so "not listed" is evidence, not proof, and
+   saying otherwise would send someone chasing a model that already works. */
+check("the diagnostic states the catalogue is a hint rather than proof",
+  /strong hint rather than proof/.test(diagnostics.source), true);
 check("an unreadable catalogue is reported as unconfirmed, not as failure",
   /unconfirmed/.test(diagnostics.source), true);
-check("and a token that reaches none of them fails the check with the fix named",
-  /Point NAVI_TRANSCRIBE_MODEL at a speech-to-text model/.test(diagnostics.source), true);
+check("and the fix offered sidesteps the uncertainty entirely",
+  /Set GROQ_API_KEY to route speech-to-text through Groq/.test(diagnostics.source), true);
+
+/* The ladder's behaviour — ordering, per-host ids, credential gating — is
+   exercised in `transcription-ladder.test.ts`, which runs under tsx and can
+   import the module. This file reads source and runs under plain node. */
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

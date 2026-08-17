@@ -71,6 +71,35 @@ async function main() {
     tools: {}, messages: [user("hi")], outputReserve: 1000
   });
   check("optional blocks drop before anything else", fits.ok && fits.droppedBlocks, ["app-knowledge"]);
+
+  /* ---- Memory is droppable, and drops before the conversation ----------- */
+
+  /* It used to sit inside the required `turn` block, so the preflight could
+     not touch it — and its trim order is optional blocks, then tools, then
+     conversation history. A turn too large for its route therefore deleted
+     what the user had just said in order to keep repeating what it had learned
+     about them months ago. The remembered facts are worth less than the
+     sentence they are being remembered during. */
+  const squeezed = preflightPayload({
+    route: ROUTES.groqFast,
+    availability: avail({ groq: true }),
+    blocks: [
+      { name: "stable-prefix", text: "You are Navi Soul." },
+      /* Comfortably past Groq's 8,000-token ceiling, so the preflight has to
+         act rather than finding it already fits. */
+      { name: "memory", text: `- a remembered fact.\n`.repeat(3_000), optional: true },
+      { name: "turn", text: "Answer the question." }
+    ],
+    tools: {},
+    messages: [user("something said three turns ago"), user("what did I just ask you")],
+    outputReserve: 1_000
+  });
+  check("an oversized turn drops memory", squeezed.ok && squeezed.droppedBlocks.includes("memory"), true);
+  check("and keeps the conversation that prompted it", squeezed.ok && squeezed.removedMessages, 0);
+
+  /* The required blocks are never candidates, however large the request. */
+  check("the prefix survives", squeezed.ok && !squeezed.droppedBlocks.includes("stable-prefix"), true);
+  check("and so does the turn itself", squeezed.ok && !squeezed.droppedBlocks.includes("turn"), true);
   check("after dropping, the request fits without rerouting", fits.ok && !fits.rerouted, true);
 
   const rerouted = preflightPayload({

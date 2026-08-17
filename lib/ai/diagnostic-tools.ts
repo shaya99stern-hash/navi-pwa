@@ -2,7 +2,7 @@ import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { configuredRouteModels, providerProbes } from "./providers";
 import { PROVIDERS, modelsProbe, providerApiKey } from "./provider-registry";
-import { transcriptionModels } from "./voice/transcription-models";
+import { transcriptionCandidates } from "./voice/transcription-models";
 
 /**
  * Letting Navi Soul find out what is actually wrong with itself.
@@ -119,14 +119,62 @@ async function checkCloudMemory(clerkToken?: string): Promise<DiagnosticResult> 
   );
 }
 
-/** Does the transcription credential actually work, rather than merely exist? */
+/**
+ * Can anything actually transcribe speech on this deployment?
+ *
+ * Two earlier versions of this check were each wrong in an instructive way.
+ *
+ * The first listed the provider's catalogue, saw a 200, and reported "the token
+ * is valid and the router answered" — a fact about the credential that says
+ * nothing about whether a speech model can be served. It reported success while
+ * every dictation failed.
+ *
+ * The second compared the configured whisper ids against that same catalogue
+ * and reported them unreachable. That reached the right conclusion on the
+ * deployment it was written for, but the method is unsound and worth naming:
+ * transcription posts to `/v1/audio/transcriptions`, while the catalogue read
+ * here is the chat-completions listing. A speech model can be absent from one
+ * and served by the other, so "not listed" is evidence, not proof.
+ *
+ * So this reports what it can prove and labels what it cannot. Credentials are
+ * a fact. The catalogue is a signal, stated as one. And a deployment with a
+ * Groq key is reported as able to transcribe regardless of the Hugging Face
+ * catalogue, because Groq answers the multipart call directly and its listing
+ * is not what decides the matter.
+ */
 async function checkTranscription(): Promise<DiagnosticResult> {
-  const token = (process.env.HF_TOKEN ?? process.env.HUGGINGFACE_API_KEY ?? "").trim();
-  if (!token) return { area: "Voice transcription", ok: false, detail: "No Hugging Face token is set, so dictation cannot be transcribed." };
+  const candidates = transcriptionCandidates();
+  if (!candidates.length) {
+    return {
+      area: "Voice transcription",
+      ok: false,
+      detail: "Neither GROQ_API_KEY nor HF_TOKEN is set, so nothing can transcribe dictation."
+    };
+  }
+
+  const hosts = [...new Set(candidates.map((candidate) => candidate.provider))];
+  const groq = hosts.includes("groq");
+  const summary = `Tried in order: ${candidates.map((candidate) => candidate.label).join(", ")}.`;
+
+  /* Groq present is the answer on its own. It serves speech-to-text on a free
+     tier through the endpoint this route already speaks, it is the fastest
+     option configured here, and it is tried first — so the Hugging Face
+     catalogue below cannot make dictation unavailable. */
+  if (groq) {
+    return {
+      area: "Voice transcription",
+      ok: true,
+      detail: `Groq is configured and is tried first for speech-to-text. ${summary}`
+    };
+  }
+
+  const hfToken = providerApiKey(PROVIDERS.huggingface);
+  if (!hfToken) return { area: "Voice transcription", ok: false, detail: `No usable credential. ${summary}` };
+
   return withTimeout(
     async (signal) => {
       const response = await fetch("https://router.huggingface.co/v1/models", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${hfToken}` },
         signal,
         cache: "no-store"
       });
@@ -140,37 +188,28 @@ async function checkTranscription(): Promise<DiagnosticResult> {
         };
       }
 
-      /* The half this check was missing.
-         It stopped here and reported "the token is valid and the router
-         answered", which is a fact about the credential and says nothing about
-         whether any model that transcribes speech can actually be reached. A
-         valid token pointed at models the account cannot serve fails every
-         dictation while this check reports success — the same credential-versus-
-         model gap `checkModelRoutes` exists to close for chat, left open on the
-         one surface where the failure reaches a person as a broken microphone. */
-      const wanted = transcriptionModels();
+      const wanted = candidates.filter((candidate) => candidate.provider === "huggingface").map((candidate) => candidate.model);
       const listed = catalogueModelIds(await response.json());
       if (!listed.size) {
-        return { area: "Voice transcription", ok: true, detail: "The token works. The model catalogue could not be read, so which transcription models are reachable is unconfirmed." };
+        return { area: "Voice transcription", ok: true, detail: `The token works; the catalogue could not be read, so reachability is unconfirmed. ${summary}` };
       }
 
-      const reachable = wanted.filter((model) => listed.has(model));
-      if (reachable.length) {
-        return {
-          area: "Voice transcription",
-          ok: true,
-          detail: `${reachable.length} of ${wanted.length} transcription models are reachable: ${reachable.join(", ")}.`
-        };
+      const listedModels = wanted.filter((model) => listed.has(model));
+      if (listedModels.length) {
+        return { area: "Voice transcription", ok: true, detail: `${listedModels.join(", ")} appear in the catalogue. ${summary}` };
       }
 
+      /* Reported as a warning with its own uncertainty attached, and with the
+         fix that does not depend on resolving it: adding a Groq key sidesteps
+         the question entirely. */
       return {
         area: "Voice transcription",
         ok: false,
         detail: [
-          `The token works, but none of the ${wanted.length} configured transcription models are served to this account:`,
-          `${wanted.join(", ")}.`,
-          "Every dictation fails on the model rather than on the audio, which reaches the user as a microphone that does not work.",
-          "Point NAVI_TRANSCRIBE_MODEL at a speech-to-text model this token can actually reach."
+          `The Hugging Face token works, but none of ${wanted.join(", ")} appear in its catalogue.`,
+          "That catalogue lists chat models, so a speech model can be absent from it and still work — this is a strong hint rather than proof.",
+          "Set GROQ_API_KEY to route speech-to-text through Groq instead: free tier, faster, and tried before Hugging Face.",
+          summary
         ].join(" ")
       };
     },
@@ -326,9 +365,21 @@ async function checkModelRoutes(): Promise<DiagnosticResult> {
       if (!listed.size) return { label: entry.label, status: "unverified" as const, detail: "the catalogue could not be read" };
 
       const missing = entry.models.filter((model) => !listed.has(model));
-      return missing.length
-        ? { label: entry.label, status: "missing" as const, detail: missing.join(", ") }
-        : { label: entry.label, status: "ok" as const, detail: `${entry.models.length} ids` };
+      if (!missing.length) return { label: entry.label, status: "ok" as const, detail: `${entry.models.length} ids` };
+
+      /* Named replacements, from the catalogue already in hand.
+         Reporting only that six ids are wrong leaves the operator to go and
+         fetch six catalogues by hand — which is exactly the errand that let
+         this table rot in the first place. The listing needed to *detect* the
+         mismatch also contains the answer, so it is spent on saying what to
+         set rather than only what is broken. */
+      const detail = missing
+        .map((model) => {
+          const options = suggestReplacements(model, listed);
+          return options.length ? `${model} → try ${options.join(" or ")}` : model;
+        })
+        .join("; ");
+      return { label: entry.label, status: "missing" as const, detail };
     },
     () => ({ label: entry.label, status: "unverified" as const, detail: "the catalogue did not answer within 10 seconds" })
   )));
@@ -355,7 +406,7 @@ async function checkModelRoutes(): Promise<DiagnosticResult> {
       `${missing.length} provider${missing.length === 1 ? "" : "s"} do not list a model id this deployment is configured to send:`,
       missing.map((entry) => `${entry.label} — ${entry.detail}`).join("; ") + ".",
       "Every request routed to one of those fails and is absorbed by the silent failover, which reads as the app being weak rather than misconfigured.",
-      "Fix by repointing the route's model environment variable at an id the provider actually serves.",
+      "Where a replacement is suggested it is an id that provider does serve and whose name resembles the configured one — check it, then set the route's model environment variable to it.",
       unverified.length ? `Not checked: ${unverified.map((entry) => entry.label).join(", ")}.` : ""
     ].filter(Boolean).join(" ")
   };
@@ -369,6 +420,47 @@ async function checkModelRoutes(): Promise<DiagnosticResult> {
  * unrecognised shape yields an empty set, which the caller treats as "could not
  * check" rather than as "nothing is there".
  */
+/**
+ * Ids from the catalogue that most resemble one it does not serve.
+ *
+ * Deliberately lexical and deliberately modest. A provider renaming
+ * `llama-3.3-70b` to `llama3.3-70b`, or moving `deepseek-ai/deepseek-r1` under
+ * a different namespace, is the overwhelmingly common shape of this failure —
+ * the model is still there and the string moved. Overlapping name fragments
+ * find that in one pass, with no second model call and no judgement about
+ * whether two models are *equivalent*, which nothing here could honestly claim.
+ *
+ * So these are candidates a person picks from, and the wording says so. An
+ * operator reading "try X or Y" checks them; an operator reading "use X" would
+ * paste it in. Only the first is a promise this can keep.
+ */
+export function suggestReplacements(missing: string, listed: Set<string>): string[] {
+  /* Dots are kept inside fragments, and that is the difference between a
+     useful suggestion and a confidently wrong one. Splitting on every
+     non-alphanumeric turned `llama-3.3-70b` into "llama", "3", "3", "70b" —
+     and the single characters were then dropped as noise, taking the version
+     with them. `llama-3.3-70b` duly suggested `llama-3.1-70b`, which is a
+     different model, offered to someone who would have pasted it in. */
+  const fragments = [...new Set(
+    missing.toLowerCase().split(/[^a-z0-9.]+/).map((part) => part.replace(/^\.+|\.+$/g, ""))
+  )].filter((part) => part.length > 1);
+  if (!fragments.length) return [];
+
+  const scored: Array<{ id: string; score: number }> = [];
+  for (const candidate of listed) {
+    const lower = candidate.toLowerCase();
+    const score = fragments.reduce((total, fragment) => total + (lower.includes(fragment) ? fragment.length : 0), 0);
+    /* Two shared fragments, or one substantial one — enough to be a rename
+       rather than a coincidence of the word "llama" appearing somewhere. */
+    if (score >= 6) scored.push({ id: candidate, score });
+  }
+
+  return scored
+    .sort((left, right) => right.score - left.score || left.id.length - right.id.length)
+    .slice(0, 2)
+    .map((entry) => entry.id);
+}
+
 function catalogueModelIds(payload: unknown): Set<string> {
   const ids = new Set<string>();
   if (!payload || typeof payload !== "object") return ids;
