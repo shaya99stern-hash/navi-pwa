@@ -5,7 +5,7 @@ import { Check, Copy, FileText, RotateCcw, ThumbsDown, ThumbsUp, Volume2 } from 
 import { memo, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { messageText } from "@/lib/chat";
 import { haptic } from "@/lib/ui/haptics";
-import { speak, whenVoicesReady } from "@/lib/ui/speech";
+import { speakBest, type SpokenHandle } from "@/lib/ui/speech";
 import { MarkdownRenderer, type CapabilityHandlers } from "./markdown-renderer";
 import { ExecutionTrace, executionRuns } from "./execution-trace";
 import { ToolActivityList, toolActivity } from "./tool-activity";
@@ -104,24 +104,42 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
     window.setTimeout(() => setCopied(false), 1_300);
   }
 
+  /* The handle for whatever is currently speaking. Premium audio is an
+     `Audio` element and has to be stopped through its own handle;
+     `speechSynthesis.cancel()` does nothing to it. */
+  const spoken = useRef<SpokenHandle | null>(null);
+
   function readAloud() {
-    if (!("speechSynthesis" in window)) return;
     if (speaking) {
-      window.speechSynthesis.cancel();
+      spoken.current?.stop();
+      spoken.current = null;
+      /* Both are cancelled regardless of which one was playing: the handle
+         only knows about the voice it started, and a stale synthesis utterance
+         left running is the bug where two voices talk over each other. */
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       setSpeaking(false);
       return;
     }
     haptic("selection", haptics);
     setSpeaking(true);
     const language = voiceLanguage === "auto" ? navigator.language || "en-US" : voiceLanguage;
-    whenVoicesReady(() => speak(text, language));
-    // speechSynthesis has no reliable end event across engines; poll it.
-    const poll = window.setInterval(() => {
-      if (!window.speechSynthesis.speaking) {
-        window.clearInterval(poll);
+
+    /* Started from the tap itself, which is what unlocks audio playback on iOS
+       for the rest of the session. `done` settles when the utterance actually
+       stops, whichever voice spoke it — that is `speakBest`'s job, not this
+       component's. */
+    void (async () => {
+      const handle = await speakBest(text, language);
+      spoken.current = handle;
+      await handle.done;
+      /* Only the turn that is still current may clear the button: a second tap
+         starts a new handle, and a late promise from the old one must not
+         switch it off underneath. */
+      if (spoken.current === handle) {
+        spoken.current = null;
         setSpeaking(false);
       }
-    }, 400);
+    })();
   }
 
   function rate(value: "up" | "down") {
