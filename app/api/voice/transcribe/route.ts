@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { PROVIDERS, providerApiKey } from "@/lib/ai/provider-registry";
-import { transcriptionModels } from "@/lib/ai/voice/transcription-models";
+import { transcriptionCandidates, type TranscriptionCandidate } from "@/lib/ai/voice/transcription-models";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -71,13 +71,10 @@ export async function POST(request: Request) {
   const refusal = await authorizeApiMutation(request);
   if (refusal) return refusal;
 
-  const token = providerApiKey(PROVIDERS.huggingface);
-  if (!token) {
-    return NextResponse.json({
-      error: "Transcription is not configured. Add HF_TOKEN in Vercel to enable voice input."
-    }, { status: 503 });
-  }
-
+  /* The configuration gate moved down to where the candidates are built. It
+     asked for a Hugging Face token specifically, which would now refuse a
+     deployment that has Groq — the faster host, and the one this app is more
+     likely to hold a working key for. */
   const audio = await request.arrayBuffer();
   if (!audio.byteLength) return NextResponse.json({ error: "No audio was received." }, { status: 400 });
   if (audio.byteLength > MAX_AUDIO_BYTES) {
@@ -125,25 +122,32 @@ export async function POST(request: Request) {
             : type.includes("webm") ? "webm"
               : "wav";
 
-  async function viaOpenAiCompatible(model: string): Promise<{ text?: string; failure?: string }> {
+  /**
+   * One attempt against one host, in the dialect they all speak.
+   *
+   * The endpoint and credential arrive with the candidate rather than being
+   * captured from this module's scope, which is what lets the ladder cross
+   * providers instead of walking model ids on a single one.
+   */
+  async function viaOpenAiCompatible(candidate: TranscriptionCandidate): Promise<{ text?: string; failure?: string }> {
     const form = new FormData();
     form.append("file", new Blob([audio], { type: contentType }), `recording.${extensionFor(contentType)}`);
-    form.append("model", model);
+    form.append("model", candidate.model);
     if (language) form.append("language", language);
     try {
-      const response = await fetch("https://router.huggingface.co/v1/audio/transcriptions", {
+      const response = await fetch(candidate.endpoint, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${candidate.token}` },
         body: form,
         signal: controller.signal
       });
       if (!response.ok) {
-        return { failure: `${model} (multipart): ${response.status} ${(await response.text().catch(() => "")).slice(0, 200)}` };
+        return { failure: `${candidate.label}: ${response.status} ${(await response.text().catch(() => "")).slice(0, 200)}` };
       }
       const data = (await response.json().catch(() => null)) as { text?: string } | null;
-      return typeof data?.text === "string" ? { text: data.text } : { failure: `${model} (multipart): no text` };
+      return typeof data?.text === "string" ? { text: data.text } : { failure: `${candidate.label}: no text` };
     } catch (error) {
-      return { failure: `${model} (multipart): ${error instanceof Error ? error.message : "unreachable"}` };
+      return { failure: `${candidate.label}: ${error instanceof Error ? error.message : "unreachable"}` };
     }
   }
 
@@ -155,10 +159,19 @@ export async function POST(request: Request) {
    * microphone is broken". Trying a short list costs one extra round trip in
    * the bad case and removes a whole class of dead end.
    */
-  /* The same list the diagnostic checks. Two copies would drift, and the
-     drifted one would be the diagnostic — reporting on models nobody calls
-     while staying quiet about the ones that are failing. */
-  const models = transcriptionModels();
+  /* Providers, not just models. The live diagnostic on this app's own
+     deployment reported the Hugging Face token working and not one of its
+     three whisper models served to the account — dictation failing on the host
+     rather than on the audio, reaching the user as a broken microphone. Chat
+     survives a catalogue change because it ladders across ten providers; this
+     was pinned to one. The same list the diagnostic checks, so the two cannot
+     drift into reporting on models nobody calls. */
+  const candidates = transcriptionCandidates();
+  if (!candidates.length) {
+    return NextResponse.json({
+      error: "Transcription is not configured. Add GROQ_API_KEY or HF_TOKEN in Vercel to enable voice input."
+    }, { status: 503 });
+  }
 
   try {
     /* Every failure is recorded rather than collapsed, because the useful
@@ -169,17 +182,29 @@ export async function POST(request: Request) {
     /* Multipart first, for every candidate: it is the path that tolerates the
        containers browsers actually produce. The raw-bytes calls below remain
        as a fallback for a provider that only speaks that dialect. */
-    for (const model of models) {
-      const attempt = await viaOpenAiCompatible(model);
-      if (attempt.text) return NextResponse.json({ text: attempt.text.trim(), model, language: language || "auto" }, { headers: { "Cache-Control": "no-store" } });
+    for (const candidate of candidates) {
+      const attempt = await viaOpenAiCompatible(candidate);
+      if (attempt.text) {
+        return NextResponse.json(
+          { text: attempt.text.trim(), model: candidate.model, language: language || "auto" },
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      }
       if (attempt.failure) failures.push(attempt.failure);
     }
 
-    for (const model of models) {
+    /* The raw-bytes dialect, which only Hugging Face speaks. Groq answers the
+       multipart call above or not at all, so walking its ids again here would
+       be a second identical refusal per model. */
+    for (const candidate of candidates.filter((entry) => entry.provider === "huggingface")) {
+      const model = candidate.model;
       const encodedModel = model.split("/").map(encodeURIComponent).join("/");
       const response = await fetch(`https://router.huggingface.co/hf-inference/models/${encodedModel}`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": contentType },
+        /* The candidate's own credential, not a token captured from the scope
+           above — that one was Hugging Face's by assumption, which is exactly
+           what stopped this route from ever reaching a second provider. */
+        headers: { Authorization: `Bearer ${candidate.token}`, "Content-Type": contentType },
         body: audio,
         signal: controller.signal
       });

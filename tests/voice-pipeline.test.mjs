@@ -32,7 +32,12 @@ check("generation uses the same host", read("lib/ai/audio-generation.ts").body.i
 
 /* ── The route is honest about why it failed ─────────────────────────────── */
 
-check("a missing token is named, not guessed at", route.includes("Add HF_TOKEN in Vercel"), true);
+/* Both credentials are named now that transcription ladders across providers.
+   Naming only Hugging Face would send someone to configure the slower host —
+   and the one whose whisper models this deployment's own diagnostic reported
+   as not served to the account. */
+check("a missing token is named, not guessed at", route.includes("Add GROQ_API_KEY or HF_TOKEN in Vercel"), true);
+check("and the faster host is named first", route.indexOf("GROQ_API_KEY") < route.indexOf("HF_TOKEN"), true);
 /* A cold model on the free tier succeeds seconds later. Reporting it as a
    failure sends the user away from something that was about to work. */
 check("a warming model is distinguished from a failure", route.includes("warming up"), true);
