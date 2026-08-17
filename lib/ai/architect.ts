@@ -187,9 +187,7 @@ export function heuristicPlan(options: {
        wrong. Empty is the honest answer: a guessed risk sends the reviewer
        looking in the wrong place, which is worse than not directing it. */
     risks: [],
-    // Reviewing prose costs a round trip and rarely changes it. Code is
-    // different: it either runs or it does not.
-    needsReview: lane === "code" && effort !== "low",
+    needsReview: worthReviewing(lane, effort),
     source: "heuristic"
   };
 }
@@ -213,6 +211,34 @@ const PWA_CONSTRAINTS = [
   "Touch targets at least 44px; layout respects the safe area and works at 390px wide.",
   "Any required credential is named exactly, with where it goes."
 ];
+
+/**
+ * Whether this kind of output is worth a second model's time.
+ *
+ * One function rather than the same expression written twice. It was written
+ * twice — once in `heuristicPlan` and once in `architectPlan` — and both said
+ * code-only, which quietly cancelled a widening made in `critiqueAllowed`. Two
+ * gates guard this pass, `plan.needsReview && critiqueAllowed(...)`, and
+ * relaxing one while the other stayed shut achieved nothing at all.
+ *
+ * Code because it either runs or it does not. Research because that is where an
+ * unchecked answer does the most damage: a fabricated citation is
+ * indistinguishable from a real one until somebody follows it, and this app now
+ * fetches pages on its own. Reasoning because a wrong number stated confidently
+ * is the failure a second model catches most reliably.
+ *
+ * Not prose, which costs a round trip and comes back reworded rather than
+ * corrected. Not low effort, which is a promise about speed. Not image or
+ * audio, which are returned by their own pipelines.
+ *
+ * The grounding requirement in `critiqueAllowed` is still the real limiter:
+ * this says the *kind* of work deserves checking, and that says whether there
+ * is anything to check it against.
+ */
+function worthReviewing(lane: ExecutionLane, effort: "low" | "medium" | "high"): boolean {
+  if (effort === "low") return false;
+  return lane === "code" || lane === "research" || lane === "reasoning";
+}
 
 function constraintsFor(lane: ExecutionLane): string[] {
   if (lane === "code") return PWA_CONSTRAINTS;
@@ -354,7 +380,7 @@ export async function architectPlan(options: {
       constraints: [...constraintsFor(lane), ...extra],
       steps: extra,
       risks,
-      needsReview: lane === "code" && options.effort !== "low",
+      needsReview: worthReviewing(lane, options.effort),
       source: "architect"
     };
   } catch {
@@ -472,6 +498,30 @@ Do not restyle working code, do not add commentary, and do not expand scope beyo
  * makes this worth a call at all: two models with the same weights share their
  * blind spots, and a draft's author is the worst available judge of it.
  */
+/**
+ * A revision with its announcement removed.
+ *
+ * The reviewer's output replaces the user's answer verbatim, and the system
+ * prompt tells it not to announce itself — "the user sees your output directly
+ * and must not be able to tell a review happened". Weak models announce
+ * themselves anyway; it is close to their defining behaviour. So the line was
+ * shipping as the first thing the user read.
+ *
+ * Only a leading line is considered, and only one that is short and ends in a
+ * colon or is a bare sentence about the revision. An answer that legitimately
+ * opens with a sentence containing the word "corrected" keeps it — this
+ * removes a label, never a paragraph.
+ */
+export function withoutReviewPreamble(text: string): string {
+  const lines = text.split("\n");
+  const first = lines[0]?.trim() ?? "";
+  const announcement =
+    first.length <= 120
+    && /^(?:here(?:'s| is)|this is|the)?\s*(?:the\s+)?(?:corrected|revised|updated|fixed|final|improved)\b[^.]*[:.]?$/i.test(first);
+  if (!announcement) return text.trim();
+  return lines.slice(1).join("\n").trim();
+}
+
 function reviewerRole(lane: ExecutionLane): string {
   if (lane === "code") {
     return [
@@ -571,12 +621,30 @@ export async function reviewDraft(options: {
     });
 
     const text = (result.text ?? "").trim();
-    if (!text || /^PASS\b/i.test(text)) return { verdict: "pass" };
+
+    /* PASS anywhere in a short reply, not anchored to its first character.
+       Weak models agree at length before committing — "Looks correct. PASS" —
+       and an anchored match read that as a correction, replacing a sound answer
+       with the reviewer's commentary. The mission loop's checker had the same
+       bug and the same fix; a verdict anywhere in a brief reply is a verdict,
+       while a long reply that merely mentions the word is not. */
+    if (!text || (/\bPASS\b/i.test(text) && text.length < 400)) return { verdict: "pass" };
+
     /* A reviewer that returns something much shorter than the draft has
        summarized rather than corrected, which loses the answer. Treat that as
        a pass and keep what the writer produced. */
     if (text.length < draft.length * 0.55) return { verdict: "pass" };
-    return { verdict: "revised", text };
+
+    /* Everything reaching here replaces the user's answer verbatim, which is
+       why it is worth a second look rather than a straight return.
+
+       The system prompt forbids a preamble. Weak models write one anyway —
+       that is close to their defining behaviour — and "Here is the corrected
+       version:" then shipped as the first line of the reply, announcing a
+       review the user was never meant to be able to detect. */
+    const revised = withoutReviewPreamble(text);
+    if (!revised || revised.length < draft.length * 0.55) return { verdict: "pass" };
+    return { verdict: "revised", text: revised };
   } catch {
     return { verdict: "skipped", reason: "review did not complete" };
   }
