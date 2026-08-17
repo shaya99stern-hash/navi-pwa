@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { critiqueAllowed, groundingFor, skipReason } from "@/lib/ai/grounding";
+import { citedUrls, critiqueAllowed, groundingFor, skipReason } from "@/lib/ai/grounding";
 import { planFor } from "@/app/components/plan-card";
 
 let pass = 0, fail = 0;
@@ -105,6 +105,77 @@ check("the card is fed the planner's own steps", /steps: plan\.steps\.map/.test(
 check("the writer still gets every constraint", route.includes("constraints: constraintBlock(plan)"), true);
 /* "0 of 4" on a plan that has not started reads as a stall, not as progress. */
 check("progress appears only once there is some", card.includes("done > 0"), true);
+
+/* ── Pages read this turn are grounding too ─────────────────────────────────
+   Before this there were two grounding kinds and both needed a repository, so
+   a research turn — the entire point of a fetcher — could never be checked
+   against anything. Worse, nothing connected the URLs in an answer to the URLs
+   actually retrieved, which made a real citation and an invented one identical
+   from the app's side. An invented citation is the failure that makes a
+   research answer worse than no answer, because it looks verified. */
+
+const page = { url: "https://county.example.gov/rates", text: "The 2026 rate is $68.40 per unit." };
+
+/* Attributions are compared as a set rather than probed with
+   `material.includes(url)`. Substring-matching a URL passes on a mangled
+   address or on one turning up for any unrelated reason, and CodeQL flags the
+   shape on sight because the same expression used for an authorisation
+   decision is a genuine vulnerability. Comparing the extracted set is both
+   stronger and unambiguous: these addresses, exactly, in this order. */
+const attributions = (material: string): string[] =>
+  [...material.matchAll(/^--- Retrieved from (\S+) ---$/gm)].map((match) => match[1]);
+
+const sourced = groundingFor({ sources: [page] });
+check("a fetched page grounds the turn", sourced.kind, "sources");
+check("its content becomes the material", sourced.material.includes("$68.40"), true);
+check("attributed to where it came from", attributions(sourced.material), ["https://county.example.gov/rates"]);
+/* The half that is the point: an answer may only cite what was really read. */
+check("the critique is told to check citations against what was retrieved",
+  /citation|cites/i.test(sourced.instruction), true);
+check("and to treat an unsupported specific as unsupported",
+  /number|date|name|rate/i.test(sourced.instruction), true);
+
+/* Ranked below files on purpose: a repository file is what this app holds, a
+   fetched page is somebody else's claim, and a confident page is still a claim. */
+check("execution still outranks a fetched page",
+  groundingFor({ executionOutput: "exit 1: boom", sources: [page] }).kind, "execution");
+check("files still outrank a fetched page",
+  groundingFor({ retrieved: "export function x() {}", sources: [page] }).kind, "files");
+
+check("no sources is still no grounding", groundingFor({ sources: [] }).kind, "none");
+/* A failed fetch must never become material an answer is checked against — it
+   would be checking a claim against an error message. */
+check("a source with no text is ignored",
+  groundingFor({ sources: [{ url: "https://x.example", text: "   " }] }).kind, "none");
+check("a source with no url is ignored",
+  groundingFor({ sources: [{ url: "", text: "real content here" }] }).kind, "none");
+
+/* Several pages are one body of material, each labelled with its address. */
+const many = groundingFor({ sources: [page, { url: "https://other.example/a", text: "Second page." }] });
+check("every retrieved page appears", many.material.includes("Second page."), true);
+check("each with its own address, in the order they were read",
+  attributions(many.material), ["https://county.example.gov/rates", "https://other.example/a"]);
+check("and the instruction is plural when there are several", /pages below were/.test(many.instruction), true);
+check("singular when there is one", /page below was/.test(sourced.instruction), true);
+
+/* A fetched page unlocks the critique on the lane that already earns one. The
+   lane gate itself is deliberately unchanged until there is a baseline to
+   measure a wider one against. */
+check("a research turn on lane 3 can now be critiqued",
+  critiqueAllowed({ lane: 3, grounding: sourced }), true);
+check("a fast lane still is not, grounding or no grounding",
+  critiqueAllowed({ lane: 1, grounding: sourced }), false);
+
+check("cited urls are extracted from an answer",
+  citedUrls("See https://a.example/one and https://b.example/two for detail."),
+  ["https://a.example/one", "https://b.example/two"]);
+/* A URL at the end of a sentence carries the full stop into the match, and a
+   comparison against what was fetched would then miss every one of them. */
+check("trailing sentence punctuation is not part of the url",
+  citedUrls("Confirmed at https://a.example/one."), ["https://a.example/one"]);
+check("the same url cited twice is one url",
+  citedUrls("https://a.example/x and again https://a.example/x").length, 1);
+check("an answer citing nothing yields nothing", citedUrls("No links here at all."), []);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

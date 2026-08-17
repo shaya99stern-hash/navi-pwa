@@ -214,13 +214,43 @@ export async function forgetFact(clerkToken: string, id: string): Promise<boolea
   }
 }
 
+/**
+ * The characters remembered facts may spend in a prompt.
+ *
+ * There was no limit at all. `listFacts` returns up to sixty rows and each may
+ * be five hundred characters, so this block could reach thirty thousand
+ * characters — roughly seven and a half thousand tokens — unconditionally, on
+ * every turn, on free routes whose whole request ceiling is eight thousand.
+ * And it sits inside the non-optional `turn` block, so the payload preflight
+ * cannot drop it: faced with an oversized request it deletes conversation
+ * history instead. The app would forget what was just said in order to keep
+ * repeating what it once learned.
+ */
+const PROMPT_BUDGET_CHARS = 4_000;
+
 /** Render remembered facts for the prompt. Empty string when there are none. */
 export function factsBlock(facts: MemoryFact[]): string {
   if (!facts.length) return "";
+
+  const kept: string[] = [];
+  let used = 0;
+  let omitted = 0;
+  for (const entry of facts) {
+    const line = `- ${entry.fact}`;
+    /* Newest first from the query, so a full budget drops the oldest — and
+       says how many, rather than quietly shortening the user's memory. */
+    if (used + line.length > PROMPT_BUDGET_CHARS) { omitted += 1; continue; }
+    kept.push(line);
+    used += line.length;
+  }
+
   return [
     "Durable facts this user has established about themselves across past conversations.",
     "Treat these as current unless this conversation contradicts them, and never present one back as though it were just discovered.",
     "",
-    ...facts.map((entry) => `- ${entry.fact}`)
+    ...kept,
+    ...(omitted
+      ? ["", `[${omitted} older ${omitted === 1 ? "fact is" : "facts are"} stored but did not fit this turn. Do not claim the list above is everything you remember about them.]`]
+      : [])
   ].join("\n");
 }

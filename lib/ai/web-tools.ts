@@ -1,6 +1,7 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { isPrivateHostname } from "../mcp";
+import { extractReadable } from "./readable";
 import { cacheSearch, readCachedSearch, recordSearch, searchAllowed } from "./search-budget";
 
 /** Enough context to answer from, without swamping the prompt. */
@@ -10,6 +11,26 @@ const MAX_SNIPPET_CHARS = 1_200;
 const REQUEST_TIMEOUT_MS = 12_000;
 /** Transcripts and PDFs are the thing being asked about, so they get more room. */
 const MAX_DOCUMENT_FETCH_CHARS = 32_000;
+/**
+ * Hard ceiling on a download, applied while it streams.
+ *
+ * The character caps above only ever trimmed something already fully in
+ * memory, because `.text()` and `.arrayBuffer()` buffer the whole body first —
+ * so how much this isolate downloaded was the remote host's decision, not ours.
+ */
+const MAX_DOCUMENT_BYTES = 4_000_000;
+/** Redirect hops followed, each re-validated, before giving up. */
+const MAX_REDIRECTS = 5;
+const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
+/**
+ * Named honestly rather than as a browser.
+ *
+ * Some hosts serve a bot-check page to this, and a browser string would get
+ * past a few of them. It would also be a lie told at scale to every site the
+ * app reads, which is a poor trade for a marginally better hit rate — and the
+ * failure is already reported honestly rather than as an empty page.
+ */
+const USER_AGENT = "NaviOSHub/1.0";
 
 type SearchHit = { title: string; url: string; snippet: string };
 
@@ -98,25 +119,16 @@ async function runSearch(query: string, signal?: AbortSignal): Promise<SearchHit
   }, signal);
 }
 
-/** Crude but dependency-free: models read prose fine, they just cannot read markup. */
-export function htmlToText(html: string): string {
-  return html
-    .replace(/<script\b[\s\S]*?<\/script\b[^>]*>/gi, " ")
-    .replace(/<style\b[\s\S]*?<\/style\b[^>]*>/gi, " ")
-    .replace(/<noscript\b[\s\S]*?<\/noscript\b[^>]*>/gi, " ")
-    .replace(/<!--[\s\S]*?--!?>/g, " ")
-    .replace(/<\/(?:p|div|section|article|li|h[1-6]|tr)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&amp;/gi, "&")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+/**
+ * A page as text a model can reason over.
+ *
+ * The implementation moved to `readable.ts`; this stays as the name the fetch
+ * path calls. Passing the page's own URL is what lets relative links resolve
+ * into addresses that can actually be fetched — without it, the second hop of
+ * any crawl is a path with no host.
+ */
+export function htmlToText(html: string, baseUrl?: string): string {
+  return extractReadable(html, { baseUrl });
 }
 
 /** The video id, when a URL is a YouTube watch page in any of its shapes. */
@@ -208,6 +220,100 @@ const TRANSCRIPT_FAILURE_TEXT: Record<TranscriptFailure, string> = {
 };
 
 /** A model-supplied URL is untrusted input aimed at our own network. */
+/**
+ * Follow redirects by hand, re-checking every hop against the SSRF guard.
+ *
+ * `assertFetchableUrl` validates the URL it is given and nothing after it, so
+ * `redirect: "follow"` handed the decision to whoever answered: a public host
+ * that returns 302 toward `169.254.169.254` is the textbook way past a hostname
+ * check, and hop three of a crawl is an address nobody chose. `connector-tools.ts`
+ * already refuses redirects outright for exactly this reason, and its comment
+ * says so — the two fetchers disagreed, and this one was the permissive half.
+ *
+ * Refusing them here is not an option the way it is there: real pages redirect
+ * constantly for http-to-https, trailing slashes and CDN edges, and a fetcher
+ * that rejects a 301 cannot read the open web. So each hop is validated the
+ * same way the first one was, and the chain is bounded.
+ */
+async function fetchRevalidating(
+  start: URL,
+  signal: AbortSignal
+): Promise<{ response: Response; finalUrl: URL } | { blocked: string }> {
+  let current = start;
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const response = await fetch(current, {
+      headers: { Accept: "text/html,application/pdf,text/plain,application/json;q=0.9", "User-Agent": USER_AGENT },
+      redirect: "manual",
+      signal
+    });
+
+    if (!REDIRECT_STATUS.has(response.status)) return { response, finalUrl: current };
+
+    const location = response.headers.get("location");
+    /* A 3xx with nowhere to go is the server's answer, not a redirect. */
+    if (!location) return { response, finalUrl: current };
+
+    try {
+      current = assertFetchableUrl(new URL(location, current).toString());
+    } catch {
+      /* Named as a redirect rather than as a bad link: the user's URL was
+         fine, and the difference matters when they are looking at a page that
+         loads perfectly in their own browser. */
+      return { blocked: "That link redirected to an address that cannot be fetched." };
+    }
+  }
+
+  return { blocked: `That link redirected more than ${MAX_REDIRECTS} times.` };
+}
+
+/**
+ * Read a body with a hard byte ceiling, stopping mid-download rather than after.
+ *
+ * `.text()` and `.arrayBuffer()` buffer the whole response before any limit can
+ * be applied, so the existing character caps only ever trimmed something
+ * already fully in memory — an edge isolate has little of it, and the size of
+ * the download was entirely the remote host's choice.
+ */
+async function readCapped(response: Response, maxBytes: number): Promise<{ bytes: Uint8Array; truncated: boolean }> {
+  if (!response.body) {
+    const whole = new Uint8Array(await response.arrayBuffer());
+    return whole.byteLength > maxBytes
+      ? { bytes: whole.slice(0, maxBytes), truncated: true }
+      : { bytes: whole, truncated: false };
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let truncated = false;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      const room = maxBytes - total;
+      if (value.byteLength >= room) {
+        chunks.push(value.subarray(0, room));
+        total += room;
+        truncated = true;
+        break;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    /* Releases the connection when the cap cut the read short. */
+    await reader.cancel().catch(() => {});
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return { bytes, truncated };
+}
+
 export function assertFetchableUrl(raw: string): URL {
   let url: URL;
   try {
@@ -309,17 +415,16 @@ export async function readUrl(url: string, options: {
 
     onActivity(`Reading ${target.hostname}`);
     return await withTimeout(async (inner): Promise<UrlReadResult> => {
-      const response = await fetch(target, {
-        headers: { Accept: "text/html,application/pdf,text/plain,application/json;q=0.9", "User-Agent": "NaviOSHub/1.0" },
-        redirect: "follow",
-        signal: inner
-      });
+      const hop = await fetchRevalidating(target, inner);
+      if ("blocked" in hop) return { ok: false, reason: "blocked", guidance: hop.blocked };
+      const { response, finalUrl } = hop;
       if (!response.ok) return { ok: false, reason: "unreachable", guidance: `That page returned ${response.status}.` };
       const type = response.headers.get("content-type") ?? "";
 
-      if (/application\/pdf/i.test(type) || /\.pdf$/i.test(target.pathname)) {
+      if (/application\/pdf/i.test(type) || /\.pdf$/i.test(finalUrl.pathname)) {
         const { extractPdfText } = await import("./document-text");
-        const extracted = await extractPdfText(new Uint8Array(await response.arrayBuffer()));
+        const { bytes } = await readCapped(response, MAX_DOCUMENT_BYTES);
+        const extracted = await extractPdfText(bytes);
         if (!extracted) return { ok: false, reason: "unreadable", guidance: "That PDF has no text layer to extract — it is likely a scan." };
         const clipped = extracted.text.length > MAX_DOCUMENT_FETCH_CHARS
           ? `${extracted.text.slice(0, MAX_DOCUMENT_FETCH_CHARS)}\n\n[Truncated at ${MAX_DOCUMENT_FETCH_CHARS} characters.]`
@@ -330,8 +435,12 @@ export async function readUrl(url: string, options: {
       if (!/text\/|json|xml/i.test(type)) {
         return { ok: false, reason: "unreadable", guidance: `That URL is ${type || "a binary file"}, which cannot be read as text.` };
       }
-      const body = await response.text();
-      const text = /html/i.test(type) ? htmlToText(body) : body.trim();
+      const { bytes } = await readCapped(response, MAX_DOCUMENT_BYTES);
+      const body = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+      /* The URL that actually served the body, not the one requested: redirects
+         are followed, so relative links belong to the final host. Resolving
+         them against the original would point every link at the wrong site. */
+      const text = /html/i.test(type) ? htmlToText(body, finalUrl.toString()) : body.trim();
       if (!text) return { ok: false, reason: "empty", guidance: "That page had no readable text." };
       return {
         ok: true,
@@ -361,11 +470,23 @@ export async function readUrlAsText(url: string, options: {
   return result.ok ? result.text : result.guidance;
 }
 
-export function buildWebTools({ search, signal, onActivity = () => {} }: {
+export function buildWebTools({ search, signal, onActivity = () => {}, onSource = () => {} }: {
   search: boolean;
   signal?: AbortSignal;
   /** Announces work as it starts, so a pause in the stream has a visible reason. */
   onActivity?: (label: string) => void;
+  /**
+   * Records a page that was genuinely retrieved, with the address it came from.
+   *
+   * The tool's return value goes to the model and nowhere else, so nothing
+   * outside this call ever knew which pages were actually read — which made a
+   * real citation and an invented one identical from the app's side. This is
+   * the thread that lets a later pass tell them apart.
+   *
+   * Only successful reads are reported. A failure explains itself to the model
+   * and must never become material an answer can be checked against.
+   */
+  onSource?: (source: { url: string; text: string }) => void;
 }): ToolSet {
   const tools: ToolSet = {
     current_datetime: tool({
@@ -393,7 +514,14 @@ export function buildWebTools({ search, signal, onActivity = () => {} }: {
     fetch_url: tool({
       description: "Fetch an https link and return its readable content. Handles web pages, plain text, JSON, PDFs (text is extracted), and YouTube links (the video's transcript is returned). Use it to read a search result or any link the user gives you, rather than guessing at its contents.",
       inputSchema: z.object({ url: z.string().describe("The full https URL to read.") }),
-      execute: async ({ url }) => readUrlAsText(url, { signal, onActivity })
+      execute: async ({ url }) => {
+        const result = await readUrl(url, { signal, onActivity });
+        /* Recorded before the string is handed back, and only on success: the
+           model gets exactly the sentences it got before, while the turn keeps
+           a record of what was really read. */
+        if (result.ok) onSource({ url, text: result.text });
+        return result.ok ? result.text : result.guidance;
+      }
     })
   };
 

@@ -90,11 +90,63 @@ async function main() {
   check("garbage decomposition degrades to a single step", single.steps.length, 1);
   check("the single step still answers", single.answer, "42");
 
+  /* The script now carries a fifth reply, because a revision is re-checked
+     rather than assumed good. That extra call is the fix: `verified` used to be
+     set to true on the strength of the revision being a non-empty string — the
+     flag asserted a check that never ran, on the one answer already known to
+     have failed one. */
   const revised = await runMission("one thing, carefully", {
-    runEngine: scripted(["nope", "first draft", "Missing the total.", "Revised answer with the total."])
+    runEngine: scripted(["nope", "first draft", "Missing the total.", "Revised answer with the total.", "PASS"])
   });
   check("a failed check earns exactly one revision", revised.answer, "Revised answer with the total.");
   check("the revision is noted", revised.notes.length, 1);
+  check("and a revision that passes its re-check is verified", revised.verified, true);
+
+  /* The case the old code called a success: the revision is produced and then
+     fails when actually checked. Reporting that as verified is the compounding
+     error in miniature — a step claims success, the report carries the claim,
+     everything downstream trusts it. */
+  const stillWrong = await runMission("one thing, carefully", {
+    runEngine: scripted(["nope", "first draft", "Missing the total.", "Still missing it.", "Still missing the total."])
+  });
+  check("a revision that fails its re-check is not reported as verified", stillWrong.verified, false);
+  check("and the note says so", /did not fix it/.test(stillWrong.notes[0] ?? ""), true);
+
+  /* A checker that breaks must not erase the fact that the answer was changed.
+     The script runs out before the re-check, which is exactly that failure. */
+  const unknown = await runMission("one thing, carefully", {
+    runEngine: scripted(["nope", "first draft", "Missing the total.", "Revised answer with the total."])
+  });
+  check("an unre-checkable revision is unknown, never true", unknown.verified, null);
+  check("the revision is still recorded when the re-check breaks", unknown.notes.length, 1);
+  check("and says the re-check could not be done", /could not be re-checked/.test(unknown.notes[0] ?? ""), true);
+  check("while the revised answer is still delivered", unknown.answer, "Revised answer with the total.");
+
+  /* Verification used to be unreachable by arithmetic: 1 decompose + 6 steps +
+     1 synthesis spent the whole budget of 8, so the check never ran on exactly
+     the long missions where it matters most. The reserve is enforced at the
+     call counter, so steps cannot spend it. */
+  const reserved = await runMission("do several things one by one across a long multi-stage brief that needs real decomposition", {
+    runEngine: scripted([
+      '[{"title":"A","instruction":"a","kind":"engine"},{"title":"B","instruction":"b","kind":"engine"}]',
+      "a", "b", "combined", "PASS"
+    ])
+  }, { maxEngineCalls: 6 });
+  /* Six calls, two held back: decompose + two steps + synthesis fills the step
+     ceiling exactly, and the check still runs. Under the old budget this is the
+     shape that silently skipped verification. */
+  check("a mission that fills its step budget is still verified", reserved.verified, true);
+  check("and the reserve was what paid for it", reserved.engineCalls, 5);
+
+  /* The reserve binds the step phase, not just the total: steps stop at the
+     ceiling and report exhaustion rather than eating the check's budget. */
+  const squeezed = await runMission("do several things one by one across a long multi-stage brief that needs real decomposition", {
+    runEngine: scripted([
+      '[{"title":"A","instruction":"a","kind":"engine"},{"title":"B","instruction":"b","kind":"engine"},{"title":"C","instruction":"c","kind":"engine"}]',
+      "a", "b", "c", "combined", "PASS"
+    ])
+  }, { maxEngineCalls: 6 });
+  check("steps cannot spend the verification reserve", squeezed.status, "budget-exhausted");
 
   console.log(`\n${pass}/${pass + fail} passed`);
   if (fail) process.exit(1);

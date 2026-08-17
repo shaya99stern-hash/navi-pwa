@@ -1,3 +1,10 @@
+/* `server-only` throws on import outside a Server Component, and the memory
+   modules below carry it. Neutralised the same way `facts.test.ts` does, before
+   anything requires them — the guard is a build-time contract, not behaviour
+   these tests are checking. */
+const serverOnly = require.resolve("server-only");
+require.cache[serverOnly] = { id: serverOnly, filename: serverOnly, loaded: true, exports: {} } as unknown as NodeModule;
+
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { youTubeVideoId } from "@/lib/ai/web-tools";
@@ -86,6 +93,65 @@ const webSource = readFileSync(join(process.cwd(), "lib/ai/web-tools.ts"), "utf8
 check("fetch_url reads pdfs", webSource.includes("extractPdfText"), true);
 check("fetch_url reads video transcripts", webSource.includes("fetchYouTubeTranscript"), true);
 check("the ssrf guard is still in place", webSource.includes("isPrivateHostname"), true);
+
+/* ── The memory budget, which used to be spent without being counted ────────
+   The header line was pushed unconditionally and only the body counted, so
+   forty skills contributed thousands of uncounted characters to a six-thousand
+   allowance. Worse, once the budget was gone the body became an empty string
+   and the skill rendered as a bare title — a capability the model is told is
+   "yours, apply it without being reminded", with no instructions under it and
+   nothing saying anything was missing. It either ignores what the user taught
+   it or invents what the title meant. */
+
+const { learnedSkillsBlock: renderSkills } = require("../lib/memory/learned-skills") as typeof import("../lib/memory/learned-skills");
+
+const skillOf = (n: number, bodyChars: number) => ({
+  id: `id-${n}`,
+  name: `Skill number ${n}`,
+  description: "a description long enough to matter to the budget arithmetic",
+  instructions: "x".repeat(bodyChars),
+  sourceUrl: null,
+  updatedAt: "2026-08-16T00:00:00.000Z"
+});
+
+const many = renderSkills(Array.from({ length: 40 }, (_, index) => skillOf(index, 1_000)));
+
+/* The arithmetic error made visible: forty headers alone overshoot the
+   allowance. A little slack is expected for the section preamble and the
+   omission notice, but not multiples of the budget. */
+check("the rendered block respects its own budget", many.length < 9_000, true);
+check("no skill is rendered as a title with nothing under it",
+  /### Skill number \d+[^\n]*\n\s*(?:###|\[|$)/.test(many), false);
+check("skills that did not fit are counted and named", /further stored items? do(?:es)? not fit/.test(many), true);
+check("and the model is told not to present the list as complete",
+  /everything you know/.test(many), true);
+
+/* One small skill must not trigger the omission notice. */
+const one = renderSkills([skillOf(1, 40)]);
+check("a block well inside its budget omits nothing", /further stored/.test(one), false);
+check("and still renders its body", one.includes("x".repeat(40)), true);
+
+/* ── Facts had no budget at all ────────────────────────────────────────────
+   Sixty rows at five hundred characters is thirty thousand characters of
+   unconditional prompt — and it sits in the non-optional `turn` block, so the
+   preflight cannot drop it and deletes conversation history instead. The app
+   would forget what was just said to keep repeating what it once learned. */
+
+const { factsBlock: renderFacts } = require("../lib/memory/facts") as typeof import("../lib/memory/facts");
+
+const factOf = (n: number) => ({
+  id: `f-${n}`, fact: `Fact ${n}: ${"y".repeat(480)}`, sourceChatId: null, updatedAt: "2026-08-16T00:00:00.000Z"
+});
+
+const facts = renderFacts(Array.from({ length: 60 }, (_, index) => factOf(index)));
+check("remembered facts are bounded", facts.length < 5_000, true);
+check("dropped facts are counted", /older facts? (?:is|are) stored but did not fit/.test(facts), true);
+check("the newest fact survives the cut", facts.includes("Fact 0:"), true);
+check("the oldest does not", facts.includes("Fact 59:"), false);
+
+const fewFacts = renderFacts([factOf(1)]);
+check("a short list of facts announces no omission", /did not fit/.test(fewFacts), false);
+check("no facts at all still renders nothing", renderFacts([]), "");
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
