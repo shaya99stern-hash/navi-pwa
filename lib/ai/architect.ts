@@ -459,6 +459,49 @@ Otherwise reply with the corrected answer in full, and nothing else — no pream
 Do not restyle working code, do not add commentary, and do not expand scope beyond what was asked.`;
 
 /**
+ * What the reviewer is being asked to be, for this kind of work.
+ *
+ * A generalist told to "review this answer" checks whether it reads well, which
+ * is the one property a draft almost always has — it was written by a model
+ * optimising for exactly that. A reviewer given a role checks the things that
+ * role knows go wrong, and the difference in what it catches is not small.
+ *
+ * The lane comes from the plan that already exists, so this invents no new
+ * signal and cannot disagree with the routing. And the reviewer runs on a
+ * *different provider* from the writer (see `reviewers` below), which is what
+ * makes this worth a call at all: two models with the same weights share their
+ * blind spots, and a draft's author is the worst available judge of it.
+ */
+function reviewerRole(lane: ExecutionLane): string {
+  if (lane === "code") {
+    return [
+      "Review this as the engineer who will be paged when it breaks at three in the morning.",
+      "Trace the unhappy paths specifically: empty input, a failed request, a missing field, the boundary value.",
+      "State-handling and lifecycle bugs matter more than style — two mechanisms tracking the same state, cleanup that never runs, a promise nobody awaits."
+    ].join(" ");
+  }
+  if (lane === "research") {
+    return [
+      "Review this as the analyst who has to defend every line of it in a meeting.",
+      "Take each specific claim — every number, date, name and rate — and ask where it came from.",
+      "A claim that appears in no retrieved source is unsupported however plausible it sounds, and a citation to something that was not read is the most serious error here: it makes an unchecked assertion look verified."
+    ].join(" ");
+  }
+  if (lane === "reasoning") {
+    return [
+      "Review this as the person checking the argument rather than the prose.",
+      "Does each step actually follow from the one before it? Recompute the arithmetic rather than trusting it.",
+      "A confident conclusion resting on one unstated assumption is the failure to look for."
+    ].join(" ");
+  }
+  return [
+    "Review this as the person who asked, reading it for the first time.",
+    "Does it answer what was actually asked, or a nearby question that was easier?",
+    "Anything asserted as fact that the answer has no basis for is the thing to fix."
+  ].join(" ");
+}
+
+/**
  * Review a finished draft before it reaches the screen.
  *
  * Only worth doing for output that can be objectively wrong — code, mainly.
@@ -504,7 +547,10 @@ export async function reviewDraft(options: {
   try {
     const result = await generateText({
       model: createProviderModel(route, origin),
-      system: REVIEWER_SYSTEM,
+      /* The generic checks stay and the role is added to them, rather than
+         replacing them: a reviewer that only looks where its role points will
+         miss the part of the answer that was simply not written. */
+      system: `${REVIEWER_SYSTEM}\n\n${reviewerRole(plan.lane)}`,
       prompt: [
         `Original request:\n${request.slice(0, 3_000)}`,
         plan.constraints.length ? `Constraints:\n${plan.constraints.map((item) => `- ${item}`).join("\n")}` : "",

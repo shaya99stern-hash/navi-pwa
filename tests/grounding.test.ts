@@ -44,11 +44,30 @@ const none = groundingFor({});
 check("lane 3 with grounding runs", critiqueAllowed({ lane: 3, grounding: files }), true);
 check("lane 3 without grounding does not", critiqueAllowed({ lane: 3, grounding: none }), false);
 // Spending a second round trip on a fast follow-up is the latency being fought.
-for (const lane of [1, 2, 4]) {
-  check(`lane ${lane} does not earn a critique`, critiqueAllowed({ lane, grounding: files }), false);
+/* The gate widened from "lane 3 only" to "anything but the fast lane", and it
+   was held back twice before that. The objection was spending a second call on
+   turns that currently skip one with no measurement behind the trade. What
+   answered it: the call is free-tier, so the cost is latency and quota rather
+   than money — and the turns this newly covers are research turns, lane 2 with
+   fetched pages, which is exactly where an unchecked answer does the most harm.
+   A fabricated citation is indistinguishable from a real one until someone
+   follows it. */
+for (const lane of [2, 3, 4]) {
+  check(`lane ${lane} earns a critique when there is something to check`,
+    critiqueAllowed({ lane, grounding: files }), true);
 }
 
-check("the skip reason names the lane", skipReason({ lane: 1, grounding: files }), "lane 1 does not earn a critique pass");
+/* Lane 1's entire promise is speed, and a second round trip is the one thing
+   it cannot afford. This is the line that must not drift. */
+check("the fast lane never earns one", critiqueAllowed({ lane: 1, grounding: files }), false);
+/* Grounding is still required at every lane: a reviewer with nothing to check
+   against re-reads the draft, agrees with it, and bills a round trip for a
+   reworded version. */
+check("and no lane earns one without grounding",
+  [1, 2, 3, 4].some((lane) => critiqueAllowed({ lane, grounding: none })), false);
+
+check("the skip reason names the lane",
+  skipReason({ lane: 1, grounding: files }), "lane 1 is the fast lane and cannot afford a second round trip");
 check("the skip reason names the gap", skipReason({ lane: 3, grounding: none }), "nothing real to check the draft against");
 
 /* ── The plan is visible before the work, not after ──────────────────────── */

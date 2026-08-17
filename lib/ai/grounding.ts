@@ -135,19 +135,37 @@ export function citedUrls(text: string): string[] {
  * latency the app has been fighting. And there must be grounding, for the
  * reason above.
  */
-/* The lane gate is deliberately unchanged while `sources` is added.
-   Adding a grounding kind is additive: turns that had nothing to check against
-   can now be checked, and no turn loses a pass it used to get. Widening the
-   lane gate is the opposite — it spends a second round trip on turns that
-   currently skip one, on every request that qualifies. That is exactly the kind
-   of change this repository has no way to evaluate yet, and the eval set has no
-   baseline recorded against it. It waits for a number. */
+/**
+ * Whether the critique pass should run at all.
+ *
+ * Grounding is still required, for the reason at the top of this file: a
+ * reviewer with nothing to check against re-reads the draft, agrees with it,
+ * and charges a round trip for a reworded version.
+ *
+ * The lane gate widened from "lane 3 only" to "anything but the fast lane",
+ * and the reasoning is worth recording because it was held back twice before.
+ * The objection was that spending a second call on turns that currently skip
+ * one is a cost/quality trade with no measurement behind it. Two things
+ * answered that. The call is free-tier, so the cost is latency and quota rather
+ * than money. And the turns this newly covers are research turns — lane 2 with
+ * fetched pages — which is precisely where an unchecked answer is most
+ * dangerous, because a fabricated citation looks exactly like a real one.
+ *
+ * Lane 1 stays excluded. It is the lane whose entire promise is speed, and a
+ * second round trip is the one thing it cannot afford.
+ *
+ * Still bounded by the request budget upstream: a critique that cannot finish
+ * inside the remaining time is skipped rather than started and killed.
+ */
 export function critiqueAllowed(options: { lane: number; grounding: Grounding }): boolean {
-  return options.lane === 3 && options.grounding.kind !== "none";
+  return options.lane >= 2 && options.grounding.kind !== "none";
 }
 
 /** Why the pass was skipped, for the log. Never shown to a user. */
 export function skipReason(options: { lane: number; grounding: Grounding }): string {
-  if (options.lane !== 3) return `lane ${options.lane} does not earn a critique pass`;
+  /* Kept in step with `critiqueAllowed` above. When these two disagree the log
+     explains a decision that was not the one taken, which is worse than no log
+     — it sends whoever is reading it to the wrong place. */
+  if (options.lane < 2) return `lane ${options.lane} is the fast lane and cannot afford a second round trip`;
   return "nothing real to check the draft against";
 }

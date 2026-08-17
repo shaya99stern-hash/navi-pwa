@@ -43,5 +43,53 @@ check("unmatched request does consult", shouldConsultArchitect({ text: "help me 
 check("high effort consults", shouldConsultArchitect({ text: "compare these two frameworks for me", plan: P("compare these two frameworks for me"), effort: "high" }), true);
 check("clear code at medium skips the hop", shouldConsultArchitect({ text: "fix my typescript build error", plan: P("fix my typescript build error"), effort: "medium" }), false);
 
+/* ── The reviewer is given a role, not just an instruction to review ────────
+   A generalist told to "review this answer" checks whether it reads well —
+   the one property a draft almost always has, since it was written by a model
+   optimising for exactly that. A reviewer given a role checks what that role
+   knows goes wrong. The role comes from the plan's own lane, so it invents no
+   new signal and cannot disagree with the routing.
+
+   Read from source: the role text reaches the model through the system prompt
+   at the `generateText` call, which cannot be exercised here without spending
+   a real provider request. */
+const architectSource = (require("node:fs") as typeof import("node:fs")).readFileSync(
+  (require("node:path") as typeof import("node:path")).join(process.cwd(), "lib/ai/architect.ts"), "utf8"
+);
+
+check("the reviewer's role is derived from the plan's lane",
+  /reviewerRole\(plan\.lane\)/.test(architectSource), true);
+/* Added to the generic checks rather than replacing them: a reviewer that only
+   looks where its role points misses the part that was simply never written. */
+check("and is appended to the general checks, not swapped for them",
+  /\$\{REVIEWER_SYSTEM\}\\n\\n\$\{reviewerRole/.test(architectSource), true);
+
+/* The research role carries the assertion that matters most for a system that
+   fetches pages: an invented citation is worse than a missing one, because it
+   makes an unchecked claim look verified. */
+check("the research reviewer is told to trace every specific claim to a source",
+  /appears in no retrieved source is unsupported/.test(architectSource), true);
+check("and to treat a citation to something unread as the most serious error",
+  /citation to something that was not read/.test(architectSource), true);
+
+/* The code role points at lifecycle and state bugs specifically — the class
+   this session kept finding by hand, and the class a style-focused review
+   never surfaces. */
+check("the code reviewer is pointed at the unhappy paths",
+  /empty input, a failed request, a missing field/.test(architectSource), true);
+check("and at two mechanisms tracking one piece of state",
+  /two mechanisms tracking the same state/.test(architectSource), true);
+
+check("the reasoning reviewer recomputes rather than trusts",
+  /Recompute the arithmetic rather than trusting it/.test(architectSource), true);
+check("every lane has a role, including the general one",
+  /Review this as the person who asked/.test(architectSource), true);
+
+/* The property that makes a second call worth making at all: the reviewer runs
+   on a different provider from the writer. Two models sharing weights share
+   their blind spots, and a draft's author is the worst judge of it. */
+check("the reviewer pool is other providers, indexed by round",
+  /reviewers\[Math\.min\(options\.pass \?\? 0, reviewers\.length - 1\)\]/.test(architectSource), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
