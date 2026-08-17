@@ -2165,6 +2165,36 @@ export async function POST(request: Request): Promise<Response> {
           reader.releaseLock();
           for (const chunk of preamble) writer.write(chunk as never);
           writer.merge(stream);
+          /**
+           * Why an answer stopped, which nothing in this app has ever asked.
+           *
+           * `finishReason` appears nowhere in the codebase, so a reply cut off
+           * by the output cap streamed mid-sentence with no marker, no retry,
+           * and no record — indistinguishable from a model that simply had
+           * little to say. `readUntilCommitted` catches an *empty* stream and
+           * an *errored* one; a truncated one looks like success to every check
+           * the route makes.
+           *
+           * Logged rather than shown, deliberately and for now. Appending a
+           * marker means writing to the stream after `merge` has been handed
+           * it, which is the one path in this app where getting the lifecycle
+           * subtly wrong breaks every answer rather than one. The frequency
+           * decides whether that risk is worth taking, and the frequency has
+           * never been observable. This makes it observable first.
+           */
+          /* `finishReason` is a PromiseLike, so it is awaited rather than
+             chained — and the whole thing is detached, because the reason is
+             diagnostics and must never be able to fail a delivered answer. */
+          void (async () => {
+            try {
+              if ((await result.finishReason) === "length") {
+                console.warn(
+                  `Navi Soul answer truncated by the output cap: ${engineName(flightRoute)}, `
+                  + `${attemptOutputTokens} tokens reserved, lane ${lane}, ${dispatch} dispatch.`
+                );
+              }
+            } catch { /* Never a reason to fail an answer already delivered. */ }
+          })();
           return;
         } catch (error) {
           markProviderFailure(flightRoute.provider, error);
