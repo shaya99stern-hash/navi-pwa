@@ -141,13 +141,55 @@ export function primeSpeech(): void {
     /* Unmuted here and nowhere else, so there is exactly one moment at which
        the element becomes usable, and `speakBest` waits for it. */
     .finally(() => { audio.muted = false; });
+
+  /**
+   * The device voice needs its own unlock, and it is the one most likely to be
+   * doing the talking.
+   *
+   * `speechSynthesis` is a separate API from `HTMLAudioElement` and iOS grants
+   * them separately: priming the element does nothing for it. On an installed
+   * app a first `speak()` outside a gesture is routinely dropped with no error
+   * and no event — which is exactly the shape of "it does not talk" that has
+   * no symptom to chase.
+   *
+   * A real word at zero volume rather than an empty string, because an empty
+   * utterance is discarded by some engines without spending the grant, which
+   * would make this look done while achieving nothing.
+   */
+  if ("speechSynthesis" in window) {
+    try {
+      const opener = new SpeechSynthesisUtterance("ok");
+      opener.volume = 0;
+      window.speechSynthesis.speak(opener);
+    } catch {
+      /* A browser that refuses this is one where the device voice was never
+         going to work, which the caller finds out from `engine` rather than
+         from an exception here. */
+    }
+  }
 }
 
-/** A voice that is speaking, and the one thing a caller needs to do to it. */
+/** Which voice actually spoke, and why, when it was not the good one. */
+export type SpokenEngine = "premium" | "device" | "silent";
+
+/**
+ * A voice that is speaking, what it is, and the one thing a caller needs to do
+ * to it.
+ *
+ * `engine` and `why` exist because this function had four silent exits — no
+ * credential, over budget, empty audio, playback refused — and every one of
+ * them looked identical from outside: an app that listens, thinks, and says
+ * nothing. Hours went into telling those apart by inference. A caller that can
+ * put the answer on screen turns the next report of "it does not talk" into a
+ * fact instead of a hunt.
+ */
 export type SpokenHandle = {
   stop: () => void;
   /** Resolves when the audio finishes, is stopped, or fails. Never rejects. */
   done: Promise<void>;
+  engine: SpokenEngine;
+  /** Why it was not the premium voice, in a few words. Empty when it was. */
+  why: string;
 };
 
 /**
@@ -184,14 +226,26 @@ export async function speakBest(text: string, language: string): Promise<SpokenH
    * which premium audio leaves false for its entire duration, racing a promise
    * that resolved immediately.
    */
-  const local = (): SpokenHandle => {
+  const local = (why: string): SpokenHandle => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      return { stop: () => {}, done: Promise.resolve() };
+      return { stop: () => {}, done: Promise.resolve(), engine: "silent", why: "this browser has no speech at all" };
     }
     let settle: () => void = () => {};
     const done = new Promise<void>((resolve) => { settle = resolve; });
     let poll = 0;
-    const finish = () => { window.clearInterval(poll); settle(); };
+    let guard = 0;
+    const finish = () => { window.clearInterval(poll); window.clearTimeout(guard); settle(); };
+    /**
+     * A ceiling on the whole utterance, because `speechSynthesis` can accept a
+     * request and never speak.
+     *
+     * On an installed iOS app it is routinely ignored outright — no error, no
+     * event, `speaking` never turns true. The poll below waits for a start that
+     * never comes, `done` never resolves, and the conversation sits on
+     * "Answering" with the microphone shut until it is ended by hand. A loop
+     * that cannot hear its own voice must at least be able to give up on it.
+     */
+    guard = window.setTimeout(finish, 60_000);
 
     whenVoicesReady(() => {
       speak(text, language);
@@ -205,10 +259,10 @@ export async function speakBest(text: string, language: string): Promise<SpokenH
       }, 300);
     });
 
-    return { stop: () => { window.speechSynthesis.cancel(); finish(); }, done };
+    return { stop: () => { window.speechSynthesis.cancel(); finish(); }, done, engine: "device", why };
   };
 
-  if (typeof window === "undefined") return local();
+  if (typeof window === "undefined") return local("there is no browser here");
 
   try {
     const response = await fetch("/api/voice/speak", {
@@ -218,10 +272,14 @@ export async function speakBest(text: string, language: string): Promise<SpokenH
     });
     /* 204 is the server saying "use the local voice" — unconfigured, over
        budget, or slower than waiting for it was worth. */
-    if (response.status !== 200 || !response.body) return local();
+    /* 204 is the server saying "use the local voice" and is not a fault — but
+       it is four different situations wearing one status, and the person
+       hearing the wrong voice deserves to know which. */
+    if (response.status === 204) return local("the premium voice is unconfigured, over its budget, or was too slow");
+    if (response.status !== 200 || !response.body) return local(`the speech service answered ${response.status}`);
 
     const blob = await response.blob();
-    if (!blob.size) return local();
+    if (!blob.size) return local("the speech service returned no audio");
 
     const url = URL.createObjectURL(blob);
     /* The shared element, so a conversation's second reply plays on the grant
@@ -255,15 +313,17 @@ export async function speakBest(text: string, language: string): Promise<SpokenH
          this was reached without one. The device voice is subject to the same
          rule but fails more gracefully, so it is still the better answer. */
       finish();
-      return local();
+      return local("this device refused to play the audio");
     }
 
     return {
       stop: () => { audio.pause(); finish(); },
-      done
+      done,
+      engine: "premium",
+      why: ""
     };
   } catch {
-    return local();
+    return local("the speech service could not be reached");
   }
 }
 

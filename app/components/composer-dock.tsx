@@ -368,8 +368,25 @@ export function ComposerDock({
     ? "Add instructions for these files"
     : hasMessages ? "Write a message…" : "How can I help you today?";
 
+  /**
+   * Which voice is talking, said out loud on the one screen where it matters.
+   *
+   * Silence had four causes that looked the same from both sides. Naming the
+   * engine means the answer to "why can I not hear it" is on screen the moment
+   * it happens, rather than something to be inferred from server logs
+   * afterwards — and if the premium voice is quietly unconfigured, that stops
+   * being a mystery and becomes a sentence.
+   */
+  const spokenBy = conversation.voice && conversation.phase === "speaking"
+    ? conversation.voice.engine === "premium"
+      ? "Answering in the premium voice"
+      : conversation.voice.engine === "device"
+        ? `Answering in this device's voice — ${conversation.voice.why}`
+        : `No voice available — ${conversation.voice.why}`
+    : null;
+
   const footer = conversation.error
-    ?? (talking ? `${CONVERSATION_PLACEHOLDER[conversation.phase]} · tap the waveform to end` : null)
+    ?? (talking ? `${spokenBy ?? CONVERSATION_PLACEHOLDER[conversation.phase]} · tap the waveform to end` : null)
     ?? (transcribing ? "Transcribing…" : null)
     ?? voiceMessage
     ?? attachmentMessage

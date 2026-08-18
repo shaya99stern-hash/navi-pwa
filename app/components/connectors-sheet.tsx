@@ -3,6 +3,8 @@
 import { AlertTriangle, Check, ChevronDown, Link2, LoaderCircle, LockKeyhole, Plus, RefreshCw, ShieldCheck, Sparkles, Trash2, UserRoundCheck, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CONNECTOR_KINDS, type ConnectorAccessMode, type CustomConnector, type CustomConnectorKind, type NaviPreferences } from "@/lib/ai/types";
+import type { CapabilityManifest } from "@/lib/ai/capabilities/manifest";
+import type { AddedCapability } from "@/lib/ai/capabilities/search";
 import { createId } from "@/lib/chat";
 import type { PublicMcpServer } from "@/lib/mcp";
 import { haptic } from "@/lib/ui/haptics";
@@ -122,6 +124,81 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
   const [draftKey, setDraftKey] = useState("");
   const [draftModel, setDraftModel] = useState("");
   const [addState, setAddState] = useState<{ phase: "idle" | "testing" | "error"; message?: string }>({ phase: "idle" });
+  /**
+   * Adding an API by having it describe itself.
+   *
+   * Four states rather than a boolean, because the interesting one is `found`:
+   * the spec has been read and nothing has been saved yet. That gap is where
+   * someone sees what they are about to give Navi Soul — how many operations,
+   * how many of them change things — and it is the only moment they can decline
+   * on the strength of the answer rather than the promise.
+   */
+  const [apiUrl, setApiUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiOpen, setApiOpen] = useState(false);
+  const [discovery, setDiscovery] = useState<
+    | { phase: "idle" }
+    | { phase: "looking" }
+    | { phase: "failed"; message: string; detail: string }
+    | { phase: "found"; manifest: CapabilityManifest; summary: { operations: number; reads: number; writes: number; auth: string } }
+  >({ phase: "idle" });
+
+  const capabilities = (preferences.capabilities ?? []) as AddedCapability[];
+
+  async function discoverApi() {
+    const baseUrl = apiUrl.trim();
+    if (!baseUrl) return;
+    setDiscovery({ phase: "looking" });
+    haptic("selection", haptics);
+    try {
+      const response = await fetch("/api/capabilities/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl })
+      });
+      const data = await response.json() as {
+        ok?: boolean; error?: string; detail?: string;
+        manifest?: CapabilityManifest;
+        summary?: { operations: number; reads: number; writes: number; auth: string };
+      };
+      if (!response.ok || !data.ok || !data.manifest || !data.summary) {
+        setDiscovery({ phase: "failed", message: data.error ?? "That could not be read.", detail: data.detail ?? "" });
+        haptic("warning", haptics);
+        return;
+      }
+      setDiscovery({ phase: "found", manifest: data.manifest, summary: data.summary });
+      haptic("success", haptics);
+    } catch {
+      setDiscovery({ phase: "failed", message: "That address could not be reached.", detail: "" });
+      haptic("error", haptics);
+    }
+  }
+
+  function saveApi() {
+    if (discovery.phase !== "found") return;
+    const manifest = discovery.manifest;
+    haptic("success", haptics);
+    onPreferences({
+      ...preferences,
+      /* Re-adding an API replaces it rather than duplicating it, so
+         re-discovering one after it changed is an update and not a second copy
+         under the same id. Approvals are deliberately not carried across: the
+         operations may not be the ones that were approved. */
+      capabilities: [
+        ...capabilities.filter((entry) => entry?.manifest?.id !== manifest.id),
+        { manifest, apiKey: apiKey.trim(), approvedWrites: [] }
+      ]
+    });
+    setApiUrl("");
+    setApiKey("");
+    setApiOpen(false);
+    setDiscovery({ phase: "idle" });
+  }
+
+  function removeApi(id: string) {
+    haptic("impact-light", haptics);
+    onPreferences({ ...preferences, capabilities: capabilities.filter((entry) => entry?.manifest?.id !== id) });
+  }
   /* The services NaviOS knows how to connect itself to, and which are set.
      Presence only — a value is never sent to the browser. */
   type CatalogProvider = { id: string; label: string; envKey: string; keyUrl: string; free: boolean; detail: string; configured: boolean };
@@ -653,6 +730,123 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
             ) : (
               <button type="button" onClick={() => { setAddOpen(true); haptic("selection", haptics); }} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-2">
                 <Plus size={16} />Add custom connector
+              </button>
+            )}
+          </section>
+
+          {/* Any API at all, by reading its own description of itself. The
+              drop-down above covers four shapes this app has adapters for;
+              this covers everything that publishes an OpenAPI document, which
+              is most of what anyone would want to add. */}
+          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elev-2 text-secondary"><Sparkles size={21} /></span>
+              <span className="min-w-0 flex-1">
+                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Any API</h2>
+                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
+                  Paste an address and Navi Soul reads the API&rsquo;s own description to learn what it can do. Nothing is written without asking you once.
+                </p>
+              </span>
+            </div>
+
+            {capabilities.length ? (
+              <div className="mt-3 divide-y divide-[var(--border-subtle)]">
+                {capabilities.map((entry) => (
+                  <div key={entry.manifest.id} className="flex min-h-14 items-center gap-3 py-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--selection-bg)] text-accent"><Sparkles size={18} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[0.875rem]/5 font-semibold text-primary">{entry.manifest.name}</span>
+                      <span className="block truncate text-[0.6875rem]/4 font-medium text-tertiary">
+                        {entry.manifest.operations.length} operation{entry.manifest.operations.length === 1 ? "" : "s"}
+                        {entry.approvedWrites.length ? ` · ${entry.approvedWrites.length} write${entry.approvedWrites.length === 1 ? "" : "s"} approved` : ""}
+                        {" · "}{new URL(entry.manifest.baseUrl).hostname}
+                      </span>
+                    </span>
+                    <button type="button" onClick={() => removeApi(entry.manifest.id)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label={`Remove ${entry.manifest.name}`}>
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {apiOpen ? (
+              <div className="mt-3 space-y-2">
+                <input
+                  value={apiUrl}
+                  onChange={(event) => { setApiUrl(event.target.value); setDiscovery({ phase: "idle" }); }}
+                  placeholder="https://api.example.com"
+                  inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  aria-label="API address"
+                  className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent"
+                />
+                <input
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder="API key, if it needs one"
+                  type="password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  aria-label="API key"
+                  className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent"
+                />
+                {/* Said where the key is typed rather than in a policy page:
+                    the key is not sent to discover the API, only to call it. */}
+                <p className="text-[0.6875rem]/4 font-medium text-tertiary">
+                  The key stays on this device and travels only with your own requests. It is not sent to read the description.
+                </p>
+
+                {discovery.phase === "failed" ? (
+                  <div className="rounded-2xl border border-[var(--accent-warning)] bg-elev-2 p-3">
+                    <p className="flex gap-1.5 text-[0.75rem]/4 font-medium text-warning"><AlertTriangle size={14} className="shrink-0" />{discovery.message}</p>
+                    {/* What was actually tried. "We could not find a spec" with
+                        nothing behind it is indistinguishable from not having
+                        looked, and this is the screen where someone decides
+                        whether their API is supported at all. */}
+                    {discovery.detail ? (
+                      <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-[0.625rem]/4 font-medium text-tertiary">{discovery.detail}</pre>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {discovery.phase === "found" ? (
+                  <div className="rounded-2xl border border-[var(--border-strong)] bg-elev-2 p-3">
+                    <p className="text-[0.875rem]/5 font-semibold text-primary">{discovery.manifest.name}</p>
+                    {discovery.manifest.purpose ? (
+                      <p className="mt-1 text-[0.75rem]/4 font-medium text-secondary">{discovery.manifest.purpose}</p>
+                    ) : null}
+                    {/* Reads and writes counted apart, because that is the
+                        number worth knowing before agreeing to any of it. */}
+                    <p className="mt-2 text-[0.6875rem]/4 font-medium text-tertiary">
+                      {discovery.summary.operations} operations · {discovery.summary.reads} read
+                      {discovery.summary.writes ? ` · ${discovery.summary.writes} that change things, each asked about once before its first use` : " · none that change anything"}
+                    </p>
+                    <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
+                      {discovery.summary.auth === "none"
+                        ? "It needs no key."
+                        : `It authenticates with ${discovery.summary.auth === "bearer" ? "a bearer token" : `a ${discovery.summary.auth}`}.`}
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="flex gap-2 pt-1">
+                  {discovery.phase === "found" ? (
+                    <button type="button" onClick={saveApi} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed">
+                      <Check size={16} />Add {discovery.manifest.name}
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => void discoverApi()} disabled={discovery.phase === "looking" || !apiUrl.trim()} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed disabled:opacity-60">
+                      {discovery.phase === "looking" ? <><LoaderCircle size={16} className="animate-spin" />Reading the API…</> : "Read this API"}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => { setApiOpen(false); setDiscovery({ phase: "idle" }); }} className="min-h-11 rounded-xl px-4 text-[0.8125rem]/5 font-semibold text-secondary active:bg-elev-3">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" onClick={() => { setApiOpen(true); haptic("selection", haptics); }} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-2">
+                <Plus size={16} />Add an API
               </button>
             )}
           </section>
