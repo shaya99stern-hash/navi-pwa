@@ -70,6 +70,17 @@ type Options = {
   language: string;
   haptics: boolean;
   reply: ConversationReply;
+  /**
+   * When the last request failed, as a timestamp that changes per failure.
+   *
+   * Without this the loop learns nothing from a turn that errored: it waits in
+   * `thinking` for a reply that is never coming, and the person is left
+   * watching a microphone that is shut and a status line that says the app is
+   * working. The only recovery was the unanswered-turn timer, which is a
+   * six-second silence *after* however long the request took to fail — and a
+   * provider timeout takes the whole request budget to get there.
+   */
+  failedAt?: number | null;
   /** Hand a finished turn to the conversation. */
   onTurn: (text: string) => void;
 };
@@ -121,6 +132,10 @@ export function useVoiceConversation(options: Options): VoiceConversation {
    * already has answers in it does not begin by reading the last one aloud.
    */
   const answeredRef = useRef<string | null>(null);
+  /* The failure already acted on. Without it, the effect below re-fires every
+     time the phase changes and kills the *next* turn with the last one's
+     error. */
+  const handledFailureRef = useRef<number | null>(null);
   const activeRef = useRef(false);
   const phaseRef = useRef<ConversationPhase>("off");
   const peakRef = useRef(0);
@@ -316,6 +331,22 @@ export function useVoiceConversation(options: Options): VoiceConversation {
 
     return () => { cancelled = true; };
   }, [active, options.busy, options.reply, phase, relisten, setPhaseBoth]);
+
+  /**
+   * A turn that failed outright ends the wait now, rather than in six seconds.
+   *
+   * Read from `phaseRef` rather than from `phase` so the phase does not have to
+   * be a dependency — with it, the effect re-runs on every phase change and
+   * would apply a stale failure to a turn that has not failed.
+   */
+  useEffect(() => {
+    const failedAt = options.failedAt;
+    if (!active || !failedAt || failedAt === handledFailureRef.current) return;
+    handledFailureRef.current = failedAt;
+    if (phaseRef.current !== "thinking") return;
+    setError("That turn did not get through. Listening again.");
+    relisten();
+  }, [active, options.failedAt, relisten]);
 
   /**
    * A turn that was never answered must not end the conversation silently.

@@ -268,6 +268,8 @@ export function AppShell({
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [scrolled, setScrolled] = useState(false);
   const [streamStatus, setStreamStatus] = useState<NaviStreamStatus | null>(null);
+  /* When the last request failed, for the spoken conversation to recover from. */
+  const [turnFailedAt, setTurnFailedAt] = useState<number | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [contextMessage, setContextMessage] = useState<{ id: string; text: string; role: string } | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
@@ -470,6 +472,10 @@ export function AppShell({
       /* The error card the stream renders is the signal; a haptic here would
          be refused for the same reason the completion one was. */
       setStreamStatus({ stage: "error", detail: "That didn't go through." });
+      /* And the spoken conversation, which otherwise waits in silence for a
+         reply that is never coming. A timestamp rather than a flag, so two
+         failures in a row are two events rather than one. */
+      setTurnFailedAt(Date.now());
     }
   });
 
@@ -922,6 +928,7 @@ export function AppShell({
     language: preferences.voiceLanguage,
     haptics: preferences.haptics,
     reply: latestReply,
+    failedAt: turnFailedAt,
     onTurn: (text) => void submitVoiceTranscript(text)
   });
 
@@ -1307,6 +1314,9 @@ export function AppShell({
         stage: "error",
         detail: voiceError instanceof Error ? voiceError.message : "Could not send the spoken request."
       });
+      /* This path never reaches `onError` — the request did not start — so the
+         conversation would wait on a turn that was never sent. */
+      setTurnFailedAt(Date.now());
     }
   }
 

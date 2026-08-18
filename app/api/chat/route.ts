@@ -47,6 +47,7 @@ import { extractFacts, looksDurable } from "@/lib/memory/extract";
 import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { historyInstruction } from "@/lib/ai/history-tools";
+import { withoutReasoning } from "@/lib/ai/replay";
 import { buildToolset } from "@/lib/tools/registry";
 import { detectRepo, retrieveFiles } from "@/lib/ai/repo-retrieval";
 import { critiqueAllowed, groundingFor, skipReason, type FetchedSource } from "@/lib/ai/grounding";
@@ -1564,7 +1565,7 @@ export async function POST(request: Request): Promise<Response> {
         }));
       }
 
-      const modelMessages = await convertToModelMessages(redactGeneratedMedia(messages));
+      const modelMessages = withoutReasoning(await convertToModelMessages(redactGeneratedMedia(messages)));
 
       if (resolvedPreset === "navi-soul-deep" || resolvedPreset === "navi-soul-direct") {
         const swarmProfile: SwarmPreset = resolvedPreset;
