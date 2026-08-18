@@ -67,6 +67,16 @@ export type ToolsetContext = {
   capabilities?: AddedCapability[];
   /** A live Google access token, when they have connected that account. */
   googleAccessToken?: string;
+  /**
+   * Whether each OAuth app exists on this deployment at all.
+   *
+   * Separate from holding a token, and the distinction is the whole answer to
+   * "why am I not connected to Google": either nobody signed in, or there is
+   * nothing to sign in to. `inspect_environment` reports them apart, because
+   * collapsing them sends someone to a Connectors screen that cannot help.
+   */
+  githubOAuthAvailable?: boolean;
+  googleOAuthAvailable?: boolean;
   /** The user's last message, so a group can be offered when it is wanted. */
   request?: string;
   /** Server-side writes are separately gated; see `github-write-tools`. */
@@ -315,7 +325,7 @@ export function wantsSelfUpdate(request: string | undefined): boolean {
  * `when` predicates be read at a glance.
  */
 export function buildToolset(context: ToolsetContext): ToolSet {
-  const { policy, mode, githubToken, capabilities, googleAccessToken, githubWritesEnabled, clerkToken, clerkUserId, customConnectors = [], signal, origin, cookie, onActivity = () => {}, onSource = () => {}, mcpTools = {} } = context;
+  const { policy, mode, githubToken, capabilities, googleAccessToken, githubOAuthAvailable, googleOAuthAvailable, githubWritesEnabled, clerkToken, clerkUserId, customConnectors = [], signal, origin, cookie, onActivity = () => {}, onSource = () => {}, mcpTools = {} } = context;
 
   const active = (name: string) => GROUPS.find((group) => group.name === name)?.when(context) ?? false;
 
@@ -328,7 +338,23 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...buildSkillTools(onActivity),
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity, onSource }),
-    ...buildEnvironmentTools({ onActivity }),
+    /* The per-person half of "what are you connected to". Without it
+       `inspect_environment` could see environment variables and nothing else,
+       so it reported the deployment's GitHub token as the answer to a question
+       about the user's GitHub account and had no answer at all for Google. */
+    ...buildEnvironmentTools({
+      onActivity,
+      /* The value, not just its presence: `test_service` has to send the
+         credential the repository tools send, or "is GitHub working?" gets a
+         confident answer about a different token than the one in use. */
+      githubToken,
+      connections: {
+        github: Boolean(githubToken),
+        githubOAuthAvailable,
+        google: Boolean(googleAccessToken),
+        googleOAuthAvailable
+      }
+    }),
     /* No `execute`: the conversations are in IndexedDB on the device, so this
        one is answered by the client. See `history-tools.ts`. */
     ...buildHistoryTools(),

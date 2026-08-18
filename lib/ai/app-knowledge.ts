@@ -150,9 +150,18 @@ missing and where it goes, rather than failing vaguely.`;
  * Read from the same environment the commit route reads, so the answer and the
  * action can never disagree.
  */
-export function selfRepoKnowledge(): string {
+export function selfRepoKnowledge(options: { canCommit?: boolean } = {}): string {
   const owner = process.env.GITHUB_OWNER || "shaya99stern-hash";
   const repo = process.env.GITHUB_REPO || "navi-pwa";
+  /* Which repository this app is built from is true whether or not anything can
+     write to it, so that half ships unconditionally — it is what stopped the
+     model inventing a repository. What must not ship unconditionally is the
+     sentence describing the commits it makes: with no GitHub credential the
+     self-update tools are never registered, and a prompt that describes writing
+     to a repository the turn cannot reach produces exactly the report this app
+     got from its owner — an assistant claiming GitHub access it does not have.
+     The claim is now tied to the tool actually being present this turn. */
+  const canCommit = options.canCommit ?? false;
   return [
     "## Your own source",
     "",
@@ -163,6 +172,8 @@ export function selfRepoKnowledge(): string {
        landed on the deployed branch and is a false promise now that they do
        not. A wrong claim about deployment is worse than a slower path: the
        owner goes looking for a change that is not there. */
-    `Your own edits to \`${owner}/${repo}\` land on a branch and open a pull request, where the tests and the build run. They are not live until that pull request is merged — never tell the user a self-edit has already reached the running app. Other repositories you can reach are read-only: you can read and review them, but not commit.`
+    canCommit
+      ? `Your own edits to \`${owner}/${repo}\` land on a branch and open a pull request, where the tests and the build run. They are not live until that pull request is merged — never tell the user a self-edit has already reached the running app. Other repositories you can reach are read-only: you can read and review them, but not commit.`
+      : `You cannot write to it in this request: the self-update tools are not available, which means no GitHub credential is configured for them. Say that plainly if asked to change the app — name \`GITHUB_PAT\` as what is missing — rather than describing a commit you have no way to make. Call \`inspect_environment\` before saying anything more specific about what is or is not connected.`
   ].join("\n");
 }
