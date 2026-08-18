@@ -61,7 +61,6 @@ import { MessageRow } from "./message-row";
 import { ArtifactsSheet } from "./artifacts-sheet";
 import { ChatMenuSheet } from "./chat-menu-sheet";
 import { EffortSheet } from "./effort-sheet";
-import { ModeSheet } from "./mode-sheet";
 import { ProjectsSheet } from "./projects-sheet";
 import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { SettingsSheet } from "./settings-sheet";
@@ -195,15 +194,24 @@ const VIEW_SUBTITLES: Record<Exclude<ShellView, "chat">, string> = {
 };
 
 /**
- * What the app is called right now.
+ * The header used to carry the mode as its dominant line, and that was the
+ * wrong claim to make there.
  *
- * The mode is the product, so it holds the header's dominant line in every
- * state rather than riding along as a pill beside the chat title. A pill is
- * read as decoration and was being missed; the name is read as the name.
+ * A title in that position is how an app says *where you are*. Everything else
+ * that ever appears there — Recents, Projects, Artifacts, Settings — is a
+ * place, and going to it changes what you are looking at. The mode is not a
+ * place: it changes how the *next message* is routed and nothing else. So
+ * switching it changed the title and not the conversation, which anywhere else
+ * in this app would read as a bug.
+ *
+ * It was worse than merely odd. The mode is a global preference and the title
+ * ignored which chat was open, so switching to Code relabelled every earlier
+ * conversation on sight — a header making a claim about a thread that was never
+ * true of it.
+ *
+ * The mode now sits in the composer beside Effort and Research, the other two
+ * per-message dials, and this line carries the conversation's own name.
  */
-function modeTitle(mode: NaviMode) {
-  return mode === "code" ? "NaviOS Code" : "NaviOS Chat";
-}
 
 export function AppShell({
   initialChatId,
@@ -232,7 +240,6 @@ export function AppShell({
     initialLayer === "customize" ? "skills" : undefined
   );
   const [effortSheetOpen, setEffortSheetOpen] = useState(false);
-  const [modeSheetOpen, setModeSheetOpen] = useState(false);
   const [chatMenuOpen, setChatMenuOpen] = useState(false);
   /* Incognito: this conversation is never written to storage and never
      recalled by memory. It exists only while the screen is open. */
@@ -346,7 +353,6 @@ export function AppShell({
      back still closes them, which is the half that was actually missing. */
   useOverlayRoute({ open: chatMenuOpen, onClose: () => setChatMenuOpen(false), restore: restorePath });
   useOverlayRoute({ open: effortSheetOpen, onClose: () => setEffortSheetOpen(false), restore: restorePath });
-  useOverlayRoute({ open: modeSheetOpen, onClose: () => setModeSheetOpen(false), restore: restorePath });
   useOverlayRoute({ open: contextMessage !== null, onClose: () => setContextMessage(null), restore: restorePath });
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
@@ -1389,6 +1395,15 @@ export function AppShell({
     setActiveId(createId());
   }
 
+  /* The same shape as `toggleResearch`, because it is the same kind of thing:
+     a dial that applies to the next message. Chat is the absence of Code, so
+     there are two states and no picker. */
+  function toggleCodeMode() {
+    const next = preferences.mode === "code" ? "chat" : "code";
+    haptic("selection", preferences.haptics);
+    updatePreferences({ ...preferences, mode: next });
+  }
+
   function toggleResearch() {
     const enabled = !preferences.tools.web;
     updatePreferences({
@@ -1460,24 +1475,29 @@ export function AppShell({
         <button
           type="button"
           onClick={() => {
+            if (view === "chat") return;
             haptic("selection", preferences.haptics);
-            if (view !== "chat") setView("chat");
-            else setModeSheetOpen(true);
+            setView("chat");
           }}
+          disabled={view === "chat"}
           className="flex min-w-0 flex-1 flex-col items-start rounded-lg pl-1 text-left active:bg-elev-2"
-          aria-label={view === "chat" ? "Switch product" : "Back to chat"}
-          aria-haspopup={view === "chat" ? "menu" : undefined}
+          aria-label={view === "chat" ? undefined : "Back to chat"}
         >
           <span className="flex max-w-full items-center gap-1.5">
             <span className="truncate text-[0.9375rem]/[1.125rem] font-semibold tracking-[-0.01em] text-primary">
-              {view === "chat" ? modeTitle(preferences.mode) : VIEW_TITLES[view]}
+              {view === "chat"
+                ? (activeChat?.title ?? (messages.length ? "New chat" : "NaviOS"))
+                : VIEW_TITLES[view]}
             </span>
-            <ChevronDown size={14} className="shrink-0 text-tertiary" />
+            {/* The chevron promised a menu. On the chat view there is none any
+                more — chat actions have their own button — so it appears only
+                where it still opens something. */}
+            {view === "chat" ? null : <ChevronDown size={14} className="shrink-0 text-tertiary" />}
           </span>
           <span className="block max-w-[200px] truncate text-[0.75rem]/[1.0125rem] font-normal text-tertiary">
             {view !== "chat"
               ? VIEW_SUBTITLES[view]
-              : `${activeProject ? `${activeProject.name} · ` : ""}${activeChat?.title ?? (messages.length ? "New chat" : "Nothing saved yet")}`}
+              : activeProject?.name ?? (messages.length ? "" : "Nothing saved yet")}
           </span>
         </button>
         {incognito ? (
@@ -1660,6 +1680,8 @@ export function AppShell({
         effortLabel={activeEffort.label}
         hasMessages={messages.length > 0}
         research={preferences.tools.web}
+        codeMode={preferences.mode === "code"}
+        onToggleCode={toggleCodeMode}
         statusText={activeProject ? `${activeProject.name} · ${statusText}` : statusText}
         haptics={preferences.haptics}
         connectorCount={preferences.connectedMcpServers.length}
@@ -1703,13 +1725,6 @@ export function AppShell({
         onOpenConnectors={() => setConnectorsOpen(true)}
         onClearData={() => void clearData()}
         onExport={exportData}
-      />
-
-      <ModeSheet
-        open={modeSheetOpen}
-        preferences={preferences}
-        onClose={() => setModeSheetOpen(false)}
-        onPreferences={updatePreferences}
       />
 
       <EffortSheet

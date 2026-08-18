@@ -303,10 +303,30 @@ export function useVoiceConversation(options: Options): VoiceConversation {
    * effect on the reply rather than something awaited after `onTurn`: the
    * request belongs to the screen above, and the answer streams in over
    * however long it takes.
+   *
+   * ## The phase is read from the ref, and that is load-bearing
+   *
+   * With `phase` in the dependency array this effect cancelled itself, every
+   * time, and the whole feature was silent:
+   *
+   *   1. it runs with the phase at `thinking`, sets `cancelled = false`,
+   *      switches the phase to `speaking`, and starts fetching the audio;
+   *   2. the phase it just set is a dependency, so React tears the effect down
+   *      and its cleanup sets `cancelled = true`;
+   *   3. it re-runs, sees a phase that is no longer `thinking`, and returns;
+   *   4. the audio arrives, finds `cancelled`, and is stopped in the same tick
+   *      it became ready — so nothing plays, and because the early return skips
+   *      `await handle.done`, `relisten` never runs and the microphone stays
+   *      shut on `speaking` for ever.
+   *
+   * Every symptom of that is a symptom of something else: no sound reads as a
+   * muted element or a missing credential, and a stuck phase reads as a hung
+   * request. It was none of those. An effect that sets a value it depends on is
+   * an effect that runs once and undoes itself.
    */
   useEffect(() => {
     if (!active || options.busy) return;
-    if (phase !== "thinking") return;
+    if (phaseRef.current !== "thinking") return;
     const reply = options.reply;
     if (!reply || reply.id === answeredRef.current) return;
 
@@ -330,7 +350,7 @@ export function useVoiceConversation(options: Options): VoiceConversation {
     })();
 
     return () => { cancelled = true; };
-  }, [active, options.busy, options.reply, phase, relisten, setPhaseBoth]);
+  }, [active, options.busy, options.reply, relisten, setPhaseBoth]);
 
   /**
    * A turn that failed outright ends the wait now, rather than in six seconds.

@@ -6,6 +6,7 @@ import {
   BookOpen,
   Camera,
   ChevronDown,
+  Code2,
   FileText,
   Image as ImageIcon,
   LoaderCircle,
@@ -109,6 +110,19 @@ type Props = {
   effortLabel: string;
   hasMessages: boolean;
   research: boolean;
+  /**
+   * Code mode, which is a routing preference for the next message and nothing
+   * more.
+   *
+   * It lives here, beside Effort and Research, because that is what it is: a
+   * per-message dial. It used to hold the header's dominant line — the position
+   * every other screen uses to say *where you are* — while behaving as a
+   * setting, so switching it changed the title and not the conversation, and
+   * opening an old chat relabelled it retroactively with a mode it was never
+   * held in.
+   */
+  codeMode: boolean;
+  onToggleCode: () => void;
   offlineCommand: boolean;
   haptics: boolean;
   voiceLanguage: string;
@@ -176,6 +190,8 @@ export function ComposerDock({
   effortLabel,
   hasMessages,
   research,
+  codeMode,
+  onToggleCode,
   offlineCommand,
   haptics,
   voiceLanguage,
@@ -780,6 +796,25 @@ export function ComposerDock({
               >
                 <span className="truncate font-semibold text-primary">{effortLabel}</span>
                 <ChevronDown size={13} className="shrink-0 text-tertiary" />
+              </button>
+              )}
+
+              {listening || talking ? null : (
+              /* Chat is the default and goes unnamed — the app already treats
+                 it that way, showing a mode in the status line only when it is
+                 Code. So this is a toggle rather than a picker: there is one
+                 thing to turn on, and its absence is the ordinary case. */
+              <button
+                type="button"
+                role="switch"
+                aria-checked={codeMode}
+                onClick={() => { haptic("selection", haptics); onToggleCode(); }}
+                disabled={blocked || generating}
+                className={`flex min-h-9 shrink-0 items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2 ${codeMode ? "bg-[var(--selection-bg)]" : ""}`}
+                aria-label={codeMode ? "Code mode is on. Turn it off" : "Code mode is off. Turn it on for software, debugging, and repositories"}
+              >
+                <Code2 size={16} strokeWidth={1.8} className={`shrink-0 ${codeMode ? "text-accent" : "text-secondary"}`} />
+                <span className={`font-semibold ${codeMode ? "text-accent" : "text-secondary"}`}>Code</span>
               </button>
               )}
 
