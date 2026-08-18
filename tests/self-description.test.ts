@@ -3,6 +3,7 @@ import { join, relative, sep } from "node:path";
 import { ROUTES, derivedAppFacts } from "@/lib/ai/self-description";
 import { CONNECTOR_KINDS } from "@/lib/ai/types";
 import { credentialNames } from "@/lib/ai/credentials";
+import { EFFORT_LEVELS, NAVI_MODES } from "@/lib/chat";
 
 let pass = 0, fail = 0;
 const check = (n: string, a: unknown, e: unknown) => {
@@ -150,5 +151,35 @@ check("and still does not outrank accuracy",
 /* None of it applies to a caller who is not the owner. */
 check("and none of this reaches a non-owner", /if \(!isOwner\) return "";/.test(route), true);
 
+
+/* ── Controls the app could not recognise as its own ─────────────────────────
+   The prose said effort had three levels called "Standard, Extended, Maximum".
+   The composer has shown Quick, Considered and Deep for a long time. So the
+   owner asked what had happened to the three levels of thinking they switch
+   between — a control that was on screen and working — and the app, reading its
+   own description, did not recognise the names of its own dial.
+
+   Same failure as the credentials and the screens before it: a list written by
+   hand drifts from the thing it describes, and the only durable fix is to stop
+   writing it down. */
+
+const controls = derivedAppFacts();
+for (const level of EFFORT_LEVELS) {
+  check(`the ${level.label} effort level is named from the constant`, controls.includes(level.label), true);
+}
+check("the default is marked as such", /\*\*Considered\*\*[^\n]*The default\./.test(controls), true);
+check("both modes are named", NAVI_MODES.every((mode) => controls.includes(mode.label)), true);
+/* The names it used to claim, gone from the prose that claimed them. */
+const knowledgeCode = readFileSync(join(process.cwd(), "lib/ai/app-knowledge.ts"), "utf8")
+  .replace(/\/\*[\s\S]*?\*\//g, "");
+check("the invented level names are gone",
+  /Standard, Extended, Maximum/.test(knowledgeCode), false);
+check("and the prose defers to the derived list instead",
+  /never name them from memory/.test(knowledgeCode), true);
+/* Denying a control the user is looking at is worse than admitting a gap. */
+check("an unrecognised control is not denied out of hand",
+  controls.includes("say so plainly rather than denying the control exists"), true);
+/* Interrupting is new and nothing told the model it existed. */
+check("talking over it is described", controls.includes("interrupted by talking over it"), true);
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
