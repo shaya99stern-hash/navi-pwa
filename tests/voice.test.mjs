@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { read, stripComments } from "./source.mjs";
 
 let pass = 0, fail = 0;
@@ -12,7 +14,7 @@ const check = (n, a, e) => {
 
 const speech = read("lib/ui/speech.ts");
 const composer = read("app/components/composer-dock.tsx");
-const sheet = read("app/components/voice-mode-sheet.tsx");
+const loop = read("lib/ui/voice-conversation.ts");
 const shell = read("app/components/app-shell.tsx");
 const settings = read("app/components/settings-sheet.tsx");
 
@@ -34,7 +36,7 @@ const settings = read("app/components/settings-sheet.tsx");
  * reach for again. */
 check("the module no longer constructs one", speech.source.includes("webkitSpeechRecognition"), false);
 check("the composer does not either", stripComments(composer.source).includes("webkitSpeechRecognition"), false);
-check("nor the sheet", stripComments(sheet.source).includes("webkitSpeechRecognition"), false);
+check("nor the conversation loop", loop.code.includes("webkitSpeechRecognition"), false);
 check("the recognition entry point is gone", speech.source.includes("startSpeechRecognition"), false);
 /* Speech *synthesis* is a different API and still earns its place: it is what
    reads a reply aloud, and it works. */
@@ -49,8 +51,8 @@ check("and still picks a good voice", speech.body.includes("pickVoice"), true);
    pressed. Both record audio and have it transcribed. */
 check("the composer records instead of recognising", composer.body.includes("startRecording"), true);
 check("the composer does not use recognition", composer.body.includes("startSpeechRecognition"), false);
-check("the sheet records too", sheet.body.includes("startRecording"), true);
-check("the sheet does not use recognition either", sheet.body.includes("startSpeechRecognition"), false);
+check("the conversation records too", loop.body.includes("startRecording"), true);
+check("and does not use recognition either", loop.body.includes("startSpeechRecognition"), false);
 /* The one thing recognition did better has been recovered.
  *
  * It streamed words as they were spoken; the first recording version could
@@ -59,25 +61,32 @@ check("the sheet does not use recognition either", sheet.body.includes("startSpe
  * thrown away. The recorder transcribes segment by segment while the
  * microphone is still open, so the text builds up as it is spoken and the
  * spinner now covers only the last unfinished sentence. */
-check("the transcript arrives while it is being spoken", sheet.body.includes("onTranscript: setLive"), true);
-check("the pass in flight is kept apart from the passes already finished",
-  /const \[live, setLive\]/.test(sheet.body), true);
-check("and shown as provisional until it settles", /listening \? "text-secondary" : undefined/.test(sheet.body), true);
-check("the sheet still shows the wait for the last sentence", sheet.body.includes("transcribing"), true);
-check("and says what is happening", sheet.source.includes("Writing down what you said"), true);
-/* Start / Stop / Start again is how a long thought gets spoken. */
-check("a second pass adds to the turn",
-  /const merged = `\$\{current\}\$\{current\.trim\(\) \? " " : ""\}\$\{text\}`/.test(sheet.body), true);
-/* Read from a ref, not from state. `stop()` runs inside the recorder's level
-   callback, which closes over the render that started the recording — so
-   appending to the state variable would append to a copy one turn stale. */
-check("and reads the running transcript from a ref, not a stale closure",
-  /const current = transcriptRef\.current;/.test(sheet.body), true);
-check("with one writer keeping the ref and the state together",
-  /function writeTranscript\(next: string\)/.test(sheet.body), true);
-/* A recording left running holds the microphone and keeps the browser's
-   recording indicator lit after the sheet is gone. */
-check("closing the sheet releases the microphone", /recorderRef\.current\?\.cancel\(\)/.test(sheet.body), true);
+check("the transcript arrives while it is being spoken", loop.body.includes("onTranscript: setTranscript"), true);
+check("and reaches the box the words would have been typed into",
+  /previewValue = talking\s*\?\s*conversation\.transcript/.test(composer.body), true);
+/* Every phase gets a line, including the ones that pass in under a second.
+   A screen that goes blank between the pause and the answer cannot be told
+   apart from one that has stopped working. */
+check("each phase says what is happening", /CONVERSATION_PLACEHOLDER: Record<VoiceConversation\["phase"\], string>/.test(composer.body), true);
+for (const phase of ["listening", "transcribing", "thinking", "speaking"]) {
+  check(`including ${phase}`, new RegExp(`  ${phase}: "[^"]+"`).test(composer.body), true);
+}
+/* The turn is sent when the pause lands, so its words never become draft
+   text — which is what makes them disappear on their own afterwards. */
+check("a spoken turn does not leak into the draft", /setTranscript\(""\)/.test(loop.body), true);
+/* A recording or a reply left running holds the microphone and keeps the
+   browser's recording indicator lit after the conversation is over. */
+check("ending the conversation releases the microphone", /session\?\.cancel\(\);/.test(loop.body), true);
+check("and silences the reply that was still playing", /spoken\?\.stop\(\);/.test(loop.body), true);
+/* Cleared before cancelled, not after. Cancelling ends the recorder's own turn
+   detection, and a callback firing on the way out would otherwise find a
+   session still in the ref and transcribe the recording just thrown away. */
+check("with the reference dropped before the thing it points at is torn down",
+  loop.body.indexOf("recorderRef.current = null;\n    session?.cancel();") > -1, true);
+/* Three callers do this — the stop button, unmount, and a failure that ends
+   the conversation. Three near-copies is how a microphone gets left on. */
+check("through one release path rather than three near-copies",
+  (loop.body.match(/const release = useCallback/g) ?? []).length, 1);
 
 /* ---- One language, from one place ------------------------------------ */
 
@@ -87,7 +96,7 @@ check("closing the sheet releases the microphone", /recorderRef\.current\?\.canc
 /* Transcription detects the spoken language itself, so the composer no longer
    needs the preference to be told to it — which removes a way for the two
    surfaces to disagree rather than adding one. */
-check("the sheet takes the preference", sheet.body.includes("language: voiceLanguage"), true);
+check("the conversation takes the preference", /const \{ online, language \} = optionsRef\.current;/.test(loop.body), true);
 check("the shell passes it to the composer", shell.body.includes("voiceLanguage={preferences.voiceLanguage}"), true);
 check("only the module resolves auto", /navigator\.language/.test(stripComments(composer.source)), false);
 check("resolution lives in the module", speech.body.includes('preference === "auto"'), true);
@@ -95,11 +104,14 @@ check("resolution lives in the module", speech.body.includes('preference === "au
 /* The sheet kept a private copy in localStorage that Settings had to mirror
    into on every change. A second store is a second thing to forget. */
 const legacyKey = "navi.voice.language.v1";
-check("the sheet keeps no private copy", sheet.source.includes(legacyKey), false);
+check("the conversation keeps no private copy", loop.source.includes(legacyKey), false);
 check("settings writes no mirror", stripComments(settings.source).includes(legacyKey), false);
 /* Reading the legacy key for the reply voice meant an answer could be spoken
    in a different language from the one the question was dictated in. */
-check("the spoken reply uses the preference", shell.body.includes("resolveVoiceLanguage(preferences.voiceLanguage)"), true);
+check("the shell hands the loop the stored preference",
+  /language: preferences\.voiceLanguage,/.test(shell.body), true);
+check("and the spoken reply resolves it there",
+  /resolveVoiceLanguage\(optionsRef\.current\.language\)/.test(loop.body), true);
 check("nothing outside storage reads the legacy key", stripComments(shell.source).includes(legacyKey), false);
 /* Storage may still read it: that is the one-time migration into preferences. */
 check("the migration still reads it", read("lib/storage/indexeddb.ts").body.includes(legacyKey), true);
@@ -113,7 +125,7 @@ check("the migration still reads it", read("lib/storage/indexeddb.ts").body.incl
 /* Transcription returns one settled string, so there is no interim text to
    leak into the draft — the class of bug this guarded cannot occur on either
    surface any more. */
-check("neither surface tracks interim text", sheet.body.includes("setInterim") || composer.body.includes("setInterim"), false);
+check("neither surface tracks interim text", loop.body.includes("setInterim") || composer.body.includes("setInterim"), false);
 /* And appends to the draft as it stands now, not as it stood when listening
    began — a callback closes over the value from that render. */
 check("the composer reads the live draft", composer.body.includes("valueRef.current"), true);
@@ -133,25 +145,39 @@ check("it does not invite a retry", /Microphone access was refused[^"]*[Tt]ry ag
 check("a missing microphone says so instead", /No microphone is available/.test(recorderSource.body), true);
 /* Both surfaces show what was thrown rather than a generic line of their own,
    which is what makes the distinction reach the person. */
-check("the sheet surfaces the real reason", /caught instanceof Error \? caught\.message/.test(sheet.body), true);
+check("the conversation surfaces the real reason", /caught instanceof Error \? caught\.message/.test(loop.body), true);
 check("the composer does too", /error instanceof Error \? error\.message/.test(composer.body), true);
 /* Silence after a recording is not a failure of the microphone, and saying
    "that could not be transcribed" for it sends someone to the wrong problem. */
-check("silence is reported as silence", /Nothing was picked up/.test(sheet.source), true);
+check("silence is reported as silence", /Nothing was picked up/.test(composer.source), true);
 
-/* ---- The sheet behaves like the other bottom sheets ------------------- */
+/* ---- There is no sheet ------------------------------------------------ */
 
-/* It was the one bottom sheet without drag-to-dismiss: same shape, same
-   position, and the swipe that closed every other one did nothing here. An
-   affordance that works everywhere except one place is worse than one that
-   works nowhere, because nothing tells you which place you are in. */
-check("the sheet can be swiped away", sheet.body.includes("useSheetDrag"), true);
-check("the scrim fades with the drag", /sheet\.scrimProps/.test(sheet.body), true);
-check("only the grab area starts a drag", /sheet\.handleProps/.test(sheet.body), true);
-/* A second way out that skips the cleanup is a microphone left open. */
-check("a swipe goes through the same cleanup", /onDismiss: \(\) => resetAndClose\(\)/.test(sheet.body), true);
-/* Two controls sharing one name is ambiguous to a screen reader and to a test. */
-check("the scrim and the X are named apart", (sheet.source.match(/aria-label="Close voice mode"/g) ?? []).length, 1);
+/* Voice mode was a modal with five controls in it — Start, Stop, Send, a
+   hands-free switch and a read-aloud switch — between wanting to say something
+   and having said it. Four of those five were answering questions the loop can
+   answer for itself, and the fifth duplicated a setting Settings already owns.
+   The file is deleted rather than left unreferenced, because an orphaned
+   component is the thing the next change reaches for. */
+check("the sheet component is gone", existsSync(join(process.cwd(), "app/components/voice-mode-sheet.tsx")), false);
+check("nothing imports it", /voice-mode-sheet/.test(shell.source) || /voice-mode-sheet/.test(composer.source), false);
+/* The composer no longer opens anything: the button is the feature. */
+check("one tap on the composer starts the conversation",
+  /onClick=\{conversation\.toggle\}/.test(composer.body), true);
+check("and there is no sheet left for it to open", /onOpenVoice/.test(composer.source), false);
+/* Two microphones open at once fight over the device and transcribe the same
+   sentence twice, so each control disables the other's. */
+check("dictation and conversation cannot both be running",
+  /disabled=\{blocked \|\| generating \|\| transcribing \|\| !online\}/.test(composer.body), true);
+check("the dictation strip yields to the conversation strip",
+  /\{talking \? \(\s*<span/.test(composer.body), true);
+/* The way out is inside the strip, where the thing to stop is. */
+check("the conversation can be ended from where it is shown",
+  /onClick=\{conversation\.stop\}/.test(composer.body), true);
+/* The language picker is not reproduced here: Settings owns that preference,
+   and two pickers meant the answer depended on which screen you last opened. */
+check("settings still owns the dictation language",
+  /onChange=\{\(voiceLanguage\) => update\(\{ voiceLanguage \}\)\}/.test(settings.body), true);
 
 /* ---- The language picker reaches the transcriber ---------------------- */
 
@@ -166,7 +192,7 @@ check("the recorder accepts a language", /language\?: string;/.test(recorderSour
 check("it travels with the recording", /language=\$\{encodeURIComponent\(language\)\}/.test(recorderSource.body), true);
 /* "auto" is the absence of a hint, not a default of English. */
 check("auto sends no hint", /language && language !== "auto"/.test(recorderSource.body), true);
-check("the sheet passes the stored preference", /language: voiceLanguage/.test(sheet.body), true);
+check("the conversation passes the stored preference", /\n        language,/.test(loop.body), true);
 check("the composer passes the same one", /language: voiceLanguage/.test(composer.body), true);
 check("the route forwards it to the model", /form\.append\("language", language\)/.test(route.body), true);
 /* A bare subtag is what the API takes: `he`, not `he-IL`. And an unvalidated
@@ -179,61 +205,94 @@ check("only the primary subtag is sent", /requested\.split\("-"\)\[0\]\.toLowerC
    Send — three of them needing a hand and eyes, which is the entire thing you
    are trying to avoid by talking to something. */
 
-check("the sheet can run hands-free", /const \[conversation, setConversation\]/.test(sheet.body), true);
-/* Off by default. Holding the microphone open across a whole exchange is not
-   something to start on someone's behalf. */
-check("and it is off until asked for", /useState\(false\);/.test(sheet.body), true);
-/* Detected by the recorder, which is the one place that knows. This sheet
-   used to run a second detector of its own over the level meter, with a fixed
+/* Hands-free is not a switch any more, it is what the mode is. The recorder is
+   opened one way and only one way. */
+check("the microphone always ends its own turn", /handsFree: true,/.test(loop.body), true);
+/* Detected by the recorder, which is the one place that knows. The sheet used
+   to run a second detector of its own over the level meter, with a fixed
    threshold — so hands-free worked in a quiet room and nowhere else, while the
    recorder was separately deciding, against a measured noise floor, where
    speech began and ended. Two answers to one question is how two surfaces
    drift apart, and the level-meter one was the worse answer. */
-check("the end of a turn is detected rather than pressed",
-  /handsFree: conversation/.test(sheet.body), true);
 check("by the detector that also decides where segments are cut",
-  /onAutoStop: \(reason: AutoStopReason\)/.test(sheet.body), true);
-check("and the sheet keeps no second detector of its own",
-  stripComments(sheet.source).includes("createTurnDetector"), false);
-/* Hands-free is decided when the recorder is opened, so a switch flipped
-   mid-turn has to restart it — otherwise turning it on looks like it did
-   nothing until the turn after next. */
-check("flipping the switch mid-turn restarts rather than doing nothing",
-  /if \(listening\) void stop\(\{ discard: true \}\);/.test(sheet.body), true);
-check("and the turn is sent without a review step",
-  /if \(conversation && online && !busy\) send\(merged\);/.test(sheet.body), true);
+  /onAutoStop: \(reason: AutoStopReason\)/.test(loop.body), true);
+check("and the loop keeps no second detector of its own",
+  loop.code.includes("createTurnDetector"), false);
+check("the turn is sent without a review step", /onTurn\(text\);/.test(loop.body), true);
 
-/* The failure that would make it unusable: opening the microphone while the
-   reply is still playing out of the speaker, transcribing it, and sending it
-   back as the next question. */
-check("listening waits for the request to finish",
-  /if \(busy \|\| reading \|\| listening \|\| transcribing \|\| restarting\.current\) return;/.test(sheet.body), true);
-check("and for the reply to stop being spoken",
-  /setReading\(window\.speechSynthesis\.speaking\)/.test(sheet.body), true);
+/* ── Half-duplex, and the arithmetic that enforces it ──────────────────────
+   The failure that would make this unusable: opening the microphone while the
+   reply is still playing out of the phone speaker, transcribing it, and
+   sending it back as the next question. The previous version polled
+   `speechSynthesis.speaking` for that, which is false for the entire duration
+   of premium audio — so with an ElevenLabs key configured the guard was not
+   merely weak, it was absent. */
+check("the microphone reopens only after the audio has actually finished",
+  /await handle\.done;/.test(loop.body), true);
+check("which is the one signal that means the same thing for both voices",
+  /const handle = await speakBest\(/.test(loop.body), true);
 /* Two different things were both called `speaking`: the app reading a reply
-   aloud, and the detector hearing a voice. Hands-free is the feature that
-   depends on telling them apart — confusing them is the app transcribing its
-   own voice back as the next question — so they are named apart. */
+   aloud, and the detector hearing a voice. This loop depends on telling them
+   apart, so they are named apart — `phase` for what the app is doing,
+   `hearing` for what the microphone is picking up. */
 check("the app talking and the person talking are named apart",
-  /const \[reading, setReading\]/.test(sheet.body) && /const \[speaking, setSpeaking\]/.test(sheet.body), true);
+  /const \[hearing, setHearing\]/.test(loop.body) && /"speaking"/.test(loop.body), true);
 check("with a beat before reopening, so the speaker's tail is not the next turn",
-  /}, 450\);/.test(sheet.body), true);
-/* busy, speaking and listening settle at different moments; without the guard
-   one gap opens two recorders. */
+  /const REOPEN_DELAY_MS = \d+;/.test(loop.body), true);
+check("and reopening goes through that one delay rather than several",
+  (loop.body.match(/REOPEN_DELAY_MS/g) ?? []).length, 2);
+/* Reopening is attempted from the auto-stop callback, from the speech ending,
+   and from the watchdog; without the guard one gap opens two recorders. */
 check("a guard stops two recorders opening on one gap",
-  /const restarting = useRef\(false\);/.test(sheet.body), true);
+  /if \(!activeRef\.current \|\| recorderRef\.current\) return;/.test(loop.body), true);
 
 /* A turn with no words in it costs a transcription and returns nothing. */
 check("a silent turn is discarded rather than transcribed",
-  /if \(reason === "silent"\) void stop\(\{ discard: true \}\);/.test(sheet.body), true);
-/* Saying "nothing was picked up" every few seconds, hands-free, is its own
-   kind of broken. */
-check("and it does not nag about it while hands-free",
-  /if \(!conversation\) setError\("Nothing was picked up/.test(sheet.body), true);
+  /discard: reason === "silent"/.test(loop.body), true);
+/* Saying "nothing was picked up" every few seconds is its own kind of broken,
+   so an empty turn simply opens the next one. */
+check("and it does not nag about it", /if \(!text\) \{ relisten\(\); return; \}/.test(loop.body), true);
 
-/* A hands-free conversation with a silent partner is not a conversation. */
-check("turning it on turns on reading the reply aloud",
-  /if \(next\) setSpeakReply\(true\);/.test(sheet.body), true);
+/* ── The tap is spent on the thing that has to speak later ─────────────────
+   iOS grants playback to an element inside a gesture, and every reply after
+   the first arrives without one — the audio is a consequence of speaking
+   rather than of touching anything. A `new Audio()` per utterance is therefore
+   audible exactly once, which is a conversation that answers the first
+   question aloud and then goes silent. */
+check("starting the conversation primes audio playback", /primeSpeech\(\);/.test(loop.body), true);
+check("the primer is a real clip rather than an empty header",
+  /data:audio\/wav;base64,/.test(speech.body), true);
+check("and every utterance reuses the element the tap unlocked",
+  /const audio = audioElement\(\);/.test(speech.body), true);
+/* A reused element that accumulates listeners settles every previous
+   utterance's promise when this one ends, which unblocks a microphone that
+   should still be shut. */
+check("its listeners are taken away again on the way out",
+  /stopListening\.abort\(\)/.test(speech.body), true);
+
+/* ── Nothing leaves the loop waiting forever ─────────────────────────────── */
+
+/* A send that failed before it started produces no reply and no error the loop
+   can see. Without this it waits with the microphone shut and the screen
+   saying "thinking" until someone taps out. Armed only while nothing is in
+   flight, so a genuinely slow answer cannot trip it. */
+check("an unanswered turn reopens the microphone rather than stalling",
+  /if \(!active \|\| options\.busy \|\| phase !== "thinking"\) return;/.test(loop.body), true);
+check("on a bounded wait", /const UNANSWERED_MS = \d+_?\d*;/.test(loop.body), true);
+/* Going offline mid-conversation ends it rather than holding a microphone open
+   against a connection that cannot carry the audio anywhere. */
+check("going offline ends the conversation", /if \(active && !options\.online\) stop\(\);/.test(loop.body), true);
+/* An answer that arrives after the conversation was closed must not start
+   playing with nothing left holding a reference to silence it. */
+check("a reply that lands after the end is not played",
+  /if \(cancelled \|\| !activeRef\.current\) \{ handle\.stop\(\); return; \}/.test(loop.body), true);
+/* Opening a conversation in a thread that already has answers in it must not
+   begin by reading the last one aloud. */
+check("it opens by listening, not by reading the thread back",
+  /answeredRef\.current = optionsRef\.current\.reply\?\.id \?\? null;/.test(loop.body), true);
+/* Half a sentence spoken and then a microphone opened over the rest of it. */
+check("and never speaks an answer that is still streaming",
+  /if \(generating\) return null;/.test(shell.body), true);
 
 /* ── Writing for an ear, wired end to end ───────────────────────────────────
    The largest single win on how a spoken answer sounds is not the voice, it is
@@ -249,7 +308,7 @@ const spokenRoute = read("app/api/chat/route.ts");
 
 /* 1. The client can ask for it, and only the spoken path does. */
 check("the request body carries a voice flag", /voice: spoken,/.test(spokenShell.code), true);
-check("the spoken submit path sets it", /requestBody\(text, speakReply\)/.test(spokenShell.code), true);
+check("the spoken submit path sets it", /requestBody\(text, true\)/.test(spokenShell.code), true);
 /* Dictating into the composer produces an answer the person reads; shortening
    that would be a loss. What earns the shorter form is the reply being heard. */
 check("the typed path does not", /body: requestBody\(text\) \}/.test(spokenShell.code), true);

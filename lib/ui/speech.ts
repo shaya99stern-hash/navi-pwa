@@ -80,6 +80,54 @@ export function speak(text: string, language: string): void {
   window.speechSynthesis.speak(utterance);
 }
 
+/**
+ * One audio element for every premium utterance, and the reason it is shared.
+ *
+ * iOS grants playback to an element, not to the page. A `new Audio()` per
+ * utterance is unlocked only if the tap that created it is still on the stack —
+ * true for the read-aloud button, false for every turn of a hands-free
+ * conversation, where the audio is a consequence of speaking rather than of
+ * touching anything. Reusing one element that was played once inside a real
+ * gesture keeps that grant for the rest of the session, which is what makes
+ * turn two audible.
+ */
+let sharedAudio: HTMLAudioElement | null = null;
+
+function audioElement(): HTMLAudioElement {
+  if (!sharedAudio) {
+    sharedAudio = new Audio();
+    sharedAudio.preload = "auto";
+  }
+  return sharedAudio;
+}
+
+/**
+ * Fifteen milliseconds of silence, played to spend a user gesture on the
+ * element that will later speak.
+ *
+ * A zero-sample file is rejected as malformed by some engines, so this is a
+ * real, inaudible clip rather than an empty header.
+ */
+const SILENCE = "data:audio/wav;base64,UklGRgQCAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YeABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+/**
+ * Called from the tap that starts a spoken conversation.
+ *
+ * Never awaited and never reported: a browser that refuses this is one where
+ * the device voice takes over, which is a working configuration rather than a
+ * fault.
+ */
+export function primeSpeech(): void {
+  if (typeof window === "undefined") return;
+  const audio = audioElement();
+  audio.muted = true;
+  audio.src = SILENCE;
+  void audio.play()
+    .then(() => { audio.pause(); audio.currentTime = 0; })
+    .catch(() => {})
+    .finally(() => { audio.muted = false; });
+}
+
 /** A voice that is speaking, and the one thing a caller needs to do to it. */
 export type SpokenHandle = {
   stop: () => void;
@@ -161,12 +209,23 @@ export async function speakBest(text: string, language: string): Promise<SpokenH
     if (!blob.size) return local();
 
     const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+    /* The shared element, so a conversation's second reply plays on the grant
+       its first tap earned. Each utterance gets its own listeners and takes
+       them away again on the way out — a reused element that accumulates them
+       would settle every previous utterance's promise on this one's end. */
+    const audio = audioElement();
+    audio.pause();
+    audio.src = url;
     let settle: () => void = () => {};
     const done = new Promise<void>((resolve) => { settle = resolve; });
-    const finish = () => { URL.revokeObjectURL(url); settle(); };
-    audio.addEventListener("ended", finish, { once: true });
-    audio.addEventListener("error", finish, { once: true });
+    const stopListening = new AbortController();
+    const finish = () => {
+      stopListening.abort();
+      URL.revokeObjectURL(url);
+      settle();
+    };
+    audio.addEventListener("ended", finish, { once: true, signal: stopListening.signal });
+    audio.addEventListener("error", finish, { once: true, signal: stopListening.signal });
 
     try {
       await audio.play();

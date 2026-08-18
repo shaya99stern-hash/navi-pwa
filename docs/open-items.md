@@ -173,7 +173,7 @@ different, smaller piece of work.
 | Task | State |
 |---|---|
 | 8 — Context compaction | **Done in the main path.** The earlier entry here said the module "exists and is used"; an audit found it imported by nothing but its own test, while the chat route carried a comment describing the compaction three lines above code handing `streamText` the raw conversation. Now wired per attempt, budgeted from each provider's own window. `runComposite` still receives the uncompacted conversation — the swarm routes separately and needs its own budget |
-| 10 — One voice mode | **Done.** One recogniser in `lib/ui/speech.ts`, used by the composer and the voice sheet. It was larger than it read, but not in the way expected: the work was not merging two similar things, it was that every difference between the copies was a defect — the composer ignored the voice-language preference, treated a blocked microphone as retryable, and appended interim words to the draft twice |
+| 10 — One voice mode | **Done.** One recorder, used by the composer's dictation and by the spoken conversation (`lib/ui/voice-conversation.ts`; the sheet it replaced is deleted). It was larger than it read, but not in the way expected: the work was not merging two similar things, it was that every difference between the copies was a defect — the composer ignored the voice-language preference, treated a blocked microphone as retryable, and appended interim words to the draft twice |
 | 11 — Remove redundancy | **Done.** The engine picker and "Run quality check" moved to a Diagnostics page behind five taps on the version string |
 | 17 — Settings two-pane at ≥768px | **Done.** One list, drill-down under 768px and a left column at or above it |
 

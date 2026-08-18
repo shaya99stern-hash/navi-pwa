@@ -43,10 +43,10 @@ import { decideLocallyWithSkills } from "@/lib/ai/navi-soul/router";
 import { NAVI_VERSION } from "@/lib/version";
 import { haptic } from "@/lib/ui/haptics";
 import { collectFiles, collectImages } from "@/lib/ui/library";
-import { resolveVoiceLanguage, speak, whenVoicesReady } from "@/lib/ui/speech";
 import { useEdgeSwipe } from "@/lib/ui/use-edge-swipe";
 import { releaseOverlaysForNavigation, useOverlayRoute } from "@/lib/ui/overlay-route";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
+import { useVoiceConversation } from "@/lib/ui/voice-conversation";
 import { ComposerDock } from "./composer-dock";
 import { ConnectorsSheet } from "./connectors-sheet";
 import { FilesScreen } from "./files-screen";
@@ -65,7 +65,6 @@ import { ModeSheet } from "./mode-sheet";
 import { ProjectsSheet } from "./projects-sheet";
 import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { SettingsSheet } from "./settings-sheet";
-import { VoiceModeSheet } from "./voice-mode-sheet";
 
 const MAX_CHATS = 40;
 /**
@@ -262,11 +261,9 @@ export function AppShell({
   const [projectsOpen, setProjectsOpen] = useState(initialLayer === "projects");
   const [connectorsOpen, setConnectorsOpen] = useState(initialLayer === "connectors");
   const [artifactsOpen, setArtifactsOpen] = useState(initialLayer === "artifacts");
-  const [voiceOpen, setVoiceOpen] = useState(initialLayer === "voice");
   /* The chat is the ground state; the library screens sit beside it, not over
      it, so switching back does not have to rebuild the thread. */
   const [view, setView] = useState<ShellView>("chat");
-  const [speakNextReply, setSpeakNextReply] = useState(false);
   const [online, setOnline] = useState(true);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [scrolled, setScrolled] = useState(false);
@@ -283,7 +280,6 @@ export function AppShell({
   const titleRequested = useRef<Set<string>>(new Set());
   const anchoredUserId = useRef<string | null>(null);
   const anchorTop = useRef(0);
-  const priorAssistantId = useRef<string | null>(null);
 
   const openHistory = useCallback(() => setHistoryOpen(true), []);
   /* Concede the left edge when iOS owns it.
@@ -344,7 +340,6 @@ export function AppShell({
   useOverlayRoute({ open: connectorsOpen, onClose: () => setConnectorsOpen(false), path: "/connectors", restore: restorePath });
   useOverlayRoute({ open: projectsOpen, onClose: () => setProjectsOpen(false), path: "/projects", restore: restorePath });
   useOverlayRoute({ open: artifactsOpen, onClose: () => setArtifactsOpen(false), path: "/artifacts", restore: restorePath });
-  useOverlayRoute({ open: voiceOpen, onClose: () => setVoiceOpen(false), path: "/voice", restore: restorePath });
   /* No route of their own — a menu is not a destination worth linking to — but
      back still closes them, which is the half that was actually missing. */
   useOverlayRoute({ open: chatMenuOpen, onClose: () => setChatMenuOpen(false), restore: restorePath });
@@ -867,23 +862,45 @@ export function AppShell({
      granted has lapsed, so the call was skipped and the tick never happened.
      The streaming cursor and the status line are what announce the reply. */
 
+  /**
+   * The newest finished answer, for the spoken conversation to read aloud.
+   *
+   * Null while one is still streaming, which is what keeps the loop from
+   * speaking half a sentence and then reopening the microphone over the rest
+   * of it.
+   */
+  const latestReply = useMemo(() => {
+    if (generating) return null;
+    const latest = [...messages].reverse().find((message) => message.role === "assistant" && messageText(message).trim());
+    return latest ? { id: latest.id, text: messageText(latest) } : null;
+  }, [generating, messages]);
+
+  /**
+   * One tap in the composer and it is a conversation until it is tapped again.
+   *
+   * This replaces a sheet with five controls in it. The read-aloud switch is
+   * gone because a conversation you cannot hear is not one, the hands-free
+   * switch is gone because that is what this is, and the language picker is
+   * gone because Settings already owns that preference and having two of them
+   * meant the answer depended on which screen you last opened.
+   */
+  const conversation = useVoiceConversation({
+    online,
+    busy: generating,
+    language: preferences.voiceLanguage,
+    haptics: preferences.haptics,
+    reply: latestReply,
+    onTurn: (text) => void submitVoiceTranscript(text)
+  });
+
+  /* The manifest shortcut promises "start a voice conversation", so it starts
+     one rather than opening a screen about starting one. */
+  const shortcutHonoured = useRef(false);
   useEffect(() => {
-    if (!speakNextReply || generating || !("speechSynthesis" in window)) return;
-    const latest = [...messages].reverse().find((message) => message.role === "assistant" && messageText(message));
-    if (!latest || latest.id === priorAssistantId.current) return;
-    const text = messageText(latest).replace(/```[\s\S]*?```/g, " Code or generated content is available on screen. ").slice(0, 4_000);
-    if (!text) return;
-    stopSpeaking();
-    /* The same preference the recogniser uses. Reading the legacy key here
-       meant a reply could be spoken in a different language from the one the
-       question was dictated in. */
-    const language = resolveVoiceLanguage(preferences.voiceLanguage);
-    // The voice list loads asynchronously and is usually empty on first use,
-    // which is how apps end up always speaking in the default compact voice.
-    whenVoicesReady(() => speak(text, language));
-    priorAssistantId.current = latest.id;
-    setSpeakNextReply(false);
-  }, [generating, messages, preferences.voiceLanguage, speakNextReply]);
+    if (initialLayer !== "voice" || shortcutHonoured.current) return;
+    shortcutHonoured.current = true;
+    conversation.start();
+  }, [conversation, initialLayer]);
 
   useEffect(() => () => stopSpeaking(), []);
 
@@ -941,8 +958,7 @@ export function AppShell({
   const newChat = useCallback(() => {
     if (generating) stop();
     stopSpeaking();
-    setVoiceOpen(false);
-    setSpeakNextReply(false);
+    conversation.stop();
     setActiveId(createId());
     setMessages([]);
     setDraft("");
@@ -957,15 +973,14 @@ export function AppShell({
        navigated and cancels it. */
     releaseOverlaysForNavigation();
     setHistoryOpen(false);
-    setVoiceOpen(false);
+    conversation.stop();
     router.push("/new");
   }, [clearError, generating, router, setMessages, stop]);
 
   const openChat = useCallback((chat: StoredChat) => {
     if (generating) stop();
     stopSpeaking();
-    setVoiceOpen(false);
-    setSpeakNextReply(false);
+    conversation.stop();
     setActiveId(chat.id);
     setActiveProjectId(chat.projectId ?? null);
     setMessages(chat.messages);
@@ -1230,7 +1245,21 @@ export function AppShell({
     }
   }
 
-  async function submitVoiceTranscript(text: string, speakReply: boolean) {
+  /**
+   * A turn from the spoken conversation.
+   *
+   * The flag it sets is about the answer being *heard*, not about the question
+   * having been spoken: dictating into the composer produces a written answer
+   * someone reads at their own pace, and shortening that would be a loss. This
+   * is the one path where the reply is going into the air, so it is the one
+   * path that asks for the spoken cadence.
+   *
+   * Who reads it aloud is the conversation loop, which is why nothing here
+   * starts any speech. It holds the audio handle, so it is the only thing that
+   * can reliably stop it — and it has to know when the sound ends before it
+   * dares open the microphone again.
+   */
+  async function submitVoiceTranscript(text: string) {
     if (!text.trim() || generating || !online) return;
     clearError();
     setAttachmentError(null);
@@ -1238,19 +1267,10 @@ export function AppShell({
       stage: "gather",
       detail: activeProject ? `Loading ${activeProject.name} project context.` : preferences.tools.web ? "Starting research for your spoken request." : "Preparing your spoken request."
     });
-    const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-    priorAssistantId.current = latestAssistant?.id ?? null;
-    setSpeakNextReply(speakReply);
     try {
       repairRounds.current = 0;
-      /* The one call site that asks for a spoken answer, and the flag is
-         `speakReply` rather than "this came from the microphone": dictating
-         into the composer produces a written answer the person reads, and
-         shortening that would be a loss. What changes the writing is that the
-         reply is going to be heard. */
-      await sendMessage({ text: text.trim() }, { body: requestBody(text, speakReply) });
+      await sendMessage({ text: text.trim() }, { body: requestBody(text, true) });
     } catch (voiceError) {
-      setSpeakNextReply(false);
       setStreamStatus({
         stage: "error",
         detail: voiceError instanceof Error ? voiceError.message : "Could not send the spoken request."
@@ -1288,8 +1308,7 @@ export function AppShell({
   function clearThread() {
     if (generating) stop();
     stopSpeaking();
-    setVoiceOpen(false);
-    setSpeakNextReply(false);
+    conversation.stop();
     setMessages([]);
     setDraft("");
     setPendingFiles([]);
@@ -1324,8 +1343,7 @@ export function AppShell({
     setDraft("");
     setPendingFiles([]);
     setStreamStatus(null);
-    setVoiceOpen(false);
-    setSpeakNextReply(false);
+    conversation.stop();
     setActiveId(createId());
   }
 
@@ -1611,11 +1629,7 @@ export function AppShell({
           haptic("selection", preferences.haptics);
           setEffortSheetOpen(true);
         }}
-        onOpenVoice={() => {
-          setSettingsOpen(false);
-          setVoiceOpen(true);
-          haptic("selection", preferences.haptics);
-        }}
+        conversation={conversation}
         onToggleResearch={toggleResearch}
         onOpenTools={() => {
           setSettingsSection("capabilities");
@@ -1696,18 +1710,6 @@ export function AppShell({
           onEdit={() => editMessage(contextMessage.id, contextMessage.text)}
         />
       ) : null}
-
-      <VoiceModeSheet
-        open={voiceOpen}
-        busy={generating}
-        online={online}
-        haptics={preferences.haptics}
-        voiceLanguage={preferences.voiceLanguage}
-        onVoiceLanguage={(voiceLanguage) => updatePreferences({ ...preferences, voiceLanguage })}
-        onClose={() => setVoiceOpen(false)}
-        onUseTranscript={(text) => setDraft((current) => `${current}${current.trim() ? " " : ""}${text}`)}
-        onSendTranscript={(text, speakReply) => void submitVoiceTranscript(text, speakReply)}
-      />
 
       <ArtifactsSheet
         open={artifactsOpen}
