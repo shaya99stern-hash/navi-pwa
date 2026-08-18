@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { readCredential } from "@/lib/ai/credentials";
 
 /**
  * GitHub OAuth for a PWA that has no server of its own beyond the Vercel Route
@@ -78,8 +79,10 @@ export async function readGithubToken(): Promise<string | undefined> {
   const jar = await cookies();
   const userToken = jar.get(GITHUB_TOKEN_COOKIE)?.value?.trim();
   if (userToken) return userToken;
-  const installToken = process.env.NAVI_GITHUB_TOKEN?.trim()
-    || process.env.GITHUB_TOKEN?.trim()
-    || process.env.GH_TOKEN?.trim();
-  return installToken || undefined;
+  /* The install-wide token, resolved from the one list every other module
+     reads. This used to accept its own three names and miss `GITHUB_PAT` —
+     the name the Settings screen offers first — so a deployment configured
+     the way the app advises had no repository tools while reporting GitHub as
+     connected. */
+  return readCredential("github");
 }

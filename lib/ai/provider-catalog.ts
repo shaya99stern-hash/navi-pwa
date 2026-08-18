@@ -1,5 +1,6 @@
 import { PROVIDERS, providerApiKey } from "./provider-registry";
 import type { ProviderName } from "./types";
+import { credentialNames } from "./credentials";
 
 /**
  * Every service NaviOS knows how to connect itself to.
@@ -210,8 +211,13 @@ const ENV_ALIASES: Record<string, string[]> = {
   EXA_API_KEY: ["EXA_KEY", "EXA_TOKEN"],
   NEXT_PUBLIC_SUPABASE_URL: ["SUPABASE_URL"],
   NEXT_PUBLIC_SUPABASE_ANON_KEY: ["SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_PUBLISHABLE_KEY"],
-  GITHUB_PAT: ["NAVI_GITHUB_TOKEN", "GITHUB_TOKEN"],
-  NAVI_VERCEL_TOKEN: ["VERCEL_API_TOKEN", "VERCEL_TOKEN"]
+  /* Read off the shared lists rather than written out again. These two were
+     the second copy, and they were the copy that disagreed: the catalogue
+     accepted three names for GitHub while the resolver that gates repository
+     tools accepted a different three, so a deployment could be reported as
+     connected with every one of those tools missing. */
+  GITHUB_PAT: [...credentialNames("github")].filter((name) => name !== "GITHUB_PAT"),
+  NAVI_VERCEL_TOKEN: [...credentialNames("vercel")].filter((name) => name !== "NAVI_VERCEL_TOKEN")
 };
 
 /**

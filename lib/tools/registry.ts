@@ -5,6 +5,7 @@ import { buildGitHubWriteTools } from "@/lib/ai/github-write-tools";
 import { buildGoogleTools } from "@/lib/ai/google-tools";
 import { buildConnectorTools, buildProvisioningTools } from "@/lib/ai/connector-tools";
 import { buildEnvironmentTools } from "@/lib/ai/environment-tools";
+import { buildHistoryTools } from "@/lib/ai/history-tools";
 import { buildLearningTools } from "@/lib/ai/learning-tools";
 import { buildReflectionTools } from "@/lib/ai/reflection-tools";
 import { buildSelfUpdateTools, selfUpdateToken } from "@/lib/ai/self-update-tools";
@@ -135,6 +136,18 @@ const GROUPS: Group[] = [
        cheap. */
     name: "environment",
     tools: () => ({}),
+    when: () => true
+  },
+  {
+    /* The same argument as `environment`, aimed at the past instead of the
+       present. Recall already ships four passages into every prompt; this is
+       what lets the model ask for the rest when the question is about
+       something said weeks ago. One schema, always on, because the turns that
+       need it are exactly the ones where the automatic pass came back empty —
+       and an empty automatic pass is indistinguishable, from inside the model,
+       from there being nothing to find. */
+    name: "history",
+    tools: () => buildHistoryTools(),
     when: () => true
   },
   {
@@ -304,6 +317,9 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity, onSource }),
     ...buildEnvironmentTools({ onActivity }),
+    /* No `execute`: the conversations are in IndexedDB on the device, so this
+       one is answered by the client. See `history-tools.ts`. */
+    ...buildHistoryTools(),
     ...(active("learning") ? buildLearningTools({ clerkToken, clerkUserId, onActivity }) : {}),
     ...(active("reflection") ? buildReflectionTools({ clerkToken, clerkUserId, onActivity }) : {}),
     ...(active("self-update") ? buildSelfUpdateTools({ signal, onActivity }) : {}),

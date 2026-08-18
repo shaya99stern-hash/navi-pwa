@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Check, ChevronDown, Link2, LoaderCircle, LockKeyhole, Plus, RefreshCw, ShieldCheck, Sparkles, Trash2, UserRoundCheck, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { ConnectorAccessMode, CustomConnector, CustomConnectorKind, NaviPreferences } from "@/lib/ai/types";
+import { CONNECTOR_KINDS, type ConnectorAccessMode, type CustomConnector, type CustomConnectorKind, type NaviPreferences } from "@/lib/ai/types";
 import { createId } from "@/lib/chat";
 import type { PublicMcpServer } from "@/lib/mcp";
 import { haptic } from "@/lib/ui/haptics";
@@ -101,13 +101,6 @@ type AccountStatus = {
  * The custom-connector types, presented as a drop-down rather than a wall of
  * icons: the list will grow, and a select scales where an icon grid does not.
  */
-const CONNECTOR_KINDS: Array<{ id: CustomConnectorKind; label: string; urlHint: string; needsModel: boolean }> = [
-  { id: "openai", label: "OpenAI-compatible API", urlHint: "https://api.example.com/v1", needsModel: true },
-  { id: "anthropic", label: "Anthropic-compatible API", urlHint: "https://api.anthropic.com", needsModel: true },
-  { id: "supabase", label: "Supabase project", urlHint: "https://xyz.supabase.co", needsModel: false },
-  { id: "mcp", label: "MCP server (HTTPS)", urlHint: "https://mcp.example.com", needsModel: false }
-];
-
 function Switch({ value, label, onChange }: { value: boolean; label: string; onChange: () => void }) {
   return (
     <button type="button" role="switch" aria-checked={value} aria-label={label} onClick={onChange} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${value ? "bg-accent" : "bg-elev-3"}`}>

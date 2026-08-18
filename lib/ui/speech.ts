@@ -111,20 +111,35 @@ function audioElement(): HTMLAudioElement {
 const SILENCE = "data:audio/wav;base64,UklGRgQCAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YeABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
 /**
+ * The priming playback, still settling.
+ *
+ * Held so the first real utterance can wait for it instead of racing it. The
+ * first version did not, and the race silenced the whole feature two ways at
+ * once: `primeSpeech` mutes the element and unmutes it in a `.finally`, so an
+ * utterance starting before that ran played at zero volume; and its `.then`
+ * calls `pause()`, which — arriving after the reply had started on the same
+ * shared element — stopped the reply outright. Neither raises anything. Both
+ * present as an app that listens, thinks, and says nothing.
+ */
+let priming: Promise<void> | null = null;
+
+/**
  * Called from the tap that starts a spoken conversation.
  *
- * Never awaited and never reported: a browser that refuses this is one where
- * the device voice takes over, which is a working configuration rather than a
- * fault.
+ * Never reported: a browser that refuses this is one where the device voice
+ * takes over, which is a working configuration rather than a fault. It is
+ * awaited, though — by `speakBest`, before it touches the same element.
  */
 export function primeSpeech(): void {
   if (typeof window === "undefined") return;
   const audio = audioElement();
   audio.muted = true;
   audio.src = SILENCE;
-  void audio.play()
+  priming = audio.play()
     .then(() => { audio.pause(); audio.currentTime = 0; })
     .catch(() => {})
+    /* Unmuted here and nowhere else, so there is exactly one moment at which
+       the element becomes usable, and `speakBest` waits for it. */
     .finally(() => { audio.muted = false; });
 }
 
@@ -213,8 +228,14 @@ export async function speakBest(text: string, language: string): Promise<SpokenH
        its first tap earned. Each utterance gets its own listeners and takes
        them away again on the way out — a reused element that accumulates them
        would settle every previous utterance's promise on this one's end. */
+    /* Let the priming clip finish before taking the element over. Without this
+       its own `pause()` lands on this utterance and its `muted` flag is still
+       set when this one starts — the two ways a conversation ends up silent. */
+    if (priming) { await priming; priming = null; }
     const audio = audioElement();
     audio.pause();
+    /* Belt and braces: whatever happened before, an utterance is audible. */
+    audio.muted = false;
     audio.src = url;
     let settle: () => void = () => {};
     const done = new Promise<void>((resolve) => { settle = resolve; });
