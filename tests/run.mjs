@@ -31,6 +31,23 @@ if (!files.length) {
   process.exit(1);
 }
 
+/**
+ * How long one test file may take before it is treated as hung.
+ *
+ * `spawnSync` waits forever by default, so a test that never returns takes the
+ * whole suite with it — and CI then sits until the platform's own job limit
+ * kills it hours later, with no output saying which file stopped.
+ *
+ * The suite now contains a test whose entire subject is an infinite loop in the
+ * OpenAPI parser. Guarding against a hang with a test that would itself hang is
+ * a poor trade: a regression should fail in seconds and name the file.
+ *
+ * Generous on purpose. The slowest file here runs in a few seconds, so this is
+ * far above anything a healthy test does and far below anything worth waiting
+ * out.
+ */
+const FILE_TIMEOUT_MS = 120_000;
+
 let failed = 0;
 const summary = [];
 
@@ -42,13 +59,19 @@ for (const file of files) {
     ? ["tsx", "--tsconfig", join(root, "tsconfig.json"), join(here, file)]
     : [join(here, file)];
 
-  const result = spawnSync(command, args, { cwd: root, encoding: "utf8" });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  const result = spawnSync(command, args, { cwd: root, encoding: "utf8", timeout: FILE_TIMEOUT_MS });
+  /* A killed process reports its signal rather than an exit status, and the
+     distinction matters: "this test is wrong" and "this test never finished"
+     send whoever is reading the log to different places. */
+  const timedOut = result.error?.code === "ETIMEDOUT" || result.signal === "SIGTERM";
+  const output = timedOut
+    ? `Timed out after ${FILE_TIMEOUT_MS / 1000}s without finishing.\n\n${result.stdout ?? ""}${result.stderr ?? ""}`
+    : `${result.stdout ?? ""}${result.stderr ?? ""}`;
   const counts = /(\d+)\/(\d+) passed/.exec(output);
-  const ok = result.status === 0;
+  const ok = !timedOut && result.status === 0;
   if (!ok) failed += 1;
 
-  summary.push(`${ok ? "  ok  " : "FAIL  "}${file.padEnd(26)} ${counts ? counts[0] : ""}`);
+  summary.push(`${ok ? "  ok  " : timedOut ? "HUNG  " : "FAIL  "}${file.padEnd(26)} ${counts ? counts[0] : ""}`);
   // A passing file's detail is noise; a failing one is the whole point.
   if (!ok) console.log(`\n─── ${file} ───\n${output.trim()}`);
 }
