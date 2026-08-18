@@ -1,5 +1,7 @@
 import { numberEnvironment, readCatalogCache, timeoutSignal, writeCatalogCache } from "./catalog";
-import { PROVIDERS, providerApiKey } from "./provider-registry";
+import { PROVIDERS, modelsProbe, providerApiKey } from "./provider-registry";
+import { configuredRouteModels } from "./providers";
+import { catalogueModelIds, knownCatalogues, recordCatalogue } from "./route-health";
 import type { ProviderRoute } from "./types";
 
 /**
@@ -243,6 +245,35 @@ export function refreshFreeModels(signal: AbortSignal): void {
   const cached = readCatalogCache<DiscoveredModel[]>(CACHE_KEY);
   if (cached?.fresh) return;
   void discoverFreeModels(signal).catch(() => {});
+}
+
+/**
+ * Learn which of the configured route models each provider actually serves.
+ *
+ * Deliberately unawaited by the request path and deliberately silent about its
+ * own failures, exactly like `refreshFreeModels` above: a catalogue that cannot
+ * be read leaves every route exactly as usable as it was, which is the only
+ * safe direction. See `route-health.ts` for why unknown must not mean dead.
+ *
+ * One request per provider per hour, at most.
+ */
+export function refreshRouteHealth(signal: AbortSignal): void {
+  const configured = configuredRouteModels();
+  if (!configured.length) return;
+  /* Nothing to learn while the last answer is still fresh. */
+  if (Object.keys(knownCatalogues()).length >= configured.length) return;
+
+  void (async () => {
+    await Promise.allSettled(configured.map(async (entry) => {
+      const adapter = PROVIDERS[entry.provider];
+      const key = providerApiKey(adapter);
+      if (!key) return;
+      const probe = modelsProbe(adapter, key);
+      const response = await fetch(probe.url, { headers: probe.headers, signal, cache: "no-store" });
+      if (!response.ok) return;
+      recordCatalogue(entry.provider, catalogueModelIds(await response.json()));
+    }));
+  })().catch(() => {});
 }
 
 /** Awaited discovery, for diagnostics and tests rather than the request path. */

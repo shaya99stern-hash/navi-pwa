@@ -32,7 +32,7 @@ import { IMAGE_ENGINES, generateNaviImage, type ImageAttachment } from "@/lib/ai
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { classifyTask, createProviderModel, engineName, fallbackRoutes, frontierConfigured, getProviderAvailability, lastResortRoute, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane, type ProviderAvailability } from "@/lib/ai/providers";
 import { markProviderFailure, markProviderSuccess, orderRoutesByHealth } from "@/lib/ai/provider-health";
-import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
+import { cachedRoute, refreshFreeModels, refreshRouteHealth } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { getRequestClerkSessionToken, getRequestClerkUserId } from "@/lib/auth/session";
@@ -1777,6 +1777,13 @@ export async function POST(request: Request): Promise<Response> {
          catalogue lookup must never sit between a person pressing send and the
          first token arriving. */
       refreshFreeModels(request.signal);
+      /* And learn which of the configured route models each provider will
+         actually answer to. Same discipline: not awaited, silent on failure,
+         and only ever used to *remove* a route already certain to 404. A
+         credential that works has never proved the model behind it exists, and
+         nothing on this path checked — so a retired or misspelled id degraded
+         every turn that reached for it, invisibly. */
+      refreshRouteHealth(request.signal);
 
       /* The one place the app is allowed to spend money, and it asks
          permission first. `readSpend` treats an unreadable ledger as exhausted,
