@@ -74,6 +74,20 @@ export function ArtifactFrame({ payload, theme, haptics }: { payload: ArtifactPa
         });
       }
       if (data.type === "artifact:interaction") haptic("selection", haptics);
+      /* The layout audit, on its way to the next turn about this artifact.
+         Dispatched as a window event rather than threaded up through props:
+         this component renders from inside the markdown renderer, several
+         layers below anything that talks to the model, and `navi:edit-artifact`
+         above already established that seam for exactly this reason.
+         Nothing is shown to the user. These are measurements for the reviewer —
+         "488px of dead space below the content" is actionable where "looks
+         empty" is not. */
+      if (data.type === "artifact:audit" && Array.isArray((data as { findings?: unknown }).findings)) {
+        const audit = data as unknown as { findings: string[]; content: number; viewport: number };
+        window.dispatchEvent(new CustomEvent("navi:artifact-audit", {
+          detail: { id: payload.id, title: payload.title, findings: audit.findings, content: audit.content, viewport: audit.viewport }
+        }));
+      }
     }
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
