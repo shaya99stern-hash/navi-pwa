@@ -1,6 +1,7 @@
 /* PATH: lib/ai/navi-soul/orchestrator.ts  — NEW FILE, copy verbatim. */
 
 import {
+  baseModelId,
   classifyTask,
   engineName,
   fallbackRoutes,
@@ -11,6 +12,7 @@ import {
   type Lane,
   type ProviderAvailability
 } from "../providers";
+import { modelResolves } from "../route-health";
 import { orderRoutesByHealth } from "../provider-health";
 import { needsOrchestrationKnowledge } from "../orchestration-knowledge";
 import type { ModelPreset, ProviderRoute, ToolPolicy } from "../types";
@@ -205,10 +207,12 @@ export function planTurn(context: TurnContext): TurnPlan {
   /* Health last, over the whole line: a cooling primary is demoted behind
      healthy alternates but never dropped — if everything is cooling,
      everything is still tried, in the original order. */
-  const ordered = orderRoutesByHealth([
-    primary,
-    ...fallbackRoutes({ primary, availability: context.availability, complex: context.complex })
-  ]);
+  const ordered = orderRoutesByHealth(
+    withoutDeadModels([
+      primary,
+      ...fallbackRoutes({ primary, availability: context.availability, complex: context.complex })
+    ])
+  );
 
   const promptBlocks: string[] = [];
   if (needsOrchestrationKnowledge(context.request, context.effort)) promptBlocks.push("orchestration-knowledge");
@@ -226,6 +230,32 @@ export function planTurn(context: TurnContext): TurnPlan {
     promptBlocks,
     wantsFreshInformation: wantsFreshInformation(context.request) && context.tools.web
   };
+}
+
+/**
+ * Drop routes whose model the provider has told us it does not serve.
+ *
+ * Health ordering already demotes a *cooling* provider — one whose recent
+ * requests failed — but a route pointing at a model that does not exist is not
+ * cooling, it is wrong. Every request to it 404s, the failure is swallowed by
+ * design, and the turn quietly degrades to whatever answers next. The user
+ * experiences that as an app that is worse than it should be, with nothing
+ * anywhere saying why.
+ *
+ * Only a confirmed `false` removes anything. `null` — nobody has looked yet,
+ * the listing could not be read, the entry went stale — leaves the route
+ * exactly where it was, because treating "no evidence" as "dead" would let one
+ * provider's listing endpoint having a bad afternoon disable every route it
+ * serves.
+ *
+ * And if that would empty the list, the original is kept. A turn answered by a
+ * route that is probably dead still beats a turn with nowhere to go: the
+ * failover below is what this app has always relied on, and this is meant to
+ * spare it work rather than to replace it.
+ */
+function withoutDeadModels(routes: ProviderRoute[]): ProviderRoute[] {
+  const alive = routes.filter((route) => modelResolves(route.provider, baseModelId(route.model)) !== false);
+  return alive.length ? alive : routes;
 }
 
 /** One log line per plan, for the person reading runtime logs mid-incident. */
