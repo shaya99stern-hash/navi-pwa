@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import type { ArtifactPayload } from "@/lib/ai/types";
 import { validateGeneratedImagePayload } from "@/lib/security/generated-images";
 import { validateGeneratedAudioPayload } from "@/lib/security/generated-audio";
-import { isArtifactFenceLanguage, looksLikeArtifactFence, recoverArtifactPayload } from "@/lib/security/artifacts";
+import { artifactFenceBody, recoverArtifactPayload } from "@/lib/security/artifacts";
 import { ArtifactFrame } from "./artifact-frame";
 import { CodeBlock } from "./code-block";
 import { parseSkillMarkdown, type Playbook } from "@/lib/playbooks";
@@ -91,12 +91,16 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ text, theme, ha
 
           /* The canonical fence always renders. An aliased fence — `artifact`,
              `react-component` — renders only when its body really is a
-             payload, so a snippet someone labelled that way stays code. */
-          if (language === "navi-artifact" || (isArtifactFenceLanguage(language) && looksLikeArtifactFence(value))) {
+             payload, so a snippet someone labelled that way stays code. And an
+             *unlabelled* fence whose first line is the label renders too: that
+             is the near-miss that showed a finished kitchen as a wall of JSON
+             with the word `navi-artifact` sitting on top of it. */
+          const artifactBody = artifactFenceBody(language, value);
+          if (artifactBody !== null) {
             /* Salvage-first: strict validation, then repair of sloppy JSON,
                aliased kinds, and raw markup. Saved history full of older
                near-miss payloads renders too, instead of erroring forever. */
-            const recovered = recoverArtifactPayload(value.trim());
+            const recovered = recoverArtifactPayload(artifactBody.trim());
             if (recovered.ok) return <ArtifactFrame payload={recovered.payload} theme={theme} haptics={haptics} />;
             return <div className="my-3 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.8125rem]/[1.125rem] text-primary">This artifact could not be rendered: {recovered.error}</div>;
           }
