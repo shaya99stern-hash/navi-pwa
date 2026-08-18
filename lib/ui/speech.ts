@@ -133,14 +133,27 @@ let priming: Promise<void> | null = null;
 export function primeSpeech(): void {
   if (typeof window === "undefined") return;
   const audio = audioElement();
-  audio.muted = true;
+  /**
+   * Unmuted, and that is the entire point.
+   *
+   * The first version muted this clip to keep it inaudible, which is precisely
+   * what stopped it working. iOS permits muted playback with no gesture at all,
+   * so a muted `play()` neither spends nor earns user activation — the element
+   * came out of it with exactly the rights it went in with, and every later
+   * `play()` of real audio was refused. The app then fell back to the device
+   * voice and sounded like a robot while a paid-for voice sat one rejected
+   * promise away, reporting nothing.
+   *
+   * It does not need muting. `SILENCE` is digital silence — every sample is
+   * zero — so this is an audible playback attempt that happens to make no
+   * sound, which is what the grant is given for.
+   */
+  audio.muted = false;
+  audio.volume = 1;
   audio.src = SILENCE;
   priming = audio.play()
     .then(() => { audio.pause(); audio.currentTime = 0; })
-    .catch(() => {})
-    /* Unmuted here and nowhere else, so there is exactly one moment at which
-       the element becomes usable, and `speakBest` waits for it. */
-    .finally(() => { audio.muted = false; });
+    .catch(() => {});
 
   /**
    * The device voice needs its own unlock, and it is the one most likely to be

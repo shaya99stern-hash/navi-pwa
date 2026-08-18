@@ -181,5 +181,27 @@ check("transcription is reported from the ladder it actually walks",
 check("rather than from a hardcoded token name",
   /Voice transcription: \$\{providerApiKey\(PROVIDERS\.huggingface\)/.test(environment), false);
 
+/* ── Muting the primer was what stopped it working ──────────────────────────
+   Reported from the device, in the app's own words: "Answering in this
+   device's voice — this device refused to play the audio." So ElevenLabs was
+   returning audio and iOS was throwing it away.
+
+   The cause was the priming clip, which was muted to keep it inaudible. iOS
+   permits muted playback with no gesture at all, so a muted `play()` neither
+   spends nor earns user activation — the element came out of the tap with
+   exactly the rights it went in with, and every later `play()` of real audio
+   was refused. The app fell back to the device voice and sounded like a robot
+   while a paid-for voice sat one rejected promise away.
+
+   It never needed muting. `SILENCE` is digital silence, every sample zero, so
+   it is an audible playback attempt that happens to make no sound — which is
+   what the grant is given for. */
+
+check("the priming clip is not muted", /audio\.muted = false;\n  audio\.volume = 1;\n  audio\.src = SILENCE;/.test(speech), true);
+check("and nothing mutes it afterwards either", /audio\.muted = true/.test(speech), false);
+/* The clip has to be genuinely silent, since it is now genuinely audible. */
+check("the primer is real silence rather than a muted sound",
+  /`SILENCE` is digital silence/.test(speech), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
