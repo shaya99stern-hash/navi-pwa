@@ -48,6 +48,7 @@ import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { historyInstruction } from "@/lib/ai/history-tools";
 import { withoutReasoning } from "@/lib/ai/replay";
+import { complexity, type Effort } from "@/lib/ai/question-difficulty";
 import { parseCapabilities } from "@/lib/ai/capabilities/parse";
 import { activeGroups, buildToolset, type ToolsetContext } from "@/lib/tools/registry";
 import { detectRepo, retrieveFiles } from "@/lib/ai/repo-retrieval";
@@ -259,7 +260,6 @@ type ProjectContextInput = {
 
 type RateBucket = { count: number; resetAt: number };
 type FilePart = { mediaType?: string; url?: string; filename?: string };
-type Effort = "normal" | "complex" | "extreme";
 
 const REQUEST_WINDOW_MS = 60_000;
 /**
@@ -487,12 +487,7 @@ function validateFiles(messages: UIMessage[]): string | null {
   return totalEstimatedBytes > 10_000_000 ? "Combined attachments exceed the 10 MB request limit." : null;
 }
 
-function complexity(text: string): Effort {
-  const extreme = text.length > 1_800 || /\b(exhaustive|deep audit|production-ready|entire codebase|long-horizon|multi-agent|research report|principal architect)\b/i.test(text);
-  if (extreme) return "extreme";
-  const complex = text.length > 650 || /\b(architecture|audit|analy[sz]e|debug|proof|strategy|compare|research|legal|financial|medical|typescript|javascript|react|next\.?js|python|sql|multi-step|comprehensive)\b/i.test(text);
-  return complex ? "complex" : "normal";
-}
+
 
 /**
  * What Soul is actually being asked for.

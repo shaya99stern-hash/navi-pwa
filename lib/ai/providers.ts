@@ -496,6 +496,15 @@ export function routeForLane(options: {
   if (lane === 2) {
     if (availability.gemini) return ROUTES.geminiSynthesis;
     if (availability.mistral) return ROUTES.mistralBalanced;
+    /* Rather than nothing. Lane 2 used to end here, so a deployment with a
+       reasoning provider configured and neither of the two balanced ones fell
+       out of lane selection entirely and was served by `selectDirectRoute`'s
+       generic ladder instead — a weaker answer chosen because the *balanced*
+       shelf was empty, not because nothing better existed. Reaching for a
+       stronger model when the right-sized one is absent is the correct
+       direction to fail in. */
+    if (availability.cerebras) return ROUTES.cerebrasLarge;
+    if (availability.groq) return ROUTES.groqReasoning;
     return null;
   }
 
