@@ -104,6 +104,78 @@ export function speak(text: string, language: string, rate = 1): void {
  */
 let sharedAudio: HTMLAudioElement | null = null;
 
+/**
+ * Why playback was refused, in the words of the thing that refused it.
+ *
+ * Every failure here reported "this device refused to play the audio", which
+ * is true of four quite different problems and actionable for none of them.
+ * The owner saw that line while being told, in the same breath, that the voice
+ * service was configured and healthy — and the honest answer, that this device
+ * would not play what had already been fetched, was sitting in an error name
+ * nothing looked at.
+ *
+ * The pattern is the one that has worked every time in this app: a failure that
+ * can describe itself gets fixed in minutes; one that cannot gets chased for
+ * days.
+ */
+/**
+ * Why the server declined to speak, in its own words rather than a guess.
+ *
+ * Mirrors `TtsRefusal` in `lib/ai/voice/tts.ts`. An unknown value is carried
+ * through rather than flattened, because a reason this file has not been
+ * taught is still more useful than "something went wrong" — and it names the
+ * gap in exactly the place someone would look to close it.
+ */
+function declinedBecause(reason: string | null): string {
+  switch (reason) {
+    case "unconfigured":
+      return "the premium voice is not configured — it needs both ELEVENLABS_API_KEY and NAVI_TTS_VOICE_ID";
+    case "budget-exhausted":
+      return "the premium voice has used its whole monthly character allowance";
+    case "ledger-unreadable":
+      return "the spend ledger could not be read, so premium speech is being treated as spent";
+    case "too-slow":
+      return "the premium voice did not start in time, so this device's voice answered instead";
+    case "provider-failed":
+      return "the speech service refused the request — the key may be expired or lack permission";
+    case "too-long":
+      return "this reply was too long to speak in the premium voice";
+    case "empty":
+      return "there was nothing to say";
+    default:
+      return `the premium voice declined${reason ? ` (${reason})` : " without saying why"}`;
+  }
+}
+
+function refusalReason(name: string): string {
+  if (name === "NotAllowedError") {
+    return "this device would not play audio without a fresh tap — the permission earned when the conversation started was not held";
+  }
+  if (name === "NotSupportedError") {
+    return "this device cannot play the audio format the voice service returned";
+  }
+  if (name === "AbortError") return "playback was interrupted before it could start";
+  return `this device refused to play the audio${name ? ` (${name})` : ""}`;
+}
+
+/**
+ * Wait for the element to have enough data to start, briefly.
+ *
+ * Bounded because this sits between a person finishing a sentence and hearing
+ * an answer: a device that is not ready within a moment is one whose reply
+ * should come in its own voice now rather than the better voice later.
+ */
+function ready(audio: HTMLAudioElement): Promise<boolean> {
+  if (audio.readyState >= 3) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const stop = new AbortController();
+    const settle = (value: boolean) => { stop.abort(); resolve(value); };
+    audio.addEventListener("canplay", () => settle(true), { once: true, signal: stop.signal });
+    audio.addEventListener("error", () => settle(false), { once: true, signal: stop.signal });
+    window.setTimeout(() => settle(false), 1_500);
+  });
+}
+
 function audioElement(): HTMLAudioElement {
   if (!sharedAudio) {
     sharedAudio = new Audio();
@@ -296,12 +368,16 @@ export async function speakBest(text: string, language: string, rate = 1): Promi
          both engines rather than only the fallback. */
       body: JSON.stringify({ text, rate })
     });
-    /* 204 is the server saying "use the local voice" — unconfigured, over
-       budget, or slower than waiting for it was worth. */
     /* 204 is the server saying "use the local voice" and is not a fault — but
-       it is four different situations wearing one status, and the person
-       hearing the wrong voice deserves to know which. */
-    if (response.status === 204) return local("the premium voice is unconfigured, over its budget, or was too slow");
+       it is seven different situations wearing one status, and the person
+       hearing the wrong voice deserves to know which.
+
+       The reason has been travelling in `X-Navi-Speech` since the route was
+       written, and nothing here read it: the client guessed a three-way list
+       aloud — "unconfigured, over its budget, or was too slow" — while the
+       server knew the answer exactly. Two rounds of this were spent trying to
+       tell those three apart from the outside. */
+    if (response.status === 204) return local(declinedBecause(response.headers.get("X-Navi-Speech")));
     if (response.status !== 200 || !response.body) return local(`the speech service answered ${response.status}`);
 
     const blob = await response.blob();
@@ -334,12 +410,22 @@ export async function speakBest(text: string, language: string, rate = 1): Promi
 
     try {
       await audio.play();
-    } catch {
-      /* Playback refused — almost always the gesture requirement on iOS when
-         this was reached without one. The device voice is subject to the same
-         rule but fails more gracefully, so it is still the better answer. */
-      finish();
-      return local("this device refused to play the audio");
+    } catch (error) {
+      const name = error instanceof Error ? error.name : "";
+      /* An abort is not a refusal. Assigning `src` above cancels any load
+         already in flight, and `play()` rejects with `AbortError` — the device
+         was willing and the request was interrupted. Waiting for the element to
+         be ready and asking once more is the standard remedy, and it costs one
+         event. Retried only for this name: retrying a genuine refusal just
+         fails twice. */
+      const retried = name === "AbortError" && await ready(audio)
+        ? await audio.play().then(() => true).catch(() => false)
+        : false;
+
+      if (!retried) {
+        finish();
+        return local(refusalReason(name));
+      }
     }
 
     return {

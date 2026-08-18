@@ -3,7 +3,7 @@
 import { FileText, Shapes, X } from "lucide-react";
 import type { StoredChat } from "@/lib/ai/types";
 import { messageText } from "@/lib/chat";
-import { isArtifactFenceLanguage, looksLikeArtifactFence, recoverArtifactPayload } from "@/lib/security/artifacts";
+import { artifactFenceBody, recoverArtifactPayload } from "@/lib/security/artifacts";
 import { haptic } from "@/lib/ui/haptics";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
@@ -22,9 +22,12 @@ function collectArtifacts(chats: StoredChat[]): Artifact[] {
     chat.messages.flatMap((message) =>
       [...messageText(message).matchAll(/```([\w-]*)\s*\n([\s\S]*?)```/g)].flatMap((match, index) => {
         const [, language = "", body = ""] = match;
-        if (!isArtifactFenceLanguage(language)) return [];
-        if (language.toLowerCase() !== "navi-artifact" && !looksLikeArtifactFence(body)) return [];
-        const recovered = recoverArtifactPayload(body);
+        /* The same decision the renderer makes, from the same function. Two
+           places asking "is this an artifact?" in two different ways is how a
+           thing appears in the thread and not in this list. */
+        const payload = artifactFenceBody(language, body);
+        if (payload === null) return [];
+        const recovered = recoverArtifactPayload(payload);
         if (!recovered.ok) return [];
         return [{
           key: `${chat.id}-${recovered.payload.id || index}`,

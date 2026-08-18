@@ -583,6 +583,24 @@ export function AppShell({
     return () => window.removeEventListener("navi:artifact-audit", receive);
   }, []);
 
+  /**
+   * Which voice actually spoke last, and why it was not the premium one.
+   *
+   * A ref rather than state, and declared here rather than beside the
+   * conversation hook, because `requestBody` closes over what is in scope where
+   * it is defined and the hook is set up much further down. Nothing re-renders
+   * on this changing; it only needs to be readable at send time.
+   *
+   * The reason this exists at all: asked "isn't it supposed to be using the
+   * Eleven Labs voice?", the model had no way to know which voice had spoken.
+   * It answered by inventing an architecture — that premium speech was "only
+   * for reading aloud long passages, not the chat voice" — while the app's own
+   * status line, one inch below the answer, read "this device refused to play
+   * the audio". The app knew. The model could not see it, so it made something
+   * up that fit.
+   */
+  const lastVoiceRef = useRef<{ engine: string; why: string } | null>(null);
+
   const requestBody = useCallback((question?: string, spoken = false) => ({
     mode: preferences.mode,
     /* Whether this answer is going to be *heard* rather than read.
@@ -593,6 +611,11 @@ export function AppShell({
        report aloud is the single thing that makes a premium voice still sound
        like a machine. */
     voice: spoken,
+    /* What happened the last time this app tried to speak. Sent so a question
+       about the voice is answered from what occurred rather than from what the
+       configuration implies — those disagreed, and the configuration is the
+       more convincing of the two. */
+    spokenBy: lastVoiceRef.current ?? undefined,
     /* Only when something was actually wrong. A clean artifact has nothing
        worth spending prompt on, and sending "no problems found" every turn
        trains the model to ignore the field. */
@@ -974,6 +997,13 @@ export function AppShell({
     failedAt: turnFailedAt,
     onTurn: (text) => void submitVoiceTranscript(text)
   });
+
+  /* Kept in step with the hook that owns it. An effect rather than a write
+     inside the hook, so the conversation loop stays unaware that a request body
+     exists and this stays the only place the two meet. */
+  useEffect(() => {
+    lastVoiceRef.current = conversation.voice;
+  }, [conversation.voice]);
 
   /* The manifest shortcut promises "start a voice conversation", so it starts
      one rather than opening a screen about starting one. */

@@ -49,11 +49,26 @@ const MAX_UTTERANCE_CHARS = 800;
 /**
  * How long to wait for the first audio byte before giving up on it.
  *
- * Time-to-first-audio is the whole experience in a conversational loop. A
- * premium voice that arrives two seconds late is worse than an ordinary one
- * that arrives now, so slowness falls back rather than being waited out.
+ * Time-to-first-audio is the whole experience in a conversational loop, so the
+ * original reasoning was that a premium voice arriving two seconds late is
+ * worse than an ordinary one arriving now.
+ *
+ * That is true, and it left out the case that actually happened: a premium
+ * voice arriving *never*. At 2.5 seconds an edge function's cold start plus the
+ * vendor's own time-to-first-byte exceeded the deadline often enough that the
+ * owner never once heard the voice they had chosen and paid attention to
+ * selecting — and because the fallback spends nothing, the ledger stayed at
+ * full allowance, which the app then reported as health.
+ *
+ * Six seconds is still bounded and still falls back rather than hanging, but it
+ * is on the other side of the line: a beat of silence before the right voice
+ * beats the wrong voice arriving promptly every single time. Tunable, because
+ * the right value depends on a region and a network this code cannot see.
  */
-const FIRST_BYTE_TIMEOUT_MS = 2_500;
+const FIRST_BYTE_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.NAVI_TTS_FIRST_BYTE_MS);
+  return Number.isFinite(raw) && raw >= 500 ? Math.floor(raw) : 6_000;
+})();
 
 export type TtsRefusal =
   | "unconfigured"
@@ -72,8 +87,42 @@ function apiKey(): string | undefined {
   return process.env.ELEVENLABS_API_KEY?.trim() || undefined;
 }
 
+/** The voice to speak in. Without one, every synthesis call refuses. */
+function voiceId(): string | undefined {
+  return process.env.NAVI_TTS_VOICE_ID?.trim() || undefined;
+}
+
+/**
+ * Whether premium speech can actually happen — not whether a key exists.
+ *
+ * This checked the API key alone, while `synthesizeSpeech` refuses without a
+ * voice id as well. A deployment with the key and no voice therefore reported
+ * "Premium speaking voice: configured" through `inspect_environment` while
+ * every single utterance fell back to the device voice.
+ *
+ * The owner hit exactly that and was told, in the app's own words, that Eleven
+ * Labs "is configured and has its full monthly quota available". Both halves
+ * were true and the conclusion was wrong: a full quota after weeks of use is
+ * evidence that nothing has *ever* been synthesised, which is the opposite of
+ * health. The app was holding the proof of its own failure and reporting it as
+ * a clean bill.
+ */
 export function ttsConfigured(): boolean {
-  return Boolean(apiKey());
+  return Boolean(apiKey() && voiceId());
+}
+
+/**
+ * What is missing, named, when premium speech cannot run.
+ *
+ * Empty when it can. Separate from the boolean because "not configured" sends
+ * someone to look at the wrong variable half the time, and this is the exact
+ * question the owner asked and got an invented answer to.
+ */
+export function ttsMissing(): string[] {
+  const missing: string[] = [];
+  if (!apiKey()) missing.push("ELEVENLABS_API_KEY");
+  if (!voiceId()) missing.push("NAVI_TTS_VOICE_ID");
+  return missing;
 }
 
 /** Characters allowed per calendar month. Zero disables premium speech. */
@@ -173,8 +222,8 @@ export async function synthesizeSpeech(options: {
     return { ok: false, reason: "budget-exhausted", detail: `${used} of ${budget} characters used this month.` };
   }
 
-  const voiceId = process.env.NAVI_TTS_VOICE_ID?.trim() || "";
-  if (!voiceId) return { ok: false, reason: "unconfigured", detail: "NAVI_TTS_VOICE_ID is not set." };
+  const voice = voiceId();
+  if (!voice) return { ok: false, reason: "unconfigured", detail: "NAVI_TTS_VOICE_ID is not set." };
 
   /* Two aborts, deliberately: the caller's, which cancels the whole turn, and
      ours, which gives up on a slow start without touching the turn. */
@@ -185,7 +234,7 @@ export async function synthesizeSpeech(options: {
 
   try {
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}/stream`,
       {
         method: "POST",
         headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },

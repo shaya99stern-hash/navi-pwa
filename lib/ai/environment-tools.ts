@@ -7,7 +7,7 @@ import { hasWebSearch, searchProviderName } from "./web-tools";
 import { selfUpdateRepo, selfUpdateToken } from "./self-update-tools";
 import { describeProbe, planProbe, runProbe } from "./service-probe";
 import { transcriptionCandidates } from "./voice/transcription-models";
-import { readTtsUsage, ttsConfigured } from "./voice/tts";
+import { readTtsUsage, ttsConfigured, ttsMissing } from "./voice/tts";
 
 /**
  * Navi Soul finding out what it can actually do, right now.
@@ -82,6 +82,44 @@ export type AccountConnections = {
   googleOAuthAvailable?: boolean;
 };
 
+/**
+ * The premium voice, in the three states it can actually be in.
+ *
+ * Not configured at all is a working deployment: the device's own voice
+ * answers, and calling that a fault sends someone to fix something that is not
+ * broken. *Half* configured is a different matter — the key without the voice
+ * id, or the reverse, means somebody meant to enable premium speech and it has
+ * never once run. Collapsing those two into "not configured" loses the only
+ * one worth acting on.
+ *
+ * Both are required because `synthesizeSpeech` refuses without either: the key
+ * buys the audio, the voice id says which voice to use.
+ */
+function premiumVoiceState(usage: { used: number; budget: number; remaining: number; durable: boolean }): string {
+  /* `ttsConfigured` decides, rather than this re-deriving it from the same
+     parts: two definitions of "configured" is how the previous version came to
+     disagree with `synthesizeSpeech` about whether the voice could run. */
+  if (ttsConfigured()) {
+    const ledger = usage.durable ? "" : " (the ledger is in memory only, so this resets when the deployment restarts)";
+    /* A full allowance is not good news. Nothing has been spent because nothing
+       has succeeded, and reading that as health is the mistake this exists to
+       stop: the owner was told the voice "is configured and has its full
+       monthly quota available" while listening to the device voice say it. */
+    const untouched = usage.used === 0
+      ? ". No characters have been spent at all — on a deployment that has been speaking, that means no premium audio has ever been produced, so check the credential with `test_service` rather than reading a full allowance as health"
+      : "";
+    return `configured; ${usage.remaining} of ${usage.budget} characters left this month${ledger}${untouched}`;
+  }
+
+  const missing = ttsMissing();
+  if (missing.length > 1) {
+    return "not configured — the device's own voice is used, which is a working configuration and not a fault. Enabling it needs both ELEVENLABS_API_KEY and NAVI_TTS_VOICE_ID";
+  }
+  /* One missing is the case worth acting on, and the only one left: this is
+     reached only when `ttsConfigured` said no, so something is absent. */
+  return `half configured, and this one IS a fault — ${missing[0]} is not set, so every attempt refuses and every reply is spoken in the device's own voice. Both ELEVENLABS_API_KEY and NAVI_TTS_VOICE_ID are required`;
+}
+
 /** One line per account, keeping "you did not connect it" apart from "it cannot be connected". */
 function describeAccount(options: {
   label: string;
@@ -152,9 +190,12 @@ export function buildEnvironmentTools({ onActivity = () => {}, connections = {},
              required reading a credential and a ledger that no tool exposed —
              so the answer was a guess, every time, for as long as the feature
              has existed. */
-          `Premium speaking voice: ${ttsConfigured()
-            ? `configured; ${voice.remaining} of ${voice.budget} characters left this month${voice.durable ? "" : " (the ledger is in memory only, so this resets when the deployment restarts)"}`
-            : "not configured — needs ELEVENLABS_API_KEY. The device's own voice is used instead, which is a working configuration and not a fault"}.`,
+          /* Two variables, both required, named separately when either is
+             absent. This said "configured" on the key alone — so a deployment
+             with no voice id reported a working premium voice while every
+             utterance fell back to the device, and the owner was told the
+             feature was fine while listening to the proof that it was not. */
+          `Premium speaking voice: ${premiumVoiceState(voice)}.`,
           /* This said commits "deploy automatically". That was true until
              self-edits were moved onto a branch behind a pull request, and then
              it was a false promise from the one tool the prompt calls the

@@ -59,7 +59,56 @@ check("a reply arriving after the end is still stopped",
   /if \(cancelled \|\| !activeRef\.current\) \{ handle\.stop\(\); return; \}/.test(source), true);
 check("and the microphone still waits for the audio to finish",
   /await handle\.done;/.test(source), true);
-check("before listening again", /await handle\.done;[\s\S]{0,120}relisten\(\);/.test(source), true);
+check("before listening again", /await handle\.done;[\s\S]{0,400}relisten\(/.test(source), true);
+
+/* ── Talking over it ─────────────────────────────────────────────────────────
+   Half-duplex made one thing impossible that every real conversation allows:
+   "when it talks back to me ... it doesn't let me interrupt by talking. which
+   it should." Being unable to stop something that has misunderstood you is the
+   difference between talking to it and waiting for it. */
+
+const bargeIn = readFileSync(join(process.cwd(), "lib/ui/barge-in.ts"), "utf8");
+check("the loop listens while it speaks", /await watchForInterruption\(\{/.test(source), true);
+/* Armed after playback starts, so the microphone is never opened between
+   earning the playback grant and using it. */
+check("armed only once the audio is playing",
+  /spokenRef\.current = handle;[\s\S]{0,600}watchForInterruption/.test(source), true);
+check("and it stops mid-sentence rather than finishing the thought",
+  /interrupted = true;[\s\S]{0,300}handle\.stop\(\);/.test(source), true);
+check("the watcher is released either way", /await handle\.done;\n {6}watch\.stop\(\);/.test(source), true);
+/* The pause before reopening exists to let a speaker finish breathing out.
+   Someone who just talked over the reply is already mid-sentence. */
+check("an interrupted turn reopens the microphone without the pause",
+  /relisten\(interrupted \? 0 : undefined\)/.test(source), true);
+
+/* Hearing itself is the obvious failure. The floor is measured from the reply's
+   own audio leaking back rather than guessed at, because how loud a phone is
+   depends on the phone. */
+check("the threshold is calibrated from what leaks back",
+  /floor = Math\.max\(floor, level\);/.test(bargeIn), true);
+check("and a voice must be sustained, not a syllable",
+  /Date\.now\(\) - aboveSince >= \(options\.holdMs \?\? HOLD_MS\)/.test(bargeIn), true);
+check("echo cancellation is asked for", /echoCancellation: true/.test(bargeIn), true);
+/* Every failure leaves the conversation exactly as it is today. Losing the
+   ability to interrupt is a far smaller harm than a loop that breaks, and this
+   runs on a device none of it can be tested against from here. */
+check("every failure returns a watcher that does nothing",
+  (bargeIn.match(/return INERT;/g) ?? []).length >= 4, true);
+/* Against the code rather than the prose — the doc comment explaining that it
+   records nothing has to be able to say so. Three assertions in this session
+   have now failed on their own documentation; negative checks read the code. */
+const bargeInCode = bargeIn.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+check("and it never records anything",
+  /MediaRecorder|upload|transcri/i.test(bargeInCode), false);
+
+/* ── Saying the same thing twice ─────────────────────────────────────────────
+   A turn that fails and is retried produces a new message carrying the same
+   sentence, and the id check alone let it be read out again — worst exactly
+   when it is least wanted, after something has already gone wrong. */
+check("the same sentence is not read out twice",
+  /words === spokenWordsRef\.current/.test(source), true);
+check("and the repeat is skipped rather than re-spoken",
+  /answeredRef\.current = reply\.id; relisten\(\); return;/.test(source), true);
 
 /* Effects that only *read* the phase are correct to depend on it — the level
    meter has to restart when listening starts, and the unanswered-turn timer has
@@ -103,13 +152,36 @@ check("and why it was not the premium one", /why: string;/.test(speech), true);
 /* Every exit gets its own words. A shared "could not speak" would put us back
    where we started. */
 for (const reason of [
-  "the premium voice is unconfigured, over its budget, or was too slow",
   "the speech service returned no audio",
   "this device refused to play the audio",
   "the speech service could not be reached"
 ]) {
   check(`"${reason.slice(0, 32)}…" is its own answer`, speech.includes(reason), true);
 }
+/* The server's decline used to be read aloud as a three-way guess —
+   "unconfigured, over its budget, or was too slow" — while the server had been
+   sending the actual reason in `X-Navi-Speech` since the route was written and
+   nothing here read it. Two rounds were spent trying to tell those three apart
+   from the outside. */
+check("the server's own reason is read rather than guessed at",
+  /declinedBecause\(response\.headers\.get\("X-Navi-Speech"\)\)/.test(speech), true);
+/* Against the code, not the prose: the comment explaining why the guess was
+   wrong has to be able to quote it. */
+const speechCode = speech.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+check("and the guess it replaced is gone",
+  speechCode.includes("unconfigured, over its budget, or was too slow"), false);
+for (const [reason, phrase] of [
+  ["unconfigured", "needs both ELEVENLABS_API_KEY and NAVI_TTS_VOICE_ID"],
+  ["budget-exhausted", "used its whole monthly character allowance"],
+  ["too-slow", "did not start in time"],
+  ["provider-failed", "the key may be expired or lack permission"]
+]) {
+  check(`a ${reason} decline says what it means`, speech.includes(phrase), true);
+}
+/* A reason this file has not been taught is still worth carrying: it names the
+   gap in the place someone would look to close it. */
+check("and an unknown reason is carried rather than flattened",
+  /the premium voice declined\$\{reason \? ` \(\$\{reason\}\)` : " without saying why"\}/.test(speech), true);
 check("and no exit falls back without saying why", /return local\(\);/.test(speech), false);
 
 check("the loop carries it out", /setVoice\(\{ engine: handle\.engine, why: handle\.why \}\)/.test(speech + readFileSync(join(process.cwd(), "lib/ui/voice-conversation.ts"), "utf8")), true);

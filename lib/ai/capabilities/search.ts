@@ -147,7 +147,18 @@ export function describeMatches(query: string, matches: OperationMatch[], capabi
     /* Naming what *is* there turns a dead end into a next step: the owner can
        see immediately whether the API they meant is missing or merely worded
        differently from how they asked. */
-    return `Nothing among the added APIs matches “${query}”. What is available: ${names}. Say so rather than guessing at an endpoint that may not exist.`;
+    /* When an API was clipped at discovery, "no match" has a second possible
+       cause worth naming: the operation may exist and simply not have been
+       kept. Without this the only available answer is "this API cannot do
+       that", which is a confident claim about operations nobody looked at. */
+    const clipped = capabilities
+      .map((capability) => capability.manifest)
+      .filter((manifest) => manifest.truncated)
+      .map((manifest) => `${manifest.name} (${manifest.truncated!.kept} of ${manifest.truncated!.declared} operations kept)`);
+    const caveat = clipped.length
+      ? ` Note that ${clipped.join(", ")} — so an operation that exists in its documentation may not have been kept, and "not found here" is not the same as "not offered by that API".`
+      : "";
+    return `Nothing among the added APIs matches “${query}”. What is available: ${names}.${caveat} Say so rather than guessing at an endpoint that may not exist.`;
   }
 
   const approved = new Map(capabilities.map((capability) => [capability.manifest.id, new Set(capability.approvedWrites)]));
