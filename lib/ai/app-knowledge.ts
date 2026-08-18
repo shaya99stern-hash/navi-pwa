@@ -159,6 +159,10 @@ export function selfRepoKnowledge(): string {
     `NaviOS is built from the GitHub repository \`${owner}/${repo}\`. That is this app's source — the code you are running inside right now, and the repository \`commit_own_source\` writes to.`,
     "",
     `State it plainly when asked. Do not describe it as a wrapper for something else, do not suggest the real source is a different or unnameable repository, and do not claim you cannot say which one it is. If a repository tool reports something that contradicts this, say what the tool returned and name the discrepancy rather than inventing a third repository to reconcile them.`,
-    `Commits to \`${owner}/${repo}\` deploy automatically. Other repositories you can reach are read-only: you can read and review them, but not commit.`
+    /* This said commits "deploy automatically", which was true while self-edits
+       landed on the deployed branch and is a false promise now that they do
+       not. A wrong claim about deployment is worse than a slower path: the
+       owner goes looking for a change that is not there. */
+    `Your own edits to \`${owner}/${repo}\` land on a branch and open a pull request, where the tests and the build run. They are not live until that pull request is merged — never tell the user a self-edit has already reached the running app. Other repositories you can reach are read-only: you can read and review them, but not commit.`
   ].join("\n");
 }

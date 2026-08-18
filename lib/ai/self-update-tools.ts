@@ -67,9 +67,103 @@ export function selfUpdateRepo(): { owner: string; repo: string } {
   };
 }
 
-/** The branch self-edits land on. Never the default branch by accident. */
+/**
+ * The branch self-edits land on, which must not be the one production runs.
+ *
+ * The comment here always said "never the default branch by accident" and the
+ * default was `main`, so the code contradicted its own stated invariant. A
+ * self-edit went straight to the branch Vercel deploys — no tests, no build
+ * check, no review — while every change made by a person went through all
+ * three. It came within one fetch timeout of happening: the owner said
+ * "Proceed. Make the changes." and only a stalled read stopped it.
+ *
+ * The default is now a branch of its own. `NAVI_SELF_UPDATE_BRANCH` still
+ * overrides it, because an operator who genuinely wants the old behaviour
+ * should be able to say so — out loud, in configuration, rather than by
+ * inheriting it.
+ */
+export const DEFAULT_SELF_UPDATE_BRANCH = "navi/self-update";
+
 function workingBranch(): string {
-  return (process.env.NAVI_SELF_UPDATE_BRANCH || "main").trim();
+  return (process.env.NAVI_SELF_UPDATE_BRANCH || DEFAULT_SELF_UPDATE_BRANCH).trim();
+}
+
+/** The branch a pull request from a self-edit is opened against. */
+function baseBranch(): string {
+  return (process.env.NAVI_SELF_UPDATE_BASE || "main").trim();
+}
+
+/**
+ * Make sure the working branch exists, because a commit cannot create one.
+ *
+ * GitHub's contents API writes to a ref that is already there and refuses
+ * otherwise, so without this the very first self-edit on a fresh deployment
+ * fails with a message about a missing branch — which reads like the tool
+ * being broken rather than like a branch needing to exist.
+ */
+async function ensureBranch(owner: string, repo: string, token: string, signal?: AbortSignal): Promise<string | null> {
+  const branch = workingBranch();
+  const base = baseBranch();
+  if (branch === base) return null;
+
+  const existing = await githubFetch(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`, token, {}, signal);
+  if (existing.ok) return null;
+
+  const head = await githubFetch(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(base)}`, token, {}, signal);
+  if (!head.ok) return `The base branch ${base} could not be read, so ${branch} could not be created.`;
+  const tip = (await head.json()) as { object?: { sha?: string } };
+  const sha = tip.object?.sha;
+  if (!sha) return `The base branch ${base} has no commit to branch from.`;
+
+  const created = await githubFetch(`/repos/${owner}/${repo}/git/refs`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha })
+  }, signal);
+  if (!created.ok) {
+    const detail = (await created.json().catch(() => ({}))) as { message?: string };
+    return `The branch ${branch} could not be created: ${detail.message ?? created.status}`;
+  }
+  return null;
+}
+
+/**
+ * Open a pull request for the self-edit, or report that one is already open.
+ *
+ * Returned as a sentence rather than thrown: the commit has already landed by
+ * the time this runs, and a failure to open the pull request must not be
+ * reported as a failure to commit. Claiming an edit did not happen when it did
+ * is the one thing worse than not opening the request.
+ */
+async function openPullRequest(owner: string, repo: string, token: string, summary: string, signal?: AbortSignal): Promise<string> {
+  const branch = workingBranch();
+  const base = baseBranch();
+  if (branch === base) return "";
+
+  const open = await githubFetch(`/repos/${owner}/${repo}/pulls?head=${encodeURIComponent(`${owner}:${branch}`)}&state=open`, token, {}, signal);
+  if (open.ok) {
+    const list = (await open.json()) as Array<{ html_url?: string }>;
+    if (list.length && list[0].html_url) {
+      return `It joins the pull request already open for these changes: ${list[0].html_url}`;
+    }
+  }
+
+  const created = await githubFetch(`/repos/${owner}/${repo}/pulls`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: summary.slice(0, 120) || "Changes Navi Soul made to its own source",
+      head: branch,
+      base,
+      body: "Opened by Navi Soul editing its own source. The checks on this pull request are what stand between this change and the running app."
+    })
+  }, signal);
+  if (!created.ok) {
+    const detail = (await created.json().catch(() => ({}))) as { message?: string };
+    return `The change is committed on ${branch}, but a pull request could not be opened: ${detail.message ?? created.status}. Say so rather than implying it is live.`;
+  }
+  const pull = (await created.json()) as { html_url?: string };
+  return pull.html_url ? `Pull request opened: ${pull.html_url}` : `A pull request was opened from ${branch}.`;
 }
 
 export function isProtectedPath(path: string): boolean {
@@ -204,6 +298,10 @@ export function buildSelfUpdateTools({ signal, onActivity = () => {} }: {
 
         onActivity(`Committing ${safe}`);
         try {
+          /* The branch has to exist before anything can be written to it. */
+          const missing = await ensureBranch(owner, repo, token, signal);
+          if (missing) return `${missing} Nothing was committed.`;
+
           // The existing sha, when the file exists — GitHub requires it to update.
           let sha: string | undefined;
           const existing = await githubFetch(`/repos/${owner}/${repo}/contents/${safe}?ref=${encodeURIComponent(branch)}`, token, {}, signal);
@@ -227,10 +325,18 @@ export function buildSelfUpdateTools({ signal, onActivity = () => {} }: {
           if (!response.ok) {
             return `The commit was rejected: ${result.message ?? response.status}. Nothing was changed. Say so plainly rather than claiming the edit landed.`;
           }
+          const pull = await openPullRequest(owner, repo, token, commitMessage.trim(), signal);
           return [
             `Committed ${safe} to ${owner}/${repo} on ${branch}.`,
             result.commit?.html_url ? `Commit: ${result.commit.html_url}` : "",
-            "Vercel is now building this commit; the change reaches the running app in a couple of minutes.",
+            pull,
+            /* The old text promised the change was reaching the running app in
+               a couple of minutes. On a branch that is simply untrue, and a
+               false claim about deployment is worse than a slower path — the
+               owner would go looking for a change that is not there. */
+            branch === baseBranch()
+              ? "Vercel is now building this commit; the change reaches the running app in a couple of minutes."
+              : "It is NOT live yet. The tests and the build run on that pull request, and merging it is what deploys the change. Say this plainly rather than implying the app has already changed.",
             "This really happened — you may confirm it."
           ].filter(Boolean).join("\n");
         } catch (error) {
