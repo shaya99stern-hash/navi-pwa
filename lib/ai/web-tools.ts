@@ -235,7 +235,7 @@ const TRANSCRIPT_FAILURE_TEXT: Record<TranscriptFailure, string> = {
  * that rejects a 301 cannot read the open web. So each hop is validated the
  * same way the first one was, and the chain is bounded.
  */
-async function fetchRevalidating(
+export async function fetchRevalidating(
   start: URL,
   signal: AbortSignal
 ): Promise<{ response: Response; finalUrl: URL } | { blocked: string }> {
@@ -275,7 +275,7 @@ async function fetchRevalidating(
  * already fully in memory — an edge isolate has little of it, and the size of
  * the download was entirely the remote host's choice.
  */
-async function readCapped(response: Response, maxBytes: number): Promise<{ bytes: Uint8Array; truncated: boolean }> {
+export async function readCapped(response: Response, maxBytes: number): Promise<{ bytes: Uint8Array; truncated: boolean }> {
   if (!response.body) {
     const whole = new Uint8Array(await response.arrayBuffer());
     return whole.byteLength > maxBytes
