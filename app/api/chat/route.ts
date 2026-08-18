@@ -64,6 +64,7 @@ import type { ConnectorAccessMode, CustomConnector, EffortLevel, ModelPreset, Na
 import { authorizeApiMutation } from "@/lib/auth/api";
 import { gatherMcpMetadata } from "@/lib/mcp";
 import { APP_KNOWLEDGE, selfRepoKnowledge } from "@/lib/ai/app-knowledge";
+import { derivedAppFacts } from "@/lib/ai/self-description";
 import { NAVI_MISSION, needsMission } from "@/lib/ai/mission";
 import { ORCHESTRATION_KNOWLEDGE, needsOrchestrationKnowledge } from "@/lib/ai/orchestration-knowledge";
 import { ENGINEERING_DISCIPLINE, needsEngineeringDiscipline } from "@/lib/ai/engineering-discipline";
@@ -703,6 +704,24 @@ function userContextBlock(value: unknown): string {
  * happened. Being the owner means their preferences settle product questions —
  * how the app should look, behave, and be built — not that refusals and
  * safety checks stop applying to them.
+ *
+ * ## Standing to know, which is not the same as standing to decide
+ *
+ * The first version settled authority and left the other half open. Asked what
+ * was configured, what a key does, or why something is off, the reply came back
+ * hedged — the shape a model reaches for when a question sounds like it might
+ * be about someone else's secrets. Nobody else uses this deployment. Its
+ * configuration is the owner's own, they are the person who set it, and a
+ * hedge there is not caution, it is an assistant refusing to read its own
+ * settings screen aloud to the person who wrote it.
+ *
+ * The one thing that stays shut is the credential *value*. That is not a
+ * concession to modesty: a secret pasted into a conversation is a secret in
+ * every backup, sync, and export of that conversation afterwards, and the
+ * owner gains nothing from seeing a string they can read in Vercel. Which
+ * variables are set, what each governs, what is failing, and what to do about
+ * it — all of that is theirs, in full, and it comes from looking rather than
+ * from remembering.
  */
 function ownerBlock(isOwner: boolean): string {
   if (!isOwner) return "";
@@ -710,7 +729,12 @@ function ownerBlock(isOwner: boolean): string {
     "The person you are talking to owns and operates this NaviOS deployment. It is their product.",
     "Their decisions about how NaviOS should look, behave, and be built are final — do not argue design or product direction with them once they have decided, and do not tell them a product choice is not yours to make.",
     "When they ask you to change the app, treat it as authorised work: read the real files, make the change, and report exactly what you did.",
-    "This settles authority, not accuracy. Never tell them something worked when it did not, never claim to have saved, committed, or learned something unless a tool result says so, and keep asking before destructive or irreversible actions."
+    "This settles authority, not accuracy. Never tell them something worked when it did not, never claim to have saved, committed, or learned something unless a tool result says so, and keep asking before destructive or irreversible actions.",
+    /* The half that was missing. Every question about configuration is a
+       question about their own property, and the honest answer to all of them
+       begins with looking rather than recalling. */
+    "Nobody else uses this deployment. Its configuration is theirs, and every question about it — what is set, what is failing, which variable governs what, why a capability is off — is a question about their own property. Answer those in full, from `inspect_environment` and the other diagnostic tools rather than from memory, and never hedge as though the setup belonged to someone else.",
+    "The single exception is a credential's value. Do not print one, because a secret repeated into a conversation is in every copy of that conversation afterwards, and they can already read it where they set it. Name the variable, say whether it is set, say what it enables — that is the useful part, and none of it is withheld."
   ].join("\n");
 }
 
@@ -862,6 +886,12 @@ function systemPromptBlocks(options: {
   const referenceCandidates = [
     { name: "self-repo", text: toolNames.includes("commit_own_source") || needsAppKnowledge(request) ? selfRepoKnowledge() : "" },
     { name: "app-knowledge", text: needsAppKnowledge(request) ? APP_KNOWLEDGE : "" },
+    /* The half of the self-description the code can state about itself:
+       screens, which variable governs which capability, and what can be
+       connected. Carried on the same condition as the prose above, because
+       either one alone is half a description — and placed after it so the
+       facts are what the model reads last. */
+    { name: "app-facts", text: needsAppKnowledge(request) ? derivedAppFacts() : "" },
     { name: "engineering-discipline", text: needsEngineeringDiscipline(toolNames.includes("commit_own_source")) ? ENGINEERING_DISCIPLINE : "" },
     { name: "code-craft", text: needsCodeCraft(toolNames.includes("commit_own_source")) ? CODE_CRAFT : "" },
     { name: "mission", text: needsMission(request) ? NAVI_MISSION : "" },
