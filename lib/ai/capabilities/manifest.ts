@@ -72,6 +72,18 @@ export type CapabilityOperation = {
   parameters: CapabilityParameter[];
   /** JSON Schema for the request body, when the operation takes one. */
   body?: Record<string, unknown>;
+  /**
+   * How the body must be encoded, when it is not JSON.
+   *
+   * Absent means `application/json`, which is what almost every modern API
+   * wants. The exception is common enough to matter: OAuth token endpoints and
+   * a good deal of older infrastructure accept only
+   * `application/x-www-form-urlencoded`, and sending them JSON produces a 400
+   * that reads like a bad argument rather than a wrong envelope — the request
+   * was right and the wrapping was not, which is among the harder failures to
+   * diagnose from the outside.
+   */
+  bodyEncoding?: "json" | "form";
 };
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -98,6 +110,8 @@ export type CapabilityManifest = {
    */
   source: "openapi" | "documentation" | "probe" | "manual";
   discoveredAt: number;
+  /** Present only when the spec declared more operations than were kept. */
+  truncated?: CapabilityTruncation;
 };
 
 /**
@@ -110,6 +124,17 @@ export type CapabilityManifest = {
  * the store on its own.
  */
 export const MAX_OPERATIONS = 120;
+
+/**
+ * How many operations a spec declared, when that is more than were kept.
+ *
+ * Recorded so the count can be said out loud. A large API silently becoming
+ * its first 120 operations is the kind of quiet loss that surfaces much later
+ * as "why can it not do the thing the docs describe" — and the answer, that
+ * the operation was dropped at discovery, is unavailable to anyone unless the
+ * number is carried.
+ */
+export type CapabilityTruncation = { declared: number; kept: number };
 
 /** Whether calling this operation could change something. */
 export function isWrite(method: HttpMethod): boolean {

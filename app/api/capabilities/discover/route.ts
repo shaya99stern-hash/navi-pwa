@@ -82,7 +82,12 @@ export async function POST(request: Request) {
       operations: found.manifest.operations.length,
       reads: found.manifest.operations.filter((operation) => !operation.writes).length,
       writes: found.manifest.operations.filter((operation) => operation.writes).length,
-      auth: found.manifest.auth.kind
+      auth: found.manifest.auth.kind,
+      /* Present only when the spec declared more than was kept. A large API
+         quietly becoming its first 120 operations is a loss the person adding
+         it should hear about at the moment they add it, not months later when
+         something they read in the docs turns out not to be there. */
+      ...(found.manifest.truncated ? { truncated: found.manifest.truncated } : {})
     }
   });
 }

@@ -32,7 +32,34 @@ import {
 const METHODS: readonly HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 /** How deep a `$ref` chain may go before it is treated as a cycle. */
-const MAX_REF_DEPTH = 8;
+/**
+ * How many `$ref` hops one chain may follow.
+ *
+ * This is the cycle guard, and it is the only thing that number was ever meant
+ * to be: a schema referring to itself, directly or around a loop, is normal in
+ * real specs and must terminate rather than recurse forever.
+ *
+ * It used to be charged for ordinary nesting as well — every object level cost
+ * one, whether or not a reference was involved. Eight levels is nothing in a
+ * real document: `requestBody.content["application/json"].schema.properties.x`
+ * is already five before any schema of substance begins, so a referenced type
+ * a little way down silently resolved to `{}`. The model then saw a parameter
+ * with no type at all, which is the exact failure `resolveRefs` exists to
+ * prevent, arriving through the guard meant to make it safe.
+ */
+const MAX_REF_HOPS = 8;
+/** Absurd nesting is still bounded, well past anything a real spec contains. */
+const MAX_NESTING = 40;
+/**
+ * A ceiling on total resolved nodes.
+ *
+ * Following references *expands*: one `$ref` repeated across a hundred
+ * properties pulls its whole subtree in a hundred times, and a few levels of
+ * that multiply. The document is somebody else's and is fetched over the
+ * network, so the expansion needs a bound that does not depend on the document
+ * being reasonable.
+ */
+const MAX_RESOLVED_NODES = 20_000;
 const MAX_SUMMARY = 300;
 
 type Json = Record<string, unknown>;
@@ -58,9 +85,15 @@ function asString(value: unknown): string {
  * someone else's instruction — the same reason the fetcher validates redirects.
  * They are left unresolved rather than followed.
  */
-function resolveRefs(value: unknown, root: Json, depth = 0): unknown {
-  if (depth > MAX_REF_DEPTH) return {};
-  if (Array.isArray(value)) return value.map((entry) => resolveRefs(entry, root, depth + 1));
+type ResolveBudget = { nodes: number };
+
+function resolveRefs(value: unknown, root: Json, hops = 0, depth = 0, budget: ResolveBudget = { nodes: MAX_RESOLVED_NODES }): unknown {
+  /* Three separate limits, because they guard three separate things and one
+     counter conflated them. */
+  if (hops > MAX_REF_HOPS || depth > MAX_NESTING || budget.nodes <= 0) return {};
+  budget.nodes -= 1;
+
+  if (Array.isArray(value)) return value.map((entry) => resolveRefs(entry, root, hops, depth + 1, budget));
 
   const object = asObject(value);
   if (!object) return value;
@@ -74,12 +107,68 @@ function resolveRefs(value: unknown, root: Json, depth = 0): unknown {
     /* A reference that goes nowhere resolves to an empty schema rather than
        throwing: one broken pointer in a large spec should cost that one
        parameter's type, not the whole API. */
-    return target === undefined ? {} : resolveRefs(target, root, depth + 1);
+    return target === undefined ? {} : resolveRefs(target, root, hops + 1, depth + 1, budget);
   }
 
   const out: Json = {};
-  for (const [key, entry] of Object.entries(object)) out[key] = resolveRefs(entry, root, depth + 1);
+  for (const [key, entry] of Object.entries(object)) out[key] = resolveRefs(entry, root, hops, depth + 1, budget);
   return out;
+}
+
+/**
+ * Follow a `$ref` sitting where a path item should be, and no further.
+ *
+ * 3.x permits `"/pets": { "$ref": "#/components/pathItems/pets" }`, and
+ * generated specs use it to share one definition across several routes.
+ * Unresolved, the entry is an object with a single `$ref` key and no methods on
+ * it, so the path is skipped — and a spec written that way throughout was
+ * refused outright as having no callable operations.
+ *
+ * Deliberately one shallow hop rather than `resolveRefs` over the whole item.
+ * Resolving the entire path item eagerly walks down through every operation,
+ * request body and schema in it, and the fields underneath are resolved again
+ * on their own terms afterwards — so the work is duplicated, and any limit
+ * charged for the walk is spent before the schemas that need it are reached.
+ */
+function resolvePathItem(value: unknown, root: Json): Json | null {
+  let item = asObject(value);
+  for (let hop = 0; item && hop < MAX_REF_HOPS; hop += 1) {
+    const ref = asString(item.$ref);
+    if (!ref.startsWith("#/")) return item;
+    const target = ref.slice(2).split("/").reduce<unknown>(
+      (node, segment) => asObject(node)?.[segment.replace(/~1/g, "/").replace(/~0/g, "~")],
+      root
+    );
+    item = asObject(target);
+  }
+  return item;
+}
+
+/**
+ * Substitute a server URL's `{variables}` with the defaults the spec supplies.
+ *
+ * 3.x lets a server be a template — `https://{region}.api.example.com/{version}`
+ * — with a `variables` map giving each placeholder a default. Left as written,
+ * that string becomes a hostname containing braces: `new URL` accepts it, the
+ * braces percent-encode in the path, and every later call goes to a host that
+ * cannot resolve. The failure surfaces as a network error naming a domain the
+ * user never typed, which is a poor clue to a spec-parsing problem.
+ *
+ * A placeholder with no default cannot be guessed. The template is abandoned
+ * rather than sent half-filled, so the caller falls back to the address the
+ * spec was actually served from — which is nearly always the right host, and
+ * is at least a real one.
+ */
+function fillServerTemplate(url: string, variables: Json | null): string {
+  if (!url.includes("{")) return url;
+
+  let unresolved = false;
+  const filled = url.replace(/\{([^{}]+)\}/g, (whole, name: string) => {
+    const value = asString(asObject(variables?.[name])?.default);
+    if (!value) { unresolved = true; return whole; }
+    return value;
+  });
+  return unresolved ? "" : filled;
 }
 
 /**
@@ -94,7 +183,7 @@ function resolveRefs(value: unknown, root: Json, depth = 0): unknown {
 export function baseUrlFrom(document: Json, specUrl: string): string {
   const servers = Array.isArray(document.servers) ? document.servers : [];
   const first = asObject(servers[0]);
-  const declared = asString(first?.url);
+  const declared = fillServerTemplate(asString(first?.url), asObject(first?.variables));
   if (declared) {
     try {
       return new URL(declared, specUrl).toString().replace(/\/+$/, "");
@@ -105,11 +194,16 @@ export function baseUrlFrom(document: Json, specUrl: string): string {
     }
   }
 
-  const host = asString(document.host);
+  const host = asString(document.host).replace(/\/+$/, "");
   if (host) {
     const schemes = Array.isArray(document.schemes) ? document.schemes.map(asString) : [];
     const scheme = schemes.includes("https") ? "https" : schemes[0] || "https";
-    const basePath = asString(document.basePath);
+    /* Normalised rather than concatenated. A `basePath` of "v1" — legal, and
+       written that way often enough — produced `https://api.example.comv1`:
+       a different host entirely, which fails DNS rather than 404ing, so the
+       error names a name the user never typed. */
+    const raw = asString(document.basePath).trim();
+    const basePath = !raw || raw === "/" ? "" : `/${raw.replace(/^\/+/, "")}`;
     return `${scheme}://${host}${basePath}`.replace(/\/+$/, "");
   }
 
@@ -170,6 +264,65 @@ function operationId(spec: Json, method: HttpMethod, path: string): string {
   return `${method.toLowerCase()}_${slug}`.slice(0, 60);
 }
 
+/**
+ * A Swagger 2.0 parameter's type, without the parameter's own bookkeeping.
+ *
+ * 2.0 puts `type`, `format` and `enum` directly on the parameter rather than
+ * inside a `schema`, so the previous fallback handed the *whole parameter* over
+ * as the schema. That shipped `name`, `in` and `required` into a JSON Schema as
+ * though they were keywords — a model reading it sees an object with a property
+ * called "in", and the description of the argument is quietly wrong.
+ *
+ * Only the keys that are actually schema keywords are carried across.
+ */
+const LEGACY_SCHEMA_KEYS = [
+  "type", "format", "enum", "default", "items", "properties", "pattern",
+  "minimum", "maximum", "minLength", "maxLength", "multipleOf", "uniqueItems"
+] as const;
+
+function schemaFromLegacy(parameter: Json): Record<string, unknown> {
+  const schema: Record<string, unknown> = {};
+  for (const key of LEGACY_SCHEMA_KEYS) {
+    if (parameter[key] !== undefined) schema[key] = parameter[key];
+  }
+  return schema;
+}
+
+/**
+ * A name not already taken, without the loop that could never terminate.
+ *
+ * The previous form was `while (seen.has(id)) id = \`${id}_${method}\`.slice(0, 60)`.
+ * At 60 characters the clamp discards exactly what was just appended, so the
+ * next iteration tests the same string: two operations whose `operationId`s
+ * agree through their first 60 characters spun forever.
+ *
+ * That is not a theoretical shape. Generated specs — Azure, AWS, anything from
+ * a code generator — routinely carry operationIds far past 60 characters, and
+ * differ only in a suffix. And the document is fetched from a host the user
+ * typed, parsed inside an edge request: an unbounded loop there is a request
+ * that never returns, on input this app does not control.
+ *
+ * The suffix now replaces the tail rather than being appended past the clamp,
+ * so each attempt is a genuinely different string and the counter guarantees
+ * an end.
+ */
+const MAX_ID = 60;
+
+function uniqueId(preferred: string, taken: Set<string>): string {
+  const base = preferred.slice(0, MAX_ID) || "operation";
+  if (!taken.has(base)) return base;
+
+  for (let suffix = 2; suffix < 1_000; suffix += 1) {
+    const tail = `_${suffix}`;
+    const candidate = `${base.slice(0, MAX_ID - tail.length)}${tail}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  /* A thousand collisions on one name is not a spec worth accommodating, and
+     `MAX_OPERATIONS` is 120 — so this is unreachable by construction rather
+     than by hope. Returning something unique-enough beats throwing. */
+  return `${base.slice(0, MAX_ID - 14)}_${Date.now().toString(36)}`;
+}
+
 function parametersFrom(raw: unknown, root: Json): CapabilityParameter[] {
   if (!Array.isArray(raw)) return [];
   const out: CapabilityParameter[] = [];
@@ -190,19 +343,33 @@ function parametersFrom(raw: unknown, root: Json): CapabilityParameter[] {
          worth not trusting. */
       required: location === "path" || parameter.required === true,
       description: asString(parameter.description).slice(0, MAX_SUMMARY),
-      schema: asObject(resolveRefs(parameter.schema, root)) ?? asObject(parameter) ?? {}
+      schema: asObject(resolveRefs(parameter.schema, root)) ?? schemaFromLegacy(parameter)
     });
   }
   return out;
 }
 
-/** The JSON request body schema, from either dialect. */
-function bodyFrom(spec: Json, root: Json): Record<string, unknown> | undefined {
+/**
+ * The request body schema and how it must be encoded, from either dialect.
+ *
+ * The encoding is returned rather than assumed. `application/json` is taken
+ * when the operation offers it; when it does not, the media type it *does*
+ * offer decides, because an endpoint that accepts only form encoding will
+ * reject a JSON body with a 400 that reads like a bad argument.
+ */
+type ParsedBody = { schema: Record<string, unknown>; encoding: "json" | "form" };
+
+function bodyFrom(spec: Json, root: Json): ParsedBody | undefined {
   const content = asObject(asObject(resolveRefs(spec.requestBody, root))?.content);
   if (content) {
-    const json = asObject(content["application/json"]) ?? asObject(Object.values(content)[0]);
-    const schema = asObject(resolveRefs(json?.schema, root));
-    if (schema) return schema;
+    const jsonEntry = asObject(content["application/json"]);
+    const [firstType, firstValue] = Object.entries(content)[0] ?? [];
+    const mediaType = jsonEntry ? "application/json" : asString(firstType);
+    const media = jsonEntry ?? asObject(firstValue);
+    const schema = asObject(resolveRefs(media?.schema, root));
+    if (schema) {
+      return { schema, encoding: mediaType.includes("x-www-form-urlencoded") ? "form" : "json" };
+    }
   }
   /* Swagger 2.0: the body is a parameter with `in: "body"`. */
   if (Array.isArray(spec.parameters)) {
@@ -210,7 +377,17 @@ function bodyFrom(spec: Json, root: Json): Record<string, unknown> | undefined {
       const parameter = asObject(resolveRefs(entry, root));
       if (asString(parameter?.in).toLowerCase() !== "body") continue;
       const schema = asObject(resolveRefs(parameter?.schema, root));
-      if (schema) return schema;
+      /* 2.0 declares body media types in `consumes`, at either scope. */
+      if (schema) {
+        const consumes = [
+          ...(Array.isArray(spec.consumes) ? spec.consumes.map(asString) : []),
+          ...(Array.isArray(root.consumes) ? root.consumes.map(asString) : [])
+        ];
+        const form = consumes.length > 0
+          && !consumes.some((type) => type.includes("json"))
+          && consumes.some((type) => type.includes("x-www-form-urlencoded"));
+        return { schema, encoding: form ? "form" : "json" };
+      }
     }
   }
   return undefined;
@@ -249,8 +426,17 @@ export function parseOpenApi(input: {
   const operations: CapabilityOperation[] = [];
   const seen = new Set<string>();
 
+  /* Counted separately from what is kept, so the ceiling can be reported
+     rather than silently applied. */
+  let declared = 0;
+
   for (const [path, value] of Object.entries(paths)) {
-    const item = asObject(value);
+    /* A path item may itself be a `$ref`, which 3.x permits and generated specs
+       use to share one definition across several routes. Unresolved, the entry
+       is an object with a single `$ref` key and no methods on it — so the path
+       was skipped, and a spec where *every* path is written that way was
+       refused outright as "no callable operations". */
+    const item = resolvePathItem(value, document);
     if (!item) continue;
     /* Parameters declared once for the whole path apply to every method on it,
        and are the usual home for the identifier in the URL. Dropping them loses
@@ -262,14 +448,24 @@ export function parseOpenApi(input: {
       if (!spec) continue;
       if (spec.deprecated === true) continue;
 
-      let id = operationId(spec, method, path);
+      /* Counted before the ceiling is applied. The loop used to `break` out of
+         both levels on reaching the cap, which meant nothing downstream could
+         say how much had been left behind — a 500-operation API quietly became
+         a 120-operation one and reported "120 operations" as though that were
+         the whole of it. */
+      declared += 1;
+      if (operations.length >= MAX_OPERATIONS) continue;
+
       /* Two operations sharing a name would collide as tools, and the later one
          would silently replace the earlier. */
-      while (seen.has(id)) id = `${id}_${method.toLowerCase()}`.slice(0, 60);
+      const id = uniqueId(operationId(spec, method, path), seen);
       seen.add(id);
 
       const own = parametersFrom(spec.parameters, document);
       const names = new Set(own.map((parameter) => `${parameter.in}:${parameter.name}`));
+      /* Once. This resolved every `$ref` in the body twice — the condition and
+         the value were separate calls to the same walk. */
+      const body = bodyFrom(spec, document);
 
       operations.push({
         id,
@@ -280,12 +476,10 @@ export function parseOpenApi(input: {
         /* Method-level parameters win over path-level ones of the same name,
            which is what the specification requires. */
         parameters: [...own, ...shared.filter((parameter) => !names.has(`${parameter.in}:${parameter.name}`))],
-        ...(bodyFrom(spec, document) ? { body: bodyFrom(spec, document) } : {})
+        ...(body ? { body: body.schema } : {}),
+        ...(body && body.encoding === "form" ? { bodyEncoding: "form" as const } : {})
       });
-
-      if (operations.length >= MAX_OPERATIONS) break;
     }
-    if (operations.length >= MAX_OPERATIONS) break;
   }
 
   if (!operations.length) {
@@ -302,7 +496,8 @@ export function parseOpenApi(input: {
       auth: authFrom(document),
       operations,
       source: "openapi",
-      discoveredAt: Date.now()
+      discoveredAt: Date.now(),
+      ...(declared > operations.length ? { truncated: { declared, kept: operations.length } } : {})
     }
   };
 }

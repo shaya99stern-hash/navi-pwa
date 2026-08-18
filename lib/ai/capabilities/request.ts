@@ -88,6 +88,33 @@ function applyAuth(auth: CapabilityAuth, apiKey: string, headers: Record<string,
   }
 }
 
+/**
+ * The body as bytes, in the encoding the operation declared.
+ *
+ * Form encoding only ever carries flat key/value pairs, so a nested value is
+ * JSON-encoded into its field rather than dropped — which is what the servers
+ * that want form bodies generally expect, and is in any case recoverable where
+ * silence is not.
+ */
+function encodeBody(value: unknown, encoding: "json" | "form" | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (encoding !== "form") return JSON.stringify(value);
+
+  const fields = value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+  /* A form body that is not an object has no field names to encode it under.
+     JSON is the honest fallback: it at least carries the value. */
+  if (!fields) return JSON.stringify(value);
+
+  const params = new URLSearchParams();
+  for (const [name, entry] of Object.entries(fields)) {
+    if (entry === undefined || entry === null) continue;
+    params.set(name, typeof entry === "string" ? entry : JSON.stringify(entry));
+  }
+  return params.toString();
+}
+
 export function buildRequest(input: {
   manifest: CapabilityManifest;
   operation: CapabilityOperation;
@@ -129,8 +156,16 @@ export function buildRequest(input: {
   const headers: Record<string, string> = { Accept: "application/json", ...parts.headers };
   applyAuth(manifest.auth, apiKey, headers, url.searchParams);
 
-  const body = parts.body !== undefined ? JSON.stringify(parts.body) : undefined;
-  if (body) headers["Content-Type"] = "application/json";
+  /* Encoded the way the operation said it must be. Sending JSON to an endpoint
+     that accepts only form encoding earns a 400 describing a malformed request
+     — which reads as a bad argument, and sends whoever is debugging it looking
+     at the arguments rather than at the envelope. */
+  const body = encodeBody(parts.body, operation.bodyEncoding);
+  if (body) {
+    headers["Content-Type"] = operation.bodyEncoding === "form"
+      ? "application/x-www-form-urlencoded"
+      : "application/json";
+  }
 
   return {
     ok: true,

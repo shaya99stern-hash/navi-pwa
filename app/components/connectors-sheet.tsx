@@ -140,7 +140,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
     | { phase: "idle" }
     | { phase: "looking" }
     | { phase: "failed"; message: string; detail: string }
-    | { phase: "found"; manifest: CapabilityManifest; summary: { operations: number; reads: number; writes: number; auth: string } }
+    | { phase: "found"; manifest: CapabilityManifest; summary: { operations: number; reads: number; writes: number; auth: string; truncated?: { declared: number; kept: number } } }
   >({ phase: "idle" });
 
   const capabilities = (preferences.capabilities ?? []) as AddedCapability[];
@@ -159,7 +159,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
       const data = await response.json() as {
         ok?: boolean; error?: string; detail?: string;
         manifest?: CapabilityManifest;
-        summary?: { operations: number; reads: number; writes: number; auth: string };
+        summary?: { operations: number; reads: number; writes: number; auth: string; truncated?: { declared: number; kept: number } };
       };
       if (!response.ok || !data.ok || !data.manifest || !data.summary) {
         setDiscovery({ phase: "failed", message: data.error ?? "That could not be read.", detail: data.detail ?? "" });
@@ -824,6 +824,17 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                       {discovery.summary.writes ? ` · ${discovery.summary.writes} that change things, each asked about once before its first use` : " · none that change anything"}
                     </p>
                     <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
+                      {discovery.summary.truncated ? (
+                      /* Said at the moment of adding, which is the only moment
+                         it can change a decision. A large API silently becoming
+                         its first 120 operations surfaces much later as "why
+                         can it not do the thing the docs describe", and by then
+                         nothing on screen explains it. */
+                        <span className="block text-amber-600 dark:text-amber-400">
+                          This API describes {discovery.summary.truncated.declared} operations and the first{" "}
+                          {discovery.summary.truncated.kept} were kept. The rest are not available.
+                        </span>
+                      ) : null}
                       {discovery.summary.auth === "none"
                         ? "It needs no key."
                         : `It authenticates with ${discovery.summary.auth === "bearer" ? "a bearer token" : `a ${discovery.summary.auth}`}.`}

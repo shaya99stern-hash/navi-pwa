@@ -101,7 +101,14 @@ function parseOperation(value: unknown): CapabilityOperation | null {
        the one check that exists to stop it. */
     writes: method !== "GET",
     parameters,
-    ...(body && JSON.stringify(body).length <= MAX_BODY_CHARS ? { body } : {})
+    ...(body && JSON.stringify(body).length <= MAX_BODY_CHARS ? { body } : {}),
+    /* Held to the two encodings this app can produce. It decides a
+       `Content-Type` header on an outbound request, so an arbitrary string
+       here would be a header value chosen by whatever wrote the stored
+       manifest — the same reason the auth header name is pattern-checked
+       below. Anything unrecognised falls back to JSON, which is what an
+       operation with no declared encoding gets anyway. */
+    ...(raw.bodyEncoding === "form" ? { bodyEncoding: "form" as const } : {})
   };
 }
 
