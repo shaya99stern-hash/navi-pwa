@@ -211,6 +211,8 @@ type ChatRequestBody = {
   routeOverride?: unknown;
   /** The answer to this turn is going to be spoken aloud rather than read. */
   voice?: unknown;
+  /** Measurements taken from the last artifact after it rendered on screen. */
+  artifactAudit?: unknown;
   /** Accepted so a client that has not reloaded since v4.2.0 still works. */
   preset?: unknown;
   style?: ResponseStyle;
@@ -826,6 +828,8 @@ function systemPromptBlocks(options: {
   capabilityRequested?: boolean;
   /** This answer is going to be spoken aloud rather than read. */
   spoken?: boolean;
+  /** What the last artifact measured once rendered. Empty when it was fine. */
+  artifactAudit?: string;
   /** Repository files fetched before generating, when the repo was knowable. */
   retrieved?: string;
   /** Attached documents, extracted as text rather than shown as pages. */
@@ -841,7 +845,7 @@ function systemPromptBlocks(options: {
    */
   referenceBudget?: number;
 }): PromptBlock[] {
-  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, spoken = false, productMode, referenceBudget = Number.POSITIVE_INFINITY } = options;
+  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, spoken = false, artifactAudit, productMode, referenceBudget = Number.POSITIVE_INFINITY } = options;
 
   /* The static reference material, in priority order, competing for whatever
      room the route has. Each predicate is unchanged — this decides which of
@@ -982,6 +986,14 @@ function systemPromptBlocks(options: {
     mcpContext ? `Connected MCP resource metadata:\n${mcpContext}` : "",
     /* Last, because it is the most volatile thing here and the most recent
        thing read before the request itself. Both reasons point the same way. */
+    /* What the last artifact measured once it was actually on screen.
+       The reviewer runs before delivery and an artifact renders after it, so
+       the turn that produced a 900px frame around 400px of content can never
+       be told. This is that turn's report, arriving at the next one — which is
+       where "make this more realistic" lands anyway.
+       Numbers rather than adjectives, because "488px of dead space below the
+       content" can be acted on and "looks empty" cannot. */
+    artifactAudit || "",
     constraints || ""
     ].filter(Boolean).join("\n\n") }
   ].filter((block) => block.text);
@@ -1277,6 +1289,31 @@ export async function POST(request: Request): Promise<Response> {
      nothing at all, which reads as a written answer — the behaviour it has
      always had. */
   const spokenReply = body.voice === true;
+
+  /**
+   * The last artifact's measurements, rendered for the prompt.
+   *
+   * Bounded on every axis because this arrives from the client: a count, a
+   * length per finding, a length for the title. It describes the app's own
+   * rendered output rather than carrying instructions, but it is still a
+   * string a request body chose, and it is placed in the prompt — so it is
+   * treated as input rather than trusted as telemetry.
+   */
+  const artifactAuditBlock = (() => {
+    const raw = body.artifactAudit;
+    if (!raw || typeof raw !== "object") return undefined;
+    const entry = raw as { title?: unknown; findings?: unknown };
+    const findings = Array.isArray(entry.findings)
+      ? entry.findings.filter((item): item is string => typeof item === "string" && item.trim().length > 0).slice(0, 8)
+      : [];
+    if (!findings.length) return undefined;
+    const title = typeof entry.title === "string" ? entry.title.slice(0, 80) : "the last artifact";
+    return [
+      `Measurements taken from “${title}” after it rendered on the user's screen. These are facts about the delivered output, not guesses:`,
+      ...findings.map((item) => `- ${item.slice(0, 200)}`),
+      "If this turn revises that artifact, fix these as well as whatever was asked. Do not mention this list."
+    ].join("\n");
+  })();
   // The swarm pipeline still thinks in the old three-way style; derive it.
   const style = body.style && ALLOWED_STYLES.has(body.style)
     ? body.style
@@ -1729,7 +1766,7 @@ export async function POST(request: Request): Promise<Response> {
          attempt can actually call. Lifted out of the `streamText` call so its
          size can be measured before the request is sent — it is the largest
          single contributor to a turn and nothing could previously see it. */
-      const blocksFor = (attemptToolNames: string[], referenceBudget: number): PromptBlock[] => systemPromptBlocks({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, spoken: spokenReply, referenceBudget });
+      const blocksFor = (attemptToolNames: string[], referenceBudget: number): PromptBlock[] => systemPromptBlocks({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, spoken: spokenReply, artifactAudit: artifactAuditBlock, referenceBudget });
       const systemFor = (attemptToolNames: string[], referenceBudget: number): string =>
         blocksFor(attemptToolNames, referenceBudget).map((block) => block.text).join("\n\n");
 

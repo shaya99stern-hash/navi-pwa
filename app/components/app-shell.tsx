@@ -238,6 +238,16 @@ export function AppShell({
   /* Incognito: this conversation is never written to storage and never
      recalled by memory. It exists only while the screen is open. */
   const [incognito, setIncognito] = useState(false);
+  /**
+   * What the last artifact actually measured once it was on screen.
+   *
+   * The reviewer runs before delivery; an artifact renders after it. So the
+   * turn that produced a 900px frame around 400px of content can never be told
+   * about it — but the next turn can, and the next turn is where "make this
+   * more realistic" lands. Held for one artifact at a time, because a stale
+   * audit describing a different artifact is worse than none.
+   */
+  const [artifactAudit, setArtifactAudit] = useState<{ title: string; findings: string[] } | null>(null);
   /* The name Clerk already knows, used only when the profile has none. Someone
      signed in has told the app who they are once already; making them type it
      again to be greeted by name is asking twice for the same thing. */
@@ -486,6 +496,19 @@ export function AppShell({
     ...preferences.customPlaybooks.map((entry) => ({ ...entry, source: "custom" as const }))
   ], [preferences.customPlaybooks]);
 
+  /* Measurements from the rendered artifact, arriving after its turn finished.
+     A window event rather than a prop: `ArtifactFrame` renders from inside the
+     markdown renderer, well below anything that talks to the model. */
+  useEffect(() => {
+    function receive(event: Event) {
+      const detail = (event as CustomEvent).detail as { title?: string; findings?: string[] } | undefined;
+      if (!detail || !Array.isArray(detail.findings)) return;
+      setArtifactAudit(detail.findings.length ? { title: String(detail.title ?? "artifact"), findings: detail.findings } : null);
+    }
+    window.addEventListener("navi:artifact-audit", receive);
+    return () => window.removeEventListener("navi:artifact-audit", receive);
+  }, []);
+
   const requestBody = useCallback((question?: string, spoken = false) => ({
     mode: preferences.mode,
     /* Whether this answer is going to be *heard* rather than read.
@@ -496,6 +519,10 @@ export function AppShell({
        report aloud is the single thing that makes a premium voice still sound
        like a machine. */
     voice: spoken,
+    /* Only when something was actually wrong. A clean artifact has nothing
+       worth spending prompt on, and sending "no problems found" every turn
+       trains the model to ignore the field. */
+    artifactAudit: artifactAudit && artifactAudit.findings.length ? artifactAudit : undefined,
     routeOverride: preferences.routeOverride,
     effort: preferences.effort,
     tools: preferences.tools,
@@ -526,7 +553,7 @@ export function AppShell({
       knowledge: activeProject.knowledge,
       documents: activeProject.documents
     } : undefined
-  }), [activeChat?.connectorAccessMode, activeChat?.summary, activeProject, messages, playbooks, preferences, recalledContext]);
+  }), [activeChat?.connectorAccessMode, activeChat?.summary, activeProject, artifactAudit, messages, playbooks, preferences, recalledContext]);
 
   useEffect(() => {
     let cancelled = false;

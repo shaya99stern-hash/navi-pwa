@@ -171,5 +171,83 @@ const lightDocument = buildArtifactDocument({ id: "a", title: "A", kind: "html",
 check("light artifacts are left alone", lightDocument.includes("!important"), false);
 check("light artifacts still get the variables", lightDocument.includes("--navi-fg"), true);
 
+/* ── The frame must not grow itself ─────────────────────────────────────────
+   The bridge reported `documentElement.scrollHeight` and observed the same
+   element. Inside an iframe that element *is* the viewport, so its height is
+   whatever the parent last set — and body carries 16px of padding, so every
+   observation reported 32px more than the last. The frame ratcheted upward
+   until it hit its 900px clamp and sat there with a large dead region below
+   content that had never grown at all. On a phone that is most of the screen.
+
+   Nothing errored. It looked like an artifact that renders badly. */
+
+const bridgeSource = (require("node:fs") as typeof import("node:fs"))
+  .readFileSync((require("node:path") as typeof import("node:path")).join(process.cwd(), "lib/security/artifacts.ts"), "utf8");
+
+check("the bridge no longer reports the document's own box",
+  /height: Math\.ceil\(document\.documentElement\.scrollHeight\)/.test(bridgeSource), false);
+check("it measures the content's furthest edge instead",
+  /getBoundingClientRect\(\)\.bottom \+ window\.scrollY/.test(bridgeSource), true);
+/* Content sized in viewport units fills whatever it is given and can never
+   report a natural height, so it is reported unchanged rather than with
+   padding added. That is what stops the loop at its source. */
+check("viewport-filling content is reported without padding added",
+  /content <= viewport \+ 4 \? viewport : content \+ 16/.test(bridgeSource), true);
+check("and the observer watches the body, not the viewport",
+  /new ResizeObserver\(resize\)\.observe\(document\.body\)/.test(bridgeSource), true);
+
+const frameSource = (require("node:fs") as typeof import("node:fs"))
+  .readFileSync((require("node:path") as typeof import("node:path")).join(process.cwd(), "app/components/artifact-frame.tsx"), "utf8");
+
+/* The half that reaches a client running a service-worker-cached build, which
+   still sends the old report and would still ratchet without this. */
+check("the frame ignores a report that merely echoes its own height",
+  /next - current <= 40/.test(frameSource), true);
+check("while a genuine jump is still honoured", /echo \? current : next/.test(frameSource), true);
+
+/* ── A tape measure, not eyes ───────────────────────────────────────────────
+   A rendered artifact cannot be screenshotted from the parent: it is a
+   sandboxed cross-origin frame, and no browser hands a page a picture of one it
+   does not own. Server-side rendering means a headless browser, which cannot
+   run on edge and is not free at volume.
+
+   But the failures that actually happen are arithmetic, not taste. A frame
+   twice the height of its content; a control smaller than a fingertip; a panel
+   sitting on the thing it describes. Those measure exactly, on the device, for
+   nothing — and a measurement beats a description of a picture at every one. */
+
+check("the bridge measures the rendered result", /const audit = \(\) =>/.test(bridgeSource), true);
+/* The exact failure from the reported screenshot, reported as two numbers
+   rather than as a judgement: "looks empty" cannot be acted on. */
+check("dead space is reported with both numbers",
+  /Dead space: content ends at/.test(bridgeSource), true);
+check("touch targets under the platform minimum are counted",
+  /44px minimum touch target/.test(bridgeSource), true);
+check("so is content that clips or sits outside the frame",
+  /wider than the/.test(bridgeSource) && /outside the frame horizontally/.test(bridgeSource), true);
+/* After layout settles, or the numbers describe the initial box rather than
+   what the user sees. */
+check("it runs after the parent's resize has landed",
+  /requestAnimationFrame\(\(\) => requestAnimationFrame\(audit\)\)/.test(bridgeSource), true);
+
+check("the frame forwards the audit rather than showing it",
+  /navi:artifact-audit/.test(frameSource), true);
+
+const routeSource = (require("node:fs") as typeof import("node:fs"))
+  .readFileSync((require("node:path") as typeof import("node:path")).join(process.cwd(), "app/api/chat/route.ts"), "utf8");
+
+/* It arrives from a request body, so it is bounded like any other client
+   input — a count, a length per finding, a length for the title — rather than
+   trusted because it happens to describe the app's own output. */
+check("findings are capped in number", /\.slice\(0, 8\)/.test(routeSource), true);
+check("and in length", /item\.slice\(0, 200\)/.test(routeSource), true);
+check("the title is bounded too", /entry\.title\.slice\(0, 80\)/.test(routeSource), true);
+/* A clean artifact contributes nothing. Sending "no problems found" every turn
+   teaches the model to skip the field. */
+check("a clean artifact adds nothing to the prompt",
+  /if \(!findings\.length\) return undefined/.test(routeSource), true);
+check("and the user is never told a measurement happened",
+  /Do not mention this list/.test(routeSource), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
