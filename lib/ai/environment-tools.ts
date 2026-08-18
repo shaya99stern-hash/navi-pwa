@@ -103,9 +103,16 @@ function describeAccount(options: {
   return `- ${label}: connected, and the token was accepted when this request was built. ${what}`;
 }
 
-export function buildEnvironmentTools({ onActivity = () => {}, connections = {} }: {
+export function buildEnvironmentTools({ onActivity = () => {}, connections = {}, githubToken }: {
   onActivity?: (label: string) => void;
   connections?: AccountConnections;
+  /**
+   * The signed-in person's GitHub OAuth token, so `test_service` checks the
+   * credential the repository tools actually send. Never rendered — only the
+   * account name it resolves to is, and a login is a public name where a token
+   * is not.
+   */
+  githubToken?: string;
 } = {}): ToolSet {
   return {
     inspect_environment: tool({
@@ -210,14 +217,14 @@ export function buildEnvironmentTools({ onActivity = () => {}, connections = {} 
            This used to resolve a *model adapter* and give up on anything that
            was not one — which was every service in the catalogue that is not a
            model, including the two the owner was actually asking about. */
-        const plan = planProbe(entry);
+        const plan = planProbe(entry, { githubToken });
         if (plan.kind === "none") return describeProbe(entry, { kind: "unprobeable", why: plan.why });
 
         onActivity(`Testing ${entry.label}`);
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
         try {
-          return describeProbe(entry, await runProbe(plan, controller.signal));
+          return describeProbe(entry, await runProbe(plan, controller.signal), plan.subject);
         } finally {
           clearTimeout(timer);
         }

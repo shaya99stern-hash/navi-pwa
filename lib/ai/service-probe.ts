@@ -60,8 +60,24 @@ export type ProbePlan =
     headers: Record<string, string>;
     /** Pulls the account name out of a successful body, when there is one. */
     identity?: (body: unknown) => string | null;
+    /**
+     * Whose credential is being tested, when more than one could be.
+     *
+     * GitHub is reachable through two entirely separate credentials: the
+     * person's connected account, which is what the repository tools use, and
+     * the deployment's own token, which is what self-editing uses. Testing one
+     * and reporting the other is how "is GitHub working?" gets a confident
+     * answer about something the user was not asking about.
+     */
+    subject?: string;
   }
   | { kind: "none"; why: string };
+
+/** Credentials resolved for this request, which outrank the environment. */
+export type ProbeOverrides = {
+  /** The signed-in person's GitHub OAuth token, when they connected one. */
+  githubToken?: string;
+};
 
 export type ProbeOutcome =
   /** The credential was used successfully. `identity` names the account. */
@@ -89,7 +105,7 @@ function text(value: unknown): string | null {
  * the reason a service cannot be probed is as much a part of the answer as a
  * status code.
  */
-export function planProbe(entry: CatalogEntry): ProbePlan {
+export function planProbe(entry: CatalogEntry, overrides: ProbeOverrides = {}): ProbePlan {
   /* Model providers first: they already have a listing endpoint, and it is the
      same one the routing layer probes, so a key that passes here is a key the
      router can use. */
@@ -103,14 +119,23 @@ export function planProbe(entry: CatalogEntry): ProbePlan {
 
   switch (entry.id) {
     case "github-pat": {
-      /* Resolved through the shared credential list rather than by reading
-         `entry.envKey`, so this answers for the token the app would actually
-         use. Reading the catalogue's single variable name is how the four
-         disagreeing GitHub resolvers happened; see `credentials.ts`. */
-      const token = readCredential("github");
-      if (!token) return { kind: "none", why: "No GitHub token is set." };
+      /* The person's connected account first, because that is the credential
+         the repository tools actually send — testing the deployment's token
+         and reporting the result would answer a question nobody asked, in a
+         way that reads as an answer to the one they did.
+
+         Falls back through the shared credential list rather than reading
+         `entry.envKey` directly. Reading the catalogue's single variable name
+         is how four disagreeing GitHub resolvers happened; see
+         `credentials.ts`. */
+      const account = overrides.githubToken?.trim();
+      const token = account || readCredential("github");
+      if (!token) return { kind: "none", why: "No GitHub token is set, and no GitHub account is connected." };
       return {
         kind: "request",
+        subject: account
+          ? "your connected GitHub account"
+          : "this deployment's own GitHub token (no account is connected, so the repository tools have nothing else to use)",
         url: "https://api.github.com/user",
         headers: {
           Accept: "application/vnd.github+json",
@@ -210,14 +235,15 @@ export async function runProbe(plan: ProbePlan, signal?: AbortSignal): Promise<P
 }
 
 /** One sentence a person can act on, for each outcome. */
-export function describeProbe(entry: CatalogEntry, outcome: ProbeOutcome): string {
+export function describeProbe(entry: CatalogEntry, outcome: ProbeOutcome, subject?: string): string {
+  const whose = subject ? ` This tested ${subject}.` : "";
   switch (outcome.kind) {
     case "working":
       return outcome.identity
-        ? `${entry.label} answered normally. The key works, and it belongs to \`${outcome.identity}\` — say that account name when reporting this, because a working key for the wrong account is the failure that looks most like success.`
-        : `${entry.label} answered normally. The key works.`;
+        ? `${entry.label} answered normally. The key works, and it belongs to \`${outcome.identity}\` — say that account name when reporting this, because a working key for the wrong account is the failure that looks most like success.${whose}`
+        : `${entry.label} answered normally. The key works.${whose}`;
     case "rejected":
-      return `${entry.label} ${outcome.detail}. A new key: ${entry.keyUrl}`;
+      return `${entry.label} ${outcome.detail}.${whose} A new key: ${entry.keyUrl}`;
     case "limited":
       return `${entry.label} ${outcome.detail}.`;
     case "unreachable":

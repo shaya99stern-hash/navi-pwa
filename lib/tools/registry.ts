@@ -344,6 +344,10 @@ export function buildToolset(context: ToolsetContext): ToolSet {
        about the user's GitHub account and had no answer at all for Google. */
     ...buildEnvironmentTools({
       onActivity,
+      /* The value, not just its presence: `test_service` has to send the
+         credential the repository tools send, or "is GitHub working?" gets a
+         confident answer about a different token than the one in use. */
+      githubToken,
       connections: {
         github: Boolean(githubToken),
         githubOAuthAvailable,

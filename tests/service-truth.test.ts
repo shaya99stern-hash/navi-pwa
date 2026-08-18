@@ -57,6 +57,19 @@ async function main() {
   check("carrying the header GitHub requires",
     github.kind === "request" ? Boolean(github.headers["User-Agent"]) : false, true);
 
+  /* Two entirely separate GitHub credentials reach two different sets of tools.
+     Testing the deployment's token and reporting it as the answer to "is GitHub
+     working" is a confident answer about something nobody asked. */
+  const asAccount = planProbe(entry("github"), { githubToken: "gho_account" });
+  check("a connected account is what gets tested",
+    asAccount.kind === "request" ? asAccount.headers.Authorization : "", "Bearer gho_account");
+  check("and the answer says whose credential it was",
+    asAccount.kind === "request" ? asAccount.subject : "", "your connected GitHub account");
+  check("with no account, the deployment's own token is tested",
+    github.kind === "request" ? github.headers.Authorization : "", "Bearer ghp_example");
+  check("and that is said out loud rather than left ambiguous",
+    github.kind === "request" && (github.subject ?? "").includes("no account is connected"), true);
+
   process.env.NAVI_VERCEL_TOKEN = "vc_example";
   check("Vercel can be checked too", planProbe(entry("vercel")).kind, "request");
 
@@ -132,6 +145,9 @@ async function main() {
 
   /* The sentence a person reads. A working key for the wrong account is the
      failure that looks most like success, so the account is stated. */
+  check("the sentence names which credential was tested",
+    describeProbe(entry("github"), { kind: "working", identity: "octocat" }, "your connected GitHub account")
+      .includes("This tested your connected GitHub account."), true);
   check("a working key is described with its account",
     describeProbe(entry("github"), { kind: "working", identity: "octocat" }).includes("`octocat`"), true);
   check("and a rejected one points at where a new key comes from",
@@ -215,7 +231,9 @@ async function main() {
     /canCommit: toolNames\.includes\("commit_own_source"\)/.test(route), true);
 
   check("test_service plans a probe rather than hunting for a model adapter",
-    /const plan = planProbe\(entry\)/.test(envTools), true);
+    /const plan = planProbe\(entry, \{ githubToken \}\)/.test(envTools), true);
+  check("and the registry hands it the account's own token",
+    /githubToken,\n {6}connections: \{/.test(registry), true);
   check("and reports the reason when one cannot be made",
     /if \(plan\.kind === "none"\) return describeProbe/.test(envTools), true);
 
