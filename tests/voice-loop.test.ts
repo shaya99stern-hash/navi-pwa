@@ -203,5 +203,33 @@ check("and nothing mutes it afterwards either", /audio\.muted = true/.test(speec
 check("the primer is real silence rather than a muted sound",
   /`SILENCE` is digital silence/.test(speech), true);
 
+/* ── A dial that exists, because the answer that it did not was wrong ────────
+   Asked to speak faster, Navi Soul said NaviOS "doesn't let me adjust my
+   speaking rate directly — it's set by the system voice settings on your
+   device". Wrong twice over: the device voice had always been given an
+   explicit rate here, and the premium voice takes a speed of its own. There
+   was simply nothing to turn, so the honest-sounding answer was the incorrect
+   one. */
+
+const settings = readFileSync(join(process.cwd(), "app/components/settings-sheet.tsx"), "utf8");
+const tts = readFileSync(join(process.cwd(), "lib/ai/voice/tts.ts"), "utf8");
+const knowledge = readFileSync(join(process.cwd(), "lib/ai/app-knowledge.ts"), "utf8");
+
+check("the rate is a stored preference", /voiceRate: number;/.test(readFileSync(join(process.cwd(), "lib/ai/types.ts"), "utf8")), true);
+check("with a control to move it", /label="Speaking rate"/.test(settings), true);
+/* One dial, both engines. A number that means something different depending on
+   which voice happens to answer is worse than no number. */
+check("it reaches the device voice", /utterance\.rate = clampVoiceRate\(0\.98 \* rate\)/.test(speech), true);
+check("and the premium voice", /speed: speed\(rate\)/.test(tts), true);
+check("clamped to the same range on both",
+  /Math\.min\(1\.4, Math\.max\(0\.7/.test(tts) && /MAX_VOICE_RATE = 1\.4/.test(speech), true);
+/* Both callers pass it, or the dial moves one surface and not the other. */
+check("the conversation reads it", /optionsRef\.current\.rate/.test(source), true);
+check("and so does the read-aloud button",
+  /speakBest\(text, language, voiceRate\)/.test(readFileSync(join(process.cwd(), "app/components/message-row.tsx"), "utf8")), true);
+/* And the model is told to stop saying the opposite. */
+check("and the app stops claiming the device controls it",
+  /never tell the user their device\n {2}controls it/.test(knowledge), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

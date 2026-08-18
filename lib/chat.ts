@@ -62,6 +62,7 @@ export const DEFAULT_PREFERENCES: NaviPreferences = {
   customPlaybooks: [],
   notifyOnComplete: false,
   voiceLanguage: "auto",
+  voiceRate: 1,
   profile: { fullName: "", displayName: "", work: "", instructions: "" },
   tools: { web: false, code: false, artifacts: true },
   connectedMcpServers: [],

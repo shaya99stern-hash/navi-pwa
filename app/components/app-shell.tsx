@@ -968,6 +968,7 @@ export function AppShell({
     online,
     busy: generating,
     language: preferences.voiceLanguage,
+    rate: preferences.voiceRate,
     haptics: preferences.haptics,
     reply: latestReply,
     failedAt: turnFailedAt,
@@ -1697,6 +1698,7 @@ export function AppShell({
                   chatFont={preferences.chatFont}
                   haptics={preferences.haptics}
                   voiceLanguage={preferences.voiceLanguage}
+                  voiceRate={preferences.voiceRate}
                   rating={activeChat?.ratings?.[message.id]}
                   onRate={message.role === "assistant" ? stableRate : undefined}
                   onRetry={message.role === "assistant" && index === messages.length - 1 && !generating && online ? stableRetry : undefined}

@@ -105,7 +105,19 @@ export async function readTtsUsage(): Promise<TtsUsage> {
  * — it adds presence at the cost of the softness this is going for. All three
  * are overridable, because "calm" is a taste and the person listening owns it.
  */
-function voiceSettings() {
+/**
+ * The owner's speaking-rate dial, clamped to what the provider accepts.
+ *
+ * Held to the same range as the device voice so one control means one thing on
+ * both engines, rather than a number that changes meaning depending on which
+ * voice happens to be answering.
+ */
+function speed(rate: number | undefined): number {
+  if (!Number.isFinite(rate)) return 1;
+  return Math.min(1.4, Math.max(0.7, rate as number));
+}
+
+function voiceSettings(rate?: number) {
   const num = (name: string, fallback: number): number => {
     const raw = Number(process.env[name]);
     return Number.isFinite(raw) ? raw : fallback;
@@ -114,7 +126,8 @@ function voiceSettings() {
     stability: num("NAVI_TTS_STABILITY", 0.55),
     similarity_boost: num("NAVI_TTS_SIMILARITY", 0.75),
     style: num("NAVI_TTS_STYLE", 0.15),
-    use_speaker_boost: process.env.NAVI_TTS_SPEAKER_BOOST === "true"
+    use_speaker_boost: process.env.NAVI_TTS_SPEAKER_BOOST === "true",
+    speed: speed(rate)
   };
 }
 
@@ -127,6 +140,8 @@ function voiceSettings() {
  */
 export async function synthesizeSpeech(options: {
   text: string;
+  /** The owner's speaking-rate dial, as a multiplier of normal. */
+  rate?: number;
   signal?: AbortSignal;
 }): Promise<TtsResult> {
   const key = apiKey();
@@ -177,7 +192,7 @@ export async function synthesizeSpeech(options: {
         body: JSON.stringify({
           text,
           model_id: process.env.NAVI_TTS_MODEL?.trim() || "eleven_turbo_v2_5",
-          voice_settings: voiceSettings()
+          voice_settings: voiceSettings(options.rate)
         }),
         signal: controller.signal
       }

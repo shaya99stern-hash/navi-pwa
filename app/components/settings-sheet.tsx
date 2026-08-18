@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, NaviPreferences } from "@/lib/ai/types";
+import { clampVoiceRate, MAX_VOICE_RATE, MIN_VOICE_RATE } from "@/lib/ui/speech";
 import { categories, isImplemented, type Skill } from "@/lib/skills";
 import { BUILT_IN_PLAYBOOKS, parseSkillMarkdown } from "@/lib/playbooks";
 import { DIAGNOSTIC_ROUTES } from "@/lib/chat";
@@ -851,6 +852,32 @@ export function SettingsSheet({
                        has to remember to keep a second one in step. */
                     onChange={(voiceLanguage) => update({ voiceLanguage })}
                   />
+                }
+              />
+              {/* Asked to speak faster, Navi Soul said NaviOS "doesn't let me
+                  adjust my speaking rate directly — it's set by the system
+                  voice settings on your device". Wrong twice over: the device
+                  voice has always been given an explicit rate, and the premium
+                  voice takes a speed of its own. There was nothing to turn, so
+                  the honest-sounding answer was the incorrect one. */}
+              <Row
+                label="Speaking rate"
+                control={
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={MIN_VOICE_RATE}
+                      max={MAX_VOICE_RATE}
+                      step={0.05}
+                      value={preferences.voiceRate}
+                      onChange={(event) => update({ voiceRate: clampVoiceRate(Number(event.target.value)) })}
+                      aria-label="Speaking rate"
+                      className="w-32 accent-[var(--accent)]"
+                    />
+                    <span className="w-10 shrink-0 text-right text-[0.8125rem]/5 font-semibold tabular-nums text-secondary">
+                      {preferences.voiceRate.toFixed(2)}&times;
+                    </span>
+                  </span>
                 }
               />
               {/* Runs the real pipeline — permission, capture, measured signal,
