@@ -32,7 +32,7 @@ check("the clock counts up rather than towards a limit", /remainingSeconds/.test
 /* The recording bar carries the clock and the level, so the footer speaks
    only for transcription — the state with no other indicator. */
 check("transcription is reported", code.includes('transcribing ? "Transcribing…" : null'), true);
-check("transcription reads as active, not as a warning", code.includes('transcribing\n    ? "text-accent"'), true);
+check("transcription reads as active, not as a warning", code.includes('talking || transcribing\n      ? "text-accent"'), true);
 
 /* ── The waveform is a record, not a decoration ──────────────────────────────
    It was fifteen fixed weights driven through a sine of the elapsed second,
@@ -60,7 +60,9 @@ check("the transcript streams in", code.includes("onTranscript: setLiveTranscrip
 check("and is shown in the composer where it will end up", code.includes("previewValue"), true);
 /* A box whose contents are being rewritten underneath the caret is a box that
    eats what you type. */
-check("the box is read-only while it is a preview", code.includes("readOnly={dictating}"), true);
+/* Both kinds of microphone put words in this box that the person did not
+   type: dictation's preview, and the conversation's turn in flight. */
+check("the box is read-only while it is a preview", code.includes("readOnly={dictating || talking}"), true);
 /* It is a preview until the recording is accepted, so discarding one is a
    discard rather than an undo. */
 check("the preview is not written into the draft", /onChange\(previewValue\)/.test(code), false);

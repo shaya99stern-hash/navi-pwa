@@ -163,9 +163,9 @@ check("a refused permission reads differently in an installed app", recorder.inc
    The bar and the leftover flex spacer both claimed flex-1, so the waveform
    rendered at half width beside controls nobody can reach one-handed. */
 
-check("the spacer yields while recording", code.includes("{listening ? null : <span className=\"min-w-0 flex-1\" />}"), true);
-check("the plus button yields", /\{listening \? null : \(\s*<button[\s\S]{0,200}Add photos/.test(code), true);
-check("the research switch yields", /\{listening \? null : \(\s*<button[\s\S]{0,200}role="switch"/.test(code), true);
+check("the spacer yields while recording", code.includes("{listening || talking ? null : <span className=\"min-w-0 flex-1\" />}"), true);
+check("the plus button yields", /\{listening \|\| talking \? null : \(\s*<button[\s\S]{0,200}Add photos/.test(code), true);
+check("the research switch yields", /\{listening \|\| talking \? null : \(\s*<button[\s\S]{0,200}role="switch"/.test(code), true);
 check("the waveform bar claims the row", code.includes("flex min-w-0 flex-1 items-center gap-2 rounded-full"), true);
 
 /* ── Dead modules stay dead ──────────────────────────────────────────────────

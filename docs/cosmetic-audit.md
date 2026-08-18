@@ -23,7 +23,7 @@ exists and is reached — not that it has been felt on a device.
 |Composer|Effort pill|Change effort|Opens `EffortSheet`; `preferences.effort` ships in `requestBody` (`app-shell.tsx:370`)|`real`|
 |Composer|Research toggle|Search the web for this message|`toggleResearch` sets `tools.web`; `tools` ships in `requestBody` (`app-shell.tsx:371`)|`real`|
 |Composer|Mic|Record a message|Records via `MediaRecorder`, uploads to `/api/voice/transcribe`, appends the transcript. **Was `partial`** — see Phase 1 below|`real` (fixed)|
-|Composer|Voice mode|Spoken conversation|Opens `VoiceModeSheet`, which drives the same recorder and speaks the reply|`real`|
+|Composer|Voice mode|Spoken conversation|One tap starts a half-duplex loop (`lib/ui/voice-conversation.ts`): it listens, the pause ends the turn, the answer is spoken, the microphone reopens. No sheet|`real`|
 |Composer|Send / Stop|Send, or stop generating|`sendMessage` / `stop` from `useChat`|`real`|
 |Composer|Starter chips|Seed a first message|Writes the draft and refocuses; "Visualize " is phrasing the server's image-intent matcher recognises|`real`|
 |Composer|Slash suggestions|On-device commands|`suggest()` over 82 skills, all with registered executors; runs with no provider call|`real`|
@@ -184,12 +184,12 @@ credentials, which this environment has neither of. `needs-device`.
 
 ## Deliberately not done
 
-- **4.1, one voice surface.** The brief says collapse mic, waveform button and
-  voice sheet into one. The answer to 4.3 was "whatever the iOS reference client
-  does" — and that client ships *both* a dictation mic and a separate voice-mode
-  entry. Applying the owner's own stated principle argues for keeping both, so
-  the surfaces are left as they are pending an explicit call. Overrule this and
-  it is a small change.
+- **4.1, one voice surface.** Partly done, and not the way the brief asked. The
+  sheet is gone — voice mode is now one tap in the composer and a conversation
+  until it is tapped again — but the dictation mic beside it stays. They are
+  different acts: dictation puts words in the box for someone to read and send,
+  a conversation sends them itself and answers out loud. The reference client
+  ships both for the same reason.
 - **4.2, two ways to start a chat.** Same reasoning: header compose icon and
   drawer "New chat" both exist in the reference client. Kept, deliberately.
 - **4.4, settings density.** Not regrouped. General still holds profile,

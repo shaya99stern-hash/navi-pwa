@@ -8,6 +8,7 @@ import {
   ChevronDown,
   FileText,
   Image as ImageIcon,
+  LoaderCircle,
   Mic,
   Paperclip,
   Plus,
@@ -16,6 +17,7 @@ import {
   Link2,
   Search,
   Square,
+  Volume2,
   X
 } from "lucide-react";
 import {
@@ -40,6 +42,7 @@ import {
   type RecordingSession
 } from "@/lib/ui/recorder";
 import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
+import type { VoiceConversation } from "@/lib/ui/voice-conversation";
 import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 import { useOverlayRoute } from "@/lib/ui/overlay-route";
 import { watchProviderStatus } from "@/lib/ui/provider-status";
@@ -73,6 +76,28 @@ const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 const WAVEFORM_BAR_COUNT = 34;
 const WAVEFORM_BAR_MS = 60;
 
+/* Fixed per-bar weights for the conversation strip, where the row is short and
+   there is no scrolling history to show — only whether the microphone is
+   hearing anything right now. The height comes from the live level; these vary
+   the shape so it reads as a voice rather than a block. */
+const CONVERSATION_BARS = [0.55, 0.85, 1, 0.7, 1, 0.8, 0.6];
+
+/**
+ * The loop's state, said plainly.
+ *
+ * Every phase gets a line, including the ones that pass in under a second.
+ * A conversation where the screen goes blank between speaking and hearing is
+ * one where nobody can tell a pause from a failure, and the phase is the only
+ * thing that answers that.
+ */
+const CONVERSATION_PLACEHOLDER: Record<VoiceConversation["phase"], string> = {
+  off: "",
+  listening: "Listening — just talk",
+  transcribing: "Writing that down…",
+  thinking: "Navi Soul is thinking…",
+  speaking: "Answering — the mic reopens after"
+};
+
 const menuRow = "flex min-h-[50px] w-full items-center gap-3 px-4 text-left text-[0.9375rem]/[1.375rem] font-medium text-primary active:bg-elev-3";
 
 type Props = {
@@ -93,7 +118,8 @@ type Props = {
   onStop: () => void;
   onFiles: (files: FileList | null) => void;
   onOpenEffort: () => void;
-  onOpenVoice: () => void;
+  /** The spoken conversation, owned by the shell and driven from here. */
+  conversation: VoiceConversation;
   onToggleResearch: () => void;
   onOpenTools: () => void;
   onOpenProjects: () => void;
@@ -159,7 +185,7 @@ export function ComposerDock({
   onStop,
   onFiles,
   onOpenEffort,
-  onOpenVoice,
+  conversation,
   onToggleResearch,
   onOpenTools,
   onOpenProjects,
@@ -252,9 +278,25 @@ export function ComposerDock({
    * makes discarding one an actual discard rather than an undo.
    */
   const dictating = listening || transcribing;
-  const previewValue = dictating && liveTranscript
-    ? `${value}${value.trim() ? " " : ""}${liveTranscript}`
-    : value;
+  /**
+   * The spoken conversation is running, which is a different thing from
+   * dictation and mutually exclusive with it.
+   *
+   * Dictation puts words in the box for someone to read and send. A
+   * conversation sends them itself and answers out loud. Two microphones open
+   * at once would fight over the device and transcribe the same sentence
+   * twice, so each disables the other's button rather than trusting nobody to
+   * press both.
+   */
+  const talking = conversation.active;
+  /* What the box shows. In a conversation the words are not going into the
+     draft at all — the turn is sent as soon as the pause lands — so they are
+     shown in the same place for the same reason and then they are gone. */
+  const previewValue = talking
+    ? conversation.transcript
+    : dictating && liveTranscript
+      ? `${value}${value.trim() ? " " : ""}${liveTranscript}`
+      : value;
 
   function completeCommand(skill: Skill) {
     haptic("selection", haptics);
@@ -310,7 +352,9 @@ export function ComposerDock({
     ? "Add instructions for these files"
     : hasMessages ? "Write a message…" : "How can I help you today?";
 
-  const footer = (transcribing ? "Transcribing…" : null)
+  const footer = conversation.error
+    ?? (talking ? `${CONVERSATION_PLACEHOLDER[conversation.phase]} · tap the waveform to end` : null)
+    ?? (transcribing ? "Transcribing…" : null)
     ?? voiceMessage
     ?? attachmentMessage
     ?? (!online && !offlineCommand
@@ -321,9 +365,11 @@ export function ComposerDock({
           ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} ready`
           : null);
 
-  const footerTone = transcribing
-    ? "text-accent"
-    : !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
+  const footerTone = conversation.error
+    ? "text-warning"
+    : talking || transcribing
+      ? "text-accent"
+      : !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
 
   /* Counts up rather than down. The old clock counted towards a sixty-second
      ceiling that existed because a whole recording had to fit in one request;
@@ -704,15 +750,15 @@ export function ComposerDock({
               autoCorrect="on"
               spellCheck
               disabled={blocked}
-              readOnly={dictating}
-              placeholder={listening ? "Listening — speak naturally" : placeholder}
+              readOnly={dictating || talking}
+              placeholder={talking ? CONVERSATION_PLACEHOLDER[conversation.phase] : listening ? "Listening — speak naturally" : placeholder}
               aria-label="Chat with Navi Soul"
               data-navi-composer=""
               className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[1rem]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
             <div className="mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
-              {listening ? null : (
+              {listening || talking ? null : (
               <button
                 type="button"
                 onClick={openSourceMenu}
@@ -725,7 +771,7 @@ export function ComposerDock({
               </button>
               )}
 
-              {listening ? null : (
+              {listening || talking ? null : (
               <button
                 type="button"
                 onClick={onOpenEffort}
@@ -737,7 +783,7 @@ export function ComposerDock({
               </button>
               )}
 
-              {listening ? null : (
+              {listening || talking ? null : (
               <button
                 type="button"
                 role="switch"
@@ -752,9 +798,48 @@ export function ComposerDock({
               </button>
               )}
 
-              {listening ? null : <span className="min-w-0 flex-1" />}
+              {listening || talking ? null : <span className="min-w-0 flex-1" />}
 
-              {listening ? (
+              {talking ? (
+                <span
+                  /* The conversation's own strip. It shares the dictation
+                     strip's shape on purpose — same ring, same bars, same
+                     place — because they are the same act from the person's
+                     side, and only the ending differs. */
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-accent" : "ring-transparent"}`}
+                  role="status"
+                  aria-label={CONVERSATION_PLACEHOLDER[conversation.phase]}
+                >
+                  <button
+                    type="button"
+                    onClick={conversation.stop}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3"
+                    aria-label="End the voice conversation"
+                  >
+                    <X size={17} strokeWidth={2} />
+                  </button>
+                  <span className="flex h-6 min-w-0 flex-1 items-end justify-center gap-1" aria-hidden="true">
+                    {CONVERSATION_BARS.map((weight, index) => (
+                      <span
+                        key={index}
+                        className={`w-1.5 rounded-full transition-[height,background-color] duration-100 ${conversation.hearing ? "bg-accent" : "bg-[var(--border-strong)]"}`}
+                        style={{ height: `${Math.max(4, Math.min(22, 4 + conversation.level * weight * 26))}px` }}
+                      />
+                    ))}
+                  </span>
+                  {/* Which of the four things is happening. The bars only
+                      answer that while the microphone is open; between the
+                      pause and the answer they are flat, and flat is exactly
+                      what a broken microphone looks like. */}
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-accent">
+                    {conversation.phase === "speaking"
+                      ? <Volume2 size={17} />
+                      : conversation.phase === "listening"
+                        ? <AudioLines size={17} />
+                        : <LoaderCircle size={17} className="animate-spin" />}
+                  </span>
+                </span>
+              ) : listening ? (
                 <span
                   /* The detector's own answer, not a level threshold read off
                      the bars. It is the same judgement that decides where a
@@ -817,13 +902,19 @@ export function ComposerDock({
                 <Mic size={19} strokeWidth={1.8} />
               </button>
               )}
-              {listening ? null : (
+              {listening || talking ? null : (
+              /* One tap and it is a conversation until it is ended: it
+                 listens, you pause, it answers aloud, it listens again. This
+                 used to open a sheet with a Start button, a Stop button, a
+                 Send button and two switches between wanting to say something
+                 and having said it. */
               <button
                 type="button"
-                onClick={onOpenVoice}
-                disabled={blocked || generating}
+                onClick={conversation.toggle}
+                disabled={blocked || generating || transcribing || !online}
                 className="composer-action"
-                aria-label="Use voice mode"
+                aria-label="Start a voice conversation"
+                aria-pressed={false}
               >
                 <AudioLines size={19} strokeWidth={1.8} />
               </button>

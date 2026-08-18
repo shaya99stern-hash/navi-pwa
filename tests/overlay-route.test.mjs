@@ -23,9 +23,14 @@ const composer = stripComments(readFileSync(join(root, "app/components/composer-
    underneath — or left the app when the chat was the first thing opened. An
    overlay added later without a route would reintroduce exactly that, silently,
    which is why this counts them rather than spot-checking. */
+/* Voice is not on this list any more, and its absence is the change rather
+   than an omission. It was a sheet with five controls in it; it is now a state
+   the composer is in, with nothing covering the thread and nothing for back to
+   dismiss. `/voice` still exists — it is the manifest shortcut — but it starts
+   a conversation instead of opening a layer, so there is no layer to route. */
 const SHELL_OVERLAYS = [
   "historyOpen", "settingsOpen", "connectorsOpen", "projectsOpen",
-  "artifactsOpen", "voiceOpen", "chatMenuOpen", "effortSheetOpen"
+  "artifactsOpen", "chatMenuOpen", "effortSheetOpen"
 ];
 for (const name of SHELL_OVERLAYS) {
   check(`${name} is dismissable by back`, new RegExp(`useOverlayRoute\\(\\{\\s*open:\\s*${name}\\b`).test(shell), true);
@@ -48,7 +53,7 @@ check("no shell overlay is left out", unrouted, []);
    again. Each overlay with a route of its own now carries it. */
 for (const [state, path] of [
   ["historyOpen", "/recents"], ["settingsOpen", "/settings"], ["connectorsOpen", "/connectors"],
-  ["projectsOpen", "/projects"], ["artifactsOpen", "/artifacts"], ["voiceOpen", "/voice"]
+  ["projectsOpen", "/projects"], ["artifactsOpen", "/artifacts"]
 ]) {
   const block = shell.slice(shell.indexOf(`open: ${state}`));
   check(`${state} carries ${path}`, block.slice(0, 260).includes(`path: "${path}"`), true);
@@ -56,6 +61,12 @@ for (const [state, path] of [
 
 /* A link straight to a sheet has nothing behind it, so closing must not walk
    off the end of the history and out of the app. */
+/* The one route with no overlay behind it. It has to still do something, and
+   what it does is the thing its manifest entry promises — start talking. */
+check("/voice starts a conversation rather than opening a layer",
+  /initialLayer !== "voice"[\s\S]{0,200}conversation\.start\(\)/.test(shell), true);
+check("and nothing opens a voice sheet any more", /voiceOpen/.test(shell), false);
+
 check("a linked sheet closes to somewhere in the app", /restore: restorePath/.test(shell), true);
 check("the restore target is a chat that exists", /chats\.some\(\(chat\) => chat\.id === activeId\)/.test(shell), true);
 
