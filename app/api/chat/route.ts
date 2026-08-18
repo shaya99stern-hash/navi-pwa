@@ -48,6 +48,7 @@ import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { historyInstruction } from "@/lib/ai/history-tools";
 import { withoutReasoning } from "@/lib/ai/replay";
+import { parseCapabilities } from "@/lib/ai/capabilities/parse";
 import { buildToolset } from "@/lib/tools/registry";
 import { detectRepo, retrieveFiles } from "@/lib/ai/repo-retrieval";
 import { critiqueAllowed, groundingFor, skipReason, type FetchedSource } from "@/lib/ai/grounding";
@@ -228,6 +229,7 @@ type ChatRequestBody = {
   playbook?: string;
   connectedMcpServers?: string[];
   customConnectors?: unknown;
+  capabilities?: unknown;
   connectorAccessMode?: unknown;
   projectContext?: unknown;
   userContext?: unknown;
@@ -1551,6 +1553,10 @@ export async function POST(request: Request): Promise<Response> {
         /* Connectors the user typed in on the device. Access mode governs them
            exactly as it governs registry MCP servers. */
         customConnectors: connectorAccessMode === "ask" ? [] : parseCustomConnectors(body.customConnectors),
+        /* Same gate as the connectors beside them: "ask" means this chat does
+           not reach the owner's own services without being asked first, and an
+           added API is one of those. */
+        capabilities: connectorAccessMode === "ask" ? [] : parseCapabilities(body.capabilities),
         signal: request.signal,
         /* Python runs on a Node route because the sandbox SDK cannot run on
            Edge. The origin lets the tool reach it; the cookie makes sure that

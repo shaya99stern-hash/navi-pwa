@@ -5,6 +5,8 @@ import { buildGitHubWriteTools } from "@/lib/ai/github-write-tools";
 import { buildGoogleTools } from "@/lib/ai/google-tools";
 import { buildConnectorTools, buildProvisioningTools } from "@/lib/ai/connector-tools";
 import { buildEnvironmentTools } from "@/lib/ai/environment-tools";
+import { buildCapabilityTools } from "@/lib/ai/capabilities/tools";
+import type { AddedCapability } from "@/lib/ai/capabilities/search";
 import { buildHistoryTools } from "@/lib/ai/history-tools";
 import { buildLearningTools } from "@/lib/ai/learning-tools";
 import { buildReflectionTools } from "@/lib/ai/reflection-tools";
@@ -62,6 +64,7 @@ export type ToolsetContext = {
   policy: ToolPolicy;
   /** Per-user GitHub token from OAuth, when they have connected an account. */
   githubToken?: string;
+  capabilities?: AddedCapability[];
   /** A live Google access token, when they have connected that account. */
   googleAccessToken?: string;
   /** The user's last message, so a group can be offered when it is wanted. */
@@ -211,6 +214,15 @@ const GROUPS: Group[] = [
   },
   {
     /* The connectors the user typed in themselves. One tool for all of them. */
+    /* APIs the owner added by reading their own description. On only when
+       there are any, because the two tools name the connected APIs in their
+       descriptions and an empty roster is a schema that can report nothing but
+       its own emptiness. */
+    name: "capabilities",
+    tools: () => ({}),
+    when: ({ capabilities }) => Boolean(capabilities?.length)
+  },
+  {
     name: "custom-connectors",
     tools: () => ({}),
     when: ({ customConnectors }) => Boolean(customConnectors?.some((connector) => connector.kind !== "mcp"))
@@ -303,7 +315,7 @@ export function wantsSelfUpdate(request: string | undefined): boolean {
  * `when` predicates be read at a glance.
  */
 export function buildToolset(context: ToolsetContext): ToolSet {
-  const { policy, mode, githubToken, googleAccessToken, githubWritesEnabled, clerkToken, clerkUserId, customConnectors = [], signal, origin, cookie, onActivity = () => {}, onSource = () => {}, mcpTools = {} } = context;
+  const { policy, mode, githubToken, capabilities, googleAccessToken, githubWritesEnabled, clerkToken, clerkUserId, customConnectors = [], signal, origin, cookie, onActivity = () => {}, onSource = () => {}, mcpTools = {} } = context;
 
   const active = (name: string) => GROUPS.find((group) => group.name === name)?.when(context) ?? false;
 
@@ -331,6 +343,7 @@ export function buildToolset(context: ToolsetContext): ToolSet {
       : {}),
     ...(active("provisioning") ? buildProvisioningTools({ origin, cookie, onActivity }) : {}),
     ...(active("custom-connectors") ? buildConnectorTools({ connectors: customConnectors, signal, onActivity }) : {}),
+    ...(active("capabilities") ? buildCapabilityTools({ capabilities: capabilities ?? [], signal, onActivity }) : {}),
     ...(active("google") ? buildGoogleTools(onActivity, { accessToken: googleAccessToken }) : {})
   };
 

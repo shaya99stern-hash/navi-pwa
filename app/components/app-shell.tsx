@@ -47,6 +47,7 @@ import { useEdgeSwipe } from "@/lib/ui/use-edge-swipe";
 import { releaseOverlaysForNavigation, useOverlayRoute } from "@/lib/ui/overlay-route";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
 import { useVoiceConversation } from "@/lib/ui/voice-conversation";
+import type { AddedCapability } from "@/lib/ai/capabilities/search";
 import { ComposerDock } from "./composer-dock";
 import { ConnectorsSheet } from "./connectors-sheet";
 import { FilesScreen } from "./files-screen";
@@ -359,6 +360,18 @@ export function AppShell({
   /* Counted per user turn, not per conversation: three attempts at this
      problem, then three fresh ones at the next. Reset on send below. */
   const repairRounds = useRef(0);
+  /**
+   * A write approval waiting on the owner.
+   *
+   * The tool call cannot return until they answer, so the resolver is held here
+   * and the sheet below settles it. One at a time: a queue of confirmations is
+   * a queue that gets cleared without being read, which is the opposite of what
+   * a gate is for.
+   */
+  const [pendingApproval, setPendingApproval] = useState<{ title: string; detail: string; reason: string } | null>(null);
+  const approvalAnswer = useRef<((granted: boolean) => void) | null>(null);
+  const preferencesRef = useRef(preferences);
+  preferencesRef.current = preferences;
   /* The conversations and which one is open, as refs, because `onToolCall` is
      invoked long after the render that created it and a closed-over copy would
      be whatever the list held several turns ago. */
@@ -406,6 +419,28 @@ export function AppShell({
             activeIdRef.current,
             { limit: typeof input?.limit === "number" ? input.limit : undefined }
           )
+        });
+        return;
+      }
+
+      /**
+       * Approving one write on a connected API, once.
+       *
+       * Handled here for the same reason `search_history` is: the server cannot
+       * ask the owner anything mid-generation, and a grant has to come from
+       * them. The answer is written into their own preferences, so the next
+       * call finds it already approved and never asks again.
+       */
+      if (toolCall.toolName === "approve_capability_write") {
+        const input = toolCall.input as { capability?: string; operation?: string; reason?: string };
+        addToolResult({
+          tool: "approve_capability_write",
+          toolCallId: toolCall.toolCallId,
+          output: await requestWriteApproval({
+            capabilityId: typeof input?.capability === "string" ? input.capability : "",
+            operationId: typeof input?.operation === "string" ? input.operation : "",
+            reason: typeof input?.reason === "string" ? input.reason : ""
+          })
         });
         return;
       }
@@ -575,6 +610,7 @@ export function AppShell({
     threadSummary: activeChat?.summary ?? compactSummary(messages),
     connectedMcpServers: preferences.connectedMcpServers,
     customConnectors: preferences.customConnectors,
+    capabilities: preferences.capabilities,
     connectorAccessMode: activeChat?.connectorAccessMode ?? preferences.connectorAccessMode,
     // Standing profile: name, work, and the user's own instructions travel
     // with every request so each chat starts already knowing them.
@@ -992,6 +1028,52 @@ export function AppShell({
     onInstall: installCapability,
     onRemove: removeCapability
   }), [preferences.customPlaybooks, installCapability, removeCapability]);
+
+  /**
+   * Ask the owner to approve one write, and remember the answer.
+   *
+   * Every refusal here is a fact about the request rather than a policy: an
+   * operation that does not exist, one that only reads, one already approved.
+   * Saying which turns a blocked turn into a next step instead of a wall.
+   */
+  const requestWriteApproval = useCallback(async (input: { capabilityId: string; operationId: string; reason: string }) => {
+    const stored = (preferencesRef.current.capabilities ?? []) as AddedCapability[];
+    const capability = stored.find((entry) => entry?.manifest?.id === input.capabilityId);
+    const operation = capability?.manifest.operations.find((entry) => entry.id === input.operationId);
+
+    if (!capability || !operation) return `There is no operation "${input.operationId}" on "${input.capabilityId}" to approve.`;
+    if (!operation.writes) return `${operation.id} only reads, so it needs no approval. Just call it.`;
+    if (capability.approvedWrites.includes(operation.id)) return `${operation.id} was already approved. Call it.`;
+
+    /* One at a time. A queue of confirmations is a queue that gets cleared
+       without being read, which is the opposite of what a gate is for. */
+    if (approvalAnswer.current) return "Another approval is already open on screen. Wait for that one to be answered.";
+
+    haptic("warning", preferencesRef.current.haptics);
+    const granted = await new Promise<boolean>((resolve) => {
+      approvalAnswer.current = resolve;
+      setPendingApproval({
+        title: `${capability.manifest.name} · ${operation.id}`,
+        detail: `${operation.method} ${operation.path} — ${operation.summary}`,
+        reason: input.reason
+      });
+    });
+    approvalAnswer.current = null;
+    setPendingApproval(null);
+
+    if (!granted) return `The owner declined. ${operation.id} was not called and is not approved. Do not ask again in this conversation or look for another way to do it.`;
+
+    /* Written into their own preferences, so the next call finds it approved
+       and the asking genuinely happens once rather than once per session. */
+    const current = preferencesRef.current;
+    updatePreferences({
+      ...current,
+      capabilities: ((current.capabilities ?? []) as AddedCapability[]).map((entry) => entry?.manifest?.id === input.capabilityId
+        ? { ...entry, approvedWrites: [...new Set([...entry.approvedWrites, operation.id])] }
+        : entry)
+    });
+    return `Approved. ${operation.id} on ${capability.manifest.name} may now be called, and will not ask again.`;
+  }, []);
 
   const updatePreferences = useCallback((next: NaviPreferences) => {
     setPreferences(next);
@@ -1766,6 +1848,46 @@ export function AppShell({
           onRetry={retry}
           onEdit={() => editMessage(contextMessage.id, contextMessage.text)}
         />
+      ) : null}
+
+      {/* The gate, on screen. A model saying "may I?" in prose is not a gate —
+          it is a sentence the model chose to write and could equally choose not
+          to. This is the thing that actually holds, and it holds because the
+          tool call cannot return until it is answered. */}
+      {pendingApproval ? (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center md:items-center md:p-4" role="dialog" aria-modal="true" aria-label="Approve a write">
+          <div className="absolute inset-0 bg-overlay backdrop-blur-[5px]" />
+          <section className="menu-enter relative w-full max-w-[460px] rounded-t-[28px] border border-b-0 border-[var(--border-subtle)] bg-elev-1 p-5 pb-[calc(20px+var(--safe-bottom))] shadow-sheet md:rounded-[28px] md:border">
+            <h2 className="text-[1.0625rem]/6 font-semibold text-primary">This one changes something</h2>
+            <p className="mt-1 text-[0.8125rem]/5 font-medium text-secondary">{pendingApproval.title}</p>
+            <p className="mt-3 break-words rounded-2xl bg-elev-2 p-3 font-mono text-[0.75rem]/5 text-secondary">{pendingApproval.detail}</p>
+            {pendingApproval.reason ? (
+              <p className="mt-3 text-[0.875rem]/5 text-primary">{pendingApproval.reason}</p>
+            ) : null}
+            {/* Said plainly, because the whole bargain is that this is asked
+                once — someone approving without knowing that is approving more
+                than they think they are. */}
+            <p className="mt-3 text-[0.75rem]/4 font-medium text-tertiary">
+              Approving remembers this one operation and never asks about it again. Everything else on this API still asks.
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { haptic("impact-light", preferences.haptics); approvalAnswer.current?.(false); }}
+                className="flex min-h-12 items-center justify-center rounded-2xl border border-[var(--border-strong)] bg-elev-2 text-[0.875rem]/5 font-semibold text-primary active:bg-elev-3"
+              >
+                Not this time
+              </button>
+              <button
+                type="button"
+                onClick={() => { haptic("success", preferences.haptics); approvalAnswer.current?.(true); }}
+                className="flex min-h-12 items-center justify-center rounded-2xl bg-accent text-[0.875rem]/5 font-semibold text-white active:bg-accent-pressed"
+              >
+                Approve
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
 
       <ArtifactsSheet
