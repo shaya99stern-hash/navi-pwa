@@ -141,5 +141,45 @@ check("the opening tap primes the device voice as well as the element",
 check("at zero volume, so priming it is not audible",
   /opener\.volume = 0;/.test(speech), true);
 
+/* The isolated test for the whole speech path: one tap, no conversation loop,
+   the gesture still on the stack. If it is silent there it is silent
+   everywhere — so it reports its fallback too, and the two surfaces together
+   say whether the problem is the loop or the speech. */
+
+const row = readFileSync(join(process.cwd(), "app/components/message-row.tsx"), "utf8");
+check("the read-aloud button reports a fallback too",
+  /setSpokenBy\(handle\.engine === "premium" \? null : handle\.why\)/.test(row), true);
+/* Only the fallbacks. Announcing the good voice on every tap would be noise on
+   a button that is usually working. */
+check("and says nothing when the good voice worked",
+  /\{spokenBy \? \(/.test(row), true);
+
+/* ── And the app can finally look this up itself ────────────────────────────
+   `ttsConfigured` and `readTtsUsage` have existed since the premium voice was
+   built, and `inspect_environment` reported neither. So "is the premium voice
+   working?" was a question the app could not answer by looking — it could only
+   guess, which is the failure this whole codebase keeps finding in new clothes.
+   Three rounds of chasing silence went past that gap without closing it. */
+
+const environment = readFileSync(join(process.cwd(), "lib/ai/environment-tools.ts"), "utf8");
+check("the environment tool reads the premium voice", /ttsConfigured\(\)/.test(environment), true);
+check("and its remaining budget", /const voice = await readTtsUsage\(\);/.test(environment), true);
+/* Not configured is a working configuration, not a fault — saying otherwise
+   sends someone to fix something that is not broken. */
+check("saying plainly that its absence is not a fault",
+  /which is a working configuration and not a fault/.test(environment), true);
+/* An in-memory ledger resets on restart, which makes a remaining count mean
+   something different from what it looks like. */
+check("and flagging a ledger that will not survive a restart",
+  /the ledger is in memory only/.test(environment), true);
+
+/* The transcription line said "needs HF_TOKEN" long after Groq became the
+   preferred path, so the answer named a variable that was neither required nor
+   first. It reads the real ladder now. */
+check("transcription is reported from the ladder it actually walks",
+  /const transcription = transcriptionCandidates\(\);/.test(environment), true);
+check("rather than from a hardcoded token name",
+  /Voice transcription: \$\{providerApiKey\(PROVIDERS\.huggingface\)/.test(environment), false);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

@@ -5,6 +5,8 @@ import { PROVIDER_CATALOG, findProvider, isEntryConfigured } from "./provider-ca
 import { coolingProviders } from "./provider-health";
 import { hasWebSearch, searchProviderName } from "./web-tools";
 import { selfUpdateRepo, selfUpdateToken } from "./self-update-tools";
+import { transcriptionCandidates } from "./voice/transcription-models";
+import { readTtsUsage, ttsConfigured } from "./voice/tts";
 
 /**
  * Navi Soul finding out what it can actually do, right now.
@@ -37,6 +39,8 @@ export function buildEnvironmentTools({ onActivity = () => {} }: {
         onActivity("Checking what is available");
 
         const configured = PROVIDER_IDS.filter((id) => Boolean(providerApiKey(PROVIDERS[id])));
+        const transcription = transcriptionCandidates();
+        const voice = await readTtsUsage();
         const cooling = coolingProviders();
         const repo = selfUpdateRepo();
         const services = PROVIDER_CATALOG.map((entry) => ({ entry, on: isEntryConfigured(entry) }));
@@ -53,7 +57,20 @@ export function buildEnvironmentTools({ onActivity = () => {} }: {
           "",
           `Web research: ${hasWebSearch() ? `available through ${searchProviderName()}` : "unavailable — needs TAVILY_API_KEY or EXA_API_KEY"}.`,
           `Image and sound generation: ${providerApiKey(PROVIDERS.huggingface) ? "available" : "unavailable — needs HF_TOKEN"}.`,
-          `Voice transcription: ${providerApiKey(PROVIDERS.huggingface) ? "available" : "unavailable — needs HF_TOKEN"}.`,
+          /* Read off the same ladder the transcriber actually walks. This said
+             "needs HF_TOKEN" long after Groq became the preferred path, so the
+             answer named a variable that was neither required nor first. */
+          `Voice transcription: ${transcription.length
+            ? `available through ${transcription.map((candidate) => candidate.label).join(", then ")}`
+            : "unavailable — needs GROQ_API_KEY or HF_TOKEN"}.`,
+          /* The premium speaking voice, which nothing could look up until now.
+             Asked why it sounded like the device voice, the honest answer
+             required reading a credential and a ledger that no tool exposed —
+             so the answer was a guess, every time, for as long as the feature
+             has existed. */
+          `Premium speaking voice: ${ttsConfigured()
+            ? `configured; ${voice.remaining} of ${voice.budget} characters left this month${voice.durable ? "" : " (the ledger is in memory only, so this resets when the deployment restarts)"}`
+            : "not configured — needs ELEVENLABS_API_KEY. The device's own voice is used instead, which is a working configuration and not a fault"}.`,
           `Self-editing: ${selfUpdateToken() ? `available on ${repo.owner}/${repo.repo}; commits deploy automatically` : "unavailable — needs GITHUB_PAT"}.`,
           "",
           "Services:",
