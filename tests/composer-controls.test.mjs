@@ -93,7 +93,13 @@ check("it forbids averaging into vagueness", orchestration.includes("Never avera
 check("high effort always carries it", read("lib/ai/orchestration-knowledge.ts").body.includes('effort === "high"'), true);
 
 const route = read("app/api/chat/route.ts").body;
-check("the brief reaches the prompt", route.includes("needsOrchestrationKnowledge(request, effort)"), true);
+/* The decision moved to `planTurn`, which had been making it all along and
+   sending it to a `console.log`. The property is unchanged — the block still
+   reaches the prompt on the same predicate — but it is now decided once rather
+   than twice, so this asserts the plan's name rather than the inline call. */
+check("the brief reaches the prompt", route.includes('promptBlocks.includes("orchestration-knowledge")'), true);
+check("and the plan is what decides it",
+  read("lib/ai/navi-soul/orchestrator.ts").body.includes('needsOrchestrationKnowledge(context.request, context.effort)'), true);
 
 /* ── Principles: the user owns this deployment ───────────────────────────── */
 

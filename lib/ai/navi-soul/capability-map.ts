@@ -91,7 +91,14 @@ export function capabilityBrief(snapshot: CapabilitySnapshot): string {
     ...snapshot.engines.map((engine) => `- ${engine}`),
     snapshot.frontier ? "- Navi Frontier — the escalation for the hardest work, spent sparingly" : "",
     "",
-    `On-device skills: ${snapshot.skillCount} deterministic tools (math, dates, encoding, text, data) that cost no tokens — always prefer one over estimating.`,
+    /* Omitted rather than rendered as zero when the count is unknown. The
+       skills live in a `"use client"` module the edge runtime cannot import, so
+       a server-built snapshot genuinely does not know the number — and "0
+       on-device skills" is a confident false claim where saying nothing is
+       merely silence. */
+    snapshot.skillCount > 0
+      ? `On-device skills: ${snapshot.skillCount} deterministic tools (math, dates, encoding, text, data) that cost no tokens — always prefer one over estimating.`
+      : "",
     snapshot.imageEngines.length ? `Image engines: ${snapshot.imageEngines.join("; ")}.` : "Image generation is not configured on this deployment.",
     snapshot.toolGroups.length ? `Tool groups active this turn: ${snapshot.toolGroups.join(", ")}.` : "",
     snapshot.mcpServers.length ? `Connected MCP servers: ${snapshot.mcpServers.join(", ")}.` : "",
@@ -118,7 +125,7 @@ export function describeCapabilitiesForUser(snapshot: CapabilitySnapshot): strin
       ? `${snapshot.engines.length} engine${snapshot.engines.length === 1 ? "" : "s"} online: ${snapshot.engines.map((engine) => engine.split(" — ")[0]).join(", ")}.`
       : "No engines are configured yet.",
     snapshot.frontier ? "Frontier escalation is configured." : "",
-    `${snapshot.skillCount} on-device skills answer instantly, offline, with no tokens.`,
+    snapshot.skillCount > 0 ? `${snapshot.skillCount} on-device skills answer instantly, offline, with no tokens.` : "",
     snapshot.imageEngines.length ? `Images: ${snapshot.imageEngines.map((engine) => engine.split(" — ")[0]).join(", ")}.` : "",
     snapshot.mcpServers.length ? `Connectors: ${snapshot.mcpServers.join(", ")}.` : ""
   ].filter(Boolean).join("\n");
