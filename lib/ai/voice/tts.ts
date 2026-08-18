@@ -72,8 +72,42 @@ function apiKey(): string | undefined {
   return process.env.ELEVENLABS_API_KEY?.trim() || undefined;
 }
 
+/** The voice to speak in. Without one, every synthesis call refuses. */
+function voiceId(): string | undefined {
+  return process.env.NAVI_TTS_VOICE_ID?.trim() || undefined;
+}
+
+/**
+ * Whether premium speech can actually happen — not whether a key exists.
+ *
+ * This checked the API key alone, while `synthesizeSpeech` refuses without a
+ * voice id as well. A deployment with the key and no voice therefore reported
+ * "Premium speaking voice: configured" through `inspect_environment` while
+ * every single utterance fell back to the device voice.
+ *
+ * The owner hit exactly that and was told, in the app's own words, that Eleven
+ * Labs "is configured and has its full monthly quota available". Both halves
+ * were true and the conclusion was wrong: a full quota after weeks of use is
+ * evidence that nothing has *ever* been synthesised, which is the opposite of
+ * health. The app was holding the proof of its own failure and reporting it as
+ * a clean bill.
+ */
 export function ttsConfigured(): boolean {
-  return Boolean(apiKey());
+  return Boolean(apiKey() && voiceId());
+}
+
+/**
+ * What is missing, named, when premium speech cannot run.
+ *
+ * Empty when it can. Separate from the boolean because "not configured" sends
+ * someone to look at the wrong variable half the time, and this is the exact
+ * question the owner asked and got an invented answer to.
+ */
+export function ttsMissing(): string[] {
+  const missing: string[] = [];
+  if (!apiKey()) missing.push("ELEVENLABS_API_KEY");
+  if (!voiceId()) missing.push("NAVI_TTS_VOICE_ID");
+  return missing;
 }
 
 /** Characters allowed per calendar month. Zero disables premium speech. */
@@ -173,8 +207,8 @@ export async function synthesizeSpeech(options: {
     return { ok: false, reason: "budget-exhausted", detail: `${used} of ${budget} characters used this month.` };
   }
 
-  const voiceId = process.env.NAVI_TTS_VOICE_ID?.trim() || "";
-  if (!voiceId) return { ok: false, reason: "unconfigured", detail: "NAVI_TTS_VOICE_ID is not set." };
+  const voice = voiceId();
+  if (!voice) return { ok: false, reason: "unconfigured", detail: "NAVI_TTS_VOICE_ID is not set." };
 
   /* Two aborts, deliberately: the caller's, which cancels the whole turn, and
      ours, which gives up on a slow start without touching the turn. */
@@ -185,7 +219,7 @@ export async function synthesizeSpeech(options: {
 
   try {
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}/stream`,
       {
         method: "POST",
         headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },

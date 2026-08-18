@@ -214,6 +214,13 @@ type ChatRequestBody = {
   mode?: unknown;
   /** Diagnostics-only route pin. Absent for every ordinary request. */
   routeOverride?: unknown;
+  /**
+   * Which voice actually spoke the previous reply, reported by the device.
+   *
+   * The one fact about speech that only the phone holds: whether the audio
+   * played. Validated on arrival like every other field here.
+   */
+  spokenBy?: { engine?: unknown; why?: unknown };
   /** The answer to this turn is going to be spoken aloud rather than read. */
   voice?: unknown;
   /** Measurements taken from the last artifact after it rendered on screen. */
@@ -916,6 +923,15 @@ function systemPromptBlocks(options: {
   capabilityRequested?: boolean;
   /** This answer is going to be spoken aloud rather than read. */
   spoken?: boolean;
+  /**
+   * Which voice actually spoke last, and why it was not the premium one.
+   *
+   * The device knows and the server cannot: whether the audio played is a fact
+   * about a phone, not about a configuration. Without it, "isn't it supposed to
+   * be using the Eleven Labs voice?" had no truthful answer available, and the
+   * model filled the gap with an invented architecture.
+   */
+  spokenBy?: { engine: string; why: string };
   /** What the last artifact measured once rendered. Empty when it was fine. */
   artifactAudit?: string;
   /** Repository files fetched before generating, when the repo was knowable. */
@@ -933,7 +949,7 @@ function systemPromptBlocks(options: {
    */
   referenceBudget?: number;
 }): PromptBlock[] {
-  const { effort, mode, tools, artifactRequested, request = "", promptBlocks = [], capabilities: capabilitySnapshot, threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, spoken = false, artifactAudit, productMode, referenceBudget = Number.POSITIVE_INFINITY } = options;
+  const { effort, mode, tools, artifactRequested, request = "", promptBlocks = [], capabilities: capabilitySnapshot, threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, spoken = false, spokenBy, artifactAudit, productMode, referenceBudget = Number.POSITIVE_INFINITY } = options;
 
   /* The static reference material, in priority order, competing for whatever
      room the route has. Each predicate is unchanged — this decides which of
@@ -1088,6 +1104,16 @@ function systemPromptBlocks(options: {
         "Keep it to a few sentences unless more was clearly asked for, and if the full detail matters, say the short version aloud and note that the rest is on screen.",
         "If a task will take a while, say so in a sentence and get on with it rather than narrating each step."
       ].join(" ")
+      : "",
+    /* What the previous utterance actually did, so a question about the voice
+       is answered from what happened. The model was asked why it did not sound
+       like the chosen voice and invented a reason — that premium speech was
+       "only for reading aloud long passages, not the chat voice" — while the
+       screen said, in the app's own words, that this device had refused to play
+       the audio. One ladder speaks everything aloud; there is no second voice
+       to switch to, and the honest answer was already on the page. */
+    spokenBy && spokenBy.engine !== "premium"
+      ? `The last reply was spoken in ${spokenBy.engine === "device" ? "this device's own voice" : "no voice at all"}${spokenBy.why ? `, because ${spokenBy.why}` : ""}. If the user asks why it does not sound like the voice they chose, that is the reason — say it plainly. Do not invent a distinction between a "chat voice" and a reading-aloud voice, and do not offer to switch between them: one ladder speaks every reply, premium first and this device's own voice when premium cannot run. Call \`inspect_environment\` before naming any variable, and never guess one.`
       : "",
     /* Memory moved out of this block and into its own optional one above.
        Inside here it was un-droppable, which made the conversation the first
@@ -1405,6 +1431,17 @@ export async function POST(request: Request): Promise<Response> {
      nothing at all, which reads as a written answer — the behaviour it has
      always had. */
   const spokenReply = body.voice === true;
+  /* Narrowed to the shapes this app produces. It reaches a prompt, so it is
+     held to a known vocabulary rather than passed through as typed — the same
+     rule every other device-supplied field here follows. */
+  const spokenBy = ((): { engine: string; why: string } | undefined => {
+    const raw = body.spokenBy;
+    if (!raw || typeof raw !== "object") return undefined;
+    const engine = (raw as { engine?: unknown }).engine;
+    if (engine !== "premium" && engine !== "device" && engine !== "silent") return undefined;
+    const why = (raw as { why?: unknown }).why;
+    return { engine, why: typeof why === "string" ? why.slice(0, 200) : "" };
+  })();
 
   /**
    * The last artifact's measurements, rendered for the prompt.
@@ -1909,7 +1946,7 @@ export async function POST(request: Request): Promise<Response> {
         ? capabilitySnapshotFor({ availability, toolsetContext })
         : undefined;
 
-      const blocksFor = (attemptToolNames: string[], referenceBudget: number): PromptBlock[] => systemPromptBlocks({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, promptBlocks: planBlocks, capabilities, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, spoken: spokenReply, artifactAudit: artifactAuditBlock, referenceBudget });
+      const blocksFor = (attemptToolNames: string[], referenceBudget: number): PromptBlock[] => systemPromptBlocks({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, promptBlocks: planBlocks, capabilities, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, spoken: spokenReply, spokenBy, artifactAudit: artifactAuditBlock, referenceBudget });
       const systemFor = (attemptToolNames: string[], referenceBudget: number): string =>
         blocksFor(attemptToolNames, referenceBudget).map((block) => block.text).join("\n\n");
 

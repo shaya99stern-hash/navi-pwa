@@ -76,7 +76,13 @@ export function derivedAppFacts(): string {
     `- Reading repositories and deployments: ${credentialAdvice("github")}, and \`${credentialAdvice("vercel")}\` for Vercel.`,
     "- Committing to this app's own source: `GITHUB_PAT` or `NAVI_GITHUB_TOKEN`. `GITHUB_TOKEN` and `GH_TOKEN` are read for repository *reads* but deliberately not for commits, because build platforms set those two automatically and a token nobody chose to give is not permission to change the app.",
     "- Writes to other repositories additionally need `NAVI_GITHUB_ALLOW_WRITES`.",
-    "- The premium speech voice: `ELEVENLABS_API_KEY`, behind a monthly character ceiling. Without it the device's own voice is used, which is a working configuration and not a fault.",
+    /* Every one of these named, because the gap was filled by invention. Asked
+       how to choose the voice, the model produced `ELEVEN_LABS_VOICE_ID` and
+       `ENABLE_ELEVEN_LABS_TTS` — neither exists, and following that advice
+       changes nothing at all. A variable this app reads and never names is a
+       variable somebody will be sent to guess at. */
+    "- The premium speech voice: `ELEVENLABS_API_KEY` **and** `NAVI_TTS_VOICE_ID`, both required — the key buys the audio, the voice id says which voice. `NAVI_TTS_MODEL` and `NAVI_TTS_MONTHLY_CHARS` are optional, as are `NAVI_TTS_STABILITY`, `NAVI_TTS_SIMILARITY`, `NAVI_TTS_STYLE` and `NAVI_TTS_SPEAKER_BOOST`. There is no switch that turns the premium voice on or off — it is used whenever both required variables are set. Without them the device's own voice is used, which is a working configuration and not a fault.",
+    "- The premium voice speaks *every* spoken reply, not a subset. There is no separate 'chat voice' and no reading-aloud-only mode: one ladder answers everything aloud, premium first and the device's own voice when premium cannot run. Never describe them as different features or offer to switch between them.",
     "",
     "### What the user can connect themselves",
     "On `/connectors`, added from the phone, with a live connection test. The key is stored on the device and sent with the request; it is never held on the server.",

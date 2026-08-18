@@ -104,6 +104,49 @@ export function speak(text: string, language: string, rate = 1): void {
  */
 let sharedAudio: HTMLAudioElement | null = null;
 
+/**
+ * Why playback was refused, in the words of the thing that refused it.
+ *
+ * Every failure here reported "this device refused to play the audio", which
+ * is true of four quite different problems and actionable for none of them.
+ * The owner saw that line while being told, in the same breath, that the voice
+ * service was configured and healthy — and the honest answer, that this device
+ * would not play what had already been fetched, was sitting in an error name
+ * nothing looked at.
+ *
+ * The pattern is the one that has worked every time in this app: a failure that
+ * can describe itself gets fixed in minutes; one that cannot gets chased for
+ * days.
+ */
+function refusalReason(name: string): string {
+  if (name === "NotAllowedError") {
+    return "this device would not play audio without a fresh tap — the permission earned when the conversation started was not held";
+  }
+  if (name === "NotSupportedError") {
+    return "this device cannot play the audio format the voice service returned";
+  }
+  if (name === "AbortError") return "playback was interrupted before it could start";
+  return `this device refused to play the audio${name ? ` (${name})` : ""}`;
+}
+
+/**
+ * Wait for the element to have enough data to start, briefly.
+ *
+ * Bounded because this sits between a person finishing a sentence and hearing
+ * an answer: a device that is not ready within a moment is one whose reply
+ * should come in its own voice now rather than the better voice later.
+ */
+function ready(audio: HTMLAudioElement): Promise<boolean> {
+  if (audio.readyState >= 3) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const stop = new AbortController();
+    const settle = (value: boolean) => { stop.abort(); resolve(value); };
+    audio.addEventListener("canplay", () => settle(true), { once: true, signal: stop.signal });
+    audio.addEventListener("error", () => settle(false), { once: true, signal: stop.signal });
+    window.setTimeout(() => settle(false), 1_500);
+  });
+}
+
 function audioElement(): HTMLAudioElement {
   if (!sharedAudio) {
     sharedAudio = new Audio();
@@ -334,12 +377,22 @@ export async function speakBest(text: string, language: string, rate = 1): Promi
 
     try {
       await audio.play();
-    } catch {
-      /* Playback refused — almost always the gesture requirement on iOS when
-         this was reached without one. The device voice is subject to the same
-         rule but fails more gracefully, so it is still the better answer. */
-      finish();
-      return local("this device refused to play the audio");
+    } catch (error) {
+      const name = error instanceof Error ? error.name : "";
+      /* An abort is not a refusal. Assigning `src` above cancels any load
+         already in flight, and `play()` rejects with `AbortError` — the device
+         was willing and the request was interrupted. Waiting for the element to
+         be ready and asking once more is the standard remedy, and it costs one
+         event. Retried only for this name: retrying a genuine refusal just
+         fails twice. */
+      const retried = name === "AbortError" && await ready(audio)
+        ? await audio.play().then(() => true).catch(() => false)
+        : false;
+
+      if (!retried) {
+        finish();
+        return local(refusalReason(name));
+      }
     }
 
     return {
