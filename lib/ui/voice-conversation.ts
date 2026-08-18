@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
+import { watchForInterruption } from "@/lib/ui/barge-in";
 import { primeSpeech, resolveVoiceLanguage, speakBest, type SpokenEngine, type SpokenHandle } from "@/lib/ui/speech";
 import { recordingSupported, startRecording, type AutoStopReason, type RecordingSession } from "@/lib/ui/recorder";
 
@@ -144,6 +145,9 @@ export function useVoiceConversation(options: Options): VoiceConversation {
    * already has answers in it does not begin by reading the last one aloud.
    */
   const answeredRef = useRef<string | null>(null);
+  /* The last sentence actually spoken, so a retry carrying the same words does
+     not read them out twice. */
+  const spokenWordsRef = useRef<string | null>(null);
   /* The failure already acted on. Without it, the effect below re-fires every
      time the phase changes and kills the *next* turn with the last one's
      error. */
@@ -221,9 +225,12 @@ export function useVoiceConversation(options: Options): VoiceConversation {
 
   /* Reopening is always deferred by a beat, and always through here, so the
      tail of whatever just finished cannot be caught by what comes next. */
-  const relisten = useCallback(() => {
+  const relisten = useCallback((delayMs?: number) => {
     if (!activeRef.current) return;
-    window.setTimeout(() => { void listen(); }, REOPEN_DELAY_MS);
+    /* The pause exists to give a speaker room to finish breathing out before
+       the microphone starts hearing them again. Someone who has just talked
+       over the reply is already mid-sentence, so waiting is the wrong thing. */
+    window.setTimeout(() => { void listen(); }, delayMs ?? REOPEN_DELAY_MS);
   }, [listen]);
 
   /**
@@ -342,9 +349,17 @@ export function useVoiceConversation(options: Options): VoiceConversation {
     const reply = options.reply;
     if (!reply || reply.id === answeredRef.current) return;
 
-    answeredRef.current = reply.id;
     const words = spokenText(reply.text);
+    /* Guarded on the words as well as the id. A turn that fails and is retried
+       produces a *new* message carrying the same sentence, and the id check
+       alone let it be read out a second time — which the owner reported as the
+       app repeating itself, and which is worst exactly when it is least wanted:
+       after something has already gone wrong. */
+    if (words && words === spokenWordsRef.current) { answeredRef.current = reply.id; relisten(); return; }
+
+    answeredRef.current = reply.id;
     if (!words) { relisten(); return; }
+    spokenWordsRef.current = words;
 
     let cancelled = false;
     setPhaseBoth("speaking");
@@ -358,10 +373,31 @@ export function useVoiceConversation(options: Options): VoiceConversation {
          holding a reference to silence it. */
       if (cancelled || !activeRef.current) { handle.stop(); return; }
       spokenRef.current = handle;
+
+      /* Listening while talking, so the person can cut in — which is the
+         difference between talking to something and waiting for it. Armed only
+         once the audio is actually playing, so the microphone is never opened
+         between earning the playback grant and using it. Every failure inside
+         returns a watcher that does nothing and the reply simply finishes,
+         which is the behaviour without this. */
+      let interrupted = false;
+      const watch = await watchForInterruption({
+        onSpeech: () => {
+          if (cancelled || !activeRef.current) return;
+          interrupted = true;
+          /* Stop mid-sentence. Finishing the thought after being interrupted is
+             the thing that makes talking over an assistant feel pointless. */
+          handle.stop();
+        }
+      });
+
       await handle.done;
+      watch.stop();
       spokenRef.current = null;
       if (cancelled || !activeRef.current) return;
-      relisten();
+      /* Either way the microphone reopens; being interrupted just gets there
+         sooner, and without the pause that gives a speaker room to breathe. */
+      relisten(interrupted ? 0 : undefined);
     })();
 
     return () => { cancelled = true; };
