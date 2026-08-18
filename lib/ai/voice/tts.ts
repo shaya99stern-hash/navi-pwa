@@ -49,11 +49,26 @@ const MAX_UTTERANCE_CHARS = 800;
 /**
  * How long to wait for the first audio byte before giving up on it.
  *
- * Time-to-first-audio is the whole experience in a conversational loop. A
- * premium voice that arrives two seconds late is worse than an ordinary one
- * that arrives now, so slowness falls back rather than being waited out.
+ * Time-to-first-audio is the whole experience in a conversational loop, so the
+ * original reasoning was that a premium voice arriving two seconds late is
+ * worse than an ordinary one arriving now.
+ *
+ * That is true, and it left out the case that actually happened: a premium
+ * voice arriving *never*. At 2.5 seconds an edge function's cold start plus the
+ * vendor's own time-to-first-byte exceeded the deadline often enough that the
+ * owner never once heard the voice they had chosen and paid attention to
+ * selecting — and because the fallback spends nothing, the ledger stayed at
+ * full allowance, which the app then reported as health.
+ *
+ * Six seconds is still bounded and still falls back rather than hanging, but it
+ * is on the other side of the line: a beat of silence before the right voice
+ * beats the wrong voice arriving promptly every single time. Tunable, because
+ * the right value depends on a region and a network this code cannot see.
  */
-const FIRST_BYTE_TIMEOUT_MS = 2_500;
+const FIRST_BYTE_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.NAVI_TTS_FIRST_BYTE_MS);
+  return Number.isFinite(raw) && raw >= 500 ? Math.floor(raw) : 6_000;
+})();
 
 export type TtsRefusal =
   | "unconfigured"

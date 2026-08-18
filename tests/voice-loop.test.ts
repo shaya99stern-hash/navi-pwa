@@ -103,13 +103,36 @@ check("and why it was not the premium one", /why: string;/.test(speech), true);
 /* Every exit gets its own words. A shared "could not speak" would put us back
    where we started. */
 for (const reason of [
-  "the premium voice is unconfigured, over its budget, or was too slow",
   "the speech service returned no audio",
   "this device refused to play the audio",
   "the speech service could not be reached"
 ]) {
   check(`"${reason.slice(0, 32)}…" is its own answer`, speech.includes(reason), true);
 }
+/* The server's decline used to be read aloud as a three-way guess —
+   "unconfigured, over its budget, or was too slow" — while the server had been
+   sending the actual reason in `X-Navi-Speech` since the route was written and
+   nothing here read it. Two rounds were spent trying to tell those three apart
+   from the outside. */
+check("the server's own reason is read rather than guessed at",
+  /declinedBecause\(response\.headers\.get\("X-Navi-Speech"\)\)/.test(speech), true);
+/* Against the code, not the prose: the comment explaining why the guess was
+   wrong has to be able to quote it. */
+const speechCode = speech.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+check("and the guess it replaced is gone",
+  speechCode.includes("unconfigured, over its budget, or was too slow"), false);
+for (const [reason, phrase] of [
+  ["unconfigured", "needs both ELEVENLABS_API_KEY and NAVI_TTS_VOICE_ID"],
+  ["budget-exhausted", "used its whole monthly character allowance"],
+  ["too-slow", "did not start in time"],
+  ["provider-failed", "the key may be expired or lack permission"]
+]) {
+  check(`a ${reason} decline says what it means`, speech.includes(phrase), true);
+}
+/* A reason this file has not been taught is still worth carrying: it names the
+   gap in the place someone would look to close it. */
+check("and an unknown reason is carried rather than flattened",
+  /the premium voice declined\$\{reason \? ` \(\$\{reason\}\)` : " without saying why"\}/.test(speech), true);
 check("and no exit falls back without saying why", /return local\(\);/.test(speech), false);
 
 check("the loop carries it out", /setVoice\(\{ engine: handle\.engine, why: handle\.why \}\)/.test(speech + readFileSync(join(process.cwd(), "lib/ui/voice-conversation.ts"), "utf8")), true);

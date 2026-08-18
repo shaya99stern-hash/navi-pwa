@@ -118,6 +118,35 @@ let sharedAudio: HTMLAudioElement | null = null;
  * can describe itself gets fixed in minutes; one that cannot gets chased for
  * days.
  */
+/**
+ * Why the server declined to speak, in its own words rather than a guess.
+ *
+ * Mirrors `TtsRefusal` in `lib/ai/voice/tts.ts`. An unknown value is carried
+ * through rather than flattened, because a reason this file has not been
+ * taught is still more useful than "something went wrong" — and it names the
+ * gap in exactly the place someone would look to close it.
+ */
+function declinedBecause(reason: string | null): string {
+  switch (reason) {
+    case "unconfigured":
+      return "the premium voice is not configured — it needs both ELEVENLABS_API_KEY and NAVI_TTS_VOICE_ID";
+    case "budget-exhausted":
+      return "the premium voice has used its whole monthly character allowance";
+    case "ledger-unreadable":
+      return "the spend ledger could not be read, so premium speech is being treated as spent";
+    case "too-slow":
+      return "the premium voice did not start in time, so this device's voice answered instead";
+    case "provider-failed":
+      return "the speech service refused the request — the key may be expired or lack permission";
+    case "too-long":
+      return "this reply was too long to speak in the premium voice";
+    case "empty":
+      return "there was nothing to say";
+    default:
+      return `the premium voice declined${reason ? ` (${reason})` : " without saying why"}`;
+  }
+}
+
 function refusalReason(name: string): string {
   if (name === "NotAllowedError") {
     return "this device would not play audio without a fresh tap — the permission earned when the conversation started was not held";
@@ -339,12 +368,16 @@ export async function speakBest(text: string, language: string, rate = 1): Promi
          both engines rather than only the fallback. */
       body: JSON.stringify({ text, rate })
     });
-    /* 204 is the server saying "use the local voice" — unconfigured, over
-       budget, or slower than waiting for it was worth. */
     /* 204 is the server saying "use the local voice" and is not a fault — but
-       it is four different situations wearing one status, and the person
-       hearing the wrong voice deserves to know which. */
-    if (response.status === 204) return local("the premium voice is unconfigured, over its budget, or was too slow");
+       it is seven different situations wearing one status, and the person
+       hearing the wrong voice deserves to know which.
+
+       The reason has been travelling in `X-Navi-Speech` since the route was
+       written, and nothing here read it: the client guessed a three-way list
+       aloud — "unconfigured, over its budget, or was too slow" — while the
+       server knew the answer exactly. Two rounds of this were spent trying to
+       tell those three apart from the outside. */
+    if (response.status === 204) return local(declinedBecause(response.headers.get("X-Navi-Speech")));
     if (response.status !== 200 || !response.body) return local(`the speech service answered ${response.status}`);
 
     const blob = await response.blob();
