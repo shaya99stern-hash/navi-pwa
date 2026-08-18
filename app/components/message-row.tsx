@@ -7,6 +7,7 @@ import { messageText } from "@/lib/chat";
 import { haptic } from "@/lib/ui/haptics";
 import { speakBest, type SpokenHandle } from "@/lib/ui/speech";
 import { MarkdownRenderer, type CapabilityHandlers } from "./markdown-renderer";
+import { MessageBoundary } from "./message-boundary";
 import { ExecutionTrace, executionRuns } from "./execution-trace";
 import { ToolActivityList, toolActivity } from "./tool-activity";
 import { PlanCard, planFor } from "./plan-card";
@@ -226,7 +227,16 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
           {text || streaming ? (
             <div className="w-fit max-w-full rounded-[20px] rounded-bl-[6px] border border-[var(--border-subtle)] bg-surface px-4 py-3">
               <div className={`navi-markdown text-[1rem]/[1.625rem] font-normal ${chatFont === "serif" ? "navi-chat-serif" : ""} ${streaming ? "streaming-cursor" : ""}`}>
-                {text ? <MarkdownRenderer text={text} theme={theme} haptics={haptics} capabilities={capabilities} /> : null}
+                {text ? (
+                  /* One message failing to draw must not take the screen with
+                     it. Without this the only boundary was Next's route-level
+                     one, which replaces the whole page — so a single malformed
+                     artifact payload threw the owner out of the conversation
+                     they were having. */
+                  <MessageBoundary text={text}>
+                    <MarkdownRenderer text={text} theme={theme} haptics={haptics} capabilities={capabilities} />
+                  </MessageBoundary>
+                ) : null}
               </div>
             </div>
           ) : null}
