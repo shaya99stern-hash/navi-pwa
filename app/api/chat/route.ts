@@ -28,9 +28,9 @@ import { LESSON_PREFIX } from "@/lib/memory/lesson";
 import { decideLocally } from "@/lib/ai/navi-soul/router";
 import { describePlan, planTurn } from "@/lib/ai/navi-soul/orchestrator";
 import { createArtifactGate } from "@/lib/ai/artifact-gate";
-import { generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
+import { IMAGE_ENGINES, generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
-import { classifyTask, createProviderModel, engineName, fallbackRoutes, getProviderAvailability, lastResortRoute, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane } from "@/lib/ai/providers";
+import { classifyTask, createProviderModel, engineName, fallbackRoutes, frontierConfigured, getProviderAvailability, lastResortRoute, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane, type ProviderAvailability } from "@/lib/ai/providers";
 import { markProviderFailure, markProviderSuccess, orderRoutesByHealth } from "@/lib/ai/provider-health";
 import { cachedRoute, refreshFreeModels } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
@@ -49,7 +49,7 @@ import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tool
 import { historyInstruction } from "@/lib/ai/history-tools";
 import { withoutReasoning } from "@/lib/ai/replay";
 import { parseCapabilities } from "@/lib/ai/capabilities/parse";
-import { buildToolset } from "@/lib/tools/registry";
+import { activeGroups, buildToolset, type ToolsetContext } from "@/lib/tools/registry";
 import { detectRepo, retrieveFiles } from "@/lib/ai/repo-retrieval";
 import { critiqueAllowed, groundingFor, skipReason, type FetchedSource } from "@/lib/ai/grounding";
 import { runComposite } from "@/lib/ai/swarm";
@@ -63,8 +63,9 @@ import {
 } from "@/lib/ai/architect";
 import type { ConnectorAccessMode, CustomConnector, EffortLevel, ModelPreset, NaviEngineNote, NaviMode, NaviStreamStatus, ResponseStyle, SwarmPreset, ToolPolicy } from "@/lib/ai/types";
 import { authorizeApiMutation } from "@/lib/auth/api";
-import { gatherMcpMetadata } from "@/lib/mcp";
+import { gatherMcpMetadata, publicMcpRegistry } from "@/lib/mcp";
 import { APP_KNOWLEDGE, selfRepoKnowledge } from "@/lib/ai/app-knowledge";
+import { buildCapabilitySnapshot, capabilityBrief, type CapabilitySnapshot } from "@/lib/ai/navi-soul/capability-map";
 import { derivedAppFacts } from "@/lib/ai/self-description";
 import { NAVI_MISSION, needsMission } from "@/lib/ai/mission";
 import { ORCHESTRATION_KNOWLEDGE, needsOrchestrationKnowledge } from "@/lib/ai/orchestration-knowledge";
@@ -830,6 +831,48 @@ function codeModeInstruction(canCommit: boolean, canWriteRepos: boolean): string
  * the preflight needs to be able to drop a block without rebuilding the prompt
  * from its inputs, and everything else needs a string.
  */
+/**
+ * What this deployment can actually do, assembled from the objects that know.
+ *
+ * `buildCapabilitySnapshot` was written to be the single answer to that
+ * question for three surfaces — the prompt, the `/capabilities` command, and
+ * Settings — and had no callers at all. So the prompt's account of its own
+ * capabilities was whatever prose happened to be loaded, which is how an app
+ * with no GitHub credential still described committing to a repository.
+ *
+ * Every input is passed rather than reached for, so this cannot drift from what
+ * it describes: availability from the provider layer, tool groups from the same
+ * context object that built the toolset, image engines gated on the credential
+ * each one actually needs.
+ */
+function capabilitySnapshotFor(options: {
+  availability: ProviderAvailability;
+  toolsetContext: ToolsetContext;
+}): CapabilitySnapshot {
+  /* Gated on the provider each engine runs on. Listing an engine whose
+     credential is absent would be the same unchecked claim this block exists to
+     replace — the model would offer a picture it cannot draw. */
+  const engines: Array<{ name: string; detail: string }> = [];
+  if (options.availability.gemini) engines.push({ name: IMAGE_ENGINES.navi.name, detail: IMAGE_ENGINES.navi.detail });
+  if (options.availability.huggingface) {
+    engines.push({ name: IMAGE_ENGINES.studio.name, detail: IMAGE_ENGINES.studio.detail });
+    engines.push({ name: IMAGE_ENGINES.text.name, detail: IMAGE_ENGINES.text.detail });
+  }
+
+  return buildCapabilitySnapshot({
+    availability: options.availability,
+    toolGroups: activeGroups(options.toolsetContext),
+    /* Genuinely unknown here. The instant skills live in a `"use client"`
+       module the edge runtime cannot import, so a server-built snapshot has no
+       count — and `capabilityBrief` omits the line rather than printing zero,
+       because "0 on-device skills" is a false claim where silence is not. */
+    skillCount: 0,
+    mcpServers: publicMcpRegistry().map((server) => ({ id: server.id, name: server.name })),
+    imageEngines: engines,
+    frontier: frontierConfigured()
+  });
+}
+
 function systemPrompt(options: Parameters<typeof systemPromptBlocks>[0]): string {
   return systemPromptBlocks(options).map((block) => block.text).join("\n\n");
 }
@@ -844,6 +887,23 @@ function systemPromptBlocks(options: {
   artifactRequested: boolean;
   /** The request itself, read only to decide which optional blocks load. */
   request?: string;
+  /**
+   * The optional blocks Navi Soul's plan says this turn earned.
+   *
+   * `planTurn` has been computing this list since it was written and nothing
+   * has ever read it, so two of the three names in it described blocks that
+   * were never assembled. It is the authority here now, rather than a second
+   * opinion: a planner whose decisions are re-derived at the call site is not
+   * a planner, it is a log line.
+   */
+  promptBlocks?: string[];
+  /**
+   * What this deployment can actually do, checked while the request was built.
+   *
+   * Absent when the plan did not ask for it, because every line is charged to
+   * the turn.
+   */
+  capabilities?: CapabilitySnapshot;
   threadSummary?: string;
   mcpContext?: string;
   toolNames?: string[];
@@ -873,7 +933,7 @@ function systemPromptBlocks(options: {
    */
   referenceBudget?: number;
 }): PromptBlock[] {
-  const { effort, mode, tools, artifactRequested, request = "", threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, spoken = false, artifactAudit, productMode, referenceBudget = Number.POSITIVE_INFINITY } = options;
+  const { effort, mode, tools, artifactRequested, request = "", promptBlocks = [], capabilities: capabilitySnapshot, threadSummary, mcpContext, toolNames = [], userContext, isOwner = false, memoryContext, playbookContext, constraints, retrieved, documents, capabilityRequested = false, spoken = false, artifactAudit, productMode, referenceBudget = Number.POSITIVE_INFINITY } = options;
 
   /* The static reference material, in priority order, competing for whatever
      room the route has. Each predicate is unchanged — this decides which of
@@ -902,7 +962,21 @@ function systemPromptBlocks(options: {
     { name: "engineering-discipline", text: needsEngineeringDiscipline(toolNames.includes("commit_own_source")) ? ENGINEERING_DISCIPLINE : "" },
     { name: "code-craft", text: needsCodeCraft(toolNames.includes("commit_own_source")) ? CODE_CRAFT : "" },
     { name: "mission", text: needsMission(request) ? NAVI_MISSION : "" },
-    { name: "orchestration", text: needsOrchestrationKnowledge(request, effort) ? ORCHESTRATION_KNOWLEDGE : "" }
+    /* Both of these are now the plan's call rather than this list's.
+       `planTurn` decides them from the same predicates in the same order —
+       `tests/prompt-block-parity.test.ts` holds the orchestration one to that
+       across every turn shape — and the point of moving them is that the
+       capability brief was decided by nobody at all: `wantsCapabilityBrief`
+       was reachable only through `planTurn`, whose output went to a
+       `console.log`, so a turn asking "what can you actually do" earned a block
+       that was never assembled.
+
+       Last in the list, which is where the cheapest thing to lose belongs.
+       The capability brief sits just above it: when a turn cannot afford both,
+       a checked list of what is on right now is worth more than a description
+       of how routing works. */
+    { name: "capability-brief", text: promptBlocks.includes("capability-brief") && capabilitySnapshot ? capabilityBrief(capabilitySnapshot) : "" },
+    { name: "orchestration", text: promptBlocks.includes("orchestration-knowledge") ? ORCHESTRATION_KNOWLEDGE : "" }
   ];
   const { dropped } = fitReferenceBlocks(referenceCandidates, referenceBudget);
   /* The same blocks `fitReferenceBlocks` kept, still carrying their names: it
@@ -1533,7 +1607,11 @@ export async function POST(request: Request): Promise<Response> {
          indistinguishable from outside the conversation. */
       const fetchedSources: FetchedSource[] = [];
 
-      const availableTools = buildToolset({
+      /* Named, because two things need to agree about it: the toolset itself,
+         and the capability brief's account of which groups are switched on.
+         Deriving the second from anything other than the object that built
+         the first is how a description drifts from what it describes. */
+      const toolsetContext: ToolsetContext = {
         mode,
         policy: tools,
         onSource: (source) => {
@@ -1576,7 +1654,8 @@ export async function POST(request: Request): Promise<Response> {
         cookie: request.headers.get("cookie") ?? undefined,
         onActivity: announce,
         mcpTools
-      });
+      };
+      const availableTools = buildToolset(toolsetContext);
       /* Retrieval before generation. A mid-tier model handed the exact three
          relevant files beats a frontier model handed the wrong ones, and the
          read tools alone do not close that gap — a weaker model answers from
@@ -1818,7 +1897,19 @@ export async function POST(request: Request): Promise<Response> {
          attempt can actually call. Lifted out of the `streamText` call so its
          size can be measured before the request is sent — it is the largest
          single contributor to a turn and nothing could previously see it. */
-      const blocksFor = (attemptToolNames: string[], referenceBudget: number): PromptBlock[] => systemPromptBlocks({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, spoken: spokenReply, artifactAudit: artifactAuditBlock, referenceBudget });
+      /* Obeyed at the prompt as well as at the route.
+         `planTurn` has always returned the optional blocks a turn earned, and
+         nothing read the list — so `capability-brief`, whose whole job is to
+         tell the model what is switched on right now, was decided by a function
+         no turn ever reached. Built once per turn rather than per attempt: the
+         answer cannot change between a failed route and its fallback, and the
+         retry path calls this for every one of them. */
+      const planBlocks = turnPlan.kind === "model" ? turnPlan.promptBlocks : [];
+      const capabilities = planBlocks.includes("capability-brief")
+        ? capabilitySnapshotFor({ availability, toolsetContext })
+        : undefined;
+
+      const blocksFor = (attemptToolNames: string[], referenceBudget: number): PromptBlock[] => systemPromptBlocks({ effort: effortLevel, productMode: mode, mode: dispatch === "code" ? "code" : "chat", tools, artifactRequested, request: lastUserText, promptBlocks: planBlocks, capabilities, retrieved: retrieval?.block, documents: documents.length ? documentsBlock(documents) : undefined, threadSummary, mcpContext, toolNames: attemptToolNames, userContext, isOwner, memoryContext, playbookContext, constraints: constraintBlock(plan), capabilityRequested, spoken: spokenReply, artifactAudit: artifactAuditBlock, referenceBudget });
       const systemFor = (attemptToolNames: string[], referenceBudget: number): string =>
         blocksFor(attemptToolNames, referenceBudget).map((block) => block.text).join("\n\n");
 
