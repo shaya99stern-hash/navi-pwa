@@ -67,6 +67,16 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
   const user = message.role === "user";
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  /**
+   * Which voice spoke, kept only when it was not the premium one.
+   *
+   * This button is the isolated test for the whole speech path: one tap, no
+   * conversation loop, the gesture still on the stack. If it is silent here it
+   * is silent everywhere, and the reason belongs on screen — the same silence
+   * has had four indistinguishable causes and each round of guessing at them
+   * cost hours.
+   */
+  const [spokenBy, setSpokenBy] = useState<string | null>(null);
   const holdTimer = useRef<number | null>(null);
   const holdStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -130,6 +140,9 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
        component's. */
     void (async () => {
       const handle = await speakBest(text, language);
+      /* Only the fallbacks are worth saying. Announcing the good voice every
+         time would be noise on a button that is usually working. */
+      setSpokenBy(handle.engine === "premium" ? null : handle.why);
       spoken.current = handle;
       await handle.done;
       /* Only the turn that is still current may clear the button: a second tap
@@ -237,6 +250,13 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
                   </button>
                 ) : null}
               </div>
+              {/* Only when it was not the good voice, and only after a tap.
+                  This button is the isolated test for the whole speech path —
+                  one gesture, no conversation loop — so when it falls back, the
+                  reason is worth a line rather than another round of guessing. */}
+              {spokenBy ? (
+                <p className="text-[0.6875rem]/4 font-medium text-tertiary" role="status">Read in this device&rsquo;s voice — {spokenBy}</p>
+              ) : null}
               {/* The mark and, beside it, which engine actually answered.
                   The mark alone was decorative — the one place under a reply
                   that could have said something said nothing, while the app

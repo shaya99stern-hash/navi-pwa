@@ -141,5 +141,18 @@ check("the opening tap primes the device voice as well as the element",
 check("at zero volume, so priming it is not audible",
   /opener\.volume = 0;/.test(speech), true);
 
+/* The isolated test for the whole speech path: one tap, no conversation loop,
+   the gesture still on the stack. If it is silent there it is silent
+   everywhere — so it reports its fallback too, and the two surfaces together
+   say whether the problem is the loop or the speech. */
+
+const row = readFileSync(join(process.cwd(), "app/components/message-row.tsx"), "utf8");
+check("the read-aloud button reports a fallback too",
+  /setSpokenBy\(handle\.engine === "premium" \? null : handle\.why\)/.test(row), true);
+/* Only the fallbacks. Announcing the good voice on every tap would be noise on
+   a button that is usually working. */
+check("and says nothing when the good voice worked",
+  /\{spokenBy \? \(/.test(row), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
