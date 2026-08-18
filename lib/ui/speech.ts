@@ -65,7 +65,16 @@ export function whenVoicesReady(run: () => void): () => void {
   return () => window.speechSynthesis.removeEventListener("voiceschanged", handler);
 }
 
-export function speak(text: string, language: string): void {
+/** Both engines are held to the same range, so the dial means one thing. */
+export const MIN_VOICE_RATE = 0.7;
+export const MAX_VOICE_RATE = 1.4;
+
+export function clampVoiceRate(value: number | undefined): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(MAX_VOICE_RATE, Math.max(MIN_VOICE_RATE, value as number));
+}
+
+export function speak(text: string, language: string, rate = 1): void {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = language;
@@ -74,8 +83,10 @@ export function speak(text: string, language: string): void {
     utterance.voice = voice;
     utterance.lang = voice.lang;
   }
-  // Slightly under the default, which reads as hurried for long answers.
-  utterance.rate = 0.98;
+  /* 0.98 was the fixed default — slightly under normal, which reads as
+     unhurried for long answers. It is now the baseline the owner's dial scales,
+     rather than a number nobody could reach. */
+  utterance.rate = clampVoiceRate(0.98 * rate);
   utterance.pitch = 1;
   window.speechSynthesis.speak(utterance);
 }
@@ -133,14 +144,27 @@ let priming: Promise<void> | null = null;
 export function primeSpeech(): void {
   if (typeof window === "undefined") return;
   const audio = audioElement();
-  audio.muted = true;
+  /**
+   * Unmuted, and that is the entire point.
+   *
+   * The first version muted this clip to keep it inaudible, which is precisely
+   * what stopped it working. iOS permits muted playback with no gesture at all,
+   * so a muted `play()` neither spends nor earns user activation — the element
+   * came out of it with exactly the rights it went in with, and every later
+   * `play()` of real audio was refused. The app then fell back to the device
+   * voice and sounded like a robot while a paid-for voice sat one rejected
+   * promise away, reporting nothing.
+   *
+   * It does not need muting. `SILENCE` is digital silence — every sample is
+   * zero — so this is an audible playback attempt that happens to make no
+   * sound, which is what the grant is given for.
+   */
+  audio.muted = false;
+  audio.volume = 1;
   audio.src = SILENCE;
   priming = audio.play()
     .then(() => { audio.pause(); audio.currentTime = 0; })
-    .catch(() => {})
-    /* Unmuted here and nowhere else, so there is exactly one moment at which
-       the element becomes usable, and `speakBest` waits for it. */
-    .finally(() => { audio.muted = false; });
+    .catch(() => {});
 
   /**
    * The device voice needs its own unlock, and it is the one most likely to be
@@ -213,7 +237,7 @@ export type SpokenHandle = {
  * request that has not started within 2.5 seconds. So the wait is bounded and
  * short, and this stays honest about being a buffer rather than a stream.
  */
-export async function speakBest(text: string, language: string): Promise<SpokenHandle> {
+export async function speakBest(text: string, language: string, rate = 1): Promise<SpokenHandle> {
   /**
    * The device voice, wrapped so `done` means the same thing it does for
    * premium audio: this utterance has stopped.
@@ -248,7 +272,7 @@ export async function speakBest(text: string, language: string): Promise<SpokenH
     guard = window.setTimeout(finish, 60_000);
 
     whenVoicesReady(() => {
-      speak(text, language);
+      speak(text, language, rate);
       /* Started after the utterance is queued, and tolerant of the gap before
          `speaking` flips true — a poll that fires in that window would end the
          turn before a word was said. */
@@ -268,7 +292,9 @@ export async function speakBest(text: string, language: string): Promise<SpokenH
     const response = await fetch("/api/voice/speak", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text })
+      /* The premium voice takes a speed of its own, so the same dial moves
+         both engines rather than only the fallback. */
+      body: JSON.stringify({ text, rate })
     });
     /* 204 is the server saying "use the local voice" — unconfigured, over
        budget, or slower than waiting for it was worth. */

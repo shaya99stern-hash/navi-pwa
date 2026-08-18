@@ -127,6 +127,17 @@ export type NaviPreferences = {
   customPlaybooks: Array<{ id: string; name: string; description: string; instructions: string }>;
   notifyOnComplete: boolean;
   voiceLanguage: string;
+  /**
+   * How fast the reply is read aloud, as a multiplier of normal.
+   *
+   * Asked to speak faster, Navi Soul answered that NaviOS "doesn't let me
+   * adjust my speaking rate directly — it's set by the system voice settings
+   * on your device". That was wrong twice over: the device voice has always
+   * been given an explicit rate here, and the premium voice takes a speed of
+   * its own. There was simply nothing to turn, so the honest-sounding answer
+   * was the incorrect one.
+   */
+  voiceRate: number;
   profile: NaviProfile;
   tools: ToolPolicy;
   connectedMcpServers: string[];

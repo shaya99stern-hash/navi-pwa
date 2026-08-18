@@ -76,5 +76,53 @@ check("a successful commit is stated as real", source.includes("This really happ
 /* Edge has no Buffer, and atob/btoa mangle UTF-8 — an em dash would corrupt. */
 check("base64 is utf-8 safe", source.includes("TextEncoder") && source.includes("TextDecoder"), true);
 
+/* ── A self-edit must not reach production without a gate ───────────────────
+   The comment on `workingBranch` always read "never the default branch by
+   accident", and the default was `main`. So the code contradicted its own
+   stated invariant: a self-edit went straight to the branch Vercel deploys —
+   no tests, no build, no review — while every change made by a person went
+   through all three.
+
+   It came within one fetch timeout of happening. The owner said "Proceed. Make
+   the changes." and a stalled read is the only reason it did not. */
+
+const selfSource = (require("node:fs") as typeof import("node:fs")).readFileSync(
+  (require("node:path") as typeof import("node:path")).join(process.cwd(), "lib/ai/self-update-tools.ts"), "utf8"
+);
+
+check("self-edits no longer default to the deployed branch",
+  /NAVI_SELF_UPDATE_BRANCH \|\| "main"/.test(selfSource), false);
+check("they land on a branch of their own",
+  /DEFAULT_SELF_UPDATE_BRANCH = "navi\/self-update"/.test(selfSource), true);
+/* An operator who genuinely wants the old behaviour should be able to say so
+   out loud, in configuration, rather than inherit it. */
+check("and an operator can still override it",
+  /process\.env\.NAVI_SELF_UPDATE_BRANCH \|\| DEFAULT_SELF_UPDATE_BRANCH/.test(selfSource), true);
+
+/* The contents API writes to a ref that already exists and refuses otherwise,
+   so the first self-edit on a fresh deployment would fail with a message about
+   a missing branch — which reads like the tool being broken. */
+check("the branch is created if it is not there", /async function ensureBranch/.test(selfSource), true);
+check("from the base branch's tip", /ref: `refs\/heads\/\$\{branch\}`, sha/.test(selfSource), true);
+
+check("a pull request is opened for the change", /async function openPullRequest/.test(selfSource), true);
+/* One branch accumulates commits, so a second edit must join the open request
+   rather than fail trying to create a duplicate. */
+check("and a second edit joins the one already open",
+  /It joins the pull request already open for these changes/.test(selfSource), true);
+/* The commit has already landed by the time the request is opened, so a
+   failure there must not be reported as a failure to commit. */
+check("a failed pull request does not deny the commit that succeeded",
+  /The change is committed on \$\{branch\}, but a pull request could not be opened/.test(selfSource), true);
+
+/* The old text promised the change was reaching the running app in a couple of
+   minutes. On a branch that is untrue, and a false claim about deployment is
+   worse than a slower path — the owner goes looking for a change that is not
+   there. */
+check("and the result says plainly that it is not live",
+  /It is NOT live yet/.test(selfSource), true);
+check("naming what actually deploys it",
+  /merging it is what deploys the change/.test(selfSource), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

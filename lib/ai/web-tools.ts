@@ -470,6 +470,9 @@ export async function readUrlAsText(url: string, options: {
   return result.ok ? result.text : result.guidance;
 }
 
+/** Pages already read in this request, so none is fetched twice. */
+const MAX_REMEMBERED_READS = 40;
+
 export function buildWebTools({ search, signal, onActivity = () => {}, onSource = () => {} }: {
   search: boolean;
   signal?: AbortSignal;
@@ -488,6 +491,11 @@ export function buildWebTools({ search, signal, onActivity = () => {}, onSource 
    */
   onSource?: (source: { url: string; text: string }) => void;
 }): ToolSet {
+  /* One per request, so it lives and dies with the turn: a page that was
+     unreachable a minute ago may be fine on the next question, and caching
+     that across turns would turn a transient failure into a permanent one. */
+  const readThisTurn = new Map<string, string>();
+
   const tools: ToolSet = {
     current_datetime: tool({
       description: "The current date and time. Call this for anything involving today, now, deadlines, ages, or elapsed time — you have no clock of your own and your training data is stale.",
@@ -515,12 +523,29 @@ export function buildWebTools({ search, signal, onActivity = () => {}, onSource 
       description: "Fetch an https link and return its readable content. Handles web pages, plain text, JSON, PDFs (text is extracted), and YouTube links (the video's transcript is returned). Use it to read a search result or any link the user gives you, rather than guessing at its contents.",
       inputSchema: z.object({ url: z.string().describe("The full https URL to read.") }),
       execute: async ({ url }) => {
+        /* Answered from what this turn already learned, rather than fetched
+           again. Production had one turn spend ten timeouts on the same
+           reading: at twelve seconds each that is two minutes of a four-minute
+           budget re-establishing a single fact, and the turn died of it.
+
+           A model re-reading a URL it has already been told about is not being
+           unreasonable — the failure text reads like something that might go
+           differently next time. So this does not rely on it choosing well.
+           Successes are worth returning again too: the same page fetched twice
+           in one answer is a second download of bytes already in hand. */
+        const remembered = readThisTurn.get(url);
+        if (remembered) return remembered;
+
         const result = await readUrl(url, { signal, onActivity });
         /* Recorded before the string is handed back, and only on success: the
            model gets exactly the sentences it got before, while the turn keeps
            a record of what was really read. */
         if (result.ok) onSource({ url, text: result.text });
-        return result.ok ? result.text : result.guidance;
+        const answer = result.ok ? result.text : result.guidance;
+        /* Bounded, because a turn that reads forty pages must not hold forty
+           page bodies alongside everything else in an edge isolate. */
+        if (readThisTurn.size < MAX_REMEMBERED_READS) readThisTurn.set(url, answer);
+        return answer;
       }
     })
   };

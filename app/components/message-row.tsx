@@ -38,6 +38,7 @@ type Props = {
   chatFont: "serif" | "sans";
   haptics: boolean;
   voiceLanguage: string;
+  voiceRate: number;
   rating?: "up" | "down";
   /** Takes the id so the shell can pass one stable handler to every row. */
   onRate?: (messageId: string, value: "up" | "down") => void;
@@ -61,7 +62,7 @@ type Props = {
  * construction — `onRetry` is only present on the last row — and a shallow
  * compare would find them different every time and memoise nothing at all.
  */
-function MessageRowBase({ message, streaming, last, recent, theme, chatFont, haptics, voiceLanguage, rating, onRate, onRetry, onLongPress, capabilities }: Props) {
+function MessageRowBase({ message, streaming, last, recent, theme, chatFont, haptics, voiceLanguage, voiceRate, rating, onRate, onRetry, onLongPress, capabilities }: Props) {
   const text = messageText(message);
   const files = messageFiles(message);
   const user = message.role === "user";
@@ -139,7 +140,7 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
        stops, whichever voice spoke it — that is `speakBest`'s job, not this
        component's. */
     void (async () => {
-      const handle = await speakBest(text, language);
+      const handle = await speakBest(text, language, voiceRate);
       /* Only the fallbacks are worth saying. Announcing the good voice every
          time would be noise on a button that is usually working. */
       setSpokenBy(handle.engine === "premium" ? null : handle.why);

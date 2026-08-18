@@ -77,6 +77,8 @@ type Options = {
   busy: boolean;
   /** The stored dictation preference, passed through as given. */
   language: string;
+  /** How fast to read the reply, as a multiplier of normal. */
+  rate: number;
   haptics: boolean;
   reply: ConversationReply;
   /**
@@ -347,7 +349,7 @@ export function useVoiceConversation(options: Options): VoiceConversation {
     let cancelled = false;
     setPhaseBoth("speaking");
     void (async () => {
-      const handle = await speakBest(words, resolveVoiceLanguage(optionsRef.current.language));
+      const handle = await speakBest(words, resolveVoiceLanguage(optionsRef.current.language), optionsRef.current.rate);
       /* Recorded before the audio is awaited, so it is on screen while the
          reply is playing rather than after it has finished. */
       setVoice({ engine: handle.engine, why: handle.why });
