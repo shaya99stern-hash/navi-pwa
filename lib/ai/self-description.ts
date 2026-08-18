@@ -1,3 +1,4 @@
+import { EFFORT_LEVELS, NAVI_MODES } from "../chat";
 import { CONNECTOR_KINDS } from "./types";
 import { PROVIDER_CATALOG } from "./provider-catalog";
 import { credentialAdvice } from "./credentials";
@@ -66,6 +67,21 @@ export function derivedAppFacts(): string {
     "",
     "### Screens",
     ...ROUTES.map((route) => `- \`${route.path}\` — ${route.what}`),
+    "",
+    "### The controls in the composer, and what each one is called",
+    /* Read from the same constants the composer renders, because the prose that
+       used to carry this had drifted: it named the effort levels "Standard,
+       Extended, Maximum" long after they became Quick, Considered and Deep. So
+       the owner asked what had happened to the three levels of thinking they
+       used to switch between — the ones still sitting in the composer — and the
+       app, reading its own description, could not recognise the names of its
+       own controls. A list written by hand is a list that goes stale; this one
+       cannot. */
+    `- Effort, a pill in the composer with three levels: ${EFFORT_LEVELS.map((level) => `**${level.label}** (${level.detail}${level.isDefault ? " The default." : ""})`).join(" ")}`,
+    `- Mode, a toggle in the composer: ${NAVI_MODES.map((mode) => `**${mode.label}**`).join(" and ")}. Chat is the default and is simply Code switched off.`,
+    "- Research, a toggle in the composer, which allows web search when a search key is configured.",
+    "- Voice, which starts a spoken conversation: it listens, answers aloud, and reopens the microphone. It can be interrupted by talking over it.",
+    "State these by the names above. If the user names a control you cannot find here, say so plainly rather than denying the control exists.",
     "",
     "### Which variable governs which capability",
     "Name the exact variable when something is missing. These are the only names read, and every one listed for a capability works — do not send someone to add a second variable for something they have already configured.",
