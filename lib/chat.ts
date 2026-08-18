@@ -66,6 +66,7 @@ export const DEFAULT_PREFERENCES: NaviPreferences = {
   tools: { web: false, code: false, artifacts: true },
   connectedMcpServers: [],
   customConnectors: [],
+  capabilities: [],
   connectorAccessMode: "ask",
   lastMenuSection: "general"
 };

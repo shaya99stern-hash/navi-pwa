@@ -132,6 +132,18 @@ export type NaviPreferences = {
   connectedMcpServers: string[];
   /** Connectors the user added themselves from the Connectors screen. */
   customConnectors: CustomConnector[];
+  /**
+   * APIs added by reading their own description of themselves.
+   *
+   * Stored beside the custom connectors and travelling the same way: on the
+   * device, synced to the owner's own cloud memory when signed in, and sent
+   * with each request so the key stays theirs and the server holds nothing.
+   * Typed as `unknown[]` here because the manifest shape lives in
+   * `lib/ai/capabilities` and this module is imported by the edge route, the
+   * client, and storage alike; the server re-validates every field on arrival
+   * regardless of what the type says.
+   */
+  capabilities: unknown[];
   connectorAccessMode: ConnectorAccessMode;
   lastMenuSection: MenuSection;
 };
