@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { haptic } from "@/lib/ui/haptics";
-import { primeSpeech, resolveVoiceLanguage, speakBest, type SpokenHandle } from "@/lib/ui/speech";
+import { primeSpeech, resolveVoiceLanguage, speakBest, type SpokenEngine, type SpokenHandle } from "@/lib/ui/speech";
 import { recordingSupported, startRecording, type AutoStopReason, type RecordingSession } from "@/lib/ui/recorder";
 
 /**
@@ -57,6 +57,15 @@ export type VoiceConversation = {
   /** Whether the detector believes a voice is present, rather than a level. */
   hearing: boolean;
   error: string | null;
+  /**
+   * Which voice last spoke, and why it was not the good one.
+   *
+   * On screen, because "it does not talk" had four indistinguishable causes and
+   * every one of them was invisible from both sides — no credential, over
+   * budget, no audio, playback refused. Naming it turns the next report into a
+   * fact instead of a hunt.
+   */
+  voice: { engine: SpokenEngine; why: string } | null;
   start: () => void;
   stop: () => void;
   toggle: () => void;
@@ -122,6 +131,7 @@ export function useVoiceConversation(options: Options): VoiceConversation {
   const [level, setLevel] = useState(0);
   const [hearing, setHearing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [voice, setVoice] = useState<{ engine: SpokenEngine; why: string } | null>(null);
 
   const recorderRef = useRef<RecordingSession | null>(null);
   const spokenRef = useRef<SpokenHandle | null>(null);
@@ -338,6 +348,9 @@ export function useVoiceConversation(options: Options): VoiceConversation {
     setPhaseBoth("speaking");
     void (async () => {
       const handle = await speakBest(words, resolveVoiceLanguage(optionsRef.current.language));
+      /* Recorded before the audio is awaited, so it is on screen while the
+         reply is playing rather than after it has finished. */
+      setVoice({ engine: handle.engine, why: handle.why });
       /* Stopped while the audio was being fetched. Without this the reply
          starts playing after the conversation was closed, with nothing left
          holding a reference to silence it. */
@@ -407,5 +420,5 @@ export function useVoiceConversation(options: Options): VoiceConversation {
     release();
   }, [release]);
 
-  return { active, phase, transcript, level, hearing, error, start, stop, toggle };
+  return { active, phase, transcript, level, hearing, error, voice, start, stop, toggle };
 }

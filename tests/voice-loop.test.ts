@@ -85,5 +85,61 @@ check("and whitespace collapses to something speakable",
 check("plain prose is untouched", spokenText("The rate is 4.2 percent."), "The rate is 4.2 percent.");
 check("an empty answer stays empty", spokenText("   "), "");
 
+/* ── Silence had four causes and they all looked the same ───────────────────
+   `speakBest` could exit without a sound in four ways — no credential, over
+   budget, no audio returned, playback refused — and every one of them
+   presented identically from both sides: an app that listens, thinks, and says
+   nothing. Hours went into telling them apart by inference from server logs.
+
+   So the handle now says which voice spoke and why it was not the good one,
+   and the screen says it while the reply is playing. The next report of "it
+   does not talk" arrives as a fact. */
+
+const speech = readFileSync(join(process.cwd(), "lib/ui/speech.ts"), "utf8");
+const composer = readFileSync(join(process.cwd(), "app/components/composer-dock.tsx"), "utf8");
+
+check("the handle names its engine", /engine: SpokenEngine;/.test(speech), true);
+check("and why it was not the premium one", /why: string;/.test(speech), true);
+/* Every exit gets its own words. A shared "could not speak" would put us back
+   where we started. */
+for (const reason of [
+  "the premium voice is unconfigured, over its budget, or was too slow",
+  "the speech service returned no audio",
+  "this device refused to play the audio",
+  "the speech service could not be reached"
+]) {
+  check(`"${reason.slice(0, 32)}…" is its own answer`, speech.includes(reason), true);
+}
+check("and no exit falls back without saying why", /return local\(\);/.test(speech), false);
+
+check("the loop carries it out", /setVoice\(\{ engine: handle\.engine, why: handle\.why \}\)/.test(speech + readFileSync(join(process.cwd(), "lib/ui/voice-conversation.ts"), "utf8")), true);
+check("and the screen says which voice is talking",
+  /Answering in the premium voice/.test(composer), true);
+check("naming the device voice as the device voice",
+  /Answering in this device's voice — \$\{conversation\.voice\.why\}/.test(composer), true);
+/* The case worth shouting about: no voice at all, which used to be
+   indistinguishable from a working one. */
+check("and saying plainly when there is no voice at all",
+  /No voice available — \$\{conversation\.voice\.why\}/.test(composer), true);
+
+/* ── The device voice must not be able to hang the loop ─────────────────────
+   `speechSynthesis` can accept an utterance and never speak it — on an
+   installed iOS app it is routinely dropped with no error and no event. The
+   poll then waits for a start that never comes, `done` never resolves, and the
+   conversation sits on "Answering" with the microphone shut. */
+
+check("the device voice gives up rather than hanging",
+  /guard = window\.setTimeout\(finish, 60_000\);/.test(speech), true);
+check("and the guard is cleared when it does finish",
+  /window\.clearTimeout\(guard\)/.test(speech), true);
+
+/* `speechSynthesis` is a separate API from the audio element and iOS grants
+   them separately, so priming one does nothing for the other — and the device
+   voice is the one most likely to be doing the talking. */
+check("the opening tap primes the device voice as well as the element",
+  /new SpeechSynthesisUtterance\("ok"\)/.test(speech), true);
+check("at zero volume, so priming it is not audible",
+  /opener\.volume = 0;/.test(speech), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
