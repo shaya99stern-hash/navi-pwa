@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { CONNECTOR_KINDS } from "@/lib/ai/types";
 import { join } from "node:path";
 import { buildConnectorTools } from "@/lib/ai/connector-tools";
 import { buildToolset, type ToolsetContext } from "@/lib/tools/registry";
@@ -51,7 +52,12 @@ check("supabase table names are validated", toolsSource.includes("That table nam
 
 const sheetSource = readFileSync(join(process.cwd(), "app/components/connectors-sheet.tsx"), "utf8");
 check("the add flow is a select drop-down", sheetSource.includes("<select"), true);
-check("all four kinds are offered", ["openai", "anthropic", "supabase", "mcp"].every((kind) => sheetSource.includes(`"${kind}"`)), true);
+/* The kinds moved to `lib/ai/types.ts` so the screen that offers them and the
+   assistant's description of them read one list. They were a table here and a
+   prose sentence in `APP_KNOWLEDGE`, and the prose was already the stale copy. */
+check("all four kinds are offered", ["openai", "anthropic", "supabase", "mcp"].every((kind) => CONNECTOR_KINDS.some((entry) => entry.id === kind)), true);
+check("and the sheet renders them from the shared list rather than its own",
+  sheetSource.includes("CONNECTOR_KINDS.map((kind) =>"), true);
 check("connectors are tested before being added", sheetSource.includes("/api/connectors/test"), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);

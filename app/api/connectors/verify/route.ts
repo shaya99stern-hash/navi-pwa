@@ -4,6 +4,7 @@ import { authorizeApiMutation } from "@/lib/auth/api";
 import { PROVIDERS, providerApiKey, modelsProbe } from "@/lib/ai/provider-registry";
 import { findProvider, isEntryConfigured } from "@/lib/ai/provider-catalog";
 import type { ProviderName } from "@/lib/ai/types";
+import { readCredential } from "@/lib/ai/credentials";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -60,7 +61,7 @@ function probeFor(id: string): Probe | null {
     return url && key ? { url: `${url}/rest/v1/`, headers: { apikey: key, Authorization: `Bearer ${key}` } } : null;
   }
   if (id === "github-pat") {
-    const key = (process.env.GITHUB_PAT ?? process.env.NAVI_GITHUB_TOKEN ?? "").trim();
+    const key = readCredential("github") ?? "";
     return key ? { url: "https://api.github.com/user", headers: { Authorization: `Bearer ${key}`, Accept: "application/vnd.github+json", "User-Agent": "NaviOS/1.0" } } : null;
   }
   if (id === "vercel") {

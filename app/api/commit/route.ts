@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authorizeApiMutation, authorizeApiRead } from "@/lib/auth/api";
+import { readCredential } from "@/lib/ai/credentials";
 
 /* Node runtime on purpose: Buffer handles UTF-8 base64 correctly, which the
    Edge atob/btoa pair does not. */
@@ -21,7 +22,7 @@ const MAX_CONTENT_BYTES = 900_000;
 
 function repoConfig(): { token: string | null; owner: string; repo: string } {
   return {
-    token: process.env.GITHUB_PAT || process.env.NAVI_GITHUB_TOKEN || null,
+    token: readCredential("github") ?? null,
     owner: process.env.GITHUB_OWNER || "shaya99stern-hash",
     repo: process.env.GITHUB_REPO || "navi-pwa"
   };

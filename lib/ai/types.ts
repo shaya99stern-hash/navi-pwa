@@ -139,6 +139,31 @@ export type NaviPreferences = {
 export type CustomConnectorKind = "openai" | "anthropic" | "supabase" | "mcp";
 
 /**
+ * What can be connected from the phone, described once.
+ *
+ * The Connectors screen renders this into a drop-down and the self-description
+ * renders it into a sentence. It used to be a table in the screen and a prose
+ * list in `APP_KNOWLEDGE`, which is two copies of a list that grows — so the
+ * prose was already the stale one, and the model confidently described the
+ * options a user did not have.
+ */
+export const CONNECTOR_KINDS: ReadonlyArray<{
+  id: CustomConnectorKind;
+  label: string;
+  /** What the base URL looks like, shown as the field's placeholder. */
+  urlHint: string;
+  /** Whether a default model name is part of the connector. */
+  needsModel: boolean;
+  /** What it is for, in the words the assistant should use. */
+  purpose: string;
+}> = [
+  { id: "openai", label: "OpenAI-compatible API", urlHint: "https://api.example.com/v1", needsModel: true, purpose: "any chat API that speaks the OpenAI request shape" },
+  { id: "anthropic", label: "Anthropic-compatible API", urlHint: "https://api.anthropic.com", needsModel: true, purpose: "any chat API that speaks the Anthropic request shape" },
+  { id: "supabase", label: "Supabase project", urlHint: "https://xyz.supabase.co", needsModel: false, purpose: "reading rows from a Supabase project over PostgREST" },
+  { id: "mcp", label: "MCP server (HTTPS)", urlHint: "https://mcp.example.com", needsModel: false, purpose: "any MCP server, whose own tool list becomes callable tools" }
+];
+
+/**
  * A connector typed in on the device rather than configured in the deployment.
  * It lives in preferences — on the device and, signed in, in the user's own
  * row-level-secured cloud memory — and its key is sent per request, never

@@ -2,6 +2,7 @@ import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { githubWritesEnabled } from "../github/oauth";
 import { buildGitHubWriteTools } from "./github-write-tools";
+import { readCredential } from "./credentials";
 
 /**
  * GitHub and Vercel, as tools the model can actually call.
@@ -18,20 +19,17 @@ import { buildGitHubWriteTools } from "./github-write-tools";
  */
 
 const REQUEST_TIMEOUT_MS = 12_000;
+
 const MAX_FILE_CHARS = 24_000;
 const MAX_LOG_CHARS = 16_000;
 const MAX_ITEMS = 20;
 
 export function githubToken(): string | undefined {
-  const token = process.env.NAVI_GITHUB_TOKEN?.trim()
-    || process.env.GITHUB_TOKEN?.trim()
-    || process.env.GH_TOKEN?.trim();
-  return token || undefined;
+  return readCredential("github");
 }
 
 export function vercelToken(): string | undefined {
-  const token = process.env.NAVI_VERCEL_TOKEN?.trim() || process.env.VERCEL_API_TOKEN?.trim();
-  return token || undefined;
+  return readCredential("vercel");
 }
 
 async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, outer?: AbortSignal): Promise<T> {

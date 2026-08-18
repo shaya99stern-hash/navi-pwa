@@ -28,7 +28,7 @@ import {
   setLocalValue,
   type StorageDurability
 } from "@/lib/storage/indexeddb";
-import { memoryBlock, recall } from "@/lib/memory";
+import { historyAnswer, memoryBlock, recall } from "@/lib/memory";
 import {
   mergeCloudChats,
   pullCloudMemory,
@@ -351,6 +351,13 @@ export function AppShell({
   /* Counted per user turn, not per conversation: three attempts at this
      problem, then three fresh ones at the next. Reset on send below. */
   const repairRounds = useRef(0);
+  /* The conversations and which one is open, as refs, because `onToolCall` is
+     invoked long after the render that created it and a closed-over copy would
+     be whatever the list held several turns ago. */
+  const chatsRef = useRef<StoredChat[]>(chats);
+  chatsRef.current = chats;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
 
   const {
     messages,
@@ -370,6 +377,31 @@ export function AppShell({
        one step short of the model ever reading its own error. */
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall: async ({ toolCall }) => {
+      /**
+       * Searching the conversations, which only this side can do.
+       *
+       * They live in IndexedDB on this device and the edge runtime has never
+       * seen one, so the tool is declared on the server with no `execute` and
+       * answered here — the same path `run_javascript` takes to reach the
+       * sandbox. Read from refs rather than from the enclosing render: this
+       * callback can be invoked several turns after it was created, and the
+       * chat list is the thing most likely to have changed since.
+       */
+      if (toolCall.toolName === "search_history") {
+        const input = toolCall.input as { query?: string; limit?: number };
+        addToolResult({
+          tool: "search_history",
+          toolCallId: toolCall.toolCallId,
+          output: historyAnswer(
+            typeof input?.query === "string" ? input.query : "",
+            chatsRef.current,
+            activeIdRef.current,
+            { limit: typeof input?.limit === "number" ? input.limit : undefined }
+          )
+        });
+        return;
+      }
+
       if (toolCall.toolName !== "run_javascript") return;
       const input = toolCall.input as { code?: string };
       const code = typeof input?.code === "string" ? input.code : "";

@@ -1,5 +1,6 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
+import { readCredential } from "./credentials";
 import { configuredRouteModels, providerProbes } from "./providers";
 import { PROVIDERS, modelsProbe, providerApiKey } from "./provider-registry";
 import { transcriptionCandidates } from "./voice/transcription-models";
@@ -219,7 +220,7 @@ async function checkTranscription(): Promise<DiagnosticResult> {
 
 /** Can the app reach its own repository — the one it commits to? */
 async function checkRepository(): Promise<DiagnosticResult> {
-  const token = (process.env.GITHUB_PAT ?? process.env.NAVI_GITHUB_TOKEN ?? "").trim();
+  const token = readCredential("github") ?? "";
   const owner = process.env.GITHUB_OWNER || "shaya99stern-hash";
   const repo = process.env.GITHUB_REPO || "navi-pwa";
   if (!token) return { area: "Own repository", ok: false, detail: `No GitHub token, so ${owner}/${repo} cannot be read or committed to.` };

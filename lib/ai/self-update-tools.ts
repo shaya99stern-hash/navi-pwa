@@ -1,5 +1,6 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
+import { readCredential } from "./credentials";
 
 /**
  * Navi Soul editing its own codebase.
@@ -51,7 +52,12 @@ const PROTECTED_PATHS = [
 ];
 
 export function selfUpdateToken(): string | undefined {
-  return (process.env.GITHUB_PAT || process.env.NAVI_GITHUB_TOKEN || "").trim() || undefined;
+  /* Deliberate names only. `GITHUB_TOKEN` and `GH_TOKEN` are injected by CI
+     platforms and agent runtimes — they were already set in this project's own
+     build environment, by no person — and a token the platform handed over is
+     not consent to commit to this app's own source. Reads take any name; this
+     one does not. */
+  return readCredential("github", { deliberate: true });
 }
 
 export function selfUpdateRepo(): { owner: string; repo: string } {

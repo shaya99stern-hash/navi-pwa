@@ -46,6 +46,7 @@ import { REFLECTION_INSTRUCTION } from "@/lib/ai/reflection-tools";
 import { extractFacts, looksDurable } from "@/lib/memory/extract";
 import { hasWebSearch } from "@/lib/ai/web-tools";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
+import { historyInstruction } from "@/lib/ai/history-tools";
 import { buildToolset } from "@/lib/tools/registry";
 import { detectRepo, retrieveFiles } from "@/lib/ai/repo-retrieval";
 import { critiqueAllowed, groundingFor, skipReason, type FetchedSource } from "@/lib/ai/grounding";
@@ -953,6 +954,9 @@ function systemPromptBlocks(options: {
        described as available "only when the selected route actually supplies
        it", which made a core ability hostage to whichever provider answered. */
     tools.code && toolNames.includes("run_javascript") ? executionInstruction() : "",
+    /* Read off the toolset, like the browsing lines above, so the prompt can
+       never describe a capability the turn does not actually hold. */
+    toolNames.includes("search_history") ? historyInstruction() : "",
     tools.artifacts ? artifactInstruction(artifactRequested) : "",
     capabilityRequested ? capabilityInstruction() : "",
     /* How to write for an ear rather than an eye.

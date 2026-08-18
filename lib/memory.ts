@@ -240,3 +240,98 @@ export function memoryBlock(passages: MemoryPassage[]): string {
     lines.join("\n\n")
   ].join("\n");
 }
+
+/* ── Searching on demand, rather than being handed four passages ────────────
+   `memoryBlock` above is pushed into every prompt whether or not this turn is
+   about the past: four passages, 2,400 characters, ranked by a guess at
+   relevance made before the model saw the question. That is the right shape
+   for background context and the wrong shape for "when did we last talk about
+   this" — which needs dates, titles, and however many results there are, not
+   a fixed four chosen by a threshold.
+
+   So the model gets to ask. This renders the answer; the tool that calls it is
+   declared on the server with no `execute` and runs here on the device, for the
+   plain reason that the conversations are here — they live in IndexedDB and the
+   edge runtime has never seen them.
+   ------------------------------------------------------------------------ */
+
+/** Results in one answer. Beyond this it is a list to scroll, not an answer. */
+const MAX_HISTORY_RESULTS = 8;
+const HISTORY_BUDGET = 4_000;
+
+function ageInWords(from: number, now: number): string {
+  const days = Math.floor((now - from) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
+  const years = Math.floor(days / 365);
+  return `${years} year${years === 1 ? "" : "s"} ago`;
+}
+
+/**
+ * What was said about something, and when.
+ *
+ * Two passes, and the order matters. Literal search runs first because that is
+ * what "search" means to the person asking: someone who says `redirect_uri`
+ * wants the conversation containing `redirect_uri`, and a fuzzy match that
+ * returns a thread about OAuth generally is a worse answer that looks like a
+ * better one. Only when the literal pass finds nothing does the ranked pass
+ * run — and the answer says which one produced it, because a topical match
+ * presented as a literal one is how "we discussed this on the 3rd" becomes a
+ * confident invention.
+ *
+ * `now` is a parameter so the phrasing of an age is testable rather than
+ * dependent on when the suite happens to run.
+ */
+export function historyAnswer(
+  query: string,
+  chats: StoredChat[],
+  currentChatId: string,
+  options: { limit?: number; now?: number } = {}
+): string {
+  const needle = query.trim();
+  if (needle.length < 2) return "A search needs at least two characters.";
+
+  const now = options.now ?? Date.now();
+  const limit = Math.min(Math.max(1, options.limit ?? MAX_HISTORY_RESULTS), MAX_HISTORY_RESULTS);
+
+  const literal = searchConversations(needle, chats, limit);
+  if (literal.length) {
+    const lines = [`${literal.length} conversation${literal.length === 1 ? "" : "s"} contain “${needle}”, most relevant first.`, ""];
+    let used = 0;
+    for (const match of literal) {
+      const here = match.chat.id === currentChatId ? " — this is the conversation you are in now" : "";
+      const entry = [
+        `### ${match.chat.title}`,
+        `${ageInWords(match.chat.updatedAt, now)}, ${new Date(match.chat.updatedAt).toISOString().slice(0, 10)}${here}`,
+        `${match.hits} message${match.hits === 1 ? "" : "s"} mention it. First one: ${match.snippet}`
+      ].join("\n");
+      if (used + entry.length > HISTORY_BUDGET) break;
+      used += entry.length;
+      lines.push(entry, "");
+    }
+    lines.push("These are conversations that literally contain those words. Quote them as what was said; say the title and when, so it can be found in Recents.");
+    return lines.join("\n");
+  }
+
+  /* Nothing said those words. The ranked pass can still find the conversation
+     that was *about* it — but it is a different claim and is labelled as one. */
+  const related = recall(needle, chats, currentChatId);
+  if (!related.length) {
+    return `Nothing in the saved conversations on this device mentions “${needle}”, and nothing reads as being about it either. Say that plainly rather than reconstructing what might have been said.`;
+  }
+
+  return [
+    `No conversation contains the words “${needle}”. These read as being about it, ranked by relevance rather than found literally:`,
+    "",
+    ...related.map((passage) => [
+      `### ${passage.chatTitle}`,
+      `${ageInWords(passage.updatedAt, now)}, ${new Date(passage.updatedAt).toISOString().slice(0, 10)}`,
+      passage.text
+    ].join("\n")),
+    "",
+    "These matched by topic, not by wording. Say so — do not present them as the words that were used."
+  ].join("\n");
+}
