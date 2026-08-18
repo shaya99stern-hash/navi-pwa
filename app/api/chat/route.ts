@@ -38,8 +38,8 @@ import { buildMcpTools } from "@/lib/ai/mcp-tools";
 import { getRequestClerkSessionToken, getRequestClerkUserId } from "@/lib/auth/session";
 import { isClerkUserAllowed } from "@/lib/auth/config";
 import { readUntilCommitted } from "@/lib/ai/lane-commit";
-import { githubWritesEnabled, readGithubToken } from "@/lib/github/oauth";
-import { googleAccessToken } from "@/lib/google/oauth";
+import { githubOAuthConfigured, githubWritesEnabled, readGithubToken } from "@/lib/github/oauth";
+import { googleAccessToken, googleOAuthConfigured } from "@/lib/google/oauth";
 import { factsBlock, factsConfigured, listFacts, rememberFact } from "@/lib/memory/facts";
 import { learnedSkillsBlock, learnedSkillsConfigured, listLearnedSkills } from "@/lib/memory/learned-skills";
 import { REFLECTION_INSTRUCTION } from "@/lib/ai/reflection-tools";
@@ -886,7 +886,12 @@ function systemPromptBlocks(options: {
      user is holding is the next worst. Routing knowledge is last: describing
      its own lanes slightly less well is the cheapest thing to lose. */
   const referenceCandidates = [
-    { name: "self-repo", text: toolNames.includes("commit_own_source") || needsAppKnowledge(request) ? selfRepoKnowledge() : "" },
+    /* The block ships on either condition; what it is allowed to claim depends
+       on the first one alone. Asking about the app is a reason to be told which
+       repository it is, never a reason to be told it can be committed to. */
+    { name: "self-repo", text: toolNames.includes("commit_own_source") || needsAppKnowledge(request)
+      ? selfRepoKnowledge({ canCommit: toolNames.includes("commit_own_source") })
+      : "" },
     { name: "app-knowledge", text: needsAppKnowledge(request) ? APP_KNOWLEDGE : "" },
     /* The half of the self-description the code can state about itself:
        screens, which variable governs which capability, and what can be
@@ -1543,6 +1548,12 @@ export async function POST(request: Request): Promise<Response> {
         },
         githubToken: userGithubToken,
         googleAccessToken: userGoogleToken ?? undefined,
+        /* Whether each account *could* be connected, which is a different
+           question from whether it is. Without these, "why is Google not
+           working" has two possible answers — nobody signed in, or this
+           deployment has no OAuth app — and no way to tell them apart. */
+        githubOAuthAvailable: githubOAuthConfigured(),
+        googleOAuthAvailable: googleOAuthConfigured(),
         /* Lets the repository group be offered when the turn is about repos or
            deployments, rather than being trimmed off the end of the cap. */
         request: lastUserText,
