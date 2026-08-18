@@ -50,6 +50,104 @@ export type OperationMatch = {
   score: number;
 };
 
+/**
+ * Everything the shared tokenizer cannot see, added before it runs.
+ *
+ * ## Why this layer exists
+ *
+ * The owner put it plainly: *"it has to know that let's say I saved a certain
+ * way, it has to know variants of that. It can't be... it has to be that
+ * exact."* They are describing the gap between the words a person uses and the
+ * words an API's authors used, and there were three of them.
+ *
+ * **Identifiers were invisible.** `terms()` strips punctuation *before* it
+ * splits on whitespace, so `listImages` arrives as the single token
+ * `listimages` and `/v1/images/{id}` as `v1 images id`. The operation id is the
+ * most semantically loaded field an operation has, and no query could ever
+ * match it — "list images" found nothing on an operation literally called
+ * `listImages`.
+ *
+ * **Plurals were different words.** `image` and `images` shared no token, so
+ * whether a search worked depended on whether the owner happened to use the
+ * same number as the spec's author.
+ *
+ * **Verbs did not meet.** Somebody asking to *delete* something never reached
+ * an operation called `removeImage`. This is the most predictable vocabulary
+ * mismatch in the whole domain and the easiest to bridge.
+ *
+ * ## Which side gets which expansion
+ *
+ * Deliberately asymmetric. The haystack gets synonyms; the query does not.
+ *
+ * Expanding both sides multiplies: every query verb would reach every
+ * operation verb, and a search for "delete" would rank a `create` endpoint as a
+ * candidate. Expanding only the index means the index is generous about how it
+ * can be *addressed*, while the question stays exactly what was asked.
+ *
+ * Stems go on both, because a stem is the same word rather than a related one.
+ */
+
+/** `listImages` → `list Images`; `get_user_by_id` → `get user by id`. */
+function splitIdentifiers(text: string): string {
+  return text
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/[_\-./]+/g, " ");
+}
+
+/**
+ * Enough stemming to make a plural the same word, and no more.
+ *
+ * A real stemmer would collapse pairs that mean different things here —
+ * `billing` and `bill` are one word to Porter and two to an API. This handles
+ * the endings that actually differ between how a person types and how a spec is
+ * written, and leaves everything else alone.
+ */
+function stem(word: string): string {
+  if (word.length <= 4) return word;
+  for (const ending of ["ies", "es", "s"]) {
+    if (word.endsWith(ending)) {
+      const base = word.slice(0, -ending.length);
+      if (base.length >= 3) return ending === "ies" ? `${base}y` : base;
+    }
+  }
+  return word;
+}
+
+/**
+ * The verbs APIs are named with, against the verbs people ask with.
+ *
+ * Narrow on purpose. Every entry here is a pair that genuinely means the same
+ * operation, and nothing aspirational: a synonym list that grows past what is
+ * certain starts matching things the owner did not ask for, which is worse than
+ * the miss it was added to fix.
+ */
+const SYNONYMS: Record<string, readonly string[]> = {
+  list: ["get", "show", "find", "search", "read", "all", "fetch", "browse"],
+  get: ["fetch", "read", "show", "retrieve", "lookup", "find"],
+  create: ["add", "new", "make", "post", "insert", "upload"],
+  update: ["edit", "change", "modify", "set", "patch", "rename"],
+  delete: ["remove", "destroy", "drop", "erase", "cancel"],
+  send: ["post", "submit", "dispatch", "deliver"],
+  image: ["picture", "photo", "img", "imagery"],
+  user: ["account", "person", "profile", "member"],
+  file: ["document", "doc", "attachment"]
+};
+
+/* Read in both directions: an operation called `remove` should be reachable by
+   someone typing "delete", and one called `delete` by someone typing "remove". */
+const SYNONYM_INDEX = ((): Map<string, string[]> => {
+  const index = new Map<string, string[]>();
+  const add = (from: string, to: string) => {
+    const existing = index.get(from) ?? [];
+    if (!existing.includes(to)) index.set(from, [...existing, to]);
+  };
+  for (const [word, others] of Object.entries(SYNONYMS)) {
+    for (const other of others) { add(word, other); add(other, word); }
+  }
+  return index;
+})();
+
 /** Results in one search. More than this is a list to scroll, not an answer. */
 const MAX_MATCHES = 8;
 /** Below this a match is a coincidence rather than a candidate. */
@@ -64,31 +162,75 @@ const MIN_SCORE = 0.5;
  * by the vocabulary of its endpoint summaries, which is the vocabulary its
  * authors used rather than the one the owner has.
  */
-function haystack(capability: AddedCapability, operation: CapabilityOperation): string[] {
-  return terms([
-    capability.manifest.name,
-    capability.manifest.purpose,
-    operation.id,
-    operation.summary,
-    operation.path,
-    ...operation.parameters.map((parameter) => `${parameter.name} ${parameter.description}`)
-  ].join(" "));
+function expand(text: string): Set<string> {
+  /* The index is generous about how it can be addressed; the query stays
+     exactly what was asked. See the note on `SYNONYMS`. */
+  const expanded = new Set<string>();
+  for (const word of terms(splitIdentifiers(text))) {
+    expanded.add(word);
+    expanded.add(stem(word));
+    for (const synonym of SYNONYM_INDEX.get(word) ?? []) {
+      expanded.add(synonym);
+      expanded.add(stem(synonym));
+    }
+  }
+  return expanded;
 }
+
+/**
+ * What this operation says about itself, and what its API says about all of
+ * them — kept apart, because they are not equally strong evidence.
+ *
+ * The API's name and purpose ride on every one of its operations, and that is
+ * deliberate: without it an API is findable only by the vocabulary of its
+ * endpoint summaries, which is its authors' vocabulary rather than the owner's.
+ * "Satellite imagery" has to reach `listImages` on an API called Imagery even
+ * though the operation says neither word.
+ *
+ * But identity is shared by every operation equally, so it can never
+ * *distinguish* between them — and once synonyms were added it became strong
+ * enough to clear the bar on its own. Asking to delete an image then surfaced
+ * the endpoint that creates reports, because both belong to an API whose
+ * purpose mentions pictures. Identity is what gets an API into the running;
+ * what the operation itself says is what decides which one answers.
+ */
+function haystack(capability: AddedCapability, operation: CapabilityOperation): { own: Set<string>; identity: Set<string> } {
+  return {
+    own: expand([
+      operation.id,
+      operation.summary,
+      operation.path,
+      ...operation.parameters.map((parameter) => `${parameter.name} ${parameter.description}`)
+    ].join(" ")),
+    identity: expand(`${capability.manifest.name} ${capability.manifest.purpose}`)
+  };
+}
+
+/** A shared word is real evidence, and weaker than the operation's own. */
+const IDENTITY_WEIGHT = 0.5;
 
 /** The operations that bear on a question, best first. */
 export function searchCapabilities(query: string, capabilities: AddedCapability[], limit = MAX_MATCHES): OperationMatch[] {
-  const wanted = terms(query);
+  /* Identifiers split on the query side too: somebody who pastes an operation
+     name is asking about that operation, and it would be strange for the one
+     phrasing guaranteed to be right to be the one that fails. */
+  const wanted = terms(splitIdentifiers(query));
   if (!wanted.length) return [];
   const asked = new Set(wanted);
 
   const matches: OperationMatch[] = [];
   for (const capability of capabilities) {
     for (const operation of capability.manifest.operations) {
-      const words = haystack(capability, operation);
-      if (!words.length) continue;
-      const present = new Set(words);
+      const { own, identity } = haystack(capability, operation);
+      if (!own.size && !identity.size) continue;
+      /* A word counts if it is there, or if its stem is — a stem is the same
+         word rather than a related one, so this loosens nothing. */
+      const holds = (words: Set<string>, word: string) => words.has(word) || words.has(stem(word));
       let hits = 0;
-      for (const word of asked) if (present.has(word)) hits += 1;
+      for (const word of asked) {
+        if (holds(own, word)) hits += 1;
+        else if (holds(identity, word)) hits += IDENTITY_WEIGHT;
+      }
       if (!hits) continue;
 
       /* Normalised by how much was asked for rather than by how much the
