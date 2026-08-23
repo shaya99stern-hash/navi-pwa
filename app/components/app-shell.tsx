@@ -66,17 +66,7 @@ import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { SettingsSheet } from "./settings-sheet";
 
 const MAX_CHATS = 40;
-/**
- * Rows at the end of the thread that keep full layout.
- *
- * `content-visibility: auto` only remembers a row's height once that row has
- * been on screen, so scrolling back up through never-measured rows makes
- * WebKit revise its 220px guess mid-gesture and the thread moves under the
- * finger. This is the stretch people actually scroll, so it pays full layout;
- * everything above it stays skippable.
- */
 const RECENT_ROWS = 20;
-/** Quiet period before a save, and the longest a save may ever be put off. */
 const PERSIST_DEBOUNCE = 360;
 const MAX_PERSIST_DEFER = 1_500;
 const MAX_MESSAGES = 60;
@@ -92,22 +82,10 @@ const ALLOWED_TYPES = new Set([
   "application/pdf"
 ]);
 
-/** Total characters of older conversation carried alongside the live messages. */
 const SUMMARY_BUDGET = 8_000;
-/** Turns kept verbatim from the start of the thread. */
 const OPENING_TURNS = 6;
-/** Share of the budget reserved for those opening turns. */
 const OPENING_SHARE = 0.35;
 
-/**
- * Condense the messages that fall outside the live window.
- *
- * Keeping only the most recent characters — which is what a plain trailing
- * slice does — drops the beginning of the conversation first. That is where
- * the task, the constraints, and any "always do X" instruction were stated, so
- * a long thread would lose its own premise while remembering small talk. Keep
- * both ends and drop the middle instead.
- */
 function compactSummary(messages: UIMessage[]): string {
   if (messages.length <= 14) return "";
   const lines = messages
@@ -144,7 +122,6 @@ function resolvedTheme(preference: NaviPreferences["theme"]): "dark" | "light" {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
-/** Installed to the Home Screen, where iOS owns the status bar. */
 function standaloneDisplay(): boolean {
   return window.matchMedia("(display-mode: standalone)").matches
     || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
@@ -154,14 +131,6 @@ function stopSpeaking() {
   if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
-/**
- * Which layer a deep link opens over the chat, rather than navigating to.
- *
- * One prop, one union. There used to be two — `initialSheet` for six of these
- * and `initialView` for voice — which was two names for one concept, and every
- * one of the seven routes means the same thing: "home, with a layer on top".
- * A second spelling of the same idea is where the next one comes from.
- */
 export type InitialLayer =
   | "history"
   | "projects"
@@ -171,14 +140,6 @@ export type InitialLayer =
   | "customize"
   | "voice";
 
-/**
- * Which screen the shell is showing.
- *
- * Files, Images and Tools are screens rather than sheets: each has its own
- * scroll position and its own title in the header, and none of them belongs
- * *over* a conversation the way a picker does. The chat keeps its state
- * underneath, so coming back to it is free.
- */
 export type ShellView = "chat" | "files" | "images" | "tools";
 
 const VIEW_TITLES: Record<Exclude<ShellView, "chat">, string> = {
@@ -214,15 +175,11 @@ export function AppShell({
   const [hydrated, setHydrated] = useState(false);
   const [durability, setDurability] = useState<StorageDurability>("unavailable");
   const [settingsOpen, setSettingsOpen] = useState(initialLayer === "settings" || initialLayer === "customize");
-  // /settings lands on the root list; /customize lands inside the Customize
-  // group, whose first page is Skills.
   const [settingsSection, setSettingsSection] = useState<MenuSection | undefined>(
     initialLayer === "customize" ? "skills" : undefined
   );
   const [effortSheetOpen, setEffortSheetOpen] = useState(false);
   const [chatMenuOpen, setChatMenuOpen] = useState(false);
-  /* Incognito: this conversation is never written to storage and never
-     recalled by memory. It exists only while the screen is open. */
   const [incognito, setIncognito] = useState(false);
   const [artifactAudit, setArtifactAudit] = useState<{ title: string; findings: string[] } | null>(null);
   const [accountName, setAccountName] = useState("");
