@@ -176,25 +176,25 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const requestHeaders = clerkConfigured ? await headers() : undefined;
   const forwardedHost = requestHeaders?.get("x-forwarded-host") ?? requestHeaders?.get("host") ?? undefined;
   const forwardedProto = requestHeaders?.get("x-forwarded-proto") ?? "https";
-  const requestOrigin = forwardedHost ? \`\${forwardedProto}://\${forwardedHost}\` : undefined;
+  const requestOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : undefined;
 
   /* Must resolve exactly the way the middleware did: a cold PWA launch carries an expired session token, and disagreeing here would put this render's chats under the signed-out storage scope and clear the caches. */
   const { userId } = clerkConfigured ? await resolveClerkSession(sessionToken, clientUat, requestOrigin) : { userId: null };
-  const storageScope = userId ? \`clerk:\${userId}\` : clerkConfigured ? "signed-out" : "guest";
+  const storageScope = userId ? `clerk:${userId}` : clerkConfigured ? "signed-out" : "guest";
   const mayMigrateLegacyState = !clerkConfigured || Boolean(userId && hasClerkUserAllowlist() && isClerkUserAllowed(userId));
 
-  const storageBootScript = \`
+  const storageBootScript = `
   try {
-    const scope = \${JSON.stringify(storageScope)};
+    const scope = ${JSON.stringify(storageScope)};
     // Signing out or switching accounts must not leave the previous account's
     // responses in a cache the next one reads from.
     if (localStorage.getItem('navi.storage.scope.v1') !== scope && 'caches' in window) {
       caches.keys().then((keys) => keys.filter((k) => k.startsWith('navi-')).forEach((k) => caches.delete(k)));
     }
     localStorage.setItem('navi.storage.scope.v1', scope);
-    \${mayMigrateLegacyState ? "localStorage.setItem('navi.storage.legacy-owner.v1', scope);" : "localStorage.removeItem('navi.storage.legacy-owner.v1');"}
+    ${mayMigrateLegacyState ? "localStorage.setItem('navi.storage.legacy-owner.v1', scope);" : "localStorage.removeItem('navi.storage.legacy-owner.v1');"}
   } catch {}
-  \`;
+  `;
 
   const app = clerkConfigured ? (
     <ClerkProvider
@@ -215,7 +215,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     <html
       lang="en-US"
       data-theme="dark"
-      className={\`dark \${displaySerif.variable} \${sans.variable} \${mono.variable}\`}
+      className={`dark ${displaySerif.variable} ${sans.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
       <head>
