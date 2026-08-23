@@ -42,7 +42,6 @@ import { instantAnswer, parseSlashCommand, runSlash } from "@/lib/skills";
 import { decideLocallyWithSkills } from "@/lib/ai/navi-soul/router";
 import { NAVI_VERSION } from "@/lib/version";
 import { haptic } from "@/lib/ui/haptics";
-import { collectFiles, collectImages } from "@/lib/ui/library";
 import { useEdgeSwipe } from "@/lib/ui/use-edge-swipe";
 import { releaseOverlaysForNavigation, useOverlayRoute } from "@/lib/ui/overlay-route";
 import { persistThemeCookie } from "@/lib/ui/theme-cookie";
@@ -194,26 +193,6 @@ const VIEW_SUBTITLES: Record<Exclude<ShellView, "chat">, string> = {
   tools: "What Navi Soul may reach for"
 };
 
-/**
- * The header used to carry the mode as its dominant line, and that was the
- * wrong claim to make there.
- *
- * A title in that position is how an app says *where you are*. Everything else
- * that ever appears there — Recents, Projects, Artifacts, Settings — is a
- * place, and going to it changes what you are looking at. The mode is not a
- * place: it changes how the *next message* is routed and nothing else. So
- * switching it changed the title and not the conversation, which anywhere else
- * in this app would read as a bug.
- *
- * It was worse than merely odd. The mode is a global preference and the title
- * ignored which chat was open, so switching to Code relabelled every earlier
- * conversation on sight — a header making a claim about a thread that was never
- * true of it.
- *
- * The mode now sits in the composer beside Effort and Research, the other two
- * per-message dials, and this line carries the conversation's own name.
- */
-
 export function AppShell({
   initialChatId,
   initialDraft,
@@ -245,38 +224,19 @@ export function AppShell({
   /* Incognito: this conversation is never written to storage and never
      recalled by memory. It exists only while the screen is open. */
   const [incognito, setIncognito] = useState(false);
-  /**
-   * What the last artifact actually measured once it was on screen.
-   *
-   * The reviewer runs before delivery; an artifact renders after it. So the
-   * turn that produced a 900px frame around 400px of content can never be told
-   * about it — but the next turn can, and the next turn is where "make this
-   * more realistic" lands. Held for one artifact at a time, because a stale
-   * audit describing a different artifact is worse than none.
-   */
   const [artifactAudit, setArtifactAudit] = useState<{ title: string; findings: string[] } | null>(null);
-  /* The name Clerk already knows, used only when the profile has none. Someone
-     signed in has told the app who they are once already; making them type it
-     again to be greeted by name is asking twice for the same thing. */
   const [accountName, setAccountName] = useState("");
-  /* The signed-in user's id, watched rather than merely read: a fresh install
-     opens signed-out, so the pull that matters is the one after sign-in. */
   const [accountId, setAccountId] = useState<string | null>(null);
-  /* Whether this device arrived with nothing of its own. A ref because it
-     gates a one-time restore and must not itself cause a render. */
   const freshDevice = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(initialLayer === "history");
   const [projectsOpen, setProjectsOpen] = useState(initialLayer === "projects");
   const [connectorsOpen, setConnectorsOpen] = useState(initialLayer === "connectors");
   const [artifactsOpen, setArtifactsOpen] = useState(initialLayer === "artifacts");
-  /* The chat is the ground state; the library screens sit beside it, not over
-     it, so switching back does not have to rebuild the thread. */
   const [view, setView] = useState<ShellView>("chat");
   const [online, setOnline] = useState(true);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [scrolled, setScrolled] = useState(false);
   const [streamStatus, setStreamStatus] = useState<NaviStreamStatus | null>(null);
-  /* When the last request failed, for the spoken conversation to recover from. */
   const [turnFailedAt, setTurnFailedAt] = useState<number | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [contextMessage, setContextMessage] = useState<{ id: string; text: string; role: string } | null>(null);
@@ -285,58 +245,16 @@ export function AppShell({
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastPersistAt = useRef(0);
-  /* Chats already sent for a summarised title. One attempt each: the title is
-     a nicety, and retrying it on every render would turn a nicety into traffic. */
   const titleRequested = useRef<Set<string>>(new Set());
   const anchoredUserId = useRef<string | null>(null);
   const anchorTop = useRef(0);
 
   const openHistory = useCallback(() => setHistoryOpen(true), []);
-  /* Concede the left edge when iOS owns it.
-   *
-   * Two correct mechanisms wanted the same 26 pixels. `use-edge-swipe` arms a
-   * drawer-open drag there; `overlay-route` makes every overlay a real history
-   * entry, which in standalone puts iOS's interactive back gesture on that same
-   * edge. One swipe, two meanings, and which one won came down to WebKit.
-   *
-   * Back wins, because that is what a user expects from the edge and it is what
-   * the overlay work bought. The drawer keeps its button, and swipe-to-close on
-   * the open drawer is unaffected — that gesture starts inside the drawer, not
-   * on the edge. In a browser tab there is no system gesture to collide with,
-   * so the drag stays.
-   */
+  
   const [systemOwnsEdge, setSystemOwnsEdge] = useState(false);
   useEffect(() => { setSystemOwnsEdge(standaloneDisplay()); }, []);
   const edgeSwipe = useEdgeSwipe({ disabled: historyOpen || systemOwnsEdge, haptics: preferences.haptics, onOpen: openHistory });
 
-  /* Every overlay is a place you can be, and back is how you leave it.
-   *
-   * These were plain booleans, so the back gesture skipped whatever was in
-   * front of you and navigated the chat underneath — or off the app entirely.
-   * On a phone that is the primary dismiss gesture, which is why the routing
-   * "didn't feel a hundred percent": the sheets were not in the history at all.
-   *
-   * Where the overlay has a route of its own, the address follows it, so the
-   * screen you are on is the screen the URL names — and closing puts it back
-   * rather than leaving a stale `/settings` behind. The ones without a route
-   * still take a history entry, because being dismissable by back matters more
-   * than being linkable. */
-  /* Where a link-opened overlay closes to. The stored list rather than the
-     live message array, because a conversation only has an address once it has
-     been written down — closing to `/chat/<id>` for a chat that does not exist
-     yet would put a dead link in the address bar.
-
-     The fallback is the most recently updated stored chat, not `/`.
-     A cold PWA launch straight to /settings renders before IndexedDB has been
-     read: `chats` is empty, `activeId` is a brand-new id, and the `some` test
-     failed — so closing the sheet landed the user in a blank new chat instead
-     of the conversation they had been reading. The same applied to every
-     /recents, /projects and notification deep link. Once hydrated there is a
-     real answer available, and `useOverlayRoute` reads `restore` through a ref,
-     so it picks up the corrected value with no other change. */
-  /* Most recently updated, computed rather than `chats[0]`: the stored order
-     puts pinned conversations first, so the head of the list is whatever was
-     pinned longest ago, not what was last read. */
   const lastReadChat = hydrated
     ? chats.reduce<StoredChat | null>((newest, chat) => (!newest || chat.updatedAt > newest.updatedAt ? chat : newest), null)
     : null;
@@ -350,31 +268,17 @@ export function AppShell({
   useOverlayRoute({ open: connectorsOpen, onClose: () => setConnectorsOpen(false), path: "/connectors", restore: restorePath });
   useOverlayRoute({ open: projectsOpen, onClose: () => setProjectsOpen(false), path: "/projects", restore: restorePath });
   useOverlayRoute({ open: artifactsOpen, onClose: () => setArtifactsOpen(false), path: "/artifacts", restore: restorePath });
-  /* No route of their own — a menu is not a destination worth linking to — but
-     back still closes them, which is the half that was actually missing. */
   useOverlayRoute({ open: chatMenuOpen, onClose: () => setChatMenuOpen(false), restore: restorePath });
   useOverlayRoute({ open: effortSheetOpen, onClose: () => setEffortSheetOpen(false), restore: restorePath });
   useOverlayRoute({ open: contextMessage !== null, onClose: () => setContextMessage(null), restore: restorePath });
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
-  /* Counted per user turn, not per conversation: three attempts at this
-     problem, then three fresh ones at the next. Reset on send below. */
   const repairRounds = useRef(0);
-  /**
-   * A write approval waiting on the owner.
-   *
-   * The tool call cannot return until they answer, so the resolver is held here
-   * and the sheet below settles it. One at a time: a queue of confirmations is
-   * a queue that gets cleared without being read, which is the opposite of what
-   * a gate is for.
-   */
+  
   const [pendingApproval, setPendingApproval] = useState<{ title: string; detail: string; reason: string } | null>(null);
   const approvalAnswer = useRef<((granted: boolean) => void) | null>(null);
   const preferencesRef = useRef(preferences);
   preferencesRef.current = preferences;
-  /* The conversations and which one is open, as refs, because `onToolCall` is
-     invoked long after the render that created it and a closed-over copy would
-     be whatever the list held several turns ago. */
   const chatsRef = useRef<StoredChat[]>(chats);
   chatsRef.current = chats;
   const activeIdRef = useRef(activeId);
@@ -393,21 +297,8 @@ export function AppShell({
   } = useChat({
     transport,
     experimental_throttle: 32,
-    /* Submit the tool result and let the model continue on its own. Without
-       this the run happens, the result sits there, and the conversation stops
-       one step short of the model ever reading its own error. */
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall: async ({ toolCall }) => {
-      /**
-       * Searching the conversations, which only this side can do.
-       *
-       * They live in IndexedDB on this device and the edge runtime has never
-       * seen one, so the tool is declared on the server with no `execute` and
-       * answered here — the same path `run_javascript` takes to reach the
-       * sandbox. Read from refs rather than from the enclosing render: this
-       * callback can be invoked several turns after it was created, and the
-       * chat list is the thing most likely to have changed since.
-       */
       if (toolCall.toolName === "search_history") {
         const input = toolCall.input as { query?: string; limit?: number };
         addToolResult({
@@ -423,14 +314,6 @@ export function AppShell({
         return;
       }
 
-      /**
-       * Approving one write on a connected API, once.
-       *
-       * Handled here for the same reason `search_history` is: the server cannot
-       * ask the owner anything mid-generation, and a grant has to come from
-       * them. The answer is written into their own preferences, so the next
-       * call finds it already approved and never asks again.
-       */
       if (toolCall.toolName === "approve_capability_write") {
         const input = toolCall.input as { capability?: string; operation?: string; reason?: string };
         addToolResult({
@@ -454,10 +337,6 @@ export function AppShell({
         return;
       }
 
-      /* The cap lives here because this is the only place that can count. The
-         model is asked to stop after three attempts and mostly will; a model
-         that does not would otherwise loop on the device until the request
-         budget ran out. */
       repairRounds.current += 1;
       if (repairRounds.current > MAX_REPAIR_ROUNDS) {
         addToolResult({
@@ -480,22 +359,10 @@ export function AppShell({
         return;
       }
       if (isError) {
-        /* The stream renders its own error card, so a second status line is a
-           duplicate of the same failure. Clear it instead. */
         setStreamStatus(null);
         return;
       }
-      /* No `haptic("success")` here, and none in `onError` below.
-         Both mechanisms need transient user activation, and a reply finishes
-         seconds after the tap that asked for it, so `haptics.ts` skipped the
-         call every single time — the two events most worth feeling were the
-         two that never fired, and nothing in the code said so.
-         Completion is carried by the channels that need no activation: the
-         status line settling in `conversation-state-panel`, and this
-         notification when the app is not being looked at. */
       setStreamStatus({ stage: "complete", detail: "Response complete." });
-      // Response-completion notification, only when the tab is not being
-      // looked at — with it in view the finished text is its own signal.
       if (preferences.notifyOnComplete && document.visibilityState === "hidden"
         && "Notification" in window && Notification.permission === "granted") {
         void navigator.serviceWorker?.getRegistration("/")
@@ -510,12 +377,7 @@ export function AppShell({
     },
     onError: (chatError) => {
       console.error("Navi Soul chat error:", chatError);
-      /* The error card the stream renders is the signal; a haptic here would
-         be refused for the same reason the completion one was. */
       setStreamStatus({ stage: "error", detail: "That didn't go through." });
-      /* And the spoken conversation, which otherwise waits in silence for a
-         reply that is never coming. A timestamp rather than a flag, so two
-         failures in a row are two events rather than one. */
       setTurnFailedAt(Date.now());
     }
   });
@@ -523,20 +385,10 @@ export function AppShell({
   const generating = status === "submitted" || status === "streaming";
   const activeChat = chats.find((chat) => chat.id === activeId);
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
-  /* The mode is the product; the route is chosen per request by the router.
-     Code mode reads as a state worth naming, Chat mode is the default and
-     naming it would be noise. */
   const activeMode = NAVI_MODES.find((item) => item.id === preferences.mode) ?? NAVI_MODES[0];
   const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
   const statusText = streamStatus?.detail ?? (generating ? "Navi Soul is working" : preferences.mode === "code" ? activeMode.label : "");
-  /* The counts beside Files and Images in the drawer. Folded out of the same
-     chats array the drawer already renders, so the number and the screen it
-     leads to can never disagree — and memoised because scanning every message
-     for image fences on each keystroke of a stream is not free. */
-  const fileCount = useMemo(() => collectFiles(chats).length, [chats]);
-  const imageCount = useMemo(() => collectImages(chats).length, [chats]);
-  const toolsOn = preferences.tools.web || preferences.tools.code || preferences.tools.artifacts;
 
   useEffect(() => {
     type ClerkGlobal = { loaded?: boolean; user?: { id?: string; firstName?: string | null } | null };
@@ -548,31 +400,21 @@ export function AppShell({
       return true;
     };
     if (read()) return;
-    /* Clerk loads asynchronously and the launch screen is the first thing
-       drawn, so a single read almost always runs too early. The poll keeps
-       going until it answers, which is also when a sign-in becomes visible
-       here without a reload. */
     const poll = window.setInterval(() => { if (read()) window.clearInterval(poll); }, 300);
     const stop = window.setTimeout(() => window.clearInterval(poll), 5_000);
     return () => { window.clearInterval(poll); window.clearTimeout(stop); };
   }, [preferences.profile.displayName]);
 
-  /* Recall runs against the question being asked, so it is computed at send
-     time rather than folded into the memoised body. */
   const recalledContext = useCallback((question: string) => {
     if (incognito || !preferences.memory || !question.trim()) return "";
     return memoryBlock(recall(question, chats, activeId));
   }, [activeId, chats, incognito, preferences.memory]);
 
-  /* Built-ins plus anything pasted in; one is chosen per request, or none. */
   const playbooks = useMemo<Playbook[]>(() => [
     ...BUILT_IN_PLAYBOOKS,
     ...preferences.customPlaybooks.map((entry) => ({ ...entry, source: "custom" as const }))
   ], [preferences.customPlaybooks]);
 
-  /* Measurements from the rendered artifact, arriving after its turn finished.
-     A window event rather than a prop: `ArtifactFrame` renders from inside the
-     markdown renderer, well below anything that talks to the model. */
   useEffect(() => {
     function receive(event: Event) {
       const detail = (event as CustomEvent).detail as { title?: string; findings?: string[] } | undefined;
@@ -583,51 +425,17 @@ export function AppShell({
     return () => window.removeEventListener("navi:artifact-audit", receive);
   }, []);
 
-  /**
-   * Which voice actually spoke last, and why it was not the premium one.
-   *
-   * A ref rather than state, and declared here rather than beside the
-   * conversation hook, because `requestBody` closes over what is in scope where
-   * it is defined and the hook is set up much further down. Nothing re-renders
-   * on this changing; it only needs to be readable at send time.
-   *
-   * The reason this exists at all: asked "isn't it supposed to be using the
-   * Eleven Labs voice?", the model had no way to know which voice had spoken.
-   * It answered by inventing an architecture — that premium speech was "only
-   * for reading aloud long passages, not the chat voice" — while the app's own
-   * status line, one inch below the answer, read "this device refused to play
-   * the audio". The app knew. The model could not see it, so it made something
-   * up that fit.
-   */
   const lastVoiceRef = useRef<{ engine: string; why: string } | null>(null);
 
   const requestBody = useCallback((question?: string, spoken = false) => ({
     mode: preferences.mode,
-    /* Whether this answer is going to be *heard* rather than read.
-       The server cannot infer it — a spoken turn and a typed one are the same
-       shape by the time they arrive — and it changes how the answer should be
-       written rather than how it is routed: shorter sentences, one idea at a
-       time, no structure that only works on a page. A voice reading a bulleted
-       report aloud is the single thing that makes a premium voice still sound
-       like a machine. */
     voice: spoken,
-    /* What happened the last time this app tried to speak. Sent so a question
-       about the voice is answered from what occurred rather than from what the
-       configuration implies — those disagreed, and the configuration is the
-       more convincing of the two. */
     spokenBy: lastVoiceRef.current ?? undefined,
-    /* Only when something was actually wrong. A clean artifact has nothing
-       worth spending prompt on, and sending "no problems found" every turn
-       trains the model to ignore the field. */
     artifactAudit: artifactAudit && artifactAudit.findings.length ? artifactAudit : undefined,
     routeOverride: preferences.routeOverride,
     effort: preferences.effort,
     tools: preferences.tools,
     memory: question ? recalledContext(question) : "",
-    /* Whether this turn may *add* to memory, as opposed to read from it. The
-       server cannot infer it: an empty `memory` string means nothing was
-       recalled, which is not the same as memory being switched off, and
-       incognito is a client-side state entirely. */
     remember: !incognito && preferences.memory,
     playbook: question ? playbookBlock(selectPlaybook(question, playbooks)) : "",
     threadSummary: activeChat?.summary ?? compactSummary(messages),
@@ -635,8 +443,6 @@ export function AppShell({
     customConnectors: preferences.customConnectors,
     capabilities: preferences.capabilities,
     connectorAccessMode: activeChat?.connectorAccessMode ?? preferences.connectorAccessMode,
-    // Standing profile: name, work, and the user's own instructions travel
-    // with every request so each chat starts already knowing them.
     userContext: preferences.profile.displayName || preferences.profile.fullName || preferences.profile.work || preferences.profile.instructions
       ? {
         displayName: preferences.profile.displayName || preferences.profile.fullName,
@@ -672,14 +478,6 @@ export function AppShell({
           : undefined;
         if (requestedChat) {
           setActiveId(requestedChat.id);
-          /* A chat that belongs to no project opens in no project.
-             It used to fall back to whatever project was last active globally,
-             and because the persist path stamps the active project onto every
-             save, simply *opening* an unfiled chat quietly filed it into that
-             project. So a conversation could appear inside a project the user
-             never put it in — and the more they used projects, the more often
-             it happened. `openChat` already reads it this way; only the
-             restore-on-load path disagreed. */
           setActiveProjectId(requestedChat.projectId ?? null);
           setMessages(requestedChat.messages);
         } else {
@@ -696,23 +494,6 @@ export function AppShell({
     };
   }, [initialChatId, initialDraft, setMessages]);
 
-  /**
-   * Bring the cloud copy back down.
-   *
-   * Runs after local state so the UI never waits on the network, and again
-   * whenever the signed-in identity changes — which is the reinstall case the
-   * one-shot version missed. A fresh install opens signed-out, the first pull
-   * returns nothing because there is nobody to pull for, and if that were the
-   * only attempt the user would sign in to an empty app and conclude their
-   * history was gone.
-   *
-   * Chats merge: newer copy wins per id, and a chat only one side knows about
-   * always survives. Preferences do not merge — there is no per-field
-   * timestamp to merge on — so they are restored only onto a device that had
-   * nothing of its own, where there is nothing to lose. That is exactly the
-   * reinstall, and it is what carries the profile, the standing instructions
-   * and the tool policy back.
-   */
   useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
@@ -726,8 +507,6 @@ export function AppShell({
         });
       }
       if (cloud.preferences && freshDevice.current) {
-        /* Once only. A second pull must not reapply the cloud copy over
-           changes the user has made since the first one landed. */
         freshDevice.current = false;
         setPreferences((current) => {
           const restored = { ...current, ...cloud.preferences };
@@ -739,8 +518,6 @@ export function AppShell({
     return () => { cancelled = true; };
   }, [hydrated, accountId]);
 
-  /* Sync mirrors history only when the user keeps history at all, and never
-     from an incognito conversation. */
   useEffect(() => {
     setCloudSyncEnabled(hydrated && !incognito && preferences.saveHistory);
   }, [hydrated, incognito, preferences.saveHistory]);
@@ -755,17 +532,6 @@ export function AppShell({
       localStorage.setItem("navi.theme.v3", next);
       persistThemeCookie(next);
 
-      /* iOS reads `apple-mobile-web-app-status-bar-style` once, at launch, and
-         ignores every later mutation of the meta tag. Settings flips the theme
-         live, so going dark → light left white glyphs on the ivory ground
-         until the next cold launch: the app looked broken along its top edge,
-         and nothing on screen explained why.
-
-         Installed, the only way to re-tint the bar is to relaunch, so write
-         the cookie and reload — the worker serves the shell, so it costs about
-         a frame. In a browser tab the bar is the browser's own furniture and a
-         reload would be an unexplained flash, so nothing happens there. The
-         Appearance control says which of the two you are getting. */
       if (changed && standaloneDisplay()) window.location.reload();
     };
     apply();
@@ -815,10 +581,6 @@ export function AppShell({
 
   useEffect(() => {
     if (!hydrated || incognito || !preferences.saveHistory || messages.length === 0) return;
-    // A stream rewrites `messages` every throttle tick, so a plain debounce was
-    // pushed out for the whole response and never fired: backgrounding the app
-    // mid-reply lost the answer *and* the question that produced it. Cap how
-    // long a write can be deferred so progress always reaches the device.
     const waited = Date.now() - lastPersistAt.current;
     const delay = waited >= MAX_PERSIST_DEFER ? 0 : Math.min(PERSIST_DEBOUNCE, MAX_PERSIST_DEFER - waited);
     const timer = window.setTimeout(() => {
@@ -847,26 +609,9 @@ export function AppShell({
     return () => window.clearTimeout(timer);
   }, [activeId, activeProjectId, hydrated, incognito, messages, preferences.connectorAccessMode, preferences.saveHistory]);
 
-  /**
-   * A better title for the chat, once, after its first exchange.
-   *
-   * The heuristic title takes the first seven words of the question, which
-   * beats echoing the prompt and still fills the drawer with truncated
-   * openings — "Write me a function that takes" for a thread about parsing
-   * dates. It is hard to scan exactly when scanning matters, which is when
-   * there are enough chats to need the list.
-   *
-   * After the reply rather than during it, and in its own request: the chat
-   * route's budget is time to first token, and nobody waiting for an answer is
-   * helped by a title. Failure is silent and total — the heuristic title is
-   * already on screen and stays there.
-   */
   useEffect(() => {
     if (!hydrated || incognito || !preferences.saveHistory) return;
     if (status !== "ready" || titleRequested.current.has(activeId)) return;
-    /* Only once the chat exists on the device. The write is debounced, so
-       firing before it lands would resolve against a chat that is not there
-       yet and drop the result. */
     if (!chats.some((chat) => chat.id === activeId)) return;
 
     const question = messageText(messages.find((message) => message.role === "user") ?? ({ parts: [] } as never));
@@ -889,9 +634,6 @@ export function AppShell({
         setChats((current) => {
           const next = current.map((chat) => {
             if (chat.id !== chatId) return chat;
-            /* Never over a name the user chose. Renaming is in the chat menu,
-               and a title that quietly reverts is worse than no summary at
-               all — so this only replaces one this app generated itself. */
             const generated = chat.title === chatTitle(chat.messages) || chat.title === "New chat";
             return generated ? { ...chat, title } : chat;
           });
@@ -903,9 +645,6 @@ export function AppShell({
     return () => controller.abort();
   }, [activeId, chats, hydrated, incognito, messages, preferences.saveHistory, status]);
 
-  /* Sending pins the new user message near the top so the reply has room to
-     stream in beneath it, matching the native app. Scrolling up during a
-     response stops the follow until the reader returns to the bottom. */
   useEffect(() => {
     const scroller = scrollRef.current;
     if (!scroller) return;
@@ -928,17 +667,12 @@ export function AppShell({
     if (!scroller || !autoFollow) return;
     const frame = requestAnimationFrame(() => {
       const bottom = scroller.scrollHeight - scroller.clientHeight;
-      // While the reply still fits under the anchored message, following the
-      // bottom would scroll the question back off the top of the screen.
       if (bottom < anchorTop.current) return;
       scroller.scrollTo({ top: bottom, behavior: status === "streaming" ? "auto" : "smooth" });
     });
     return () => cancelAnimationFrame(frame);
   }, [autoFollow, generating, messages, status, streamStatus]);
 
-  /* The keyboard shrinks the shell, which would otherwise slide the newest
-     message behind the composer. Re-anchor to the bottom as it opens so the
-     conversation keeps its place, the way a native thread does. */
   useEffect(() => {
     const root = document.documentElement;
     const observer = new MutationObserver(() => {
@@ -951,8 +685,6 @@ export function AppShell({
     return () => observer.disconnect();
   }, [autoFollow]);
 
-  /* CSS smooth scrolling wins over scrollTo({ behavior: "auto" }), so every
-     streamed token would animate and the thread would float behind the text. */
   useEffect(() => {
     document.documentElement.dataset.streaming = generating ? "true" : "false";
     return () => {
@@ -960,33 +692,12 @@ export function AppShell({
     };
   }, [generating]);
 
-  /* The first-token tick used to live here and had the same defect as the
-     completion haptic: by the time a stream opens, the activation the tap
-     granted has lapsed, so the call was skipped and the tick never happened.
-     The streaming cursor and the status line are what announce the reply. */
-
-  /**
-   * The newest finished answer, for the spoken conversation to read aloud.
-   *
-   * Null while one is still streaming, which is what keeps the loop from
-   * speaking half a sentence and then reopening the microphone over the rest
-   * of it.
-   */
   const latestReply = useMemo(() => {
     if (generating) return null;
     const latest = [...messages].reverse().find((message) => message.role === "assistant" && messageText(message).trim());
     return latest ? { id: latest.id, text: messageText(latest) } : null;
   }, [generating, messages]);
 
-  /**
-   * One tap in the composer and it is a conversation until it is tapped again.
-   *
-   * This replaces a sheet with five controls in it. The read-aloud switch is
-   * gone because a conversation you cannot hear is not one, the hands-free
-   * switch is gone because that is what this is, and the language picker is
-   * gone because Settings already owns that preference and having two of them
-   * meant the answer depended on which screen you last opened.
-   */
   const conversation = useVoiceConversation({
     online,
     busy: generating,
@@ -998,15 +709,10 @@ export function AppShell({
     onTurn: (text) => void submitVoiceTranscript(text)
   });
 
-  /* Kept in step with the hook that owns it. An effect rather than a write
-     inside the hook, so the conversation loop stays unaware that a request body
-     exists and this stays the only place the two meet. */
   useEffect(() => {
     lastVoiceRef.current = conversation.voice;
   }, [conversation.voice]);
 
-  /* The manifest shortcut promises "start a voice conversation", so it starts
-     one rather than opening a screen about starting one. */
   const shortcutHonoured = useRef(false);
   useEffect(() => {
     if (initialLayer !== "voice" || shortcutHonoured.current) return;
@@ -1016,25 +722,14 @@ export function AppShell({
 
   useEffect(() => () => stopSpeaking(), []);
 
-  /* Installing a capability Navi drafted. Same store and same cap as pasting
-     one into Settings, so there is one library rather than two — a capability
-     added from a message is indistinguishable afterwards from one added by
-     hand, which is the point of the feature. */
   const installCapability = useCallback((playbook: { id: string; name: string; description: string; instructions: string }) => {
     setPreferences((current) => ({
       ...current,
       customPlaybooks: [
-        // Re-adding an existing id replaces it rather than duplicating it.
         ...current.customPlaybooks.filter((entry) => entry.id !== playbook.id),
         playbook
       ].slice(-40)
     }));
-    /* Also into durable memory, which is the difference between a capability
-       that exists and one Navi Soul actually has. A playbook reaches the prompt
-       only when the request happens to match it; a learned skill is carried
-       into every conversation. Installing one used to do only the first, which
-       is why "save this skill" felt like it did nothing. Best-effort: signed
-       out or storage unconfigured, the local copy still works. */
     void fetch("/api/memory/skills", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1060,13 +755,6 @@ export function AppShell({
     onRemove: removeCapability
   }), [preferences.customPlaybooks, installCapability, removeCapability]);
 
-  /**
-   * Ask the owner to approve one write, and remember the answer.
-   *
-   * Every refusal here is a fact about the request rather than a policy: an
-   * operation that does not exist, one that only reads, one already approved.
-   * Saying which turns a blocked turn into a next step instead of a wall.
-   */
   const requestWriteApproval = useCallback(async (input: { capabilityId: string; operationId: string; reason: string }) => {
     const stored = (preferencesRef.current.capabilities ?? []) as AddedCapability[];
     const capability = stored.find((entry) => entry?.manifest?.id === input.capabilityId);
@@ -1076,8 +764,6 @@ export function AppShell({
     if (!operation.writes) return `${operation.id} only reads, so it needs no approval. Just call it.`;
     if (capability.approvedWrites.includes(operation.id)) return `${operation.id} was already approved. Call it.`;
 
-    /* One at a time. A queue of confirmations is a queue that gets cleared
-       without being read, which is the opposite of what a gate is for. */
     if (approvalAnswer.current) return "Another approval is already open on screen. Wait for that one to be answered.";
 
     haptic("warning", preferencesRef.current.haptics);
@@ -1094,8 +780,6 @@ export function AppShell({
 
     if (!granted) return `The owner declined. ${operation.id} was not called and is not approved. Do not ask again in this conversation or look for another way to do it.`;
 
-    /* Written into their own preferences, so the next call finds it approved
-       and the asking genuinely happens once rather than once per session. */
     const current = preferencesRef.current;
     updatePreferences({
       ...current,
@@ -1125,10 +809,6 @@ export function AppShell({
     setAttachmentError(null);
     setStreamStatus(null);
     clearError();
-    /* Both halves of one tap: dismiss the drawer and go somewhere. The drawer
-       normally unwinds its own history entry on close, which is right for a
-       dismissal and wrong here — the unwind lands after the router has
-       navigated and cancels it. */
     releaseOverlaysForNavigation();
     setHistoryOpen(false);
     conversation.stop();
@@ -1152,9 +832,6 @@ export function AppShell({
     router.push(`/chat/${encodeURIComponent(chat.id)}`);
   }, [clearError, generating, router, setMessages, stop]);
 
-  /* Files and Images list what a conversation produced, so every row is a way
-     back into that conversation. A row whose chat has since been deleted just
-     returns to the thread view rather than opening nothing. */
   const openChatById = useCallback((chatId: string) => {
     const chat = chats.find((entry) => entry.id === chatId);
     if (chat) openChat(chat);
@@ -1187,7 +864,6 @@ export function AppShell({
     if (activeId === id) newChat();
   }
 
-  /** Thumbs feedback is stored on the chat; tapping the same thumb clears it. */
   function rateMessage(messageId: string, value: "up" | "down") {
     mutateChats((current) => current.map((chat) => {
       if (chat.id !== activeId) return chat;
@@ -1198,16 +874,6 @@ export function AppShell({
     }));
   }
 
-  /* Handlers that keep the same identity across renders, so the memoised
-     message rows can tell "nothing about this row changed" from "the draft
-     changed one component up".
-   *
-   * Both are redeclared every render and close over live state — `retry` over
-   * the project, the research switch and the message list, `rateMessage` over
-   * the active chat. Passing those straight down would defeat the memo; freezing
-   * them with a dependency list would let a row hold a closure from a render
-   * where research was still on, and retry with the wrong settings. Reading the
-   * current one through a ref keeps both properties at once. */
   const liveHandlers = useRef({ rateMessage, retry });
   liveHandlers.current = { rateMessage, retry };
   const stableRate = useCallback((messageId: string, value: "up" | "down") => liveHandlers.current.rateMessage(messageId, value), []);
@@ -1220,8 +886,6 @@ export function AppShell({
   }
 
   async function shareActiveChat() {
-    /* On the gesture. Both branches below are async — the share sheet and the
-       clipboard write — so a tick after either had no activation left. */
     haptic("selection", preferences.haptics);
     const current = chats.find((chat) => chat.id === activeId);
     const transcript = messages
@@ -1269,8 +933,6 @@ export function AppShell({
         haptic("warning", preferences.haptics);
         return;
       }
-      // Images are resized on send, so only their decode cost is bounded here;
-      // everything else has to fit the request budget as-is.
       const limit = isResizableImage(file) ? MAX_IMAGE_INPUT_BYTES : ATTACHMENT_BUDGET;
       if (file.size > limit) {
         setAttachmentError(`${file.name} is too large to send.`);
@@ -1283,29 +945,12 @@ export function AppShell({
     haptic("selection", preferences.haptics);
   }
 
-  /**
-   * Slash commands are answered on the device: no request, no model, no
-   * network, and the same answer every time. Offline is therefore not a
-   * reason to refuse one, which is why this runs before the online check.
-   */
   async function runSkillCommand(): Promise<boolean> {
     const invocation = parseSlashCommand(draft);
-    // A question with exactly one right answer that a local function already
-    // knows does not need a round trip, a network, or a model that might get
-    // it wrong. Anything not recognised falls through untouched.
-    //
-    // The gate runs the system commands and arithmetic first and only then
-    // consults the skill library, which is injected rather than imported so
-    // the same decision function can be reached from the edge without pulling
-    // a "use client" module into that bundle.
     const decision = invocation
       ? null
       : await decideLocallyWithSkills(draft, { version: NAVI_VERSION, online }, instantAnswer);
 
-    /* Recognised on the device but not answerable as text: the conversation is
-       the client's to own, so `/clear` is performed here. Anything else the
-       gate hands back this way has no local action, and falls through to the
-       model rather than dying silently. */
     if (decision?.route === "client-command") {
       if (decision.command !== "/clear") return false;
       newChat();
@@ -1329,11 +974,6 @@ export function AppShell({
     };
     setMessages([...messages, question, answer]);
     setStreamStatus(null);
-    /* No completion tick. `runSlash` is awaited above, so activation is gone
-       and this fired for the synchronous instant answers and not the rest —
-       the same command feeling different depending on how it resolved. The
-       send button already ticked on the tap, and the answer appearing is the
-       completion signal. */
     if (window.location.pathname === "/" || window.location.pathname === "/new") {
       window.history.replaceState(window.history.state, "", `/chat/${encodeURIComponent(activeId)}`);
     }
@@ -1355,18 +995,9 @@ export function AppShell({
           : "Preparing your request."
     });
     try {
-      // Resize before encoding: the Edge runtime rejects the whole request if
-      // the base64 payload overruns its body cap, with no usable error.
-      /* An edit that must preserve text needs the source to stay legible, so
-         the usual aggressive downscale is relaxed for those requests. */
       const preserveDetail = /\b(document|paper|form|receipt|invoice|statement|spreadsheet|table|label|sign|menu|page|letter|contract|report|ticket|screenshot|text|number|numbers|digit|digits|amount|date|total|handwriting|handwritten)\b/i.test(draft)
         || /\b(?:do\s?n[o']?t|don't|never)\s+(?:change|alter|modify|touch)\b/i.test(draft)
         || /\bkeep\s+.{1,40}?\s+(?:the\s+same|unchanged|as\s+is|intact)\b/i.test(draft);
-      /* What the conversation itself will cost in this request. A chat that
-         already contains photos re-sends them as data URLs, so the room left
-         for a new one can be far smaller than the nominal budget — sizing
-         against a fixed reserve is what produced "resized to fit" followed
-         immediately by "that didn't go through". */
       const conversationBytes = JSON.stringify(messages).length;
       const { files: outgoing, notice } = await prepareAttachments(pendingFiles, preserveDetail, conversationBytes);
       if (notice) setAttachmentError(notice);
@@ -1396,27 +1027,10 @@ export function AppShell({
       await sendMessage({ text, files }, { body: requestBody(text) });
     } catch (submitError) {
       setAttachmentError(submitError instanceof Error ? submitError.message : "Could not prepare attachments.");
-      /* The status panel above carries this. A tick here lands after
-         `sendMessage` has been awaited, where there is no activation left to
-         fire it. */
       setStreamStatus({ stage: "error", detail: "Could not prepare or send this request." });
     }
   }
 
-  /**
-   * A turn from the spoken conversation.
-   *
-   * The flag it sets is about the answer being *heard*, not about the question
-   * having been spoken: dictating into the composer produces a written answer
-   * someone reads at their own pace, and shortening that would be a loss. This
-   * is the one path where the reply is going into the air, so it is the one
-   * path that asks for the spoken cadence.
-   *
-   * Who reads it aloud is the conversation loop, which is why nothing here
-   * starts any speech. It holds the audio handle, so it is the only thing that
-   * can reliably stop it — and it has to know when the sound ends before it
-   * dares open the microphone again.
-   */
   async function submitVoiceTranscript(text: string) {
     if (!text.trim() || generating || !online) return;
     clearError();
@@ -1433,14 +1047,10 @@ export function AppShell({
         stage: "error",
         detail: voiceError instanceof Error ? voiceError.message : "Could not send the spoken request."
       });
-      /* This path never reaches `onError` — the request did not start — so the
-         conversation would wait on a turn that was never sent. */
       setTurnFailedAt(Date.now());
     }
   }
 
-  /* Editing a question drops it and everything after it, then returns the text
-     to the composer so the thread can be re-run from that point. */
   function editMessage(id: string, text: string) {
     if (generating) stop();
     const index = messages.findIndex((message) => message.id === id);
@@ -1451,9 +1061,6 @@ export function AppShell({
     clearError();
     anchoredUserId.current = null;
     setAutoFollow(true);
-    // Must run inside the tap that triggered the edit: iOS only opens the
-    // keyboard for a focus() call that still carries the user-gesture token,
-    // which a timeout or a post-render effect would have already lost.
     composerRef.current?.focus({ preventScroll: true });
   }
 
@@ -1508,9 +1115,6 @@ export function AppShell({
     setActiveId(createId());
   }
 
-  /* The same shape as `toggleResearch`, because it is the same kind of thing:
-     a dial that applies to the next message. Chat is the absence of Code, so
-     there are two states and no picker. */
   function toggleCodeMode() {
     const next = preferences.mode === "code" ? "chat" : "code";
     haptic("selection", preferences.haptics);
@@ -1543,15 +1147,16 @@ export function AppShell({
         profileName={preferences.profile.displayName || preferences.profile.fullName}
         haptics={preferences.haptics}
         onClose={() => setHistoryOpen(false)}
-        onNew={newChat}
+        onNew={() => {
+          if (preferences.mode !== "chat") updatePreferences({ ...preferences, mode: "chat" });
+          newChat();
+        }}
+        onNewCode={() => {
+          if (preferences.mode !== "code") updatePreferences({ ...preferences, mode: "code" });
+          newChat();
+        }}
         onProjects={() => setProjectsOpen(true)}
         projects={projects}
-        fileCount={fileCount}
-        imageCount={imageCount}
-        toolsOn={toolsOn}
-        onFiles={() => { setView("files"); setHistoryOpen(false); }}
-        onImages={() => { setView("images"); setHistoryOpen(false); }}
-        onTools={() => { setView("tools"); setHistoryOpen(false); }}
         onSettings={() => setSettingsOpen(true)}
         onOpen={openChat}
         onRename={renameChat}
@@ -1571,20 +1176,6 @@ export function AppShell({
         >
           <PanelLeft size={21} strokeWidth={1.8} />
         </button>
-        {/* Left-aligned, in the flow, and stacked: the product on the top line
-            and what you are looking at underneath it.
-
-            It used to be absolutely centred, which is what forced the max
-            width and the -translate-x-1/2 — one button on the left against two
-            or three on the right means true centre is never the centre of the
-            space that is actually free. Reading order on a phone starts at the
-            left edge anyway, so the title now simply begins where the eye
-            already is, and the truncation has the whole middle to work with
-            instead of `calc(100% - 184px)`. */}
-        {/* The chevron sits beside the product name, so it switches the
-            product. That is what it looked like it did all along, and it gives
-            the mode a home now that the drawer is navigation rather than
-            configuration. On a library screen it goes back to the chat. */}
         <button
           type="button"
           onClick={() => {
@@ -1602,9 +1193,6 @@ export function AppShell({
                 ? (activeChat?.title ?? (messages.length ? "New chat" : "NaviOS"))
                 : VIEW_TITLES[view]}
             </span>
-            {/* The chevron promised a menu. On the chat view there is none any
-                more — chat actions have their own button — so it appears only
-                where it still opens something. */}
             {view === "chat" ? null : <ChevronDown size={14} className="shrink-0 text-tertiary" />}
           </span>
           <span className="block max-w-[200px] truncate text-[0.75rem]/[1.0125rem] font-normal text-tertiary">
@@ -1618,9 +1206,6 @@ export function AppShell({
             <Ghost size={19} strokeWidth={1.8} />
           </span>
         ) : null}
-        {/* Chat actions before New chat: the trailing button is the one under
-            the thumb, and starting a new chat is the more frequent and more
-            destructive of the two, so it takes the outer, deliberate position. */}
         <button
           type="button"
           onClick={() => {
@@ -1653,14 +1238,7 @@ export function AppShell({
           <FolderKanban size={14} />
           Project: {activeProject.name} · {activeProject.knowledge.length} knowledge item{activeProject.knowledge.length === 1 ? "" : "s"}
         </button>
-      ) : /* No research banner.
-             It was the only place the state was visible, so it earned its
-             stripe across the top. Now the composer carries a research toggle
-             that lights up when it is on — right where the request is typed,
-             which is where the state matters — and the banner became a second
-             announcement of something already on screen, pushing the
-             conversation down to say it. One indicator, at the point of use. */
-        preferences.connectedMcpServers.length ? (
+      ) : preferences.connectedMcpServers.length ? (
         <button type="button" onClick={() => setConnectorsOpen(true)} className="flex min-h-9 items-center justify-center gap-2 border-y border-[var(--border-subtle)] bg-elev-2 px-4 text-center text-[0.6875rem]/4 font-semibold text-secondary active:bg-elev-3">
           <Link2 size={14} />
           {preferences.connectedMcpServers.length} connector{preferences.connectedMcpServers.length === 1 ? "" : "s"} · {connectorMode}
@@ -1677,7 +1255,6 @@ export function AppShell({
           const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
           const bottom = distanceFromBottom < 90;
           setAtBottom(bottom);
-          // Reading back through a response takes precedence over following it.
           setAutoFollow(bottom);
         }}
       >
@@ -1693,8 +1270,6 @@ export function AppShell({
             onArtifacts={() => setArtifactsOpen(true)}
           />
         ) : messages.length === 0 && !hydrated && initialChatId ? (
-          /* Restoring a saved chat: without this the greeting flashes for a
-             frame before the stored messages arrive from IndexedDB. */
           <div className="mx-auto w-full max-w-app px-gutter py-5" aria-hidden="true">
             <div className="message-stack flex flex-col">
               <div className="flex justify-end"><div className="skeleton-line h-11 w-[62%] rounded-[18px]" /></div>
@@ -1772,9 +1347,6 @@ export function AppShell({
         </button>
       ) : null}
 
-      {/* The composer belongs to the conversation, not to the app. On Files,
-          Images and Tools there is nothing to send, and a dock sitting under a
-          list of files invites a message that would go to the wrong place. */}
       {view !== "chat" ? null : (
         <>
       {attachmentError ? (
@@ -1832,7 +1404,6 @@ export function AppShell({
         initialSection={settingsSection}
         durability={durability}
         preferences={preferences}
-        /* The same array the drawer renders, so the two cannot disagree. */
         localChatCount={chats.length}
         onClose={() => { setSettingsOpen(false); setSettingsSection(undefined); }}
         onPreferences={updatePreferences}
@@ -1858,7 +1429,6 @@ export function AppShell({
         onToggleIncognito={() => {
           const next = !incognito;
           setIncognito(next);
-          // Turning it on removes whatever was already written for this chat.
           if (next) mutateChats((current) => current.filter((chat) => chat.id !== activeId));
           haptic(next ? "impact-medium" : "selection", preferences.haptics);
         }}
@@ -1882,10 +1452,6 @@ export function AppShell({
         />
       ) : null}
 
-      {/* The gate, on screen. A model saying "may I?" in prose is not a gate —
-          it is a sentence the model chose to write and could equally choose not
-          to. This is the thing that actually holds, and it holds because the
-          tool call cannot return until it is answered. */}
       {pendingApproval ? (
         <div className="fixed inset-0 z-[120] flex items-end justify-center md:items-center md:p-4" role="dialog" aria-modal="true" aria-label="Approve a write">
           <div className="absolute inset-0 bg-overlay backdrop-blur-[5px]" />
@@ -1896,9 +1462,6 @@ export function AppShell({
             {pendingApproval.reason ? (
               <p className="mt-3 text-[0.875rem]/5 text-primary">{pendingApproval.reason}</p>
             ) : null}
-            {/* Said plainly, because the whole bargain is that this is asked
-                once — someone approving without knowing that is approving more
-                than they think they are. */}
             <p className="mt-3 text-[0.75rem]/4 font-medium text-tertiary">
               Approving remembers this one operation and never asks about it again. Everything else on this API still asks.
             </p>
