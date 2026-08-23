@@ -1,25 +1,22 @@
 "use client";
 
 import {
+  Activity,
+  Bell,
+  Camera as CameraIcon,
+  Check,
   ChevronLeft,
   ChevronRight,
   FlaskConical,
   Key,
   Link2,
   LogOut,
-  Monitor,
-  Moon,
+  Mic as MicIcon,
   RefreshCw,
   Settings,
   Shield,
-  Smartphone,
-  Sun,
   Volume2,
-  X,
-  Check,
-  Bell,
-  Camera as CameraIcon,
-  Mic as MicIcon
+  X
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
