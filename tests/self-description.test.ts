@@ -181,5 +181,31 @@ check("an unrecognised control is not denied out of hand",
   controls.includes("say so plainly rather than denying the control exists"), true);
 /* Interrupting is new and nothing told the model it existed. */
 check("talking over it is described", controls.includes("interrupted by talking over it"), true);
+/* ── Variable names shown to a person must be ones the code reads ────────────
+   An audit flagged `GITHUB_PAT` as a "ghost variable" read by no code. It was
+   wrong — `readCredential` reads it out of a name table as `process.env[name]`,
+   which a scan for the literal `process.env.GITHUB_PAT` cannot see. Worth
+   recording, because the same scan would call every credential in that table a
+   ghost.
+
+   But the scan landed next to a real one: the Settings screen said
+   `NAVI_SELF_UPDATE_BRANCH` "Defaults to main" after the default became a
+   branch behind a pull request — telling someone their self-edits go live when
+   they now wait for CI and a merge. */
+
+const settings = readFileSync(join(process.cwd(), "app/components/settings-sheet.tsx"), "utf8");
+check("the self-update branch is read from the constant, not restated",
+  settings.includes("Defaults to ${DEFAULT_SELF_UPDATE_BRANCH}"), true);
+check("and the claim it replaced is gone", /Defaults to main\./.test(settings), false);
+check("with the pull request said out loud",
+  settings.includes("opens a pull request rather than going live"), true);
+
+/* An error naming one of four accepted names sends someone to set a variable
+   they may already have set under a different one. */
+const commit = readFileSync(join(process.cwd(), "app/api/commit/route.ts"), "utf8");
+check("the commit route names every credential it would accept",
+  /credentialAdvice\("github"\)/.test(commit), true);
+check("rather than only the first", commit.includes("GITHUB_PAT missing"), false);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

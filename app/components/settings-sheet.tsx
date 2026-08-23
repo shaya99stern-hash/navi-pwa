@@ -25,6 +25,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, NaviPreferences } from "@/lib/ai/types";
+import { DEFAULT_SELF_UPDATE_BRANCH } from "@/lib/ai/self-update-tools";
 import { clampVoiceRate, MAX_VOICE_RATE, MIN_VOICE_RATE } from "@/lib/ui/speech";
 import { categories, isImplemented, type Skill } from "@/lib/skills";
 import { BUILT_IN_PLAYBOOKS, parseSkillMarkdown } from "@/lib/playbooks";
@@ -869,6 +870,26 @@ export function SettingsSheet({
                 </div>
               </Group>
 
+              {(memoryStatus.skillNames.length > 0 || memoryStatus.lessonNames.length > 0) && (
+                /* What it has actually learned, shown rather than only counted.
+                   Both lists were already being fetched every time this sheet
+                   opened and neither was rendered — so the app knew what it had
+                   been taught and had no way to say it. Kept apart because they
+                   are different things: one the owner taught it on purpose, the
+                   other it drew from its own work. */
+                <>
+                  <SectionHeader>What Navi Soul has learned</SectionHeader>
+                  <Group>
+                    {memoryStatus.skillNames.length > 0 && (
+                      <Row label={`Taught by you · ${memoryStatus.skillNames.length}`} description={memoryStatus.skillNames.join(" · ")} />
+                    )}
+                    {memoryStatus.lessonNames.length > 0 && (
+                      <Row label={`Learned from its own work · ${memoryStatus.lessonNames.length}`} description={memoryStatus.lessonNames.join(" · ")} />
+                    )}
+                  </Group>
+                </>
+              )}
+
               {skillGroups.map((group) => (
                 <div key={group.category}>
                   <SectionHeader>{group.category}</SectionHeader>
@@ -1047,6 +1068,11 @@ export function SettingsSheet({
               <Group>
                 {[
                   ["GITHUB_PAT / NAVI_GITHUB_TOKEN", "Lets Navi Soul read and commit to this app's own repository."],
+                  /* Read from the constant rather than restated. This row said
+                     "Defaults to main" after the default became a branch behind
+                     a pull request — telling the owner their self-edits go live
+                     when they now wait for CI and a merge. */
+                  [`NAVI_SELF_UPDATE_BRANCH`, `Which branch self-edits commit to. Defaults to ${DEFAULT_SELF_UPDATE_BRANCH}, which opens a pull request rather than going live.`],
                   ["GOOGLE_OAUTH_CLIENT_ID / _SECRET", "Lets each person connect their own Gmail and Calendar."],
                   ["GITHUB_OAUTH_CLIENT_ID / _SECRET", "Per-person GitHub."],
                   ["NAVI_VERCEL_TOKEN", "Deployment and build-log reads."],

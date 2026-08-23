@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authorizeApiMutation, authorizeApiRead } from "@/lib/auth/api";
-import { readCredential } from "@/lib/ai/credentials";
+import { credentialAdvice, readCredential } from "@/lib/ai/credentials";
 
 /* Node runtime on purpose: Buffer handles UTF-8 base64 correctly, which the
    Edge atob/btoa pair does not. */
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
   if (refusal) return refusal;
 
   const { token, owner, repo } = repoConfig();
-  if (!token) return NextResponse.json({ error: "Server misconfiguration: GITHUB_PAT missing." }, { status: 503 });
+  if (!token) return NextResponse.json({ error: `Server misconfiguration: no GitHub credential. Set ${credentialAdvice("github")}.` }, { status: 503 });
 
   const path = safeRepoPath(new URL(request.url).searchParams.get("path"));
   if (!path) return NextResponse.json({ error: "Invalid path." }, { status: 400 });
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
   if (refusal) return refusal;
 
   const { token, owner, repo } = repoConfig();
-  if (!token) return NextResponse.json({ error: "Server misconfiguration: GITHUB_PAT missing." }, { status: 503 });
+  if (!token) return NextResponse.json({ error: `Server misconfiguration: no GitHub credential. Set ${credentialAdvice("github")}.` }, { status: 503 });
 
   const body = (await request.json().catch(() => null)) as { path?: unknown; content?: unknown; commitMessage?: unknown } | null;
   const path = safeRepoPath(body?.path);

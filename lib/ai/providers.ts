@@ -413,8 +413,51 @@ export function classifyTask(request: string | undefined): TaskKind | null {
   return null;
 }
 
+/**
+ * Whether this deployment has said, out loud, that it may spend money.
+ *
+ * "Free tiers only" is the owner's standing constraint and it was enforced by a
+ * comment. An audit found 67 production requests to a paid frontier model over
+ * eight minutes; they failed with `402 This request requires more credits`,
+ * which means the only thing that stopped them was an empty balance. Nothing in
+ * the code objected.
+ *
+ * A rule that depends on nobody setting a variable is not a rule. This is.
+ */
+export function paidModelsAllowed(): boolean {
+  return (process.env.NAVI_ALLOW_PAID_MODELS ?? "").trim().toLowerCase() === "true";
+}
+
+/** Warned once per cold start rather than per turn; the point is to be seen. */
+let warnedAboutPaidFrontier = false;
+
+/**
+ * Whether a frontier route exists to escalate to.
+ *
+ * Naming a model in `NAVI_FRONTIER_MODEL` used to be the whole gate, so the
+ * single most expensive route in the app was one environment variable away from
+ * being live — and the variable's own doc called it "deliberately unset by
+ * default", which describes an intention rather than a guard.
+ *
+ * A `:free` slug is exempt because OpenRouter's own naming says it bills
+ * nothing, so a free frontier model is not the thing being guarded against.
+ * Anything else needs the deployment to have said so explicitly.
+ */
 export function frontierConfigured(): boolean {
-  return Boolean((process.env.NAVI_FRONTIER_MODEL ?? "").trim());
+  const model = (process.env.NAVI_FRONTIER_MODEL ?? "").trim();
+  if (!model) return false;
+  if (model.endsWith(":free")) return true;
+  if (paidModelsAllowed()) return true;
+
+  if (!warnedAboutPaidFrontier) {
+    warnedAboutPaidFrontier = true;
+    console.warn(
+      `Navi Soul is ignoring NAVI_FRONTIER_MODEL="${model}": it is not a \`:free\` slug and `
+      + "NAVI_ALLOW_PAID_MODELS is not set to true, so routing to it would breach this "
+      + "deployment's free-tier-only rule. Set NAVI_ALLOW_PAID_MODELS=true to permit it."
+    );
+  }
+  return false;
 }
 
 export function selectLane(options: {

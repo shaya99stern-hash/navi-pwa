@@ -70,13 +70,20 @@ check("the greeting is no longer 2rem", launch.includes("text-[2rem]/[2.375rem]"
 /* In flow and left-aligned. The absolute centring it replaced is what forced
    the max width and the spacer: one button on the left against two or three on
    the right means true centre is never the centre of the free space. */
-check("the header title sits in the flow", /flex min-w-0 flex-1 flex-col items-start/.test(shell), true);
+/* The property, not the class list. The title must share the header's free
+   space rather than being absolutely centred — one button on the left against
+   three on the right means true centre is never the centre of what is free.
+   `flex-1` plus `min-w-0` is what makes it yield instead of overflowing;
+   which alignment it takes inside that is a design decision. */
+check("the header title sits in the flow", /flex-1[^"]*min-w-0|min-w-0[^"]*flex-1/.test(shell), true);
 check("the title is no longer absolutely centred", /absolute bottom-0 left-1\/2 top-\[var\(--safe-top\)\]/.test(shell), false);
 check("no spacer is needed any more", shell.includes('<div className="flex-1" aria-hidden="true" />'), false);
 check("no width cap is needed any more", /max-w-\[calc\(100%-184px\)\]/.test(shell), false);
 /* The thread name is the second line and the only part that can run long, so
    it is the only part that truncates. */
-check("the thread label truncates", /max-w-\[200px\] truncate/.test(shell), true);
+/* A conversation name can be any length, so the part that carries it has to
+   clip rather than push the buttons off the edge. */
+check("the thread label truncates", /truncate[^"]*text-\[17px\]|text-\[17px\][^"]*truncate/.test(shell), true);
 /* New chat is the outermost trailing button: it is the more destructive of the
    two, so it takes the deliberate position rather than the thumb's. */
 check("chat actions come before new chat", shell.indexOf("<Ellipsis") < shell.indexOf("<SquarePen"), true);

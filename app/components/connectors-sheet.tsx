@@ -688,6 +688,18 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                       {discovery.summary.operations} operations · {discovery.summary.reads} read {discovery.summary.writes ? `· ${discovery.summary.writes} writes` : ""}
                     </div>
                     <div className="text-[0.8125rem] text-secondary mt-1">Auth: {discovery.summary.auth}</div>
+                    {discovery.summary.truncated && (
+                      /* Said before it is saved, which is the only moment it can
+                         change a decision. A large API silently becoming its
+                         first 120 operations surfaces much later as "why can it
+                         not do the thing the docs describe", and by then nothing
+                         on screen explains it. The count already arrives in the
+                         response; it was simply not being rendered. */
+                      <div className="text-[0.8125rem] text-[#FF9F0A] mt-1">
+                        This API describes {discovery.summary.truncated.declared} operations and the first{" "}
+                        {discovery.summary.truncated.kept} were kept. The rest will not be available.
+                      </div>
+                    )}
                     <button type="button" onClick={saveApi} className="mt-3 h-10 w-full rounded-[8px] bg-[#0A84FF] font-semibold text-white active:opacity-80 flex items-center justify-center gap-2">
                       <Check size={16} /> Add {discovery.manifest.name}
                     </button>

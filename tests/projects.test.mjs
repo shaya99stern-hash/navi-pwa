@@ -21,11 +21,15 @@ const shell = read("app/components/app-shell.tsx").body;
 check("creating takes a name", /function createProject\(name: string, instructions: string\)/.test(sheet), true);
 check("the placeholder name is gone", sheet.includes('name: "New project"'), false);
 check("the button opens a form rather than creating", /onClick=\{beginProject\}/.test(sheet), true);
-check("the form collects instructions too", sheet.includes("navi-project-instructions"), true);
+/* The field is what matters, not how it is labelled. The redesign dropped the
+   label id in favour of a placeholder, which carries the same information to a
+   sighted reader — so this asserts the control is bound to the draft rather
+   than pinning the markup that presents it. */
+check("the form collects instructions too", /value=\{draft\.instructions\}/.test(sheet), true);
 /* A project with no name is the bug this fixes; a project with no
    instructions is a legitimate choice. Only the name is required. */
 check("a nameless project cannot be created", /disabled=\{!draft\.name\.trim\(\)\}/.test(sheet), true);
-check("instructions are optional", sheet.includes("Optional, and editable later."), true);
+check("instructions are optional", /placeholder="Instructions \(optional\)"/.test(sheet), true);
 /* Created and selected in one act. Having to find a second button to actually
    use the project is where the flow was being abandoned. */
 check("creating also selects it for this conversation", /onCreate\(project\)[\s\S]{0,400}onSelect\(project\.id\)/.test(sheet), true);

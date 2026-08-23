@@ -164,7 +164,13 @@ check("a refused permission reads differently in an installed app", recorder.inc
    rendered at half width beside controls nobody can reach one-handed. */
 
 check("the spacer yields while recording", code.includes("{listening || talking ? null : <span className=\"min-w-0 flex-1\" />}"), true);
-check("the plus button yields", /\{listening \|\| talking \? null : \(\s*<button[\s\S]{0,200}Add photos/.test(code), true);
+/* Measured rather than guessed at a character distance: the previous form
+   allowed 200 characters between the guard and the label, and an `onClick` body
+   growing past that failed a control that had not moved. Each guarded block is
+   sliced and asked whether it contains the control. */
+const guarded = code.split("{listening || talking ? null : (").slice(1);
+check("the plus button yields",
+  guarded.some((block) => block.slice(0, 600).includes("Add photos")), true);
 check("the research switch yields", /\{listening \|\| talking \? null : \(\s*<button[\s\S]{0,200}role="switch"/.test(code), true);
 check("the waveform bar claims the row", code.includes("flex min-w-0 flex-1 items-center gap-2 rounded-full"), true);
 
