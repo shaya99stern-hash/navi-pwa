@@ -3,7 +3,7 @@ import { useChat } from "@ai-sdk/react";
 import { describeResult, runInSandbox } from "@/lib/execution/sandbox";
 import { MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type FileUIPart, type UIMessage } from "ai";
-import { ChevronDown, Ellipsis, FolderKanban, Ghost, Link2, PanelLeft, SquarePen, WifiOff } from "lucide-react";
+import { ChevronDown, FolderKanban, Ghost, Link2, PanelLeft, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -1121,7 +1121,7 @@ export function AppShell({
         onDelete={deleteChat}
       />
 
-      <header className="navi-header relative z-50 flex h-14 shrink-0 items-center gap-0.5 px-1" data-scrolled={String(scrolled)}>
+      <header className="navi-header relative z-50 flex min-h-[calc(44px+var(--safe-top))] pt-[var(--safe-top)] pb-1 shrink-0 items-center justify-between px-2 bg-app" data-scrolled={String(scrolled)}>
         <button
           type="button"
           onClick={() => {
@@ -1134,21 +1134,26 @@ export function AppShell({
           <PanelLeft size={24} strokeWidth={1.5} />
         </button>
 
-        <div className="flex min-w-0 flex-1 flex-col items-center justify-center text-center">
+        <div className="flex flex-col items-center justify-center text-center max-w-[60%]">
           <span className="truncate text-[1.0625rem] font-semibold tracking-tight text-primary">
             {view === "chat"
               ? (activeChat?.title && activeChat.title !== "New chat" ? activeChat.title : (preferences.mode === "code" ? "NaviOS Code" : "NaviOS Chat"))
               : VIEW_TITLES[view]}
           </span>
+          {view !== "chat" && VIEW_SUBTITLES[view] && (
+            <span className="block truncate text-[0.75rem]/[1.0125rem] font-normal text-tertiary">
+              {VIEW_SUBTITLES[view]}
+            </span>
+          )}
         </div>
 
-        {incognito ? (
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center text-accent" title="Incognito">
-            <Ghost size={19} strokeWidth={1.8} />
-          </span>
-        ) : (
-          <div className="h-11 w-11 shrink-0" aria-hidden="true" />
-        )}
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center">
+          {incognito && (
+            <span className="text-accent" title="Incognito">
+              <Ghost size={19} strokeWidth={1.8} />
+            </span>
+          )}
+        </div>
       </header>
 
       {!online ? (
