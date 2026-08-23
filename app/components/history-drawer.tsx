@@ -155,16 +155,16 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, hapt
         className={`safe-top safe-bottom absolute inset-y-0 left-0 flex w-[314px] max-w-[86vw] flex-col bg-[var(--bg-sidebar)] shadow-menu ${dragging ? "" : "drawer-enter"}`}
         style={dragging ? { transform: `translateX(${((dragProgress ?? 0) - 1) * 100}%)`, transition: "none" } : undefined}
       >
-        <div className="flex min-h-[52px] shrink-0 items-center gap-2 px-3.5 pt-1">
-          <span className="navi-orb h-[26px] w-[26px] shrink-0 rounded-full" aria-hidden="true" />
-          <span className="text-[0.9375rem]/[1.125rem] font-semibold tracking-[-0.01em] text-primary">NaviOS</span>
+        <div className="flex min-h-[52px] shrink-0 items-center gap-3 px-4 pt-1">
+          <img src="/pwa-icon-192-v5.png" alt="NaviOS" className="h-7 w-7 shrink-0 rounded-[6px] shadow-sm" />
+          <span className="text-[1.0625rem] font-semibold tracking-tight text-primary">NaviOS</span>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close sidebar"
-            className="ml-auto flex h-[38px] w-[38px] items-center justify-center rounded-full text-tertiary active:bg-elev-2"
+            className="ml-auto flex h-9 w-9 items-center justify-center rounded-full text-tertiary active:bg-elev-2"
           >
-            <X size={18} strokeWidth={2} />
+            <X size={20} strokeWidth={2} />
           </button>
         </div>
 
