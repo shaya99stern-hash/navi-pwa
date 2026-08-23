@@ -30,7 +30,7 @@ import {
   isResizableImage,
   prepareAttachments
 } from "@/lib/ui/attachments";
-import { DEFAULT_PREFERENCES, EFFORT_LEVELS, NAVI_MODES, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
+import { DEFAULT_PREFERENCES, EFFORT_LEVELS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
 import {
   clearLocalState,
   loadLocalState,
@@ -354,10 +354,8 @@ export function AppShell({
   const generating = status === "submitted" || status === "streaming";
   const activeChat = chats.find((chat) => chat.id === activeId);
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
-  const activeMode = NAVI_MODES.find((item) => item.id === preferences.mode) ?? NAVI_MODES[0];
   const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
-  const statusText = streamStatus?.detail ?? (generating ? "Navi Soul is working" : preferences.mode === "code" ? activeMode.label : "");
 
   useEffect(() => {
     type ClerkGlobal = { loaded?: boolean; user?: { id?: string; firstName?: string | null } | null };
@@ -1356,7 +1354,6 @@ export function AppShell({
       </div>
       <ComposerDock
         inputRef={composerRef}
-        voiceLanguage={preferences.voiceLanguage}
         offlineCommand={parseSlashCommand(draft) !== null}
         value={draft}
         generating={generating}
@@ -1367,10 +1364,7 @@ export function AppShell({
         research={preferences.tools.web}
         codeMode={preferences.mode === "code"}
         onToggleCode={toggleCodeMode}
-        statusText={activeProject ? `${activeProject.name} · ${statusText}` : statusText}
         haptics={preferences.haptics}
-        connectorCount={preferences.connectedMcpServers.length}
-        connectorAccessMode={preferences.connectorAccessMode}
         onChange={setDraft}
         onSend={() => void submit()}
         onFiles={addFiles}
@@ -1382,12 +1376,6 @@ export function AppShell({
         onToggleResearch={toggleResearch}
         onOpenTools={() => {
           setSettingsSection("capabilities");
-          setSettingsOpen(true);
-        }}
-        onOpenProjects={() => setProjectsOpen(true)}
-        onOpenConnectors={() => setConnectorsOpen(true)}
-        onOpenPlaybooks={() => {
-          setSettingsSection("playbooks");
           setSettingsOpen(true);
         }}
         onStop={() => {

@@ -5,11 +5,10 @@ import {
   ArrowUp,
   ChevronDown,
   Globe,
+  SquareTerminal,
   FileText,
   LoaderCircle,
-  Mic,
   Plus,
-  Check,
   Square,
   Volume2,
   X
@@ -28,13 +27,6 @@ import {
 import { suggest, type Skill } from "@/lib/skills";
 import type { ConnectorAccessMode } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
-import {
-  describeRecordingSupport,
-  MAX_RECORDING_SECONDS,
-  startRecording,
-  type AutoStopReason,
-  type RecordingSession
-} from "@/lib/ui/recorder";
 import type { VoiceConversation } from "@/lib/ui/voice-conversation";
 import { watchProviderStatus } from "@/lib/ui/provider-status";
 import {
@@ -55,8 +47,6 @@ const DOCUMENT_ACCEPT = [
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 const COMBINED_ACCEPT = `${IMAGE_ACCEPT},${DOCUMENT_ACCEPT}`;
 
-const WAVEFORM_BAR_COUNT = 34;
-const WAVEFORM_BAR_MS = 60;
 const CONVERSATION_BARS = [0.55, 0.85, 1, 0.7, 1, 0.8, 0.6];
 
 const CONVERSATION_PLACEHOLDER: Record<VoiceConversation["phase"], string> = {
@@ -72,7 +62,6 @@ type Props = {
   generating: boolean;
   online: boolean;
   attachmentCount: number;
-  statusText: string;
   effortLabel: string;
   hasMessages: boolean;
   research: boolean;
@@ -80,7 +69,6 @@ type Props = {
   onToggleCode: () => void;
   offlineCommand: boolean;
   haptics: boolean;
-  voiceLanguage: string;
   inputRef?: RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
   onSend: () => void;
@@ -90,11 +78,6 @@ type Props = {
   conversation: VoiceConversation;
   onToggleResearch: () => void;
   onOpenTools: () => void;
-  onOpenProjects: () => void;
-  onOpenConnectors: () => void;
-  connectorCount: number;
-  connectorAccessMode: ConnectorAccessMode;
-  onOpenPlaybooks: () => void;
 };
 
 function formatBytes(bytes: number): string {
@@ -140,7 +123,6 @@ export function ComposerDock({
   generating,
   online,
   attachmentCount,
-  statusText,
   effortLabel,
   hasMessages,
   research,
@@ -148,7 +130,6 @@ export function ComposerDock({
   onToggleCode,
   offlineCommand,
   haptics,
-  voiceLanguage,
   inputRef,
   onChange,
   onSend,
@@ -157,17 +138,11 @@ export function ComposerDock({
   onOpenEffort,
   conversation,
   onToggleResearch,
-  onOpenTools,
-  onOpenProjects,
-  onOpenConnectors,
-  connectorCount,
-  connectorAccessMode,
-  onOpenPlaybooks
+  onOpenTools
 }: Props) {
   const dockRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recorderRef = useRef<RecordingSession | null>(null);
 
   useEffect(() => {
     const dock = dockRef.current;
@@ -184,15 +159,7 @@ export function ComposerDock({
     };
   }, []);
 
-  const loggedSupport = useRef(false);
-  const [recordedSeconds, setRecordedSeconds] = useState(0);
   const [sending, setSending] = useState(false);
-  const [listening, setListening] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-
-  const [liveTranscript, setLiveTranscript] = useState("");
-  const [speaking, setSpeaking] = useState(false);
-  const [waveform, setWaveform] = useState<number[]>([]);
   const [focused, setFocused] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
@@ -203,20 +170,13 @@ export function ComposerDock({
 
   const valueRef = useRef(value);
   valueRef.current = value;
-  const peakRef = useRef(0);
-  const waveformRef = useRef<number[]>([]);
 
   const commands: Skill[] = value.startsWith("/") && !value.includes("\n") ? suggest(value, 6) : [];
   const showCommands = commands.length > 0 && focused;
 
-  const dictating = listening || transcribing;
   const talking = conversation.active;
 
-  const previewValue = talking
-    ? conversation.transcript
-    : dictating && liveTranscript
-      ? `${value}${value.trim() ? " " : ""}${liveTranscript}`
-      : value;
+  const previewValue = talking ? conversation.transcript : value;
 
   function completeCommand(skill: Skill) {
     haptic("selection", haptics);
@@ -252,8 +212,6 @@ export function ComposerDock({
     setProviderReady(Object.values(data.providers ?? {}).some(Boolean));
   }), []);
 
-  useEffect(() => () => recorderRef.current?.cancel(), []);
-
   const available = providerReady !== false;
   const canSend = (online || offlineCommand) && !generating && Boolean(value.trim() || attachmentCount);
   const blocked = false;
@@ -273,7 +231,6 @@ export function ComposerDock({
 
   const footer = conversation.error
     ?? (talking ? `${spokenBy ?? CONVERSATION_PLACEHOLDER[conversation.phase]} · tap the waveform to end` : null)
-    ?? (transcribing ? "Transcribing…" : null)
     ?? voiceMessage
     ?? attachmentMessage
     ?? (!online && !offlineCommand
@@ -286,38 +243,9 @@ export function ComposerDock({
 
   const footerTone = conversation.error
     ? "text-warning"
-    : talking || transcribing
+    : talking
       ? "text-accent"
       : !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
-
-  useEffect(() => {
-    if (!listening) { setRecordedSeconds(0); return; }
-    const started = Date.now();
-    const timer = window.setInterval(() => setRecordedSeconds(Math.floor((Date.now() - started) / 1000)), 250);
-    return () => window.clearInterval(timer);
-  }, [listening]);
-
-  useEffect(() => {
-    if (!listening) {
-      waveformRef.current = [];
-      peakRef.current = 0;
-      setWaveform([]);
-      return;
-    }
-    let frame = 0;
-    let lastBar = 0;
-    const tick = (now: number) => {
-      if (now - lastBar >= WAVEFORM_BAR_MS) {
-        lastBar = now;
-        waveformRef.current = [...waveformRef.current, peakRef.current].slice(-WAVEFORM_BAR_COUNT);
-        setWaveform(waveformRef.current);
-        peakRef.current = 0;
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [listening]);
 
   function send() {
     if ((!value.trim() && attachmentCount === 0) || generating) return;
@@ -416,89 +344,6 @@ export function ComposerDock({
   function openTools() {
     haptic("selection", haptics);
     onOpenTools();
-  }
-
-  async function startVoice() {
-    setVoiceMessage(null);
-    setLiveTranscript("");
-    haptic("selection", haptics);
-
-    if (!loggedSupport.current) {
-      loggedSupport.current = true;
-      const supportInfo = describeRecordingSupport();
-      console.info("NaviOS recording support:", supportInfo);
-    }
-
-    try {
-      const session = await startRecording({
-        onLevel: (level) => { peakRef.current = Math.max(peakRef.current, level); },
-        onSpeaking: setSpeaking,
-        onTranscript: setLiveTranscript,
-        onError: (message) => setVoiceMessage(message),
-        onAutoStop: (reason: AutoStopReason) => {
-          if (reason === "too-long") {
-            setVoiceMessage(`Recording stopped at ${Math.round(MAX_RECORDING_SECONDS / 60)} minutes. Keeping what you said.`);
-          }
-          void finishVoice();
-        },
-        language: voiceLanguage
-      });
-      recorderRef.current = session;
-      setListening(true);
-    } catch (error) {
-      setListening(false);
-      setSpeaking(false);
-      setTranscribing(false);
-      setVoiceMessage(error instanceof Error ? error.message : "Recording could not start.");
-    }
-  }
-
-  async function finishVoice() {
-    const session = recorderRef.current;
-    recorderRef.current = null;
-    if (!session) {
-      setListening(false);
-      setSpeaking(false);
-      setTranscribing(false);
-      return;
-    }
-
-    setListening(false);
-    setSpeaking(false);
-    setTranscribing(true);
-    haptic("selection", haptics);
-
-    try {
-      const text = await session.stop();
-      if (text) {
-        const current = valueRef.current;
-        onChange(`${current}${current.trim() ? " " : ""}${text}`);
-        textareaRef.current?.focus();
-      } else {
-        setVoiceMessage("Nothing was picked up.");
-      }
-    } catch (error) {
-      setVoiceMessage(error instanceof Error ? error.message : "That recording could not be transcribed.");
-    } finally {
-      setTranscribing(false);
-      setLiveTranscript("");
-    }
-  }
-
-  function cancelVoice() {
-    recorderRef.current?.cancel();
-    recorderRef.current = null;
-    setListening(false);
-    setSpeaking(false);
-    setLiveTranscript("");
-    setVoiceMessage(null);
-    haptic("selection", haptics);
-  }
-
-  function toggleVoice() {
-    if (transcribing) return;
-    if (listening) void finishVoice();
-    else void startVoice();
   }
 
   return (
@@ -609,15 +454,15 @@ export function ComposerDock({
               autoCorrect="on"
               spellCheck
               disabled={blocked}
-              readOnly={dictating || talking}
-              placeholder={talking ? CONVERSATION_PLACEHOLDER[conversation.phase] : listening ? "Listening — speak naturally" : placeholder}
+              readOnly={talking}
+              placeholder={talking ? CONVERSATION_PLACEHOLDER[conversation.phase] : placeholder}
               aria-label="Chat with Navi Soul"
               data-navi-composer=""
               className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[17px] tracking-[-0.41px] text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
             <div className="mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
-              {listening || talking ? null : (
+              {talking ? null : (
               <button
                 type="button"
                 onClick={() => {
@@ -633,14 +478,16 @@ export function ComposerDock({
               </button>
               )}
 
-              {listening || talking ? null : (
+              {talking ? null : (
               /* Web research, put back.
                  The redesign left `research` and `onToggleResearch` arriving as
                  props with nothing calling them, so searching the web became
                  unreachable from anywhere in the app — while the prompt still
-                 offered it and the router still weighed it. Code mode survived
-                 the same edit because it moved to the sidebar; this had nowhere
-                 to go.
+                 offered it and the router still weighed it. Code mode did not
+                 survive it either — the note that used to stand here said it
+                 had moved to the sidebar, and it had not: `onToggleCode`
+                 arrived beside `onToggleResearch` and was called by nothing,
+                 from either place.
 
                  A switch rather than a button, because it has an on state a
                  screen reader has to be able to read. */
@@ -657,7 +504,30 @@ export function ComposerDock({
               </button>
               )}
 
-              {listening || talking ? null : (
+              {talking ? null : (
+              /* Code mode, put back for the same reason and by the same
+                 evidence. `toggleCodeMode` in the shell had exactly one caller
+                 — this prop — and this prop had none, so a whole routing lane,
+                 its preset and its prompt sat behind a control that did not
+                 exist. Nothing in the app could turn it on.
+
+                 Beside Research rather than in a menu: both answer the same
+                 question about a turn, which is what this reply is allowed to
+                 reach for. */
+              <button
+                type="button"
+                role="switch"
+                aria-checked={codeMode}
+                onClick={() => { haptic("selection", haptics); onToggleCode(); }}
+                disabled={blocked || generating}
+                className={`composer-action ${codeMode ? "text-accent" : ""}`}
+                aria-label={codeMode ? "Code mode is on. Switch back to chat" : "Code mode is off. Turn on code mode"}
+              >
+                <SquareTerminal size={20} strokeWidth={1.5} />
+              </button>
+              )}
+
+              {talking ? null : (
               <button
                 type="button"
                 onClick={onOpenEffort}
@@ -669,7 +539,7 @@ export function ComposerDock({
               </button>
               )}
 
-              {listening || talking ? null : <span className="min-w-0 flex-1" />}
+              {talking ? null : <span className="min-w-0 flex-1" />}
 
               {talking ? (
                 <span
@@ -702,65 +572,12 @@ export function ComposerDock({
                         : <LoaderCircle size={17} className="animate-spin" />}
                   </span>
                 </span>
-              ) : listening ? (
-                <span
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${speaking ? "ring-accent" : "ring-transparent"}`}
-                  role="status"
-                  aria-label={speaking ? "Listening, speech detected" : "Listening"}
-                >
-                  <button
-                    type="button"
-                    onClick={cancelVoice}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3"
-                    aria-label="Discard recording"
-                  >
-                    <X size={17} strokeWidth={2} />
-                  </button>
-                  <span className="flex min-w-0 flex-1 items-center justify-end gap-[3px] overflow-hidden" aria-hidden="true">
-                    {Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
-                      const offset = index - (WAVEFORM_BAR_COUNT - waveform.length);
-                      const level = offset >= 0 ? waveform[offset] : 0;
-                      const height = Math.max(3, Math.round(3 + level * 19));
-                      return (
-                        <span
-                          key={index}
-                          className={`w-[3px] shrink-0 rounded-full transition-[height,background-color] duration-100 ${level > 0.02 ? "bg-accent" : "bg-[var(--border-strong)]"}`}
-                          style={{ height: `${height}px` }}
-                        />
-                      );
-                    })}
-                  </span>
-                  <span
-                    className="shrink-0 tabular-nums text-[13px] font-semibold text-secondary"
-                    aria-label={`Recording, ${recordedSeconds} seconds`}
-                  >
-                    {Math.floor(recordedSeconds / 60)}:{String(recordedSeconds % 60).padStart(2, "0")}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={toggleVoice}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-white active:bg-opacity-80"
-                    aria-label="Stop recording and transcribe"
-                  >
-                    <Check size={17} strokeWidth={2.4} />
-                  </button>
-                </span>
-              ) : (
-              <button
-                type="button"
-                onClick={toggleVoice}
-                disabled={blocked || generating || transcribing}
-                className={`composer-action ${transcribing ? "opacity-60" : ""}`}
-                aria-label={transcribing ? "Transcribing" : "Record a message"}
-              >
-                <Mic size={20} strokeWidth={1.5} />
-              </button>
-              )}
-              {listening || talking ? null : (
+              ) : null}
+              {talking ? null : (
               <button
                 type="button"
                 onClick={conversation.toggle}
-                disabled={blocked || generating || transcribing || !online}
+                disabled={blocked || generating || !online}
                 className="composer-action"
                 aria-label="Start a voice conversation"
                 aria-pressed={false}

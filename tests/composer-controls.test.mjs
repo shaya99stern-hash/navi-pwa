@@ -9,70 +9,66 @@ const check = (n, a, e) => {
 const { body } = read("app/components/composer-dock.tsx");
 const code = stripComments(body);
 
-/* ── The mic is a toggle, not a hold ─────────────────────────────────────────
-   The defect: pointerdown started recording and pointerup stopped it, so a
-   normal tap — a pointerdown and a pointerup milliseconds apart — started and
-   instantly stopped it. The button did nothing at all unless held perfectly
-   still for a whole sentence, and a scroll or a permission prompt cancelled
-   the gesture. "The microphone doesn't work" was literally true. */
+/* ── One voice control, not two ──────────────────────────────────────────────
+   The composer carried two adjacent microphones. One recorded a clip,
+   transcribed it and pasted the text into the box to edit before sending; the
+   other opened the spoken conversation. Two buttons a thumb apart, both
+   drawn as a microphone, doing different things — and on a phone the only way
+   to learn which was which was to press one.
 
-check("the mic toggles on click", /onClick=\{toggleVoice\}/.test(code), true);
-check("pointer-down no longer starts recording", /onPointerDown=\{\(\) => \{ holdingMic/.test(code), false);
-check("the hold-tracking ref is gone", code.includes("holdingMic"), false);
-check("the idle label invites recording", code.includes('"Record a message"'), true);
+   The dictation path is gone. What follows is not a check that it was
+   deleted, which git already records, but that it was deleted *whole*: a
+   half-removal leaves a recorder still allocating a MediaRecorder, or state
+   that updates on every audio frame for a control nobody can see. That is a
+   worse outcome than either keeping it or removing it.
 
-/* Recording must be legible while it happens: a lit icon says something is
-   on, a running clock says you are being heard. */
-check("recording time is tracked", code.includes("recordedSeconds"), true);
-check("the timer only runs while listening", /if \(!listening\) \{ setRecordedSeconds\(0\); return; \}/.test(code), true);
-/* Counting up rather than down. The countdown existed because a whole
-   recording had to fit in one request; nothing is held whole now, and a
-   deadline on screen is a thought cut short. */
-check("the clock counts up rather than towards a limit", /remainingSeconds/.test(code), false);
-/* The recording bar carries the clock and the level, so the footer speaks
-   only for transcription — the state with no other indicator. */
-check("transcription is reported", code.includes('transcribing ? "Transcribing…" : null'), true);
-check("transcription reads as active, not as a warning", code.includes('talking || transcribing\n      ? "text-accent"'), true);
+   Everything asserted here about the conversation loop was true before and
+   stays true; it is now the only voice control there is. */
 
-/* ── The waveform is a record, not a decoration ──────────────────────────────
-   It was fifteen fixed weights driven through a sine of the elapsed second,
-   so it moved identically whether the microphone was picking up a voice or
-   picking up nothing — which is exactly the question the person watching it
-   is asking. */
-check("the fake waveform is gone", code.includes("Math.sin"), false);
-check("a live waveform is drawn", code.includes("WAVEFORM_BAR_COUNT"), true);
-check("from a scrolling history of real levels", /waveformRef\.current, peakRef\.current\]\.slice\(-WAVEFORM_BAR_COUNT\)/.test(code), true);
-/* Each bar is the peak of the window it covers, so a short loud syllable
-   cannot fall between two animation frames and vanish. */
-check("each bar holds the peak of its window", /peakRef\.current = Math\.max\(peakRef\.current, level\)/.test(code), true);
-/* Fifty levels a second through React state to move a row of bars is
-   measurable on a phone, and the bars only redraw sixty times a second. */
-check("levels are drained on an animation frame, not per sample", /requestAnimationFrame\(tick\)/.test(code), true);
-/* Whether the detector believes it is hearing a voice is a stronger statement
-   than bar height, which moves on room noise too. */
+check("no dictation button survives", code.includes('"Record a message"'), false);
+check("nothing toggles a recording", code.includes("toggleVoice"), false);
+check("the recorder is no longer imported", code.includes("startRecording"), false);
+check("no recording session is held", code.includes("RecordingSession"), false);
+check("the clip timer is gone", code.includes("recordedSeconds"), false);
+check("so is the level meter it drove", code.includes("WAVEFORM_BAR_COUNT"), false);
+check("and the frame loop behind it", code.includes("peakRef"), false);
+check("no live-transcript preview state remains", code.includes("liveTranscript"), false);
+/* `listening` was dictation's; `conversation.phase === "listening"` is the
+   loop's and must survive. Asserting the bare identifier is absent would fail
+   on the wrong one, so this asks for what actually matters: no state of our
+   own tracking a recording. */
+check("no recording state of our own", /\[listening, setListening\]|\[transcribing, setTranscribing\]/.test(code), false);
+check("the conversation still reads its own phase", code.includes('conversation.phase === "listening"'), true);
+
+/* The one that remains, and what it has to keep doing. */
+check("the conversation button is still there", code.includes('aria-label="Start a voice conversation"'), true);
+check("it starts and stops the loop", code.includes("onClick={conversation.toggle}"), true);
+check("it can be ended from inside the loop", code.includes('aria-label="End the voice conversation"'), true);
+check("it needs a network", /disabled=\{blocked \|\| generating \|\| !online\}/.test(code), true);
+
 /* A level meter moves for a door slamming. What tells someone the app is
    actually hearing *them* is the detector, so the ring is bound to that rather
-   than to amplitude. The variable and the colour token both changed in the
-   redesign; the property did not. */
-check("speech detection is shown, not just level",
-  /conversation\.hearing \? "ring-/.test(code), true);
-check("recording can be discarded", code.includes("Discard recording"), true);
+   than to amplitude. */
+check("speech detection is shown, not just level", /conversation\.hearing \? "ring-/.test(code), true);
 
-/* ── The words arrive while they are still being spoken ──────────────────────
-   The whole point of the rewrite. Segments upload as they close, so the
-   transcript grows during the recording rather than after it. */
-check("the transcript streams in", code.includes("onTranscript: setLiveTranscript"), true);
-check("and is shown in the composer where it will end up", code.includes("previewValue"), true);
 /* A box whose contents are being rewritten underneath the caret is a box that
-   eats what you type. */
-/* Both kinds of microphone put words in this box that the person did not
-   type: dictation's preview, and the conversation's turn in flight. */
-check("the box is read-only while it is a preview", code.includes("readOnly={dictating || talking}"), true);
-/* It is a preview until the recording is accepted, so discarding one is a
-   discard rather than an undo. */
-check("the preview is not written into the draft", /onChange\(previewValue\)/.test(code), false);
-check("discarding clears it", /function cancelVoice\(\)[\s\S]{0,220}setLiveTranscript\(""\)/.test(code), true);
+   eats what you type. The conversation's turn in flight still lands there. */
+check("the box is read-only while the loop is talking", code.includes("readOnly={talking}"), true);
+check("the turn in flight is a preview, not the draft", /onChange\(previewValue\)/.test(code), false);
 check("and the textarea is sized to what is displayed", /\}, \[previewValue\]\);/.test(code), true);
+
+/* ── Code mode is reachable ──────────────────────────────────────────────────
+   The same defect as Research below, found the same way and one release
+   later: `codeMode` and `onToggleCode` arrived as props with nothing calling
+   them, and `toggleCodeMode` in the shell had exactly one caller — that prop.
+   A whole routing lane, its preset and its prompt sat behind a control that
+   did not exist anywhere in the app. */
+
+check("code mode sits in the composer row", /aria-label=\{codeMode \? "Code mode is on/.test(code), true);
+check("it is a switch", /role="switch"[\s\S]{0,120}aria-checked=\{codeMode\}/.test(code), true);
+check("it is reachable at all", code.includes("onToggleCode()"), true);
+/* And the shell's handler is wired to it rather than to nothing. */
+check("the shell hands it the toggle", read("app/components/app-shell.tsx").body.includes("onToggleCode={toggleCodeMode}"), true);
 
 /* ── Research is reachable where it is decided ───────────────────────────────
    It lived inside the plus menu, so turning search on for the next question

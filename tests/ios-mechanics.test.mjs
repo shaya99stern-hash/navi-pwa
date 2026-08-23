@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 let pass = 0, fail = 0;
@@ -91,11 +91,29 @@ check("the rule is manipulation, not none", /touch-action: manipulation;/.test(c
 
 /* Every tappable thing that is not a real button should be caught by the role
    selectors above. A new one using a role this rule does not list is the
-   regression. */
+   regression.
+
+   This used to read one file — `integrations-sheet.tsx`, which had zero
+   importers and was never rendered by anything. It has since been deleted, and
+   the assertion it was making is worth more against the components the app
+   actually mounts. */
 const COVERED = new Set(["button", "switch", "radio", "tab", "option"]);
-const roles = [...readFileSync(join(root, "app/components/integrations-sheet.tsx"), "utf8")
-  .matchAll(/role="(\w+)"[\s\S]{0,200}?onClick/g)].map((m) => m[1]);
-check("every clickable role in the sheet is covered", roles.filter((r) => !COVERED.has(r)), []);
+const componentDir = join(root, "app/components");
+const uncovered = readdirSync(componentDir)
+  .filter((name) => name.endsWith(".tsx"))
+  .flatMap((name) => [...readFileSync(join(componentDir, name), "utf8")
+    /* `[^>]` binds the two to one tag. Allowing any character matched a
+       `role="status"` wrapper whose *child* carried the onClick, and reported
+       a container as an untapped control. */
+    .matchAll(/role="(\w+)"[^>]{0,240}?onClick=\{([^\n]{0,90})/g)]
+    /* A handler that only stops propagation is a backdrop guard, not a
+       control — nothing is tapping it on purpose, and the 300ms wait it does
+       not have costs nobody anything. */
+    .filter((match) => !match[2].includes("stopPropagation"))
+    .map((match) => match[1])
+    .filter((role) => !COVERED.has(role))
+    .map((role) => `${name}: ${role}`));
+check("every clickable role in the components is covered", [...new Set(uncovered)], []);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
