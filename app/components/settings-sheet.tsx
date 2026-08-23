@@ -3,7 +3,7 @@
 import {
   Activity,
   Bell,
-  Camera as CameraIcon,
+  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -11,6 +11,7 @@ import {
   Key,
   Link2,
   LogOut,
+  Mic,
   Monitor,
   Moon,
   RefreshCw,
@@ -85,7 +86,7 @@ const PAGE_TITLES: Record<Exclude<PageId, "root">, string> = {
   diagnostics: "Diagnostics",
   profile: "Profile",
   general: "General",
-  privacy: "Memory and storage",
+  privacy: "Memory & Storage",
   capabilities: "Capabilities",
   voice: "Voice",
   permissions: "Permissions"
@@ -108,11 +109,11 @@ type ClerkGlobal = {
 type AccountState = { email: string; signedIn: boolean; ready: boolean };
 
 function SectionHeader({ children }: { children: ReactNode }) {
-  return <h3 className="mb-1.5 mt-6 px-4 text-[0.8125rem] font-medium text-tertiary uppercase tracking-wide">{children}</h3>;
+  return <h3 className="mb-1.5 mt-8 px-4 text-[13px] font-normal text-[#6E6E73] dark:text-[#EBEBF599] uppercase tracking-wide">{children}</h3>;
 }
 
 function Group({ children }: { children: ReactNode }) {
-  return <div className="mx-4 mb-6 overflow-hidden rounded-[10px] bg-elev-2 shadow-sm">{children}</div>;
+  return <div className="mx-4 mb-6 rounded-[10px] bg-white dark:bg-[#1C1C1E]">{children}</div>;
 }
 
 function Row({ label, description, control, fullWidthControl }: {
@@ -122,19 +123,20 @@ function Row({ label, description, control, fullWidthControl }: {
   fullWidthControl?: ReactNode;
 }) {
   return (
-    <div className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3 active:bg-elev-3 transition-colors">
+    <div className="relative flex flex-col justify-center min-h-[44px] px-4 py-2.5 bg-transparent">
+      <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6] last-of-type:hidden" />
       <div className="flex items-center gap-3">
-        <span className="min-w-0 flex-1 text-[1rem]/[1.375rem] text-primary">{label}</span>
+        <span className="min-w-0 flex-1 text-[17px] tracking-[-0.41px] text-primary">{label}</span>
         {control}
       </div>
-      {description ? <p className="mt-1 text-[0.8125rem]/[1.125rem] text-tertiary">{description}</p> : null}
-      {fullWidthControl ? <div className="mt-3">{fullWidthControl}</div> : null}
+      {description ? <p className="mt-1 text-[13px] text-tertiary">{description}</p> : null}
+      {fullWidthControl ? <div className="mt-2">{fullWidthControl}</div> : null}
     </div>
   );
 }
 
 function Count({ value }: { value: number }) {
-  return <span className="text-[1rem]/[1.375rem] tabular-nums text-secondary">{value}</span>;
+  return <span className="text-[17px] tracking-[-0.41px] text-secondary">{value}</span>;
 }
 
 export function SettingsToggle({ value, onChange, label }: { value: boolean; onChange: () => void; label: string }) {
@@ -145,9 +147,9 @@ export function SettingsToggle({ value, onChange, label }: { value: boolean; onC
       aria-checked={value}
       aria-label={label}
       onClick={onChange}
-      className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-[120ms] ${value ? "bg-[#0A84FF]" : "bg-[#39393D]"}`}
+      className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-[200ms] ${value ? "bg-[#0A84FF]" : "bg-[#E5E5EA] dark:bg-[#39393D]"}`}
     >
-      <span className={`absolute top-[2px] left-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-sm transition-transform duration-[140ms] ${value ? "translate-x-[20px]" : "translate-x-0"}`} />
+      <span className={`absolute top-[2px] left-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-sm transition-transform duration-[200ms] ${value ? "translate-x-[20px]" : "translate-x-0"}`} />
     </button>
   );
 }
@@ -159,7 +161,7 @@ function TextSegmented<T extends string>({ value, options, onChange, label }: {
   label: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex shrink-0 items-center gap-0.5 rounded-md bg-elev-3 p-0.5">
+    <div role="radiogroup" aria-label={label} className="flex shrink-0 items-center gap-0.5 rounded-[8px] bg-elev-3 dark:bg-[#3A3A3C] p-0.5">
       {options.map((option) => (
         <button
           key={option.id}
@@ -167,7 +169,7 @@ function TextSegmented<T extends string>({ value, options, onChange, label }: {
           role="radio"
           aria-checked={value === option.id}
           onClick={() => onChange(option.id)}
-          className={`h-[28px] rounded-md px-3 text-[0.8125rem] font-medium transition-colors duration-[100ms] ${value === option.id ? "bg-elev-1 text-primary shadow-sm" : "text-tertiary"}`}
+          className={`h-[28px] rounded-[6px] px-3 text-[13px] font-medium transition-colors duration-[100ms] ${value ? "bg-white dark:bg-[#636366] text-primary shadow-sm" : "text-primary"}`}
         >
           {option.name}
         </button>
@@ -184,9 +186,9 @@ function BareSelect({ value, options, onChange, label }: {
 }) {
   const current = options.find(([id]) => id === value)?.[1] ?? options[0]?.[1] ?? "";
   return (
-    <span className="relative flex shrink-0 items-center gap-1.5 text-[1rem]/5 text-secondary">
+    <span className="relative flex shrink-0 items-center gap-1.5 text-[17px] tracking-[-0.41px] text-secondary">
       {current}
-      <ChevronRight size={16} className="text-tertiary" />
+      <ChevronRight size={20} className="text-[#3C3C434A] dark:text-[#EBEBF54A]" />
       <select
         aria-label={label}
         value={value}
@@ -212,7 +214,7 @@ function TextField({ value, onChange, label, placeholder }: {
       value={value}
       placeholder={placeholder}
       onChange={(event) => onChange(event.target.value)}
-      className="h-10 w-[55%] min-w-0 shrink-0 rounded-[8px] bg-elev-3 px-3 text-right text-[1rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-4"
+      className="h-10 w-[55%] min-w-0 shrink-0 text-right text-[17px] tracking-[-0.41px] text-secondary outline-none bg-transparent placeholder:text-tertiary"
     />
   );
 }
@@ -222,7 +224,7 @@ function InlineButton({ children, onClick, destructive }: { children: ReactNode;
     <button
       type="button"
       onClick={onClick}
-      className={`h-9 shrink-0 rounded-[8px] bg-elev-3 px-4 text-[0.875rem]/5 font-medium active:bg-elev-4 ${destructive ? "text-[#FF453A]" : "text-primary"}`}
+      className={`h-[44px] w-full shrink-0 px-4 text-left text-[17px] tracking-[-0.41px] active:bg-black/5 dark:active:bg-white/5 ${destructive ? "text-[#FF453A]" : "text-[#0A84FF]"}`}
     >
       {children}
     </button>
@@ -235,34 +237,35 @@ function RootRow({ label, active, onOpen, icon }: { label: string; active?: bool
       type="button"
       onClick={onOpen}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-[44px] w-full items-center justify-between border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-2 text-left active:bg-elev-3`}
+      className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 text-left active:bg-black/5 dark:active:bg-white/5 bg-transparent"
     >
+      <div className="absolute bottom-0 left-[60px] right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6] last-of-type:hidden" />
       <div className="flex items-center gap-3">
         {icon}
-        <span className="text-[1rem]/[1.375rem] text-primary">{label}</span>
+        <span className="text-[17px] tracking-[-0.41px] text-primary">{label}</span>
       </div>
-      <ChevronRight size={20} className="text-tertiary" />
+      <ChevronRight size={20} className="text-[#3C3C434A] dark:text-[#EBEBF54A]" />
     </button>
   );
 }
 
 function ThemeCard({ theme, active, onClick, label }: { theme: "light" | "dark" | "system", active: boolean, onClick: () => void, label: string }) {
   return (
-    <button type="button" onClick={onClick} className={`flex flex-col items-center gap-2 p-2 rounded-[14px] active:scale-95 transition-all ${active ? "bg-elev-2" : "bg-transparent"}`}>
-      <div className={`w-[54px] h-[72px] rounded-[10px] overflow-hidden flex flex-col p-1.5 shadow-sm border ${active ? "border-[#0A84FF] ring-2 ring-[#0A84FF]/20" : "border-[var(--border-strong)]"}`}>
-         {theme === "light" && <div className="w-full h-full bg-[#FFFFFF] rounded-md shadow-sm border border-black/5" />}
-         {theme === "dark" && <div className="w-full h-full bg-[#1C1C1E] rounded-md shadow-sm border border-white/5" />}
+    <button type="button" onClick={onClick} className={`flex flex-col items-center gap-2 p-2 active:scale-95 transition-all bg-transparent`}>
+      <div className={`w-[54px] h-[72px] rounded-[10px] overflow-hidden flex flex-col p-1.5 border-[2px] ${active ? "border-[#0A84FF]" : "border-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.1)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.1)]"}`}>
+         {theme === "light" && <div className="w-full h-full bg-[#FFFFFF] rounded-md shadow-sm" />}
+         {theme === "dark" && <div className="w-full h-full bg-[#1C1C1E] rounded-md shadow-sm" />}
          {theme === "system" && (
-            <div className="w-full h-full rounded-md shadow-sm border border-black/5 flex overflow-hidden">
+            <div className="w-full h-full rounded-md shadow-sm flex overflow-hidden">
               <div className="w-1/2 h-full bg-[#FFFFFF]" />
               <div className="w-1/2 h-full bg-[#1C1C1E]" />
             </div>
          )}
       </div>
       <div className="flex flex-col items-center gap-1 mt-1">
-        <span className={`text-[0.8125rem] ${active ? "font-medium text-primary" : "text-tertiary"}`}>{label}</span>
-        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${active ? "border-[#0A84FF] bg-[#0A84FF] text-white" : "border-tertiary"}`}>
-          {active && <Check size={10} strokeWidth={3} />}
+        <span className={`text-[13px] ${active ? "font-medium text-primary" : "text-tertiary"}`}>{label}</span>
+        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${active ? "border-[#0A84FF] bg-[#0A84FF] text-white" : "border-[#C7C7CC] dark:border-[#38383A]"}`}>
+          {active && <Check size={12} strokeWidth={3} />}
         </div>
       </div>
     </button>
@@ -525,21 +528,25 @@ export function SettingsSheet({
 
   return (
     <div className="fixed inset-0 z-[95] flex flex-col bg-[#F2F2F7] dark:bg-black" role="dialog" aria-modal="true" aria-label="Settings">
-      <header className="navi-sheet-header sticky top-0 z-10 flex min-h-[calc(44px+var(--safe-top))] pt-[var(--safe-top)] shrink-0 items-center gap-1 bg-[#F2F2F7] dark:bg-black px-2 border-b border-[var(--border-subtle)]">
-        {page === "root" ? (
-          <div className="flex h-11 w-11 items-center justify-center" aria-hidden="true" />
-        ) : (
-          <button type="button" onClick={() => setPage("root")} aria-label="Back to Settings" className="flex h-11 w-14 items-center justify-center rounded-full text-[#0A84FF] active:opacity-60 md:hidden">
-            <ChevronLeft size={30} strokeWidth={1.5} className="-ml-1" />
-            <span className="text-[1.0625rem]">Back</span>
-          </button>
-        )}
-        <div className="flex-1 text-center text-[1.0625rem]/6 font-semibold tracking-[-0.01em] text-primary md:pl-4 md:text-left">
+      <header className="navi-sheet-header sticky top-0 z-10 flex min-h-[44px] pt-[max(var(--safe-top),env(safe-area-inset-top))] pb-2 shrink-0 items-center justify-between bg-[#F2F2F7] dark:bg-black px-2 border-b border-[var(--border-subtle)]">
+        <div className="flex w-24 items-center justify-start">
+          {page === "root" ? (
+            <div className="h-11 w-11 items-center justify-center" aria-hidden="true" />
+          ) : (
+            <button type="button" onClick={() => setPage("root")} aria-label="Back to Settings" className="flex h-11 items-center justify-center text-[#0A84FF] active:opacity-60 md:hidden">
+              <ChevronLeft size={32} strokeWidth={1.5} className="-ml-1" />
+              <span className="text-[17px] font-normal tracking-[-0.41px] -ml-1">Back</span>
+            </button>
+          )}
+        </div>
+        <div className="flex-1 text-center text-[17px] font-semibold tracking-[-0.41px] text-primary md:pl-4 md:text-left truncate">
           {page === "root" ? "Settings" : PAGE_TITLES[page]}
         </div>
-        <button type="button" onClick={onClose} aria-label="Close settings" className="flex h-11 w-[72px] items-center justify-end pr-3 rounded-full text-[#0A84FF] font-semibold text-[1.0625rem] active:opacity-60">
-          Done
-        </button>
+        <div className="flex w-24 items-center justify-end">
+          <button type="button" onClick={onClose} aria-label="Close settings" className="flex h-11 items-center justify-end pr-3 text-[#0A84FF] font-semibold text-[17px] tracking-[-0.41px] active:opacity-60">
+            Done
+          </button>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1 md:mx-auto md:w-full md:max-w-[1000px]">
@@ -548,24 +555,24 @@ export function SettingsSheet({
           className={`min-h-0 w-full shrink-0 overflow-y-auto overscroll-contain pb-[calc(24px+var(--safe-bottom))] md:block md:w-[264px] md:border-r md:border-[var(--border-subtle)] ${page === "root" ? "block" : "hidden"}`}
         >
           <div className="mt-2 mb-2 px-4 md:hidden">
-             <h2 className="text-[2rem]/8 font-bold text-primary">Settings</h2>
+             <h2 className="text-[34px] tracking-[0.37px] font-bold text-primary">Settings</h2>
           </div>
 
           <div className="mt-4">
             <Group>
-              <button type="button" onClick={() => openPage("profile")} className="flex min-h-[76px] w-full items-center justify-between px-4 text-left active:bg-elev-3 bg-transparent transition-colors">
+              <button type="button" onClick={() => openPage("profile")} className="flex min-h-[76px] w-full items-center justify-between px-4 text-left active:bg-black/5 dark:active:bg-white/5 bg-transparent transition-colors">
                  <div className="flex items-center gap-4">
-                   <div className="w-[58px] h-[58px] rounded-full bg-gradient-to-b from-gray-200 to-gray-400 dark:from-gray-600 dark:to-gray-800 flex items-center justify-center text-[1.5rem] font-medium text-black dark:text-white shadow-sm border border-black/5 dark:border-white/5">
+                   <div className="w-[60px] h-[60px] rounded-full bg-gradient-to-b from-gray-200 to-gray-400 dark:from-gray-600 dark:to-gray-800 flex items-center justify-center text-[22px] font-medium text-black dark:text-white shadow-sm border border-black/5 dark:border-white/5">
                      {profileInitial}
                    </div>
                    <div className="flex flex-col">
-                     <span className="text-[1.125rem]/6 font-normal text-primary">
+                     <span className="text-[20px] font-normal tracking-tight text-primary">
                        {preferences.profile.displayName || preferences.profile.fullName || account.email || "Profile"}
                      </span>
-                     <span className="text-[0.8125rem]/5 text-tertiary">Personal Info, Account</span>
+                     <span className="text-[13px] text-tertiary">Apple Account, iCloud, and more</span>
                    </div>
                  </div>
-                 <ChevronRight size={20} className="text-tertiary" />
+                 <ChevronRight size={20} className="text-[#3C3C434A] dark:text-[#EBEBF54A]" />
               </button>
             </Group>
           </div>
@@ -591,7 +598,7 @@ export function SettingsSheet({
           <button
             type="button"
             onClick={revealDiagnostics}
-            className="w-full mt-4 px-4 py-6 text-center text-[0.75rem]/4 text-tertiary"
+            className="w-full mt-4 px-4 py-6 text-center text-[13px] font-normal text-tertiary"
             aria-label={`NaviOS ${versionLabel()}`}
           >
             NaviOS · {versionLabel()}
@@ -620,13 +627,18 @@ export function SettingsSheet({
                   <Row
                     label="Signed out"
                     description="Chats stay on this device while signed out. Signing in lets Navi Soul answer and syncs your history to your private cloud memory."
-                    control={<InlineButton onClick={signIn}>Sign in</InlineButton>}
                   />
                 )}
-                <div className="px-4 py-2 text-[0.8125rem]/[1.125rem] text-tertiary bg-transparent">
+                <div className="px-4 py-2 text-[13px] text-tertiary bg-transparent">
                   {oauthNotice || "Sign in with Google or GitHub to sync your data securely."}
                 </div>
               </Group>
+
+              {!account.signedIn && CLERK_AVAILABLE && (
+                <Group>
+                   <InlineButton onClick={signIn}>Sign in</InlineButton>
+                </Group>
+              )}
               
               <SectionHeader>Personal Information</SectionHeader>
               <Group>
@@ -637,28 +649,22 @@ export function SettingsSheet({
 
               <SectionHeader>Instructions for Navi Soul</SectionHeader>
               <Group>
-                <Row
-                  label="Custom Instructions"
-                  description="Navi Soul keeps these in mind across every chat on this device."
-                  fullWidthControl={
-                    <textarea
-                      aria-label="Instructions for Navi Soul"
-                      value={preferences.profile.instructions}
-                      onChange={(event) => updateProfile({ instructions: event.target.value.slice(0, 4_000) })}
-                      placeholder="e.g. keep explanations brief and to the point"
-                      rows={4}
-                      className="min-h-[112px] w-full resize-y rounded-[8px] bg-elev-3 px-3.5 py-3 text-[1rem]/[1.375rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-4"
-                    />
-                  }
-                />
+                <div className="px-4 py-2 bg-transparent">
+                  <textarea
+                    aria-label="Instructions for Navi Soul"
+                    value={preferences.profile.instructions}
+                    onChange={(event) => updateProfile({ instructions: event.target.value.slice(0, 4_000) })}
+                    placeholder="e.g. keep explanations brief and to the point"
+                    rows={4}
+                    className="min-h-[112px] w-full resize-y bg-transparent text-[17px] tracking-[-0.41px] text-primary outline-none placeholder:text-tertiary"
+                  />
+                </div>
               </Group>
 
               {account.signedIn && (
-                <div className="mt-8 px-4">
-                  <button onClick={() => void signOut()} className="flex items-center justify-center gap-2 w-full h-[50px] rounded-[10px] bg-elev-2 text-[#FF453A] font-normal text-[1.0625rem] active:bg-elev-3">
-                    Log out
-                  </button>
-                </div>
+                <Group>
+                  <InlineButton destructive onClick={() => void signOut()}>Log out</InlineButton>
+                </Group>
               )}
             </div>
           ) : null}
@@ -687,10 +693,10 @@ export function SettingsSheet({
                 <RootRow label="Voice" onOpen={() => setPage("voice")} icon={
                   <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#0A84FF] text-white shrink-0"><Volume2 size={16} strokeWidth={2.5}/></span>
                 } />
-                <div className="flex min-h-[44px] w-full items-center justify-between px-4 bg-transparent border-b border-[var(--border-subtle)] last:border-b-0">
+                <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
                   <div className="flex items-center gap-3">
                     <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#FF453A] text-white shrink-0"><Activity size={16} strokeWidth={2.5}/></span>
-                    <span className="text-[1rem]/[1.375rem] text-primary">Haptic feedback</span>
+                    <span className="text-[17px] tracking-[-0.41px] text-primary">Haptic feedback</span>
                   </div>
                   <SettingsToggle label="Haptics" value={preferences.haptics} onChange={() => update({ haptics: !preferences.haptics })} />
                 </div>
@@ -698,20 +704,20 @@ export function SettingsSheet({
 
               <SectionHeader>App Update</SectionHeader>
               <Group>
-                <button type="button" onClick={() => { haptic("impact-light", preferences.haptics); setUpdateStatus({ phase: "checking", message: "Checking for the newest version…" }); requestPwaUpdate(); }} disabled={updateBusy} className="flex w-full items-center justify-between px-4 py-3 text-left active:bg-elev-3 disabled:opacity-70 bg-transparent">
+                <button type="button" onClick={() => { haptic("impact-light", preferences.haptics); setUpdateStatus({ phase: "checking", message: "Checking for the newest version…" }); requestPwaUpdate(); }} disabled={updateBusy} className="flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 text-left active:bg-black/5 dark:active:bg-white/5 bg-transparent">
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[1rem]/[1.375rem] text-primary">Update NaviOS</span>
-                    <span className={`block text-[0.8125rem]/[1.125rem] mt-0.5 ${updateStatus.phase === "error" ? "text-danger" : "text-tertiary"}`}>{updateStatus.message}</span>
+                    <span className="block text-[17px] tracking-[-0.41px] text-primary">Update NaviOS</span>
+                    <span className={`block text-[13px] mt-0.5 ${updateStatus.phase === "error" ? "text-[#FF453A]" : "text-tertiary"}`}>{updateStatus.message}</span>
                   </span>
-                  <RefreshCw size={18} className={`shrink-0 text-secondary ${updateBusy ? "animate-spin" : ""}`} />
+                  <RefreshCw size={18} className={`shrink-0 text-[#3C3C434A] dark:text-[#EBEBF54A] ${updateBusy ? "animate-spin" : ""}`} />
                 </button>
               </Group>
               
-              <div className="mt-8 px-4">
-                 <button onClick={() => { if (window.confirm("Clear all NaviOS history, projects, and settings from this device?")) { onClearData(); onClose(); } }} className="flex items-center justify-center gap-2 w-full h-[50px] rounded-[10px] bg-elev-2 text-[#FF453A] font-normal text-[1.0625rem] active:bg-elev-3">
+              <Group>
+                 <InlineButton destructive onClick={() => { if (window.confirm("Clear all NaviOS history, projects, and settings from this device?")) { onClearData(); onClose(); } }}>
                    Clear Local Data
-                 </button>
-              </div>
+                 </InlineButton>
+              </Group>
             </div>
           ) : null}
 
@@ -719,29 +725,31 @@ export function SettingsSheet({
             <div className="pb-10 pt-2">
               <SectionHeader>System Permissions</SectionHeader>
               <Group>
-                <div className="flex min-h-[44px] w-full items-center justify-between px-4 bg-transparent border-b border-[var(--border-subtle)] last:border-b-0">
+                <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
+                  <div className="absolute bottom-0 left-[60px] right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6]" />
                   <div className="flex items-center gap-3">
                     <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#FF3B30] text-white shrink-0"><Bell size={16} strokeWidth={2.5}/></span>
-                    <span className="text-[1rem]/[1.375rem] text-primary">Notifications</span>
+                    <span className="text-[17px] tracking-[-0.41px] text-primary">Notifications</span>
                   </div>
                   <SettingsToggle label="Notifications" value={preferences.notifyOnComplete} onChange={() => void enableNotifications()} />
                 </div>
-                <div className="flex min-h-[44px] w-full items-center justify-between px-4 bg-transparent border-b border-[var(--border-subtle)] last:border-b-0">
+                <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
+                  <div className="absolute bottom-0 left-[60px] right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6]" />
                   <div className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#34C759] text-white shrink-0"><CameraIcon size={16} strokeWidth={2.5}/></span>
-                    <span className="text-[1rem]/[1.375rem] text-primary">Camera</span>
+                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#34C759] text-white shrink-0"><Camera size={16} strokeWidth={2.5}/></span>
+                    <span className="text-[17px] tracking-[-0.41px] text-primary">Camera</span>
                   </div>
                   <SettingsToggle label="Camera" value={true} onChange={() => haptic("warning", preferences.haptics)} />
                 </div>
-                <div className="flex min-h-[44px] w-full items-center justify-between px-4 bg-transparent border-b border-[var(--border-subtle)] last:border-b-0">
+                <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
                   <div className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#FF9500] text-white shrink-0"><MicIcon size={16} strokeWidth={2.5}/></span>
-                    <span className="text-[1rem]/[1.375rem] text-primary">Microphone</span>
+                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#FF9500] text-white shrink-0"><Mic size={16} strokeWidth={2.5}/></span>
+                    <span className="text-[17px] tracking-[-0.41px] text-primary">Microphone</span>
                   </div>
                   <SettingsToggle label="Microphone" value={true} onChange={() => haptic("warning", preferences.haptics)} />
                 </div>
               </Group>
-              <p className="px-4 text-[0.8125rem] text-tertiary">
+              <p className="px-4 text-[13px] text-tertiary">
                 Some permissions can only be managed from your device's primary Settings app.
               </p>
             </div>
@@ -765,45 +773,41 @@ export function SettingsSheet({
                         onChange={(event) => update({ voiceRate: clampVoiceRate(Number(event.target.value)) })}
                         className="w-32 accent-[var(--accent)]"
                       />
-                      <span className="w-10 shrink-0 text-right text-[0.8125rem]/5 font-semibold tabular-nums text-secondary">
+                      <span className="w-10 shrink-0 text-right text-[17px] tracking-[-0.41px] font-semibold tabular-nums text-secondary">
                         {preferences.voiceRate.toFixed(2)}&times;
                       </span>
                     </span>
                   }
                 />
-                <Row
-                  label="Test microphone"
-                  description="Records two seconds and reports exactly which step fails. Speak while it listens."
-                  control={
-                    <InlineButton onClick={() => { haptic("selection", preferences.haptics); void runMicTest(); }}>
-                      {micTest.running ? "Testing…" : "Test"}
-                    </InlineButton>
-                  }
-                  fullWidthControl={
-                    micTest.running || micTest.checks.length ? (
-                      <div className="rounded-[10px] bg-elev-3 p-3">
-                        {micTest.running ? (
-                          <p className="text-[0.8125rem]/[1.125rem] text-secondary">{micTest.step}…</p>
-                        ) : (
-                          <ul className="space-y-2">
-                            {micTest.checks.map((check) => (
-                              <li key={check.step} className="flex gap-2">
-                                <span className={`mt-[3px] shrink-0 text-[0.75rem] font-bold ${check.ok ? "text-success" : "text-danger"}`} aria-hidden="true">
-                                  {check.ok ? "✓" : "✕"}
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block text-[0.8125rem]/[1.125rem] font-semibold text-primary">{check.step}</span>
-                                  <span className="block break-words text-[0.75rem]/[1.125rem] text-tertiary">{check.detail}</span>
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ) : undefined
-                  }
-                />
               </Group>
+              <Group>
+                <InlineButton onClick={() => { haptic("selection", preferences.haptics); void runMicTest(); }}>
+                   {micTest.running ? "Testing Microphone…" : "Test Microphone"}
+                </InlineButton>
+              </Group>
+              {micTest.running || micTest.checks.length ? (
+                <div className="px-4 pb-6">
+                  <div className="rounded-[10px] bg-white dark:bg-[#1C1C1E] p-4">
+                    {micTest.running ? (
+                      <p className="text-[17px] tracking-[-0.41px] text-secondary">{micTest.step}…</p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {micTest.checks.map((check) => (
+                          <li key={check.step} className="flex gap-3">
+                            <span className={`mt-0.5 shrink-0 text-[15px] font-bold ${check.ok ? "text-[#34C759]" : "text-[#FF453A]"}`} aria-hidden="true">
+                              {check.ok ? "✓" : "✕"}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[17px] tracking-[-0.41px] font-medium text-primary">{check.step}</span>
+                              <span className="block text-[13px] text-tertiary mt-0.5">{check.detail}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -811,60 +815,58 @@ export function SettingsSheet({
             <div className="pb-10 pt-2">
               <SectionHeader>Tools</SectionHeader>
               <Group>
-                <div className="flex min-h-[44px] w-full items-center justify-between px-4 bg-transparent border-b border-[var(--border-subtle)] last:border-b-0">
-                  <span className="text-[1rem]/[1.375rem] text-primary">Web search</span>
+                <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
+                  <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6]" />
+                  <span className="text-[17px] tracking-[-0.41px] text-primary">Web search</span>
                   <SettingsToggle label="Web search" value={preferences.tools.web} onChange={() => update({ tools: { ...preferences.tools, web: !preferences.tools.web } })} />
                 </div>
-                <div className="flex min-h-[44px] w-full items-center justify-between px-4 bg-transparent border-b border-[var(--border-subtle)] last:border-b-0">
-                  <span className="text-[1rem]/[1.375rem] text-primary">Artifacts</span>
+                <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
+                  <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6]" />
+                  <span className="text-[17px] tracking-[-0.41px] text-primary">Artifacts</span>
                   <SettingsToggle label="Artifacts" value={preferences.tools.artifacts} onChange={() => update({ tools: { ...preferences.tools, artifacts: !preferences.tools.artifacts } })} />
                 </div>
-                <div className="flex min-h-[44px] w-full items-center justify-between px-4 bg-transparent border-b border-[var(--border-subtle)] last:border-b-0">
-                  <span className="text-[1rem]/[1.375rem] text-primary">Code execution</span>
+                <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
+                  <span className="text-[17px] tracking-[-0.41px] text-primary">Code execution</span>
                   <SettingsToggle label="Code execution" value={preferences.tools.code} onChange={() => update({ tools: { ...preferences.tools, code: !preferences.tools.code } })} />
                 </div>
               </Group>
               
               <SectionHeader>Teach a new skill</SectionHeader>
               <Group>
-                <Row
-                  label="New skill"
-                  description="Stored against your account and applied in every future conversation. Type / in the composer to use it."
-                  fullWidthControl={
-                    <div>
-                      <input
-                        aria-label="Skill name"
-                        value={teach.name}
-                        onChange={(event) => setTeach({ ...teach, name: event.target.value.slice(0, 120), status: null })}
-                        placeholder="Name, e.g. How I like commit messages"
-                        className="min-h-10 w-full rounded-[8px] bg-elev-3 px-3.5 text-[0.9375rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-4"
-                      />
-                      <textarea
-                        aria-label="Skill instructions"
-                        value={teach.instructions}
-                        onChange={(event) => setTeach({ ...teach, instructions: event.target.value.slice(0, 24_000), status: null })}
-                        rows={3}
-                        placeholder="What you want it to know or do, in your own words…"
-                        className="mt-2 min-h-[100px] w-full resize-y rounded-[8px] bg-elev-3 px-3.5 py-3 text-[0.9375rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-4"
-                      />
-                      <div className="mt-3 flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => { haptic("selection", preferences.haptics); void saveSkill(); }}
-                          disabled={teach.saving || !teach.name.trim() || !teach.instructions.trim()}
-                          className="h-9 rounded-[8px] bg-accent px-4 text-[0.875rem]/5 font-semibold text-[var(--accent-on-primary)] active:opacity-80 disabled:opacity-50"
-                        >
-                          {teach.saving ? "Saving…" : "Teach it"}
-                        </button>
-                        {teach.status ? (
-                          <span className={`min-w-0 flex-1 text-[0.8125rem] ${teach.status.ok ? "text-success" : "text-danger"}`}>
-                            {teach.status.message}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  }
-                />
+                <div className="px-4 py-3 bg-transparent border-b border-[#3C3C434A] dark:border-[#545458A6]">
+                  <input
+                    aria-label="Skill name"
+                    value={teach.name}
+                    onChange={(event) => setTeach({ ...teach, name: event.target.value.slice(0, 120), status: null })}
+                    placeholder="Name, e.g. How I like commit messages"
+                    className="h-10 w-full bg-transparent text-[17px] tracking-[-0.41px] text-primary outline-none placeholder:text-tertiary"
+                  />
+                </div>
+                <div className="px-4 py-3 bg-transparent">
+                  <textarea
+                    aria-label="Skill instructions"
+                    value={teach.instructions}
+                    onChange={(event) => setTeach({ ...teach, instructions: event.target.value.slice(0, 24_000), status: null })}
+                    rows={4}
+                    placeholder="What you want it to know or do, in your own words…"
+                    className="w-full resize-y bg-transparent text-[17px] tracking-[-0.41px] text-primary outline-none placeholder:text-tertiary"
+                  />
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { haptic("selection", preferences.haptics); void saveSkill(); }}
+                      disabled={teach.saving || !teach.name.trim() || !teach.instructions.trim()}
+                      className="h-11 rounded-[10px] bg-[#0A84FF] px-4 text-[17px] tracking-[-0.41px] font-semibold text-white active:opacity-80 disabled:opacity-50"
+                    >
+                      {teach.saving ? "Saving…" : "Teach it"}
+                    </button>
+                    {teach.status ? (
+                      <span className={`min-w-0 flex-1 text-[13px] ${teach.status.ok ? "text-[#34C759]" : "text-[#FF453A]"}`}>
+                        {teach.status.message}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
               </Group>
 
               {skillGroups.map((group) => (
@@ -872,9 +874,10 @@ export function SettingsSheet({
                   <SectionHeader>{group.category}</SectionHeader>
                   <Group>
                     {group.skills.map((skill: Skill) => (
-                      <div key={skill.id} className="px-4 py-3 bg-transparent border-b border-[var(--border-subtle)] last:border-b-0">
-                        <div className="text-[1rem]/[1.375rem] text-primary">{skill.triggers.slash}</div>
-                        <div className="text-[0.8125rem]/[1.125rem] text-tertiary mt-0.5">{skill.description}</div>
+                      <div key={skill.id} className="relative px-4 py-3 bg-transparent">
+                        <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6] last-of-type:hidden" />
+                        <div className="text-[17px] tracking-[-0.41px] text-primary">{skill.triggers.slash}</div>
+                        <div className="text-[13px] text-tertiary mt-0.5">{skill.description}</div>
                       </div>
                     ))}
                   </Group>
@@ -883,43 +886,37 @@ export function SettingsSheet({
 
               <SectionHeader>Add a Playbook</SectionHeader>
               <Group>
-                <Row
-                  label="Paste a SKILL.md"
-                  description="Paste a SKILL.md file to give Navi Soul specific methods."
-                  fullWidthControl={
-                    <div>
-                      <textarea
-                        aria-label="Paste a SKILL.md file"
-                        value={playbookDraft}
-                        onChange={(event) => { setPlaybookDraft(event.target.value); setPlaybookNotice(null); }}
-                        placeholder={"---\nname: my-playbook\ndescription: When Navi Soul should use this\n---\n\n# Instructions…"}
-                        rows={4}
-                        className="min-h-[100px] w-full resize-y rounded-[8px] bg-elev-3 px-3.5 py-3 font-mono text-[0.8125rem]/[1.125rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-4"
-                      />
-                      <div className="mt-3 flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const result = parseSkillMarkdown(playbookDraft);
-                            if ("error" in result) { setPlaybookNotice(result.error); haptic("error", preferences.haptics); return; }
-                            const next = preferences.customPlaybooks.filter((entry) => entry.id !== result.playbook.id);
-                            update({ customPlaybooks: [...next, result.playbook].slice(0, 40) });
-                            setPlaybookDraft("");
-                            setPlaybookNotice(result.truncated ? `Added “${result.playbook.name}”, trimmed to 4,000 characters.` : `Added “${result.playbook.name}”.`);
-                            haptic("success", preferences.haptics);
-                          }}
-                          disabled={!playbookDraft.trim()}
-                          className="h-9 rounded-[8px] bg-accent px-4 text-[0.875rem]/5 font-semibold text-[var(--accent-on-primary)] active:opacity-80 disabled:opacity-50"
-                        >
-                          Add playbook
-                        </button>
-                        {playbookNotice ? (
-                          <span className={`min-w-0 flex-1 text-[0.8125rem] ${playbookNotice.startsWith("Added") ? "text-success" : "text-danger"}`}>{playbookNotice}</span>
-                        ) : null}
-                      </div>
-                    </div>
-                  }
-                />
+                <div className="px-4 py-3 bg-transparent">
+                  <textarea
+                    aria-label="Paste a SKILL.md file"
+                    value={playbookDraft}
+                    onChange={(event) => { setPlaybookDraft(event.target.value); setPlaybookNotice(null); }}
+                    placeholder={"---\nname: my-playbook\ndescription: When Navi Soul should use this\n---\n\n# Instructions…"}
+                    rows={4}
+                    className="w-full resize-y bg-transparent font-mono text-[13px] text-primary outline-none placeholder:text-tertiary"
+                  />
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const result = parseSkillMarkdown(playbookDraft);
+                        if ("error" in result) { setPlaybookNotice(result.error); haptic("error", preferences.haptics); return; }
+                        const next = preferences.customPlaybooks.filter((entry) => entry.id !== result.playbook.id);
+                        update({ customPlaybooks: [...next, result.playbook].slice(0, 40) });
+                        setPlaybookDraft("");
+                        setPlaybookNotice(result.truncated ? `Added “${result.playbook.name}”, trimmed to 4,000 characters.` : `Added “${result.playbook.name}”.`);
+                        haptic("success", preferences.haptics);
+                      }}
+                      disabled={!playbookDraft.trim()}
+                      className="h-11 rounded-[10px] bg-[#0A84FF] px-4 text-[17px] tracking-[-0.41px] font-semibold text-white active:opacity-80 disabled:opacity-50"
+                    >
+                      Add playbook
+                    </button>
+                    {playbookNotice ? (
+                      <span className={`min-w-0 flex-1 text-[13px] ${playbookNotice.startsWith("Added") ? "text-[#34C759]" : "text-[#FF453A]"}`}>{playbookNotice}</span>
+                    ) : null}
+                  </div>
+                </div>
               </Group>
 
               {preferences.customPlaybooks.length ? (
@@ -927,19 +924,16 @@ export function SettingsSheet({
                   <SectionHeader>Your Playbooks</SectionHeader>
                   <Group>
                     {preferences.customPlaybooks.map((entry) => (
-                      <Row
-                        key={entry.id}
-                        label={entry.name}
-                        description={entry.description}
-                        control={
-                          <InlineButton
-                            destructive
-                            onClick={() => update({ customPlaybooks: preferences.customPlaybooks.filter((item) => item.id !== entry.id) })}
-                          >
+                      <div key={entry.id} className="relative flex flex-col justify-center min-h-[44px] px-4 py-2.5 bg-transparent">
+                        <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6] last-of-type:hidden" />
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[17px] tracking-[-0.41px] text-primary truncate">{entry.name}</span>
+                          <button type="button" onClick={() => update({ customPlaybooks: preferences.customPlaybooks.filter((item) => item.id !== entry.id) })} className="text-[17px] tracking-[-0.41px] text-[#FF453A] active:opacity-60">
                             Remove
-                          </InlineButton>
-                        }
-                      />
+                          </button>
+                        </div>
+                        {entry.description && <p className="mt-1 text-[13px] text-tertiary">{entry.description}</p>}
+                      </div>
                     ))}
                   </Group>
                 </>
@@ -956,18 +950,25 @@ export function SettingsSheet({
 
           {page === "privacy" ? (
             <div className="pb-10 pt-2">
-              <p className="px-4 pt-4 text-[0.875rem]/[1.25rem] text-secondary">
-                Conversations, projects, and preferences live in this browser. Signed in, they also sync to your own private cloud memory, readable by your account alone.
+              <p className="px-4 mb-2 mt-2 text-[13px] text-tertiary">
+                Conversations, projects, and preferences live in this browser. Signed in, they also sync to your own private cloud memory.
               </p>
 
               <SectionHeader>Memory</SectionHeader>
               <Group>
-                <div className="flex min-h-[44px] w-full items-center justify-between px-4 bg-transparent border-b border-[var(--border-subtle)] last:border-b-0">
-                  <span className="text-[1rem]/[1.375rem] text-primary">Local history</span>
+                <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
+                  <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6]" />
+                  <div className="flex flex-col flex-1 min-w-0 pr-4">
+                    <span className="text-[17px] tracking-[-0.41px] text-primary">Local history</span>
+                    <span className="text-[13px] text-tertiary mt-0.5">{DURABILITY_DETAIL[durability]}</span>
+                  </div>
                   <SettingsToggle label="Local history" value={preferences.saveHistory} onChange={() => update({ saveHistory: !preferences.saveHistory })} />
                 </div>
-                <div className="flex min-h-[44px] w-full items-center justify-between px-4 bg-transparent border-b border-[var(--border-subtle)] last:border-b-0">
-                  <span className="text-[1rem]/[1.375rem] text-primary">Memory</span>
+                <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
+                  <div className="flex flex-col flex-1 min-w-0 pr-4">
+                    <span className="text-[17px] tracking-[-0.41px] text-primary">Memory</span>
+                    <span className="text-[13px] text-tertiary mt-0.5">Let a new chat draw on relevant passages from your earlier ones.</span>
+                  </div>
                   <SettingsToggle label="Memory" value={preferences.memory} onChange={() => update({ memory: !preferences.memory })} />
                 </div>
               </Group>
@@ -1000,14 +1001,22 @@ export function SettingsSheet({
                   <Row label="Nothing yet" description="Standing facts you mention are kept here so they do not have to be repeated." />
                 ) : (
                   facts.items.map((item) => (
-                    <Row key={item.id} label={item.fact} control={<InlineButton destructive onClick={() => void forget(item.id)}>Forget</InlineButton>} />
+                    <div key={item.id} className="relative flex flex-col justify-center min-h-[44px] px-4 py-2.5 bg-transparent">
+                      <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6] last-of-type:hidden" />
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[17px] tracking-[-0.41px] text-primary">{item.fact}</span>
+                        <button type="button" onClick={() => void forget(item.id)} className="text-[17px] tracking-[-0.41px] text-[#FF453A] active:opacity-60">
+                          Forget
+                        </button>
+                      </div>
+                    </div>
                   ))
                 )}
               </Group>
 
               <SectionHeader>Your data</SectionHeader>
               <Group>
-                <Row label="Export data" description="Download chats, projects, and preferences as JSON." control={<InlineButton onClick={() => { haptic("selection", preferences.haptics); onExport(); }}>Export data</InlineButton>} />
+                <InlineButton onClick={() => { haptic("selection", preferences.haptics); onExport(); }}>Export data</InlineButton>
               </Group>
             </div>
           ) : null}
@@ -1016,26 +1025,22 @@ export function SettingsSheet({
             <div className="pb-10 pt-2">
               <SectionHeader>Check everything</SectionHeader>
               <Group>
-                <Row
-                  label="Run all checks"
-                  description="Cloud memory, transcription, providers, and search."
-                  control={<InlineButton onClick={() => { haptic("selection", preferences.haptics); void runChecks(); }}>{systemChecks.running ? "Checking…" : "Check"}</InlineButton>}
-                  fullWidthControl={
-                    systemChecks.results.length ? (
-                      <ul className="space-y-2 rounded-[10px] bg-elev-3 p-3">
-                        {systemChecks.results.map((entry) => (
-                          <li key={entry.area} className="flex gap-2">
-                            <span className={`mt-[3px] shrink-0 text-[0.75rem] font-bold ${entry.ok ? "text-success" : "text-danger"}`} aria-hidden="true">{entry.ok ? "✓" : "✕"}</span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-[0.8125rem]/[1.125rem] font-semibold text-primary">{entry.area}</span>
-                              <span className="block break-words text-[0.75rem]/[1.125rem] text-tertiary">{entry.detail}</span>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : undefined
-                  }
-                />
+                <InlineButton onClick={() => { haptic("selection", preferences.haptics); void runChecks(); }}>{systemChecks.running ? "Checking…" : "Run all checks"}</InlineButton>
+                {systemChecks.results.length ? (
+                  <div className="px-4 py-3 border-t border-[#3C3C434A] dark:border-[#545458A6]">
+                    <ul className="space-y-3">
+                      {systemChecks.results.map((entry) => (
+                        <li key={entry.area} className="flex gap-3">
+                          <span className={`mt-0.5 shrink-0 text-[15px] font-bold ${entry.ok ? "text-[#34C759]" : "text-[#FF453A]"}`} aria-hidden="true">{entry.ok ? "✓" : "✕"}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[17px] tracking-[-0.41px] font-medium text-primary">{entry.area}</span>
+                            <span className="block break-words text-[13px] text-tertiary mt-0.5">{entry.detail}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </Group>
 
               <SectionHeader>Deployment variables</SectionHeader>
@@ -1067,18 +1072,18 @@ export function SettingsSheet({
                   }
                 />
                 {preferences.routeOverride ? (
-                  <Row label="Routing is pinned" description="Automatic routing is off. Answers will not improve until this is cleared." control={<InlineButton destructive onClick={() => update({ routeOverride: undefined })}>Clear</InlineButton>} />
+                  <InlineButton destructive onClick={() => update({ routeOverride: undefined })}>Clear Pin</InlineButton>
                 ) : null}
               </Group>
 
               <SectionHeader>Measurement</SectionHeader>
               <Group>
-                <button type="button" onClick={() => void runEvals()} disabled={evalState.phase === "running"} className="flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-elev-3 disabled:opacity-70 bg-transparent">
+                <button type="button" onClick={() => void runEvals()} disabled={evalState.phase === "running"} className="flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 text-left active:bg-black/5 dark:active:bg-white/5 bg-transparent disabled:opacity-70">
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[1rem]/[1.375rem] text-primary">Run quality check</span>
-                    <span className={`block text-[0.8125rem]/[1.125rem] mt-0.5 ${evalState.phase === "error" ? "text-danger" : "text-tertiary"}`}>{evalState.message}</span>
+                    <span className="block text-[17px] tracking-[-0.41px] text-primary">Run quality check</span>
+                    <span className={`block text-[13px] mt-0.5 ${evalState.phase === "error" ? "text-[#FF453A]" : "text-tertiary"}`}>{evalState.message}</span>
                   </span>
-                  <FlaskConical size={18} className={`shrink-0 text-secondary ${evalState.phase === "running" ? "animate-pulse" : ""}`} />
+                  <FlaskConical size={20} className={`shrink-0 text-[#3C3C434A] dark:text-[#EBEBF54A] ${evalState.phase === "running" ? "animate-pulse" : ""}`} />
                 </button>
               </Group>
             </div>
