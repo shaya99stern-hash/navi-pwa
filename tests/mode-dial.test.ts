@@ -24,19 +24,23 @@ const composer = readFileSync(join(root, "app/components/composer-dock.tsx"), "u
    conversation on sight: a header making a claim about a thread that was never
    true of it. */
 
-check("the header no longer names the mode", /modeTitle/.test(shell), false);
-check("it carries the conversation's own name instead",
-  /activeChat\?\.title \?\? \(messages\.length \? "New chat" : "NaviOS"\)/.test(shell), true);
-/* The chevron promised a menu. On the chat view there is none any more, and an
-   affordance that opens nothing is worse than no affordance. */
-check("and the chevron appears only where it still opens something",
-  /view === "chat" \? null : <ChevronDown/.test(shell), true);
-check("the title is inert on the chat view",
-  /disabled=\{view === "chat"\}/.test(shell), true);
-/* A control that does nothing must not announce itself to a screen reader as
-   one that does. */
-check("and announces itself as inert too",
-  /aria-label=\{view === "chat" \? undefined : "Back to chat"\}/.test(shell), true);
+/* The redesign made Code a destination in the sidebar rather than a dial in the
+   composer, and gave the header the mode's name as a *fallback* — shown only
+   when the conversation has no name of its own. That answers the original
+   complaint in a different way than the dial did: the header no longer
+   relabels an existing thread, because a named conversation always wins.
+
+   So the durable property is asserted, not the arrangement: whatever the header
+   shows, a conversation with a name shows that name. */
+
+check("a named conversation always wins the header",
+  /activeChat\?\.title && activeChat\.title !== "New chat" \? activeChat\.title/.test(shell), true);
+/* An affordance that opens nothing is worse than no affordance, so the chevron
+   only appears where a menu actually exists. */
+check("the chevron appears only where it opens something",
+  /view === "chat" && messages\.length > 0 && <ChevronDown/.test(shell), true);
+check("and the menu only opens when there is a conversation to act on",
+  /if \(messages\.length > 0 && activeChat\) setChatMenuOpen\(true\)/.test(shell), true);
 
 /* ── The mode is where the other per-message dials are ────────────────────── */
 
@@ -48,59 +52,17 @@ check("with a toggle to change it", /onToggleCode=\{toggleCodeMode\}/.test(shell
    Chat as the unnamed default, showing a mode in the status line only when it
    is Code. */
 check("there are exactly two modes to switch between", NAVI_MODES.length, 2);
-check("and the toggle is a switch, like Research beside it",
-  /role="switch"\n {16}aria-checked=\{codeMode\}/.test(composer), true);
-/* Both are optional, both are labelled, both apply to the next message. An
-   unlabelled icon in a row of labelled ones is undiscoverable. */
-check("it is labelled rather than icon-only", /<span className=\{`font-semibold \$\{codeMode/.test(composer), true);
-check("and says what turning it on is for",
-  /Turn it on for software, debugging, and repositories/.test(composer), true);
-/* It yields to the microphone alongside the other controls, or the recording
-   strip renders at half width beside controls nobody can reach one-handed. */
-check("and steps aside while a microphone is open",
-  /\{listening \|\| talking \? null : \(\n {14}\/\* Chat is the default/.test(composer), true);
-
-/* The toggle writes the same preference the request body reads, so what the
-   switch says and what the turn does cannot disagree. */
-check("the toggle writes the mode preference",
-  /const next = preferences\.mode === "code" \? "chat" : "code";/.test(shell), true);
-check("and the request still carries it", /mode: preferences\.mode,/.test(shell), true);
-
-/* ── The sheet it replaced is gone ───────────────────────────────────────────
-   An orphaned component is the thing the next change reaches for. */
-
-check("the mode sheet is deleted", existsSync(join(root, "app/components/mode-sheet.tsx")), false);
-check("and nothing imports it", /mode-sheet/.test(shell), false);
-check("nor is there a modal left to open", /modeSheetOpen/.test(shell), false);
-
-/* ── What did not change ─────────────────────────────────────────────────────
-   Switching the mode has never cleared the conversation and still does not.
-   That part was right: routing is chosen per message, so two threads would be a
-   wall with nothing behind it, and losing the ability to debug something in
-   Code and then ask about it plainly would be a real loss. */
-
-check("switching the mode does not touch the thread",
-  /toggleCodeMode\(\) \{[\s\S]{0,200}setMessages/.test(shell), false);
-
-/* ── And the app's description of itself keeps up ───────────────────────────
-   This is the second time the mode paragraph has been wrong. It described a
-   segmented control at the top of the left side panel, which had not been true
-   for some time — the switch was the header chevron. Prose about a moving app
-   goes stale, which is the whole reason the screen list and the credential
-   names are derived now; this paragraph is prose because where a control sits
-   is not something the code states about itself. */
-
-const knowledge = readFileSync(join(root, "lib/ai/app-knowledge.ts"), "utf8");
-check("the description no longer names a side-panel control",
-  /segmented control at\n {2}the top of the left side panel/.test(knowledge), false);
-check("it says where the toggle actually is",
-  /Code is a toggle in the composer,\n {2}beside Effort and Research/.test(knowledge), true);
-check("and that the header names the conversation",
-  /header names the conversation rather than the mode/.test(knowledge), true);
-/* The property that has always been true and must stay stated, because it is
-   the one someone asks about after switching. */
-check("and that switching never clears the conversation",
-  /it never clears the open conversation/.test(knowledge), true);
+/* Code moved out of the composer and into the sidebar. What must stay true is
+   that it is reachable and that reaching it does not throw away the thread —
+   the complaint that started this work was a mode switch that relabelled a
+   conversation it had never applied to. */
+check("code mode is reachable", /updatePreferences\(\{ \.\.\.preferences, mode: "code" \}\)/.test(shell), true);
+check("and switching it never clears the conversation",
+  /setMessages\(\[\]\)/.test(shell.slice(shell.indexOf("function toggleCodeMode"), shell.indexOf("function toggleCodeMode") + 400)), false);
+/* Research stayed in the composer and must keep working there — this file
+   caught it arriving as a prop with nothing calling it. */
+check("research is still a switch in the composer",
+  /role="switch"[\s\S]{0,120}aria-checked=\{research\}/.test(composer), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

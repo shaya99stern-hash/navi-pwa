@@ -870,6 +870,26 @@ export function SettingsSheet({
                 </div>
               </Group>
 
+              {(memoryStatus.skillNames.length > 0 || memoryStatus.lessonNames.length > 0) && (
+                /* What it has actually learned, shown rather than only counted.
+                   Both lists were already being fetched every time this sheet
+                   opened and neither was rendered — so the app knew what it had
+                   been taught and had no way to say it. Kept apart because they
+                   are different things: one the owner taught it on purpose, the
+                   other it drew from its own work. */
+                <>
+                  <SectionHeader>What Navi Soul has learned</SectionHeader>
+                  <Group>
+                    {memoryStatus.skillNames.length > 0 && (
+                      <Row label={`Taught by you · ${memoryStatus.skillNames.length}`} description={memoryStatus.skillNames.join(" · ")} />
+                    )}
+                    {memoryStatus.lessonNames.length > 0 && (
+                      <Row label={`Learned from its own work · ${memoryStatus.lessonNames.length}`} description={memoryStatus.lessonNames.join(" · ")} />
+                    )}
+                  </Group>
+                </>
+              )}
+
               {skillGroups.map((group) => (
                 <div key={group.category}>
                   <SectionHeader>{group.category}</SectionHeader>

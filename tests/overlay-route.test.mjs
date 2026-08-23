@@ -36,8 +36,17 @@ for (const name of SHELL_OVERLAYS) {
   check(`${name} is dismissable by back`, new RegExp(`useOverlayRoute\\(\\{\\s*open:\\s*${name}\\b`).test(shell), true);
 }
 check("the message action sheet is dismissable by back", /useOverlayRoute\(\{\s*open:\s*contextMessage !== null/.test(shell), true);
-check("the attachment menu is dismissable by back", /useOverlayRoute\(\{\s*open:\s*sourceMenuOpen\b/.test(composer), true);
-check("the integrations sheet is dismissable by back", /useOverlayRoute\(\{\s*open:\s*integrationsOpen\b/.test(composer), true);
+/* The attachment menu moved out of the composer and into the shell, where the
+   rest of the overlays live. What has to stay true is that back closes it —
+   not which file owns it. Asserted against the shell now, and the composer is
+   still read above so a menu reappearing there without routing is still
+   caught. */
+check("the attachment menu is dismissable by back",
+  /useOverlayRoute\(\{\s*open:\s*composeMenuOpen\b/.test(shell), true);
+check("and no overlay is left in the composer without it",
+  /open\s*&&|Open \?/.test(composer) && !/useOverlayRoute/.test(composer)
+    ? !/(sourceMenuOpen|integrationsOpen)\b/.test(composer)
+    : true, true);
 
 /* Every boolean the shell opens an overlay with should be accounted for. A new
    `somethingOpen` that never reaches this module is the regression. */

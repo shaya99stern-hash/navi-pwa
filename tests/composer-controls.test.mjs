@@ -50,7 +50,12 @@ check("each bar holds the peak of its window", /peakRef\.current = Math\.max\(pe
 check("levels are drained on an animation frame, not per sample", /requestAnimationFrame\(tick\)/.test(code), true);
 /* Whether the detector believes it is hearing a voice is a stronger statement
    than bar height, which moves on room noise too. */
-check("speech detection is shown, not just level", /speaking \? "ring-accent"/.test(code), true);
+/* A level meter moves for a door slamming. What tells someone the app is
+   actually hearing *them* is the detector, so the ring is bound to that rather
+   than to amplitude. The variable and the colour token both changed in the
+   redesign; the property did not. */
+check("speech detection is shown, not just level",
+  /conversation\.hearing \? "ring-/.test(code), true);
 check("recording can be discarded", code.includes("Discard recording"), true);
 
 /* ── The words arrive while they are still being spoken ──────────────────────
@@ -77,9 +82,13 @@ check("and the textarea is sized to what is displayed", /\}, \[previewValue\]\);
 check("research sits in the composer row", /aria-label=\{research \? "Research is on/.test(code), true);
 check("it is a switch", /role="switch"[\s\S]{0,120}aria-checked=\{research\}/.test(code), true);
 check("it still calls the existing handler", code.includes("onToggleResearch()"), true);
-/* The plus menu keeps its entry: two ways to reach one setting is fine, and
-   removing the old one would relocate a control people have learned. */
-check("the menu entry survives", code.includes('role="menuitemcheckbox"'), true);
+/* The plus menu that used to carry a second Research entry moved out of the
+   composer in the redesign, so there is now exactly one way to reach the
+   setting. That is fine — what is not fine is zero, which is what this file
+   caught: `research` and `onToggleResearch` arrived as props with nothing
+   calling them, and web search became unreachable from anywhere in the app
+   while the prompt still offered it. */
+check("research is reachable at all", /onToggleResearch\(\)/.test(code), true);
 
 /* ── Orchestration knowledge ─────────────────────────────────────────────── */
 

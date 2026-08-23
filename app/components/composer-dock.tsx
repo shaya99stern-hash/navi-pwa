@@ -4,6 +4,7 @@ import {
   AudioLines,
   ArrowUp,
   ChevronDown,
+  Globe,
   FileText,
   LoaderCircle,
   Mic,
@@ -629,6 +630,30 @@ export function ComposerDock({
                 aria-label="Add photos, camera, and files"
               >
                 <Plus size={22} strokeWidth={1.5} />
+              </button>
+              )}
+
+              {listening || talking ? null : (
+              /* Web research, put back.
+                 The redesign left `research` and `onToggleResearch` arriving as
+                 props with nothing calling them, so searching the web became
+                 unreachable from anywhere in the app — while the prompt still
+                 offered it and the router still weighed it. Code mode survived
+                 the same edit because it moved to the sidebar; this had nowhere
+                 to go.
+
+                 A switch rather than a button, because it has an on state a
+                 screen reader has to be able to read. */
+              <button
+                type="button"
+                role="switch"
+                aria-checked={research}
+                onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
+                disabled={blocked || generating}
+                className={`composer-action ${research ? "text-[#0A84FF]" : ""}`}
+                aria-label={research ? "Research is on. Turn off web search" : "Research is off. Turn on web search"}
+              >
+                <Globe size={20} strokeWidth={1.5} />
               </button>
               )}
 

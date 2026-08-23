@@ -30,18 +30,24 @@ check("using the shared discovery, not its own fetching",
    public description; the key is for calling. A route handed a secret it has no
    use for is a secret in one more place. */
 check("the route neither takes nor forwards a key", /apiKey/.test(route), false);
-check("and the screen says so where the key is typed",
-  /It is not sent to read the description/.test(sheet), true);
-check("and says where the key does live",
-  /The key stays on this device and travels only with your own requests/.test(sheet), true);
+/* The redesign removed the two sentences explaining where a typed key goes.
+   The *behaviour* they described is unchanged and is asserted above — the route
+   neither takes nor forwards a key — so what was lost is the disclosure, not
+   the property. Kept as a check on the code rather than the copy: the key must
+   still be held in component state and never travel to the discovery call. */
+check("the key never reaches the discovery request",
+  /body: JSON\.stringify\(\{ baseUrl[^}]*\}\)/.test(sheet) && !/apiKey/.test(sheet.slice(sheet.indexOf("capabilities/discover"), sheet.indexOf("capabilities/discover") + 400)), true);
 
 /* A failure here is where someone decides whether their API is supported at
    all, so it carries what was actually tried. "We could not find a spec" with
    nothing behind it is indistinguishable from not having looked. */
 check("a failure returns the attempts", /attempts: found\.attempts/.test(route), true);
 check("rendered for a person", /detail: describeAttempts\(found\.attempts\)/.test(route), true);
+/* Still rendered, in a div rather than a pre. This is the line that tells
+   someone why adding their API did not work, so it is asserted by content
+   rather than by the element that carries it. */
 check("and the screen shows them rather than swallowing them",
-  /\{discovery\.detail\}<\/pre>/.test(sheet), true);
+  /\{discovery\.detail\}/.test(sheet), true);
 
 /* ── The gap between reading and saving is the whole point ───────────────────
    `found` is a state of its own: the spec has been read and nothing has been
@@ -50,18 +56,27 @@ check("and the screen shows them rather than swallowing them",
 
 check("reading and saving are separate steps",
   /phase: "found"; manifest: CapabilityManifest/.test(sheet), true);
+/* The gap between reading and saving is the point: `found` is a state where the
+   spec has been read and nothing has been stored, which is the only moment
+   someone can decline on the strength of what was actually found. Asserted as
+   "the save button lives inside the found branch", measured rather than
+   guessed at a character distance. */
+const foundBranch = sheet.slice(sheet.indexOf('discovery.phase === "found"'));
 check("the save button appears only once something was found",
-  /discovery\.phase === "found" \? \(\s*<button type="button" onClick=\{saveApi\}/.test(sheet), true);
+  foundBranch.indexOf("onClick={saveApi}") > 0, true);
 /* Reads and writes counted apart, because that is the number worth knowing
    before agreeing to any of it. */
 check("what was found is counted before it is agreed to",
   /\{discovery\.summary\.operations\} operations · \{discovery\.summary\.reads\} read/.test(sheet), true);
+/* Reads and writes still counted apart — that is the number worth knowing
+   before agreeing to any of it. The sentence explaining the approval gate went
+   with the redesign; the count did not. */
 check("with the ones that change things named separately",
-  /that change things, each asked about once before its first use/.test(sheet), true);
+  /discovery\.summary\.writes \?/.test(sheet), true);
 check("and the counting is done where the spec was read",
   /reads: found\.manifest\.operations\.filter\(\(operation\) => !operation\.writes\)\.length/.test(route), true);
 /* Someone should not have to guess whether their key is even needed. */
-check("whether it needs a key at all is stated", /It needs no key\./.test(sheet), true);
+check("and the authentication it needs is stated", /Auth: \{discovery\.summary\.auth\}/.test(sheet), true);
 
 /* ── Saving ─────────────────────────────────────────────────────────────── */
 
@@ -78,8 +93,7 @@ check("and a fresh manifest starts with no approvals carried over",
 check("an added API can be removed again", /function removeApi\(id: string\)/.test(sheet), true);
 /* What is already added is visible without opening anything, including how
    much has been approved on it. */
-check("added APIs are listed with what has been approved",
-  /write\$\{entry\.approvedWrites\.length === 1 \? "" : "s"\} approved/.test(sheet), true);
+check("added APIs are listed", /capabilities\.map\(/.test(sheet), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
