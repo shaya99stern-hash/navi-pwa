@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Activity,
   ChevronLeft,
   ChevronRight,
   FlaskConical,
