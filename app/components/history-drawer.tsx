@@ -7,11 +7,9 @@ import {
   PinOff,
   Search,
   RefreshCw,
-  Settings,
   SquarePen,
   SquareTerminal,
   Trash2,
-  UserRound,
   X
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -24,18 +22,15 @@ import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 type Props = {
   open: boolean;
-  /** 0-1 while an edge swipe is in progress, null when idle. */
   dragProgress?: number | null;
   chats: StoredChat[];
   activeId: string;
-  /** Display name from the profile; falls back to the workspace label. */
   profileName?: string;
   haptics: boolean;
   onClose: () => void;
   onNew: () => void;
   onNewCode: () => void;
   onProjects: () => void;
-  /** Count beside the Projects row. The list itself is a screen of its own. */
   projects: NaviProject[];
   onSettings: () => void;
   onOpen: (chat: StoredChat) => void;
@@ -44,7 +39,7 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, haptics, onClose, onNew, onNewCode, onProjects, projects, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, haptics, onClose, onNew, onNewCode, onProjects, projects, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
   
@@ -86,8 +81,6 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
   const pinned = normalized ? [] : visible.filter((chat) => chat.pinned);
   const recents = normalized ? visible : visible.filter((chat) => !chat.pinned);
 
-  // Split recents into Chats and Code sessions 
-  // (Assuming your StoredChat type will have a property like `isCodeSession` or `mode`)
   const recentChats = recents.filter((chat) => !(chat as any).isCodeSession);
   const recentCodeSessions = recents.filter((chat) => (chat as any).isCodeSession);
 
@@ -188,12 +181,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
         </div>
 
         <nav className="shrink-0 px-2 pt-2" aria-label="Navigation">
-          <button type="button" onClick={onNew} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <SquarePen size={19} strokeWidth={1.8} className="text-secondary" />
-            New chat
-          </button>
-          
-          <button type="button" onClick={onNew} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+          <button type="button" onClick={() => { onClose(); onNew(); }} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
             <MessageSquare size={19} strokeWidth={1.8} className="text-secondary" />
             NaviOS Chat
           </button>
@@ -264,14 +252,9 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
             </button>
           ) : null}
           <button type="button" onClick={() => openSheet(onSettings)} className="flex min-h-12 w-full items-center gap-3 rounded-[10px] px-2 text-left active:bg-elev-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-[0.8125rem] font-semibold text-[var(--accent-on-primary)]">
-              <UserRound size={16} />
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E5E5E5] text-[#121214] text-[0.875rem] font-bold shadow-sm">
+              S
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[0.875rem]/5 font-medium text-primary">{profileName || "My workspace"}</span>
-              <span className="block text-[0.6875rem]/4 font-medium text-tertiary">Private · on this device</span>
-            </span>
-            <Settings size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
           </button>
         </footer>
       </aside>
