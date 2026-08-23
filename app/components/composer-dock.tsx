@@ -3,19 +3,12 @@
 import {
   AudioLines,
   ArrowUp,
-  BookOpen,
-  Camera,
   ChevronDown,
   FileText,
-  Globe,
-  Image as ImageIcon,
   LoaderCircle,
   Mic,
-  Paperclip,
   Plus,
   Check,
-  FolderKanban,
-  Link2,
   Square,
   Volume2,
   X
@@ -41,10 +34,7 @@ import {
   type AutoStopReason,
   type RecordingSession
 } from "@/lib/ui/recorder";
-import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
 import type { VoiceConversation } from "@/lib/ui/voice-conversation";
-import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
-import { useOverlayRoute } from "@/lib/ui/overlay-route";
 import { watchProviderStatus } from "@/lib/ui/provider-status";
 import {
   ATTACHMENT_BUDGET,
@@ -62,6 +52,7 @@ const DOCUMENT_ACCEPT = [
 ].join(",");
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
+const COMBINED_ACCEPT = `${IMAGE_ACCEPT},${DOCUMENT_ACCEPT}`;
 
 const WAVEFORM_BAR_COUNT = 34;
 const WAVEFORM_BAR_MS = 60;
@@ -74,9 +65,6 @@ const CONVERSATION_PLACEHOLDER: Record<VoiceConversation["phase"], string> = {
   thinking: "Navi Soul is thinking…",
   speaking: "Answering — the mic reopens after"
 };
-
-// iOS Native Action Sheet Button Style
-const sheetButton = "flex min-h-[58px] w-full items-center justify-between border-b border-[#3C3C434A] dark:border-[#545458A6] last:border-b-0 px-4 active:bg-black/10 dark:active:bg-white/10 transition-colors";
 
 type Props = {
   value: string;
@@ -177,9 +165,7 @@ export function ComposerDock({
 }: Props) {
   const dockRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const documentInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<RecordingSession | null>(null);
 
   useEffect(() => {
@@ -208,28 +194,16 @@ export function ComposerDock({
   const [waveform, setWaveform] = useState<number[]>([]);
   const [focused, setFocused] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [providerReady, setProviderReady] = useState<boolean | null>(null);
-  const [integrationsOpen, setIntegrationsOpen] = useState(false);
-  const [integrations, setIntegrations] = useState<IntegrationStatus>({
-    github: false,
-    vercel: false,
-    search: { configured: false, provider: null },
-    loaded: false
-  });
   const [touchKeyboard, setTouchKeyboard] = useState(false);
 
   const valueRef = useRef(value);
   valueRef.current = value;
   const peakRef = useRef(0);
   const waveformRef = useRef<number[]>([]);
-  const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
-
-  useOverlayRoute({ open: sourceMenuOpen, onClose: () => setSourceMenuOpen(false) });
-  useOverlayRoute({ open: integrationsOpen, onClose: () => setIntegrationsOpen(false) });
 
   const commands: Skill[] = value.startsWith("/") && !value.includes("\n") ? suggest(value, 6) : [];
   const showCommands = commands.length > 0 && focused;
@@ -275,12 +249,6 @@ export function ComposerDock({
       return;
     }
     setProviderReady(Object.values(data.providers ?? {}).some(Boolean));
-    setIntegrations({
-      github: Boolean(data.devTools?.github),
-      vercel: Boolean(data.devTools?.vercel),
-      search: { configured: Boolean(data.search?.configured), provider: data.search?.provider ?? null },
-      loaded: true
-    });
   }), []);
 
   useEffect(() => () => recorderRef.current?.cancel(), []);
@@ -354,7 +322,6 @@ export function ComposerDock({
     if ((!value.trim() && attachmentCount === 0) || generating) return;
     if (!online && !offlineCommand) return;
     setSending(true);
-    setSourceMenuOpen(false);
     haptic("impact-light", haptics);
     window.setTimeout(() => setSending(false), 100);
     onSend();
@@ -415,7 +382,6 @@ export function ComposerDock({
     incoming.forEach((file) => transfer.items.add(file));
     setSelectedFiles((current) => [...current, ...incoming].slice(0, MAX_ATTACHMENTS));
     setAttachmentMessage(null);
-    setSourceMenuOpen(false);
     onFiles(transfer.files);
     haptic("selection", haptics);
     window.setTimeout(() => textareaRef.current?.focus(), 80);
@@ -446,15 +412,7 @@ export function ComposerDock({
     addSelectedFiles(event.dataTransfer.files);
   }
 
-  function openSourceMenu() {
-    if (blocked || generating) return;
-    setAttachmentMessage(null);
-    setSourceMenuOpen(true);
-    haptic("selection", haptics);
-  }
-
   function openTools() {
-    setSourceMenuOpen(false);
     haptic("selection", haptics);
     onOpenTools();
   }
@@ -546,40 +504,19 @@ export function ComposerDock({
     <>
       <div
         ref={dockRef}
-        className={`navi-composer-dock relative z-40 shrink-0 border-t transition-colors duration-150 ${dragActive ? "border-accent bg-[var(--selection-bg)]" : "border-[var(--border-subtle)]"}`}
+        className={`navi-composer-dock relative z-40 shrink-0 border-t transition-colors duration-150 ${dragActive ? "border-[#0A84FF] bg-[#0A84FF]/5" : "border-[var(--border-subtle)]"}`}
         onDragEnter={dragOver}
         onDragOver={dragOver}
         onDragLeave={dragLeave}
         onDrop={drop}
       >
         <div className="mx-auto w-full max-w-app">
+          {/* Universal native iOS File Picker mapped to the + button */}
           <input
-            ref={imageInputRef}
+            ref={fileInputRef}
             type="file"
             multiple
-            accept={IMAGE_ACCEPT}
-            className="hidden"
-            onChange={(event) => {
-              addSelectedFiles(event.currentTarget.files);
-              event.currentTarget.value = "";
-            }}
-          />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(event) => {
-              addSelectedFiles(event.currentTarget.files);
-              event.currentTarget.value = "";
-            }}
-          />
-          <input
-            ref={documentInputRef}
-            type="file"
-            multiple
-            accept={DOCUMENT_ACCEPT}
+            accept={COMBINED_ACCEPT}
             className="hidden"
             onChange={(event) => {
               addSelectedFiles(event.currentTarget.files);
@@ -588,7 +525,7 @@ export function ComposerDock({
           />
 
           {dragActive ? (
-            <div className="mb-2 flex min-h-12 items-center justify-center rounded-2xl border border-dashed border-accent bg-elev-2 px-3 text-[0.75rem]/4 font-semibold text-primary">
+            <div className="mb-2 flex min-h-12 items-center justify-center rounded-2xl border border-dashed border-[#0A84FF] bg-elev-2 px-3 text-[0.75rem]/4 font-semibold text-primary">
               Drop files here to attach them
             </div>
           ) : null}
@@ -622,7 +559,7 @@ export function ComposerDock({
             <div
               role="listbox"
               aria-label="Commands"
-              className="mb-1.5 overflow-hidden rounded-card border border-[var(--border-subtle)] bg-elev-1 shadow-menu"
+              className="mb-1.5 overflow-hidden rounded-[14px] border border-[var(--border-subtle)] bg-elev-1 shadow-sm"
             >
               {commands.map((skill) => (
                 <button
@@ -631,13 +568,13 @@ export function ComposerDock({
                   role="option"
                   aria-selected="false"
                   onPointerDown={(event) => { event.preventDefault(); completeCommand(skill); }}
-                  className="flex min-h-[52px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-3 text-left last:border-b-0 active:bg-elev-2"
+                  className="flex min-h-[52px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-3 text-left last:border-b-0 active:bg-black/5 dark:active:bg-white/5"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[0.875rem]/5 font-semibold text-primary">{skill.triggers.slash}</span>
-                    <span className="block truncate text-[0.75rem]/4 font-medium text-tertiary">{skill.description}</span>
+                    <span className="block truncate text-[17px] tracking-[-0.41px] text-primary">{skill.triggers.slash}</span>
+                    <span className="block truncate text-[13px] text-tertiary">{skill.description}</span>
                   </span>
-                  <span className="shrink-0 rounded-full bg-elev-2 px-2 py-0.5 text-[0.625rem]/4 font-semibold uppercase tracking-wide text-tertiary">
+                  <span className="shrink-0 rounded-[4px] bg-elev-2 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-tertiary">
                     on device
                   </span>
                 </button>
@@ -675,34 +612,23 @@ export function ComposerDock({
               placeholder={talking ? CONVERSATION_PLACEHOLDER[conversation.phase] : listening ? "Listening — speak naturally" : placeholder}
               aria-label="Chat with Navi Soul"
               data-navi-composer=""
-              className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[1rem]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
+              className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[17px] tracking-[-0.41px] text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
             <div className="mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
               {listening || talking ? null : (
               <button
                 type="button"
-                onClick={openSourceMenu}
+                onClick={() => {
+                  if (blocked || generating) return;
+                  haptic("selection", haptics);
+                  fileInputRef.current?.click();
+                }}
                 disabled={blocked || generating}
                 className="composer-action"
                 aria-label="Add photos, camera, and files"
-                aria-expanded={sourceMenuOpen}
               >
-                <Plus size={22} strokeWidth={1.8} />
-              </button>
-              )}
-
-              {listening || talking ? null : (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={research}
-                onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
-                disabled={blocked || generating}
-                className="composer-action"
-                aria-label={research ? "Research is on. Turn it off" : "Research is off. Turn it on"}
-              >
-                <Globe size={19} strokeWidth={1.8} className={research ? "text-[#0A84FF]" : ""} />
+                <Plus size={22} strokeWidth={1.5} />
               </button>
               )}
 
@@ -710,7 +636,7 @@ export function ComposerDock({
               <button
                 type="button"
                 onClick={onOpenEffort}
-                className="flex items-center gap-1 px-2 text-[0.8125rem]/4 font-medium text-tertiary hover:text-secondary active:opacity-60 transition-colors"
+                className="flex items-center gap-1 px-2 text-[13px] font-medium text-tertiary hover:text-secondary active:opacity-60 transition-colors"
                 aria-label={`Effort: ${effortLabel}. Change effort`}
               >
                 <span className="truncate">{effortLabel}</span>
@@ -722,7 +648,7 @@ export function ComposerDock({
 
               {talking ? (
                 <span
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-accent" : "ring-transparent"}`}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-[#0A84FF]" : "ring-transparent"}`}
                   role="status"
                   aria-label={CONVERSATION_PLACEHOLDER[conversation.phase]}
                 >
@@ -780,7 +706,7 @@ export function ComposerDock({
                     })}
                   </span>
                   <span
-                    className="shrink-0 tabular-nums text-[0.75rem]/4 font-semibold text-secondary"
+                    className="shrink-0 tabular-nums text-[13px] font-semibold text-secondary"
                     aria-label={`Recording, ${recordedSeconds} seconds`}
                   >
                     {Math.floor(recordedSeconds / 60)}:{String(recordedSeconds % 60).padStart(2, "0")}
@@ -802,7 +728,7 @@ export function ComposerDock({
                 className={`composer-action ${transcribing ? "opacity-60" : ""}`}
                 aria-label={transcribing ? "Transcribing" : "Record a message"}
               >
-                <Mic size={19} strokeWidth={1.8} />
+                <Mic size={20} strokeWidth={1.5} />
               </button>
               )}
               {listening || talking ? null : (
@@ -814,7 +740,7 @@ export function ComposerDock({
                 aria-label="Start a voice conversation"
                 aria-pressed={false}
               >
-                <AudioLines size={19} strokeWidth={1.8} />
+                <AudioLines size={20} strokeWidth={1.5} />
               </button>
               )}
               {value.trim() || attachmentCount || generating ? (
@@ -822,111 +748,24 @@ export function ComposerDock({
                   type={generating ? "button" : "submit"}
                   onClick={generating ? onStop : undefined}
                   disabled={!generating && !canSend}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-[#0A84FF] text-white shadow-sm active:scale-95 active:bg-opacity-80" : "bg-elev-3 text-disabled"}`}
+                  className={`flex h-[34px] w-[34px] ml-1 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-[#0A84FF] text-white shadow-sm active:scale-95 active:bg-opacity-80" : "bg-elev-3 text-disabled"}`}
                   aria-label={generating ? "Stop response" : "Send message"}
                 >
-                  {generating ? <Square size={13} fill="currentColor" /> : <ArrowUp size={18} strokeWidth={2.4} />}
+                  {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={20} strokeWidth={2} />}
                 </button>
               ) : null}
             </div>
           </form>
 
-          <div className="flex items-center justify-center px-3 text-center" role="status" aria-live="polite">
+          <div className="flex items-center justify-center px-3 text-center pb-[max(0px,env(safe-area-inset-bottom))] mb-2" role="status" aria-live="polite">
             {footer ? (
-              <span className={`block max-h-8 overflow-hidden pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
+              <span className={`block max-h-8 overflow-hidden pt-1 text-[11px] font-medium ${footerTone}`}>{footer}</span>
             ) : hasMessages ? (
-              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">Navi Soul is AI and can make mistakes. Double-check important answers.</span>
+              <span className="block pt-1 text-[11px] font-medium text-tertiary">Navi Soul is AI and can make mistakes. Double-check important answers.</span>
             ) : null}
           </div>
         </div>
       </div>
-
-      {sourceMenuOpen ? (
-        <div className="fixed inset-0 z-[85]">
-          <button
-            type="button"
-            aria-label="Close attachment menu"
-            onClick={() => setSourceMenuOpen(false)}
-            {...sourceSheet.scrimProps}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
-          />
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add to message"
-            {...sourceSheet.sheetProps}
-            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[500px] px-2 pb-[calc(10px+var(--safe-bottom))] pt-1"
-          >
-            {/* Invisible handle strictly for the drag logic, no visual dot */}
-            <div {...sourceSheet.handleProps} className="h-6 w-full opacity-0" />
-            
-            <div className="overflow-hidden rounded-[14px] bg-[#F2F2F7]/95 dark:bg-[#1E1E1E]/95 backdrop-blur-xl">
-              <div className="px-4 py-3 border-b border-[#3C3C434A] dark:border-[#545458A6] flex flex-col items-center justify-center text-center">
-                <span className="text-[13px] font-semibold text-[#8E8E93]">Add to message</span>
-                <span className="text-[13px] font-normal text-[#8E8E93] mt-0.5">Up to six items · photos are resized</span>
-              </div>
-
-              <button type="button" onClick={() => imageInputRef.current?.click()} className={`${sheetButton} text-[#0A84FF]`}>
-                <span className="text-[20px] font-normal">Add Photos</span>
-                <ImageIcon size={22} strokeWidth={1.5} />
-              </button>
-              <button type="button" onClick={() => cameraInputRef.current?.click()} className={`${sheetButton} text-[#0A84FF]`}>
-                <span className="text-[20px] font-normal">Take Photo</span>
-                <Camera size={22} strokeWidth={1.5} />
-              </button>
-              <button type="button" onClick={() => documentInputRef.current?.click()} className={`${sheetButton} text-[#0A84FF]`}>
-                <span className="text-[20px] font-normal">Add Files</span>
-                <Paperclip size={22} strokeWidth={1.5} />
-              </button>
-              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenProjects(); }} className={`${sheetButton} text-primary`}>
-                <span className="text-[20px] font-normal">Add to Project</span>
-                <FolderKanban size={22} strokeWidth={1.5} className="text-primary" />
-              </button>
-              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenPlaybooks(); }} className={`${sheetButton} text-primary`}>
-                <span className="text-[20px] font-normal">Playbooks</span>
-                <BookOpen size={22} strokeWidth={1.5} className="text-primary" />
-              </button>
-              <button type="button" onClick={() => { setSourceMenuOpen(false); setIntegrationsOpen(true); }} className={`${sheetButton} text-primary`}>
-                <span className="text-[20px] font-normal">Integrations</span>
-                <Link2 size={22} strokeWidth={1.5} className="text-primary" />
-              </button>
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={research}
-                onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
-                className={`${sheetButton} text-primary`}
-              >
-                <span className="text-[20px] font-normal">Web Search</span>
-                {research ? <Check size={22} strokeWidth={2} className="text-[#0A84FF]" /> : <Globe size={22} strokeWidth={1.5} className="text-primary" />}
-              </button>
-            </div>
-
-            <div className="mt-2">
-              <button
-                type="button"
-                onClick={() => setSourceMenuOpen(false)}
-                className="flex min-h-[58px] w-full items-center justify-center rounded-[14px] bg-white dark:bg-[#1E1E1E] text-[20px] font-semibold text-[#0A84FF] active:bg-black/10 dark:active:bg-white/10 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      <IntegrationsSheet
-        open={integrationsOpen}
-        status={integrations}
-        connectorCount={connectorCount}
-        connectorAccessMode={connectorAccessMode}
-        haptics={haptics}
-        onClose={() => setIntegrationsOpen(false)}
-        onOpenConnectors={() => {
-          setIntegrationsOpen(false);
-          onOpenConnectors();
-        }}
-      />
     </>
   );
 }
