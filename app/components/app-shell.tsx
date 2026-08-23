@@ -1164,68 +1164,34 @@ export function AppShell({
         onDelete={deleteChat}
       />
 
-      <header className="navi-header relative z-50 flex shrink-0 items-center gap-0.5" data-scrolled={String(scrolled)}>
+      <header className="navi-header relative z-50 flex h-14 shrink-0 items-center gap-0.5 px-1" data-scrolled={String(scrolled)}>
         <button
           type="button"
           onClick={() => {
             haptic("impact-light", preferences.haptics);
             setHistoryOpen(true);
           }}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-primary active:bg-elev-2"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-primary active:opacity-60"
           aria-label="Open sidebar"
         >
-          <PanelLeft size={21} strokeWidth={1.8} />
+          <PanelLeft size={24} strokeWidth={1.5} />
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (view === "chat") return;
-            haptic("selection", preferences.haptics);
-            setView("chat");
-          }}
-          disabled={view === "chat"}
-          className="flex min-w-0 flex-1 flex-col items-start rounded-lg pl-1 text-left active:bg-elev-2"
-          aria-label={view === "chat" ? undefined : "Back to chat"}
-        >
-          <span className="flex max-w-full items-center gap-1.5">
-            <span className="truncate text-[0.9375rem]/[1.125rem] font-semibold tracking-[-0.01em] text-primary">
-              {view === "chat"
-                ? (activeChat?.title ?? (messages.length ? "New chat" : "NaviOS"))
-                : VIEW_TITLES[view]}
-            </span>
-            {view === "chat" ? null : <ChevronDown size={14} className="shrink-0 text-tertiary" />}
+
+        <div className="flex min-w-0 flex-1 flex-col items-center justify-center text-center">
+          <span className="truncate text-[1.0625rem] font-semibold tracking-tight text-primary">
+            {view === "chat"
+              ? (activeChat?.title && activeChat.title !== "New chat" ? activeChat.title : (preferences.mode === "code" ? "NaviOS Code" : "NaviOS Chat"))
+              : VIEW_TITLES[view]}
           </span>
-          <span className="block max-w-[200px] truncate text-[0.75rem]/[1.0125rem] font-normal text-tertiary">
-            {view !== "chat"
-              ? VIEW_SUBTITLES[view]
-              : activeProject?.name ?? (messages.length ? "" : "Nothing saved yet")}
-          </span>
-        </button>
+        </div>
+
         {incognito ? (
-          <span className="flex h-11 w-8 shrink-0 items-center justify-center text-accent" title="Incognito — this chat is not saved">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center text-accent" title="Incognito">
             <Ghost size={19} strokeWidth={1.8} />
           </span>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => {
-            haptic("impact-light", preferences.haptics);
-            if (messages.length > 0 && activeChat) setChatMenuOpen(true);
-            else setSettingsOpen(true);
-          }}
-          aria-label={messages.length > 0 && activeChat ? "Chat actions" : "Settings"}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-2"
-        >
-          <Ellipsis size={20} strokeWidth={1.8} />
-        </button>
-        <button
-          type="button"
-          onClick={newChat}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-2"
-          aria-label="New chat"
-        >
-          <SquarePen size={20} strokeWidth={1.8} />
-        </button>
+        ) : (
+          <div className="h-11 w-11 shrink-0" aria-hidden="true" />
+        )}
       </header>
 
       {!online ? (
