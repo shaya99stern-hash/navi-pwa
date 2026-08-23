@@ -11,10 +11,13 @@ import {
   Key,
   Link2,
   LogOut,
-  Mic as MicIcon,
+  Monitor,
+  Moon,
   RefreshCw,
   Settings,
   Shield,
+  Smartphone,
+  Sun,
   Volume2,
   X
 } from "lucide-react";
@@ -522,7 +525,7 @@ export function SettingsSheet({
 
   return (
     <div className="fixed inset-0 z-[95] flex flex-col bg-[#F2F2F7] dark:bg-black" role="dialog" aria-modal="true" aria-label="Settings">
-      <header className="navi-sheet-header sticky top-0 z-10 flex h-[calc(52px+var(--safe-top))] shrink-0 items-center gap-1 bg-[#F2F2F7] dark:bg-black px-2 pt-[var(--safe-top)]">
+      <header className="navi-sheet-header sticky top-0 z-10 flex min-h-[calc(44px+var(--safe-top))] pt-[var(--safe-top)] shrink-0 items-center gap-1 bg-[#F2F2F7] dark:bg-black px-2 border-b border-[var(--border-subtle)]">
         {page === "root" ? (
           <div className="flex h-11 w-11 items-center justify-center" aria-hidden="true" />
         ) : (
