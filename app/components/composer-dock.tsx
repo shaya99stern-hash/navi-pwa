@@ -63,33 +63,10 @@ const DOCUMENT_ACCEPT = [
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
-/**
- * The waveform is a record of what was heard, not a decoration.
- *
- * It used to be fifteen fixed weights driven through a sine of the elapsed
- * second — so it moved identically whether the microphone was picking up a
- * voice or picking up nothing, which is precisely the question the person
- * watching it is asking. Now each bar is the loudest moment of a real 60ms
- * window and they scroll leftwards, which makes silence look like silence and
- * a dead microphone look dead.
- */
 const WAVEFORM_BAR_COUNT = 34;
 const WAVEFORM_BAR_MS = 60;
-
-/* Fixed per-bar weights for the conversation strip, where the row is short and
-   there is no scrolling history to show — only whether the microphone is
-   hearing anything right now. The height comes from the live level; these vary
-   the shape so it reads as a voice rather than a block. */
 const CONVERSATION_BARS = [0.55, 0.85, 1, 0.7, 1, 0.8, 0.6];
 
-/**
- * The loop's state, said plainly.
- *
- * Every phase gets a line, including the ones that pass in under a second.
- * A conversation where the screen goes blank between speaking and hearing is
- * one where nobody can tell a pause from a failure, and the phase is the only
- * thing that answers that.
- */
 const CONVERSATION_PLACEHOLDER: Record<VoiceConversation["phase"], string> = {
   off: "",
   listening: "Listening — just talk",
@@ -109,17 +86,6 @@ type Props = {
   effortLabel: string;
   hasMessages: boolean;
   research: boolean;
-  /**
-   * Code mode, which is a routing preference for the next message and nothing
-   * more.
-   *
-   * It lives here, beside Effort and Research, because that is what it is: a
-   * per-message dial. It used to hold the header's dominant line — the position
-   * every other screen uses to say *where you are* — while behaving as a
-   * setting, so switching it changed the title and not the conversation, and
-   * opening an old chat relabelled it retroactively with a mode it was never
-   * held in.
-   */
   codeMode: boolean;
   onToggleCode: () => void;
   offlineCommand: boolean;
@@ -131,7 +97,6 @@ type Props = {
   onStop: () => void;
   onFiles: (files: FileList | null) => void;
   onOpenEffort: () => void;
-  /** The spoken conversation, owned by the shell and driven from here. */
   conversation: VoiceConversation;
   onToggleResearch: () => void;
   onOpenTools: () => void;
@@ -236,15 +201,7 @@ export function ComposerDock({
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  /**
-   * The transcript as it arrives, which is now during the recording rather
-   * than after it.
-   *
-   * Kept apart from the draft until the recording is accepted. The words
-   * appear in the composer as they are spoken — that is the whole point — but
-   * they are a preview until then, so discarding a recording actually
-   * discards it instead of leaving half a sentence behind in the box.
-   */
+
   const [liveTranscript, setLiveTranscript] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [waveform, setWaveform] = useState<number[]>([]);
@@ -266,10 +223,6 @@ export function ComposerDock({
 
   const valueRef = useRef(value);
   valueRef.current = value;
-  /* Levels arrive fifty times a second. Held in refs and drained on an
-     animation frame, because fifty React renders a second to move a row of
-     bars is measurable on a phone — and the bars only refresh sixty times a
-     second anyway. */
   const peakRef = useRef(0);
   const waveformRef = useRef<number[]>([]);
   const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
@@ -280,33 +233,9 @@ export function ComposerDock({
   const commands: Skill[] = value.startsWith("/") && !value.includes("\n") ? suggest(value, 6) : [];
   const showCommands = commands.length > 0 && focused;
 
-  /**
-   * The draft as it will read if this recording is kept.
-   *
-   * Shown in the composer itself rather than in a panel above it, because
-   * that is where the text is going to end up and watching it land there is
-   * what makes dictation feel like typing rather than like filing a request.
-   * Read-only while it is a preview: an editable box whose contents are being
-   * rewritten underneath the caret is a box that eats what you type.
-   *
-   * It stays out of `value` until the recording is accepted, which is what
-   * makes discarding one an actual discard rather than an undo.
-   */
   const dictating = listening || transcribing;
-  /**
-   * The spoken conversation is running, which is a different thing from
-   * dictation and mutually exclusive with it.
-   *
-   * Dictation puts words in the box for someone to read and send. A
-   * conversation sends them itself and answers out loud. Two microphones open
-   * at once would fight over the device and transcribe the same sentence
-   * twice, so each disables the other's button rather than trusting nobody to
-   * press both.
-   */
   const talking = conversation.active;
-  /* What the box shows. In a conversation the words are not going into the
-     draft at all — the turn is sent as soon as the pause lands — so they are
-     shown in the same place for the same reason and then they are gone. */
+
   const previewValue = talking
     ? conversation.transcript
     : dictating && liveTranscript
@@ -323,9 +252,6 @@ export function ComposerDock({
     setTouchKeyboard(window.matchMedia("(pointer: coarse)").matches);
   }, []);
 
-  /* Measured against what is displayed, not against the draft. While dictation
-     is running the box shows the live transcript, and sizing to `value` would
-     leave a growing paragraph scrolled out of sight inside a one-line box. */
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -367,15 +293,6 @@ export function ComposerDock({
     ? "Add instructions for these files"
     : hasMessages ? "Write a message…" : "How can I help you today?";
 
-  /**
-   * Which voice is talking, said out loud on the one screen where it matters.
-   *
-   * Silence had four causes that looked the same from both sides. Naming the
-   * engine means the answer to "why can I not hear it" is on screen the moment
-   * it happens, rather than something to be inferred from server logs
-   * afterwards — and if the premium voice is quietly unconfigured, that stops
-   * being a mystery and becomes a sentence.
-   */
   const spokenBy = conversation.voice && conversation.phase === "speaking"
     ? conversation.voice.engine === "premium"
       ? "Answering in the premium voice"
@@ -403,10 +320,6 @@ export function ComposerDock({
       ? "text-accent"
       : !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
 
-  /* Counts up rather than down. The old clock counted towards a sixty-second
-     ceiling that existed because a whole recording had to fit in one request;
-     nothing is held whole now, so there is no deadline to show and a deadline
-     shown is a thought cut short. */
   useEffect(() => {
     if (!listening) { setRecordedSeconds(0); return; }
     const started = Date.now();
@@ -414,9 +327,6 @@ export function ComposerDock({
     return () => window.clearInterval(timer);
   }, [listening]);
 
-  /* One place the waveform advances, at the display's own rate. A bar is the
-     peak of the window it covers rather than the last sample in it, so a
-     short loud syllable cannot fall between two frames and vanish. */
   useEffect(() => {
     if (!listening) {
       waveformRef.current = [];
@@ -561,23 +471,11 @@ export function ComposerDock({
 
     try {
       const session = await startRecording({
-        /* Recorded into a ref rather than into state; the effect above turns
-           it into bars at the display's rate. */
         onLevel: (level) => { peakRef.current = Math.max(peakRef.current, level); },
         onSpeaking: setSpeaking,
-        /* The words, while they are still being said. Each call is the whole
-           transcript so far and it only ever grows, so this can be rendered
-           straight through without the text reordering itself as later pieces
-           of the recording come back. */
         onTranscript: setLiveTranscript,
         onError: (message) => setVoiceMessage(message),
         onAutoStop: (reason: AutoStopReason) => {
-          /* Only two of these can reach the composer: the fifteen-minute
-             safety stop, and the microphone being taken away by a call or
-             another app. Both mean "this recording is over" rather than "this
-             recording is lost" — everything up to the interruption has
-             already been transcribed, so it is finished rather than
-             discarded. */
           if (reason === "too-long") {
             setVoiceMessage(`Recording stopped at ${Math.round(MAX_RECORDING_SECONDS / 60)} minutes. Keeping what you said.`);
           }
@@ -591,11 +489,6 @@ export function ComposerDock({
       setListening(false);
       setSpeaking(false);
       setTranscribing(false);
-
-      /* Whatever the recorder threw, said as it was thrown. It already tells a
-         refused permission apart from a missing device, and an installed iOS
-         app apart from a browser tab — replacing that with a generic line here
-         would throw away the only part of the message that names the remedy. */
       setVoiceMessage(error instanceof Error ? error.message : "Recording could not start.");
     }
   }
@@ -616,9 +509,6 @@ export function ComposerDock({
     haptic("selection", haptics);
 
     try {
-      /* Usually a short wait now, and often none at all: everything up to the
-         last pause has been transcribing while the person was still talking,
-         so this only has to finish the final segment. */
       const text = await session.stop();
       if (text) {
         const current = valueRef.current;
@@ -640,8 +530,6 @@ export function ComposerDock({
     recorderRef.current = null;
     setListening(false);
     setSpeaking(false);
-    /* The preview goes with it. It was never written into the draft, so
-       discarding is a discard rather than an undo. */
     setLiveTranscript("");
     setVoiceMessage(null);
     haptic("selection", haptics);
@@ -821,11 +709,11 @@ export function ComposerDock({
               <button
                 type="button"
                 onClick={onOpenEffort}
-                className="flex min-h-9 min-w-0 max-w-[180px] items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2"
+                className="flex items-center gap-1 px-2 text-[0.8125rem]/4 font-medium text-tertiary hover:text-secondary active:opacity-60 transition-colors"
                 aria-label={`Effort: ${effortLabel}. Change effort`}
               >
-                <span className="truncate font-semibold text-primary">{effortLabel}</span>
-                <ChevronDown size={13} className="shrink-0 text-tertiary" />
+                <span className="truncate">{effortLabel}</span>
+                <ChevronDown size={13} className="shrink-0" />
               </button>
               )}
 
@@ -833,10 +721,6 @@ export function ComposerDock({
 
               {talking ? (
                 <span
-                  /* The conversation's own strip. It shares the dictation
-                     strip's shape on purpose — same ring, same bars, same
-                     place — because they are the same act from the person's
-                     side, and only the ending differs. */
                   className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-accent" : "ring-transparent"}`}
                   role="status"
                   aria-label={CONVERSATION_PLACEHOLDER[conversation.phase]}
@@ -858,10 +742,6 @@ export function ComposerDock({
                       />
                     ))}
                   </span>
-                  {/* Which of the four things is happening. The bars only
-                      answer that while the microphone is open; between the
-                      pause and the answer they are flat, and flat is exactly
-                      what a broken microphone looks like. */}
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-accent">
                     {conversation.phase === "speaking"
                       ? <Volume2 size={17} />
@@ -872,12 +752,6 @@ export function ComposerDock({
                 </span>
               ) : listening ? (
                 <span
-                  /* The detector's own answer, not a level threshold read off
-                     the bars. It is the same judgement that decides where a
-                     segment is cut, so the ring lighting up means the words
-                     inside it are on their way — and a ring that never lights
-                     is the clearest possible statement that the microphone is
-                     open but hearing nothing. */
                   className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${speaking ? "ring-accent" : "ring-transparent"}`}
                   role="status"
                   aria-label={speaking ? "Listening, speech detected" : "Listening"}
@@ -892,9 +766,6 @@ export function ComposerDock({
                   </button>
                   <span className="flex min-w-0 flex-1 items-center justify-end gap-[3px] overflow-hidden" aria-hidden="true">
                     {Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
-                      /* Right-aligned and padded on the left, so the first
-                         bars scroll in from the empty side instead of the row
-                         growing outwards from the middle. */
                       const offset = index - (WAVEFORM_BAR_COUNT - waveform.length);
                       const level = offset >= 0 ? waveform[offset] : 0;
                       const height = Math.max(3, Math.round(3 + level * 19));
@@ -934,11 +805,6 @@ export function ComposerDock({
               </button>
               )}
               {listening || talking ? null : (
-              /* One tap and it is a conversation until it is ended: it
-                 listens, you pause, it answers aloud, it listens again. This
-                 used to open a sheet with a Start button, a Stop button, a
-                 Send button and two switches between wanting to say something
-                 and having said it. */
               <button
                 type="button"
                 onClick={conversation.toggle}
