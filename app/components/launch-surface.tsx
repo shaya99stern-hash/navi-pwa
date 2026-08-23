@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Code2, FileText, Lightbulb, PenTool } from "lucide-react";
+import { Code2, FileText, Sparkles, SquarePen } from "lucide-react";
 
 /
 
@@ -50,30 +50,14 @@ return lines[Math.floor(now.getTime() / 60_000) % lines.length];
 /
 
 Capitalise a name that arrived lowercase.
-
-The name falls back to the account handle when no display name is set, and a
-
-handle is whatever its owner typed — "shaya", not "Shaya". Printing it
-
-verbatim in a greeting produced "Evening, shaya", which reads as a database
-
-field rather than as being addressed.
-
-Only the leading letter of each word is raised, and only when the word
-
-starts lowercase: anything already capitalised is left exactly as it is, so
-
-"McDonald", "d'Angelo" and "van der Berg" survive a fallback that a blanket
-
-title-case would mangle. A name the user typed themselves is their business.
 */
 function presentName(name: string): string {
 return name.replace(/(^|[\s-])(\p{Ll})/gu, (_, boundary: string, letter: string) => boundary + letter.toUpperCase());
 }
 
 const SUGGESTIONS = [
-{ icon: PenTool, label: "Draft a document", prompt: "Draft a document outlining the key requirements for..." },
-{ icon: Lightbulb, label: "Brainstorm ideas", prompt: "Help me brainstorm some ideas for..." },
+{ icon: SquarePen, label: "Draft a document", prompt: "Draft a document outlining the key requirements for..." },
+{ icon: Sparkles, label: "Brainstorm ideas", prompt: "Help me brainstorm some ideas for..." },
 { icon: FileText, label: "Summarize notes", prompt: "Can you summarize these notes into a concise bulleted list:\n\n" },
 { icon: Code2, label: "Write a script", prompt: "Write a script that will..." }
 ];
@@ -82,10 +66,6 @@ export function LaunchSurface({ online, name, children }: { online: boolean; nam
 const [greeting, setGreeting] = useState("Good evening");
 
 useEffect(() => {
-/* A name turns the line into an address, so the bare time-of-day form is
-the only one that reads correctly beside it — "Where should we begin
-today?, Sam" is not a sentence. With no name the rotation stands; a
-placeholder would be worse than the variety it replaced. */
 if (name) {
 const hour = new Date().getHours();
 const part = hour < 5 ? "Late night" : hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
@@ -96,8 +76,6 @@ setGreeting(greetingForNow(new Date()));
 }, [name]);
 
 const handleSuggestion = (prompt: string) => {
-// Safely injects the prompt into the composer without requiring prop drilling
-// or breaking the AppShell architecture.
 const textarea = document.querySelector("textarea[data-navi-composer]");
 if (textarea) {
 const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -130,21 +108,24 @@ return (
 
     {/* Quick Actions Grid */}
     <div className="mt-10 grid w-full max-w-[420px] grid-cols-2 gap-3">
-      {SUGGESTIONS.map((suggestion, index) => (
-        <button
-          key={index}
-          type="button"
-          onClick={() => handleSuggestion(suggestion.prompt)}
-          className="flex flex-col items-start gap-3 rounded-[20px] border border-[var(--border-subtle)] bg-elev-1 p-4 text-left transition-transform duration-[120ms] active:scale-95 active:bg-elev-2"
-        >
-          <span className="flex h-[36px] w-[36px] items-center justify-center rounded-[12px] bg-[var(--selection-bg)] text-accent">
-            <suggestion.icon size={18} strokeWidth={2} />
-          </span>
-          <span className="text-[0.8125rem]/[1.125rem] font-semibold text-primary">
-            {suggestion.label}
-          </span>
-        </button>
-      ))}
+      {SUGGESTIONS.map((suggestion, index) => {
+        const Icon = suggestion.icon;
+        return (
+          <button
+            key={index}
+            type="button"
+            onClick={() => handleSuggestion(suggestion.prompt)}
+            className="flex flex-col items-start gap-3 rounded-[20px] border border-[var(--border-subtle)] bg-elev-1 p-4 text-left transition-transform duration-[120ms] active:scale-95 active:bg-elev-2"
+          >
+            <span className="flex h-[36px] w-[36px] items-center justify-center rounded-[12px] bg-[var(--selection-bg)] text-accent">
+              <Icon size={18} strokeWidth={2} />
+            </span>
+            <span className="text-[0.8125rem]/[1.125rem] font-semibold text-primary">
+              {suggestion.label}
+            </span>
+          </button>
+        );
+      })}
     </div>
 
     {!online ? (
