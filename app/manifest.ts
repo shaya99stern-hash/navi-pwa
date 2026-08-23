@@ -11,8 +11,15 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
     orientation: "portrait",
-    background_color: "#262624",
-    theme_color: "#262624",
+    /* The same value the app paints as `--bg-page`, and the same one
+       `themeColor` declares. Three different colours used to run in sequence at
+       launch on an installed iPhone — the splash at #262624, the header at
+       black, the page at #121214 — which reads as the app stuttering rather
+       than as three correct values disagreeing. A manifest cannot be
+       theme-aware, so it takes the dark page colour, which is what the app
+       opens as. */
+    background_color: "#121214",
+    theme_color: "#121214",
     lang: "en-US",
     dir: "ltr",
     categories: ["productivity", "utilities"],

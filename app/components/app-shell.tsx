@@ -1134,7 +1134,7 @@ export function AppShell({
         onDelete={deleteChat}
       />
 
-      <header className="navi-header relative z-50 flex min-h-[44px] pt-[env(safe-area-inset-top)] pb-2 shrink-0 items-center justify-between bg-[#F2F2F7] dark:bg-black px-[max(8px,env(safe-area-inset-left))] border-b border-[var(--border-subtle)]" style={{ paddingRight: 'max(8px, env(safe-area-inset-right))' }} data-scrolled={String(scrolled)}>
+      <header className="navi-header relative z-50 flex min-h-[44px] pt-[env(safe-area-inset-top)] pb-2 shrink-0 items-center justify-between bg-page px-[max(8px,env(safe-area-inset-left))] border-b border-[var(--border-subtle)]" style={{ paddingRight: 'max(8px, env(safe-area-inset-right))' }} data-scrolled={String(scrolled)}>
         <div className="flex w-16 items-center justify-start pl-1">
           <button
             type="button"
@@ -1142,7 +1142,7 @@ export function AppShell({
               haptic("impact-light", preferences.haptics);
               setHistoryOpen(true);
             }}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-[#0A84FF] active:opacity-60"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-accent active:opacity-60"
             aria-label="Open sidebar"
           >
             <PanelLeft size={28} strokeWidth={1.5} className="-ml-1" />
@@ -1184,7 +1184,7 @@ export function AppShell({
               haptic("selection", preferences.haptics);
               setComposeMenuOpen(true);
             }}
-            className="flex items-center justify-center text-[#0A84FF] active:opacity-60"
+            className="flex items-center justify-center text-accent active:opacity-60"
             aria-label="Compose Menu"
           >
             <SquarePen size={26} strokeWidth={1.5} />
@@ -1320,7 +1320,7 @@ export function AppShell({
               <div className="mt-4 rounded-[14px] border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
                 <p className="text-[15px] font-medium text-primary">{error.message || "That didn't go through. Tap to retry."}</p>
                 <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={retry} className="min-h-11 rounded-[10px] bg-[#0A84FF] px-4 text-[15px] font-semibold text-white active:bg-opacity-80">Try again</button>
+                  <button type="button" onClick={retry} className="min-h-11 rounded-[10px] bg-accent px-4 text-[15px] font-semibold text-white active:bg-opacity-80">Try again</button>
                   <button type="button" onClick={clearError} className="min-h-11 rounded-[10px] px-4 text-[15px] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
                 </div>
               </div>
@@ -1475,7 +1475,7 @@ export function AppShell({
               <button
                 type="button"
                 onClick={() => { haptic("success", preferences.haptics); approvalAnswer.current?.(true); }}
-                className="flex min-h-12 items-center justify-center rounded-[12px] bg-[#0A84FF] text-[15px] font-semibold text-white active:bg-opacity-80"
+                className="flex min-h-12 items-center justify-center rounded-[12px] bg-accent text-[15px] font-semibold text-white active:bg-opacity-80"
               >
                 Approve
               </button>

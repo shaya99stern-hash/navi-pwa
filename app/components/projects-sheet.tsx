@@ -167,7 +167,7 @@ export function ProjectsSheet({
     <div className="fixed inset-0 z-[120] flex flex-col bg-[#F2F2F7] dark:bg-black text-primary">
       <header className="navi-sheet-header sticky top-0 z-10 flex h-[calc(52px+var(--safe-top))] shrink-0 items-center gap-1 bg-[#F2F2F7] dark:bg-black px-2 pt-[var(--safe-top)] border-b border-[var(--border-subtle)]">
         {selected && (
-           <button type="button" onClick={() => setSelectedId(null)} aria-label="Back to Projects" className="flex h-11 w-14 items-center justify-center rounded-full text-[#0A84FF] active:opacity-60 md:hidden">
+           <button type="button" onClick={() => setSelectedId(null)} aria-label="Back to Projects" className="flex h-11 w-14 items-center justify-center rounded-full text-accent active:opacity-60 md:hidden">
              <ChevronLeft size={30} strokeWidth={1.5} className="-ml-1" />
            </button>
         )}
@@ -175,7 +175,7 @@ export function ProjectsSheet({
         <div className="flex-1 text-center text-[1.0625rem]/6 font-semibold tracking-[-0.01em] text-primary md:pl-4 md:text-left">
           Projects
         </div>
-        <button type="button" onClick={onClose} aria-label="Close projects" className="flex h-11 w-[72px] items-center justify-end pr-3 rounded-full text-[#0A84FF] font-semibold text-[1.0625rem] active:opacity-60">
+        <button type="button" onClick={onClose} aria-label="Close projects" className="flex h-11 w-[72px] items-center justify-end pr-3 rounded-full text-accent font-semibold text-[1.0625rem] active:opacity-60">
           Done
         </button>
       </header>
@@ -194,14 +194,14 @@ export function ProjectsSheet({
                 onChange={(event) => setDraft({ ...draft, name: event.target.value.slice(0, 80) })}
                 onKeyDown={(event) => { if (event.key === "Enter" && draft.name.trim()) commitProject(); }}
                 placeholder="Name (e.g. NaviOS, Thesis)"
-                className="h-11 w-full rounded-[8px] bg-elev-3 px-3 text-[0.9375rem] text-primary outline-none border border-[var(--border-subtle)] focus:border-[#0A84FF]"
+                className="h-11 w-full rounded-[8px] bg-elev-3 px-3 text-[0.9375rem] text-primary outline-none border border-[var(--border-subtle)] focus:border-accent"
               />
               <textarea
                 value={draft.instructions}
                 onChange={(event) => setDraft({ ...draft, instructions: event.target.value.slice(0, 8_000) })}
                 rows={3}
                 placeholder="Instructions (optional)"
-                className="w-full resize-none rounded-[8px] bg-elev-3 p-3 text-[0.9375rem] text-primary outline-none border border-[var(--border-subtle)] focus:border-[#0A84FF]"
+                className="w-full resize-none rounded-[8px] bg-elev-3 p-3 text-[0.9375rem] text-primary outline-none border border-[var(--border-subtle)] focus:border-accent"
               />
             </div>
 
@@ -213,7 +213,7 @@ export function ProjectsSheet({
                 type="button"
                 onClick={commitProject}
                 disabled={!draft.name.trim()}
-                className="h-11 flex-1 rounded-[8px] bg-[#0A84FF] text-[0.9375rem] font-medium text-white disabled:opacity-50 active:opacity-80"
+                className="h-11 flex-1 rounded-[8px] bg-accent text-[0.9375rem] font-medium text-white disabled:opacity-50 active:opacity-80"
               >
                 Create
               </button>
@@ -235,7 +235,7 @@ export function ProjectsSheet({
                 <span className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] bg-[#8E8E93] text-white shrink-0"><FolderKanban size={16} strokeWidth={2.5}/></span>
                 <span className="text-[1rem] text-primary font-medium">No project</span>
               </div>
-              {activeProjectId === null && <Check size={20} className="text-[#0A84FF] shrink-0" />}
+              {activeProjectId === null && <Check size={20} className="text-accent shrink-0" />}
             </button>
           </Group>
 
@@ -246,13 +246,13 @@ export function ProjectsSheet({
               return (
                 <button key={project.id} type="button" onClick={() => { setSelectedId(project.id); haptic("selection", haptics); }} className="flex min-h-[44px] w-full items-center justify-between border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-2.5 text-left active:bg-elev-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
-                    <span className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] bg-[#0A84FF] text-white shrink-0"><FolderKanban size={16} strokeWidth={2.5}/></span>
+                    <span className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] bg-accent text-white shrink-0"><FolderKanban size={16} strokeWidth={2.5}/></span>
                     <div className="flex flex-col flex-1 min-w-0">
                       <span className="truncate text-[1rem] font-medium text-primary">{project.name}</span>
                       <span className="text-[0.75rem] text-tertiary mt-0.5">{count} chat{count === 1 ? "" : "s"} · {project.knowledge.length + (project.documents?.length || 0)} item{project.knowledge.length + (project.documents?.length || 0) === 1 ? "" : "s"}</span>
                     </div>
                   </div>
-                  {activeProjectId === project.id && <Check size={20} className="text-[#0A84FF] shrink-0" />}
+                  {activeProjectId === project.id && <Check size={20} className="text-accent shrink-0" />}
                 </button>
               );
             })}
@@ -260,7 +260,7 @@ export function ProjectsSheet({
           </Group>
 
           <div className="px-4 mt-6">
-            <button type="button" onClick={beginProject} className="flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-[#0A84FF]/10 text-[#0A84FF] font-semibold text-[0.9375rem] active:bg-[#0A84FF]/20">
+            <button type="button" onClick={beginProject} className="flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-accent/10 text-accent font-semibold text-[0.9375rem] active:bg-accent/20">
               <Plus size={18} strokeWidth={2.5} /> New Project
             </button>
           </div>
@@ -277,7 +277,7 @@ export function ProjectsSheet({
                 </div>
                 <button type="button" onClick={() => { onSelect(selected.id); haptic("success", haptics); }} className="flex min-h-[44px] w-full items-center justify-between px-4 py-3 text-left active:bg-elev-3 transition-colors">
                   <span className="text-[1rem] font-medium text-primary">Use this project</span>
-                  {activeProjectId === selected.id && <Check size={20} className="text-[#0A84FF]" />}
+                  {activeProjectId === selected.id && <Check size={20} className="text-accent" />}
                 </button>
               </Group>
 
@@ -300,15 +300,15 @@ export function ProjectsSheet({
                     value={knowledgeDraft}
                     onChange={(event) => setKnowledgeDraft(event.target.value)}
                     placeholder="Add a decision, requirement, source note, or project fact…"
-                    className="min-h-[60px] min-w-0 flex-1 resize-none rounded-[8px] bg-elev-3 p-2.5 text-[0.875rem] text-primary outline-none placeholder:text-tertiary focus:border-[#0A84FF]"
+                    className="min-h-[60px] min-w-0 flex-1 resize-none rounded-[8px] bg-elev-3 p-2.5 text-[0.875rem] text-primary outline-none placeholder:text-tertiary focus:border-accent"
                   />
-                  <button type="button" onClick={addKnowledge} disabled={!knowledgeDraft.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-[#0A84FF] text-white active:opacity-80 disabled:opacity-40" aria-label="Add project knowledge"><Plus size={20} /></button>
+                  <button type="button" onClick={addKnowledge} disabled={!knowledgeDraft.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-accent text-white active:opacity-80 disabled:opacity-40" aria-label="Add project knowledge"><Plus size={20} /></button>
                 </div>
                 {selected.knowledge.map((item, index) => (
                   <div key={`${selected.id}-${index}`} className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent">
                     <FileText size={18} className="shrink-0 text-tertiary" />
                     <p className="min-w-0 flex-1 whitespace-pre-wrap text-[0.875rem]/5 text-primary">{item}</p>
-                    <button type="button" onClick={() => patch(selected, { knowledge: selected.knowledge.filter((_, itemIndex) => itemIndex !== index) })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#FF453A] active:bg-elev-3" aria-label="Remove knowledge item"><Trash2 size={16} /></button>
+                    <button type="button" onClick={() => patch(selected, { knowledge: selected.knowledge.filter((_, itemIndex) => itemIndex !== index) })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-danger active:bg-elev-3" aria-label="Remove knowledge item"><Trash2 size={16} /></button>
                   </div>
                 ))}
                 {!selected.knowledge.length ? <div className="px-4 py-6 text-center text-[0.8125rem] text-tertiary">No project knowledge yet.</div> : null}
@@ -330,29 +330,29 @@ export function ProjectsSheet({
                     type="button"
                     onClick={() => { haptic("selection", haptics); fileInputRef.current?.click(); }}
                     disabled={uploading}
-                    className="flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-elev-3 text-[0.875rem] font-medium text-[#0A84FF] active:bg-elev-4 disabled:opacity-50"
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-elev-3 text-[0.875rem] font-medium text-accent active:bg-elev-4 disabled:opacity-50"
                   >
                     <Upload size={16} />{uploading ? "Reading…" : "Add files"}
                   </button>
-                  {uploadError ? <p className="mt-2 text-[0.75rem] text-center text-[#FF453A]">{uploadError}</p> : null}
+                  {uploadError ? <p className="mt-2 text-[0.75rem] text-center text-danger">{uploadError}</p> : null}
                 </div>
                 {(selected.documents ?? []).map((document) => (
                   <div key={document.id} className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent">
-                    <FileText size={18} className="shrink-0 text-[#0A84FF]" />
+                    <FileText size={18} className="shrink-0 text-accent" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[0.875rem] font-medium text-primary">{document.name}</span>
                       <span className="block text-[0.75rem] text-tertiary mt-0.5">
                         {document.text.length.toLocaleString()} characters{document.truncated ? " · truncated to fit" : ""}
                       </span>
                     </span>
-                    <button type="button" onClick={() => patch(selected, { documents: (selected.documents ?? []).filter((entry) => entry.id !== document.id) })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#FF453A] active:bg-elev-3" aria-label={`Remove ${document.name}`}><Trash2 size={16} /></button>
+                    <button type="button" onClick={() => patch(selected, { documents: (selected.documents ?? []).filter((entry) => entry.id !== document.id) })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-danger active:bg-elev-3" aria-label={`Remove ${document.name}`}><Trash2 size={16} /></button>
                   </div>
                 ))}
                 {!(selected.documents ?? []).length ? <div className="px-4 py-6 text-center text-[0.8125rem] text-tertiary">No files yet.</div> : null}
               </Group>
 
               <div className="mt-8 px-4">
-                 <button onClick={() => removeProject(selected)} className="flex items-center justify-center gap-2 w-full h-[50px] rounded-[10px] bg-elev-2 text-[#FF453A] font-normal text-[1.0625rem] active:bg-elev-3 shadow-sm">
+                 <button onClick={() => removeProject(selected)} className="flex items-center justify-center gap-2 w-full h-[50px] rounded-[10px] bg-elev-2 text-danger font-normal text-[1.0625rem] active:bg-elev-3 shadow-sm">
                    Delete Project
                  </button>
               </div>

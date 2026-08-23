@@ -505,7 +505,7 @@ export function ComposerDock({
     <>
       <div
         ref={dockRef}
-        className={`navi-composer-dock relative z-40 shrink-0 border-t transition-colors duration-150 ${dragActive ? "border-[#0A84FF] bg-[#0A84FF]/5" : "border-[var(--border-subtle)]"}`}
+        className={`navi-composer-dock relative z-40 shrink-0 border-t transition-colors duration-150 ${dragActive ? "border-accent bg-accent/5" : "border-[var(--border-subtle)]"}`}
         onDragEnter={dragOver}
         onDragOver={dragOver}
         onDragLeave={dragLeave}
@@ -526,7 +526,7 @@ export function ComposerDock({
           />
 
           {dragActive ? (
-            <div className="mb-2 flex min-h-12 items-center justify-center rounded-2xl border border-dashed border-[#0A84FF] bg-elev-2 px-3 text-[0.75rem]/4 font-semibold text-primary">
+            <div className="mb-2 flex min-h-12 items-center justify-center rounded-2xl border border-dashed border-accent bg-elev-2 px-3 text-[0.75rem]/4 font-semibold text-primary">
               Drop files here to attach them
             </div>
           ) : null}
@@ -650,7 +650,7 @@ export function ComposerDock({
                 aria-checked={research}
                 onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
                 disabled={blocked || generating}
-                className={`composer-action ${research ? "text-[#0A84FF]" : ""}`}
+                className={`composer-action ${research ? "text-accent" : ""}`}
                 aria-label={research ? "Research is on. Turn off web search" : "Research is off. Turn on web search"}
               >
                 <Globe size={20} strokeWidth={1.5} />
@@ -673,7 +673,7 @@ export function ComposerDock({
 
               {talking ? (
                 <span
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-[#0A84FF]" : "ring-transparent"}`}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-accent" : "ring-transparent"}`}
                   role="status"
                   aria-label={CONVERSATION_PLACEHOLDER[conversation.phase]}
                 >
@@ -689,12 +689,12 @@ export function ComposerDock({
                     {CONVERSATION_BARS.map((weight, index) => (
                       <span
                         key={index}
-                        className={`w-1.5 rounded-full transition-[height,background-color] duration-100 ${conversation.hearing ? "bg-[#0A84FF]" : "bg-[var(--border-strong)]"}`}
+                        className={`w-1.5 rounded-full transition-[height,background-color] duration-100 ${conversation.hearing ? "bg-accent" : "bg-[var(--border-strong)]"}`}
                         style={{ height: `${Math.max(4, Math.min(22, 4 + conversation.level * weight * 26))}px` }}
                       />
                     ))}
                   </span>
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#0A84FF]">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-accent">
                     {conversation.phase === "speaking"
                       ? <Volume2 size={17} />
                       : conversation.phase === "listening"
@@ -704,7 +704,7 @@ export function ComposerDock({
                 </span>
               ) : listening ? (
                 <span
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${speaking ? "ring-[#0A84FF]" : "ring-transparent"}`}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${speaking ? "ring-accent" : "ring-transparent"}`}
                   role="status"
                   aria-label={speaking ? "Listening, speech detected" : "Listening"}
                 >
@@ -724,7 +724,7 @@ export function ComposerDock({
                       return (
                         <span
                           key={index}
-                          className={`w-[3px] shrink-0 rounded-full transition-[height,background-color] duration-100 ${level > 0.02 ? "bg-[#0A84FF]" : "bg-[var(--border-strong)]"}`}
+                          className={`w-[3px] shrink-0 rounded-full transition-[height,background-color] duration-100 ${level > 0.02 ? "bg-accent" : "bg-[var(--border-strong)]"}`}
                           style={{ height: `${height}px` }}
                         />
                       );
@@ -739,7 +739,7 @@ export function ComposerDock({
                   <button
                     type="button"
                     onClick={toggleVoice}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0A84FF] text-white active:bg-opacity-80"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-white active:bg-opacity-80"
                     aria-label="Stop recording and transcribe"
                   >
                     <Check size={17} strokeWidth={2.4} />
@@ -773,7 +773,7 @@ export function ComposerDock({
                   type={generating ? "button" : "submit"}
                   onClick={generating ? onStop : undefined}
                   disabled={!generating && !canSend}
-                  className={`flex h-[34px] w-[34px] ml-1 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-[#0A84FF] text-white shadow-sm active:scale-95 active:bg-opacity-80" : "bg-elev-3 text-disabled"}`}
+                  className={`flex h-[34px] w-[34px] ml-1 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-white shadow-sm active:scale-95 active:bg-opacity-80" : "bg-elev-3 text-disabled"}`}
                   aria-label={generating ? "Stop response" : "Send message"}
                 >
                   {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={20} strokeWidth={2} />}

@@ -115,7 +115,10 @@ export const viewport: Viewport = {
   colorScheme: "dark light",
   themeColor: [
     { media: "(prefers-color-scheme: dark)", color: "#121214" },
-    { media: "(prefers-color-scheme: light)", color: "#FAF9F5" }
+    /* `--bg-page`, not `--bg-app`. The page is what sits behind the status
+       bar, and declaring the app surface instead put a visible band along the
+       top edge in light mode. */
+    { media: "(prefers-color-scheme: light)", color: "#F0EEE6" }
   ]
 };
 

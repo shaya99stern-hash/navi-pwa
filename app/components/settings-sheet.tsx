@@ -148,7 +148,7 @@ export function SettingsToggle({ value, onChange, label }: { value: boolean; onC
       aria-checked={value}
       aria-label={label}
       onClick={onChange}
-      className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-[200ms] ${value ? "bg-[#0A84FF]" : "bg-[#E5E5EA] dark:bg-[#39393D]"}`}
+      className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-[200ms] ${value ? "bg-accent" : "bg-[#E5E5EA] dark:bg-[#39393D]"}`}
     >
       <span className={`absolute top-[2px] left-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-sm transition-transform duration-[200ms] ${value ? "translate-x-[20px]" : "translate-x-0"}`} />
     </button>
@@ -225,7 +225,7 @@ function InlineButton({ children, onClick, destructive }: { children: ReactNode;
     <button
       type="button"
       onClick={onClick}
-      className={`h-[44px] w-full shrink-0 px-4 text-left text-[17px] tracking-[-0.41px] active:bg-black/5 dark:active:bg-white/5 ${destructive ? "text-[#FF453A]" : "text-[#0A84FF]"}`}
+      className={`h-[44px] w-full shrink-0 px-4 text-left text-[17px] tracking-[-0.41px] active:bg-black/5 dark:active:bg-white/5 ${destructive ? "text-danger" : "text-accent"}`}
     >
       {children}
     </button>
@@ -253,7 +253,7 @@ function RootRow({ label, active, onOpen, icon }: { label: string; active?: bool
 function ThemeCard({ theme, active, onClick, label }: { theme: "light" | "dark" | "system", active: boolean, onClick: () => void, label: string }) {
   return (
     <button type="button" onClick={onClick} className={`flex flex-col items-center gap-2 p-2 active:scale-95 transition-all bg-transparent`}>
-      <div className={`w-[54px] h-[72px] rounded-[10px] overflow-hidden flex flex-col p-1.5 border-[2px] ${active ? "border-[#0A84FF]" : "border-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.1)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.1)]"}`}>
+      <div className={`w-[54px] h-[72px] rounded-[10px] overflow-hidden flex flex-col p-1.5 border-[2px] ${active ? "border-accent" : "border-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.1)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.1)]"}`}>
          {theme === "light" && <div className="w-full h-full bg-[#FFFFFF] rounded-md shadow-sm" />}
          {theme === "dark" && <div className="w-full h-full bg-[#1C1C1E] rounded-md shadow-sm" />}
          {theme === "system" && (
@@ -265,7 +265,7 @@ function ThemeCard({ theme, active, onClick, label }: { theme: "light" | "dark" 
       </div>
       <div className="flex flex-col items-center gap-1 mt-1">
         <span className={`text-[13px] ${active ? "font-medium text-primary" : "text-tertiary"}`}>{label}</span>
-        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${active ? "border-[#0A84FF] bg-[#0A84FF] text-white" : "border-[#C7C7CC] dark:border-[#38383A]"}`}>
+        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${active ? "border-accent bg-accent text-white" : "border-[#C7C7CC] dark:border-[#38383A]"}`}>
           {active && <Check size={12} strokeWidth={3} />}
         </div>
       </div>
@@ -534,7 +534,7 @@ export function SettingsSheet({
           {page === "root" ? (
             <div className="h-11 w-11 items-center justify-center" aria-hidden="true" />
           ) : (
-            <button type="button" onClick={() => setPage("root")} aria-label="Back to Settings" className="flex h-11 items-center justify-center text-[#0A84FF] active:opacity-60 md:hidden">
+            <button type="button" onClick={() => setPage("root")} aria-label="Back to Settings" className="flex h-11 items-center justify-center text-accent active:opacity-60 md:hidden">
               <ChevronLeft size={32} strokeWidth={1.5} className="-ml-1" />
               <span className="text-[17px] font-normal tracking-[-0.41px] -ml-1">Back</span>
             </button>
@@ -544,7 +544,7 @@ export function SettingsSheet({
           {page === "root" ? "Settings" : PAGE_TITLES[page]}
         </div>
         <div className="flex w-24 items-center justify-end">
-          <button type="button" onClick={onClose} aria-label="Close settings" className="flex h-11 items-center justify-end pr-3 text-[#0A84FF] font-semibold text-[17px] tracking-[-0.41px] active:opacity-60">
+          <button type="button" onClick={onClose} aria-label="Close settings" className="flex h-11 items-center justify-end pr-3 text-accent font-semibold text-[17px] tracking-[-0.41px] active:opacity-60">
             Done
           </button>
         </div>
@@ -583,7 +583,7 @@ export function SettingsSheet({
               <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#8E8E93] text-white shrink-0"><Settings size={18} strokeWidth={2}/></span>
             } />
             <RootRow label="Connectors" onOpen={() => { onClose(); onOpenConnectors(); }} icon={
-              <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#0A84FF] text-white shrink-0"><Link2 size={18} strokeWidth={2}/></span>
+              <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-accent text-white shrink-0"><Link2 size={18} strokeWidth={2}/></span>
             } />
             <RootRow label="Capabilities" active={page === "capabilities"} onOpen={() => openPage("capabilities")} icon={
               <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#FF2D55] text-white shrink-0"><FlaskConical size={18} strokeWidth={2}/></span>
@@ -692,11 +692,11 @@ export function SettingsSheet({
                   <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#8E8E93] text-white shrink-0"><Key size={16} strokeWidth={2.5}/></span>
                 } />
                 <RootRow label="Voice" onOpen={() => setPage("voice")} icon={
-                  <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#0A84FF] text-white shrink-0"><Volume2 size={16} strokeWidth={2.5}/></span>
+                  <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-accent text-white shrink-0"><Volume2 size={16} strokeWidth={2.5}/></span>
                 } />
                 <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
                   <div className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#FF453A] text-white shrink-0"><Activity size={16} strokeWidth={2.5}/></span>
+                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-danger text-white shrink-0"><Activity size={16} strokeWidth={2.5}/></span>
                     <span className="text-[17px] tracking-[-0.41px] text-primary">Haptic feedback</span>
                   </div>
                   <SettingsToggle label="Haptics" value={preferences.haptics} onChange={() => update({ haptics: !preferences.haptics })} />
@@ -708,7 +708,7 @@ export function SettingsSheet({
                 <button type="button" onClick={() => { haptic("impact-light", preferences.haptics); setUpdateStatus({ phase: "checking", message: "Checking for the newest version…" }); requestPwaUpdate(); }} disabled={updateBusy} className="flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 text-left active:bg-black/5 dark:active:bg-white/5 bg-transparent">
                   <span className="min-w-0 flex-1">
                     <span className="block text-[17px] tracking-[-0.41px] text-primary">Update NaviOS</span>
-                    <span className={`block text-[13px] mt-0.5 ${updateStatus.phase === "error" ? "text-[#FF453A]" : "text-tertiary"}`}>{updateStatus.message}</span>
+                    <span className={`block text-[13px] mt-0.5 ${updateStatus.phase === "error" ? "text-danger" : "text-tertiary"}`}>{updateStatus.message}</span>
                   </span>
                   <RefreshCw size={18} className={`shrink-0 text-[#3C3C434A] dark:text-[#EBEBF54A] ${updateBusy ? "animate-spin" : ""}`} />
                 </button>
@@ -737,14 +737,14 @@ export function SettingsSheet({
                 <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
                   <div className="absolute bottom-0 left-[60px] right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6]" />
                   <div className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#34C759] text-white shrink-0"><Camera size={16} strokeWidth={2.5}/></span>
+                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-success text-white shrink-0"><Camera size={16} strokeWidth={2.5}/></span>
                     <span className="text-[17px] tracking-[-0.41px] text-primary">Camera</span>
                   </div>
                   <SettingsToggle label="Camera" value={true} onChange={() => haptic("warning", preferences.haptics)} />
                 </div>
                 <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
                   <div className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#FF9500] text-white shrink-0"><Mic size={16} strokeWidth={2.5}/></span>
+                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-warning text-white shrink-0"><Mic size={16} strokeWidth={2.5}/></span>
                     <span className="text-[17px] tracking-[-0.41px] text-primary">Microphone</span>
                   </div>
                   <SettingsToggle label="Microphone" value={true} onChange={() => haptic("warning", preferences.haptics)} />
@@ -795,7 +795,7 @@ export function SettingsSheet({
                       <ul className="space-y-3">
                         {micTest.checks.map((check) => (
                           <li key={check.step} className="flex gap-3">
-                            <span className={`mt-0.5 shrink-0 text-[15px] font-bold ${check.ok ? "text-[#34C759]" : "text-[#FF453A]"}`} aria-hidden="true">
+                            <span className={`mt-0.5 shrink-0 text-[15px] font-bold ${check.ok ? "text-success" : "text-danger"}`} aria-hidden="true">
                               {check.ok ? "✓" : "✕"}
                             </span>
                             <span className="min-w-0 flex-1">
@@ -857,12 +857,12 @@ export function SettingsSheet({
                       type="button"
                       onClick={() => { haptic("selection", preferences.haptics); void saveSkill(); }}
                       disabled={teach.saving || !teach.name.trim() || !teach.instructions.trim()}
-                      className="h-11 rounded-[10px] bg-[#0A84FF] px-4 text-[17px] tracking-[-0.41px] font-semibold text-white active:opacity-80 disabled:opacity-50"
+                      className="h-11 rounded-[10px] bg-accent px-4 text-[17px] tracking-[-0.41px] font-semibold text-white active:opacity-80 disabled:opacity-50"
                     >
                       {teach.saving ? "Saving…" : "Teach it"}
                     </button>
                     {teach.status ? (
-                      <span className={`min-w-0 flex-1 text-[13px] ${teach.status.ok ? "text-[#34C759]" : "text-[#FF453A]"}`}>
+                      <span className={`min-w-0 flex-1 text-[13px] ${teach.status.ok ? "text-success" : "text-danger"}`}>
                         {teach.status.message}
                       </span>
                     ) : null}
@@ -929,12 +929,12 @@ export function SettingsSheet({
                         haptic("success", preferences.haptics);
                       }}
                       disabled={!playbookDraft.trim()}
-                      className="h-11 rounded-[10px] bg-[#0A84FF] px-4 text-[17px] tracking-[-0.41px] font-semibold text-white active:opacity-80 disabled:opacity-50"
+                      className="h-11 rounded-[10px] bg-accent px-4 text-[17px] tracking-[-0.41px] font-semibold text-white active:opacity-80 disabled:opacity-50"
                     >
                       Add playbook
                     </button>
                     {playbookNotice ? (
-                      <span className={`min-w-0 flex-1 text-[13px] ${playbookNotice.startsWith("Added") ? "text-[#34C759]" : "text-[#FF453A]"}`}>{playbookNotice}</span>
+                      <span className={`min-w-0 flex-1 text-[13px] ${playbookNotice.startsWith("Added") ? "text-success" : "text-danger"}`}>{playbookNotice}</span>
                     ) : null}
                   </div>
                 </div>
@@ -949,7 +949,7 @@ export function SettingsSheet({
                         <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6] last-of-type:hidden" />
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-[17px] tracking-[-0.41px] text-primary truncate">{entry.name}</span>
-                          <button type="button" onClick={() => update({ customPlaybooks: preferences.customPlaybooks.filter((item) => item.id !== entry.id) })} className="text-[17px] tracking-[-0.41px] text-[#FF453A] active:opacity-60">
+                          <button type="button" onClick={() => update({ customPlaybooks: preferences.customPlaybooks.filter((item) => item.id !== entry.id) })} className="text-[17px] tracking-[-0.41px] text-danger active:opacity-60">
                             Remove
                           </button>
                         </div>
@@ -1026,7 +1026,7 @@ export function SettingsSheet({
                       <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6] last-of-type:hidden" />
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-[17px] tracking-[-0.41px] text-primary">{item.fact}</span>
-                        <button type="button" onClick={() => void forget(item.id)} className="text-[17px] tracking-[-0.41px] text-[#FF453A] active:opacity-60">
+                        <button type="button" onClick={() => void forget(item.id)} className="text-[17px] tracking-[-0.41px] text-danger active:opacity-60">
                           Forget
                         </button>
                       </div>
@@ -1052,7 +1052,7 @@ export function SettingsSheet({
                     <ul className="space-y-3">
                       {systemChecks.results.map((entry) => (
                         <li key={entry.area} className="flex gap-3">
-                          <span className={`mt-0.5 shrink-0 text-[15px] font-bold ${entry.ok ? "text-[#34C759]" : "text-[#FF453A]"}`} aria-hidden="true">{entry.ok ? "✓" : "✕"}</span>
+                          <span className={`mt-0.5 shrink-0 text-[15px] font-bold ${entry.ok ? "text-success" : "text-danger"}`} aria-hidden="true">{entry.ok ? "✓" : "✕"}</span>
                           <span className="min-w-0 flex-1">
                             <span className="block text-[17px] tracking-[-0.41px] font-medium text-primary">{entry.area}</span>
                             <span className="block break-words text-[13px] text-tertiary mt-0.5">{entry.detail}</span>
@@ -1107,7 +1107,7 @@ export function SettingsSheet({
                 <button type="button" onClick={() => void runEvals()} disabled={evalState.phase === "running"} className="flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 text-left active:bg-black/5 dark:active:bg-white/5 bg-transparent disabled:opacity-70">
                   <span className="min-w-0 flex-1">
                     <span className="block text-[17px] tracking-[-0.41px] text-primary">Run quality check</span>
-                    <span className={`block text-[13px] mt-0.5 ${evalState.phase === "error" ? "text-[#FF453A]" : "text-tertiary"}`}>{evalState.message}</span>
+                    <span className={`block text-[13px] mt-0.5 ${evalState.phase === "error" ? "text-danger" : "text-tertiary"}`}>{evalState.message}</span>
                   </span>
                   <FlaskConical size={20} className={`shrink-0 text-[#3C3C434A] dark:text-[#EBEBF54A] ${evalState.phase === "running" ? "animate-pulse" : ""}`} />
                 </button>
