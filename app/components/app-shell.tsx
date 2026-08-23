@@ -1121,35 +1121,44 @@ export function AppShell({
         onDelete={deleteChat}
       />
 
-      <header className="navi-header relative z-50 flex min-h-[calc(44px+var(--safe-top))] pt-[var(--safe-top)] pb-1 shrink-0 items-center justify-between px-2 bg-app" data-scrolled={String(scrolled)}>
+      <header className="navi-header relative z-50 flex min-h-[44px] pt-[max(var(--safe-top),env(safe-area-inset-top))] pb-1 shrink-0 items-center justify-between px-2 bg-app border-b border-[var(--border-subtle)]" data-scrolled={String(scrolled)}>
+        <div className="flex w-14 items-center justify-start">
+          <button
+            type="button"
+            onClick={() => {
+              haptic("impact-light", preferences.haptics);
+              setHistoryOpen(true);
+            }}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-primary active:opacity-60"
+            aria-label="Open sidebar"
+          >
+            <PanelLeft size={24} strokeWidth={1.5} />
+          </button>
+        </div>
+
         <button
           type="button"
           onClick={() => {
-            haptic("impact-light", preferences.haptics);
-            setHistoryOpen(true);
+            haptic("selection", preferences.haptics);
+            if (messages.length > 0 && activeChat) setChatMenuOpen(true);
           }}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-primary active:opacity-60"
-          aria-label="Open sidebar"
+          className="flex flex-1 flex-col items-center justify-center text-center min-w-0 px-2 active:opacity-60"
         >
-          <PanelLeft size={24} strokeWidth={1.5} />
-        </button>
-
-        <div className="flex flex-col items-center justify-center text-center max-w-[60%]">
-          <span className="truncate text-[1.0625rem] font-semibold tracking-tight text-primary">
+          <span className="truncate text-[17px] font-semibold tracking-[-0.41px] text-primary w-full">
             {view === "chat"
               ? (activeChat?.title && activeChat.title !== "New chat" ? activeChat.title : (preferences.mode === "code" ? "NaviOS Code" : "NaviOS Chat"))
               : VIEW_TITLES[view]}
           </span>
           {view !== "chat" && VIEW_SUBTITLES[view] && (
-            <span className="block truncate text-[0.75rem]/[1.0125rem] font-normal text-tertiary">
+            <span className="block truncate text-[11px] font-medium text-tertiary w-full">
               {VIEW_SUBTITLES[view]}
             </span>
           )}
-        </div>
+        </button>
 
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center">
+        <div className="flex w-14 items-center justify-end">
           {incognito && (
-            <span className="text-accent" title="Incognito">
+            <span className="flex h-11 w-11 items-center justify-center text-accent" title="Incognito">
               <Ghost size={19} strokeWidth={1.8} />
             </span>
           )}
@@ -1246,11 +1255,11 @@ export function AppShell({
               status={streamStatus}
             />
             {error ? (
-              <div className="mt-4 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
-                <p className="text-[0.8125rem]/[1.125rem] font-medium text-primary">{error.message || "That didn't go through. Tap to retry."}</p>
+              <div className="mt-4 rounded-[14px] border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
+                <p className="text-[15px] font-medium text-primary">{error.message || "That didn't go through. Tap to retry."}</p>
                 <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={retry} className="min-h-11 rounded-xl bg-accent px-4 text-[0.8125rem]/[1.125rem] font-semibold text-white active:bg-accent-pressed">Try again</button>
-                  <button type="button" onClick={clearError} className="min-h-11 rounded-xl px-4 text-[0.8125rem]/[1.125rem] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
+                  <button type="button" onClick={retry} className="min-h-11 rounded-[10px] bg-[#0A84FF] px-4 text-[15px] font-semibold text-white active:bg-opacity-80">Try again</button>
+                  <button type="button" onClick={clearError} className="min-h-11 rounded-[10px] px-4 text-[15px] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
                 </div>
               </div>
             ) : null}
@@ -1278,7 +1287,7 @@ export function AppShell({
       {view !== "chat" ? null : (
         <>
       {attachmentError ? (
-        <div className="mx-4 mb-1 rounded-2xl border border-[var(--accent-warning)] bg-elev-2 px-3 py-2 text-center text-[0.75rem]/4 font-medium text-warning" role="alert">{attachmentError}</div>
+        <div className="mx-4 mb-1 rounded-[14px] border border-[var(--accent-warning)] bg-elev-2 px-3 py-2 text-center text-[13px] font-medium text-warning" role="alert">{attachmentError}</div>
       ) : null}
       <div className="shrink-0 px-gutter">
         <PwaPlatformBanner inline />
@@ -1384,27 +1393,27 @@ export function AppShell({
         <div className="fixed inset-0 z-[120] flex items-end justify-center md:items-center md:p-4" role="dialog" aria-modal="true" aria-label="Approve a write">
           <div className="absolute inset-0 bg-overlay backdrop-blur-[5px]" />
           <section className="menu-enter relative w-full max-w-[460px] rounded-t-[28px] border border-b-0 border-[var(--border-subtle)] bg-elev-1 p-5 pb-[calc(20px+var(--safe-bottom))] shadow-sheet md:rounded-[28px] md:border">
-            <h2 className="text-[1.0625rem]/6 font-semibold text-primary">This one changes something</h2>
-            <p className="mt-1 text-[0.8125rem]/5 font-medium text-secondary">{pendingApproval.title}</p>
-            <p className="mt-3 break-words rounded-2xl bg-elev-2 p-3 font-mono text-[0.75rem]/5 text-secondary">{pendingApproval.detail}</p>
+            <h2 className="text-[17px] font-semibold text-primary">This one changes something</h2>
+            <p className="mt-1 text-[13px] font-medium text-secondary">{pendingApproval.title}</p>
+            <p className="mt-3 break-words rounded-[14px] bg-elev-2 p-3 font-mono text-[12px] text-secondary">{pendingApproval.detail}</p>
             {pendingApproval.reason ? (
-              <p className="mt-3 text-[0.875rem]/5 text-primary">{pendingApproval.reason}</p>
+              <p className="mt-3 text-[15px] text-primary">{pendingApproval.reason}</p>
             ) : null}
-            <p className="mt-3 text-[0.75rem]/4 font-medium text-tertiary">
+            <p className="mt-3 text-[12px] font-medium text-tertiary">
               Approving remembers this one operation and never asks about it again. Everything else on this API still asks.
             </p>
             <div className="mt-5 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => { haptic("impact-light", preferences.haptics); approvalAnswer.current?.(false); }}
-                className="flex min-h-12 items-center justify-center rounded-2xl border border-[var(--border-strong)] bg-elev-2 text-[0.875rem]/5 font-semibold text-primary active:bg-elev-3"
+                className="flex min-h-12 items-center justify-center rounded-[12px] border border-[var(--border-strong)] bg-elev-2 text-[15px] font-semibold text-primary active:bg-elev-3"
               >
                 Not this time
               </button>
               <button
                 type="button"
                 onClick={() => { haptic("success", preferences.haptics); approvalAnswer.current?.(true); }}
-                className="flex min-h-12 items-center justify-center rounded-2xl bg-accent text-[0.875rem]/5 font-semibold text-white active:bg-accent-pressed"
+                className="flex min-h-12 items-center justify-center rounded-[12px] bg-[#0A84FF] text-[15px] font-semibold text-white active:bg-opacity-80"
               >
                 Approve
               </button>
