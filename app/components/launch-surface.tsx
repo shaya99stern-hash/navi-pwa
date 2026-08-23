@@ -82,8 +82,8 @@ const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "v
 setter?.call(textarea, prompt);
 textarea.dispatchEvent(new Event("input", { bubbles: true }));
 window.setTimeout(() => {
-textarea.focus();
-textarea.setSelectionRange(prompt.length, prompt.length);
+(textarea as HTMLTextAreaElement).focus();
+(textarea as HTMLTextAreaElement).setSelectionRange(prompt.length, prompt.length);
 }, 60);
 }
 };
@@ -91,12 +91,11 @@ textarea.setSelectionRange(prompt.length, prompt.length);
 return (
 
 
+{/* Premium glowing brand orb /}
 
-    {/* Premium glowing brand orb */}
-    <div className="brand-orb mb-5 flex h-20 w-20 items-center justify-center rounded-[24px] border border-[var(--border-subtle)] shadow-sm">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/brand-spark.png" alt="" aria-hidden="true" className="h-11 w-11 shrink-0 drop-shadow-sm" />
-    </div>
+{/ eslint-disable-next-line @next/next/no-img-element */}
+
+
 
     <h1 className="greeting-title text-[2.25rem]/[2.5rem] font-normal tracking-[-0.03em] text-primary">
       {greeting}
