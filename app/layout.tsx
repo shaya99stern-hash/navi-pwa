@@ -3,7 +3,6 @@ import { Source_Serif_4, Inter, JetBrains_Mono } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import type { ReactNode } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
-
 import {
   getClerkPublishableKey,
   getNaviAuthCanonicalOrigin,
@@ -52,15 +51,22 @@ async function buildMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(siteUrl),
     applicationName: "NaviOS",
-    title: { default: "NaviOS — Private AI Workspace", template: "%s · NaviOS" },
+    title: {
+      default: "NaviOS — Private AI Workspace",
+      template: "%s · NaviOS"
+    },
     description: "A private, local-first AI workspace for conversations, files, images, interactive tools, and long-running projects.",
     manifest: "/manifest.webmanifest",
-    alternates: { canonical: "/" },
+    alternates: {
+      canonical: "/"
+    },
     keywords: ["NaviOS", "Navi Soul", "AI workspace", "AI assistant", "private AI", "PWA"],
-    formatDetection: { telephone: false, address: false, email: false },
-    /* iOS reads this once at launch and ignores later mutation, so it has to be
-       rendered per request. black-translucent draws white glyphs, which vanish
-       against the ivory light theme; default keeps them dark. */
+    formatDetection: {
+      telephone: false,
+      address: false,
+      email: false
+    },
+    /* iOS reads this once at launch and ignores later mutation, so it has to be rendered per request. black-translucent draws white glyphs, which vanish against the ivory light theme; default keeps them dark. */
     appleWebApp: {
       capable: true,
       title: "NaviOS",
@@ -87,7 +93,11 @@ async function buildMetadata(): Promise<Metadata> {
     robots: {
       index: true,
       follow: true,
-      googleBot: { index: true, follow: true, "max-image-preview": "large" }
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large"
+      }
     }
   };
 }
@@ -100,17 +110,11 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  /* Chromium shrinks the layout viewport instead of overlaying the keyboard,
-     so the fixed shell lands above it with no scripting. iOS ignores this
-     today — visualViewport in ViewportMetrics covers iOS — but declaring it
-     costs nothing and fixes Android outright.
-     Deliberately no maximum-scale or user-scalable: iOS ignores both and they
-     break pinch-zoom for low-vision users. The 16px floor in globals.css is
-     the real zoom fix. */
+  /* Chromium shrinks the layout viewport instead of overlaying the keyboard, so the fixed shell lands above it with no scripting. iOS ignores this today — visualViewport in ViewportMetrics covers iOS — but declaring it costs nothing and fixes Android outright. Deliberately no maximum-scale or user-scalable: iOS ignores both and they break pinch-zoom for low-vision users. The 16px floor in globals.css is the real zoom fix. */
   interactiveWidget: "resizes-content",
   colorScheme: "dark light",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#262624" },
+    { media: "(prefers-color-scheme: dark)", color: "#121214" },
     { media: "(prefers-color-scheme: light)", color: "#FAF9F5" }
   ]
 };
@@ -123,8 +127,8 @@ async function readThemeCookie(): Promise<"dark" | "light"> {
   return value === "light" ? "light" : "dark";
 }
 
-/* The cookie is authoritative because the server rendered against it; mirror it
-   back into localStorage so existing readers stay in sync. */
+/* The cookie is authoritative because the server rendered against it; mirror it back into localStorage so existing readers stay in sync. */
+
 /**
  * Matches the app's root size to iOS Dynamic Type.
  *
@@ -166,35 +170,32 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const cookieStore = clerkConfigured ? await cookies() : undefined;
   const sessionToken = cookieStore?.get(CLERK_SESSION_COOKIE_NAME)?.value;
   const clientUat = cookieStore?.get(CLERK_CLIENT_UAT_COOKIE_NAME)?.value;
+
   // Verify against the origin actually serving this request so custom domains
   // resolve the same user the middleware did.
   const requestHeaders = clerkConfigured ? await headers() : undefined;
   const forwardedHost = requestHeaders?.get("x-forwarded-host") ?? requestHeaders?.get("host") ?? undefined;
   const forwardedProto = requestHeaders?.get("x-forwarded-proto") ?? "https";
-  const requestOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : undefined;
-  /* Must resolve exactly the way the middleware did: a cold PWA launch carries
-     an expired session token, and disagreeing here would put this render's
-     chats under the signed-out storage scope and clear the caches. */
-  const { userId } = clerkConfigured
-    ? await resolveClerkSession(sessionToken, clientUat, requestOrigin)
-    : { userId: null };
-  const storageScope = userId ? `clerk:${userId}` : clerkConfigured ? "signed-out" : "guest";
-  const mayMigrateLegacyState = !clerkConfigured
-    || Boolean(userId && hasClerkUserAllowlist() && isClerkUserAllowed(userId));
-  const storageBootScript = `
-try {
-  const scope = ${JSON.stringify(storageScope)};
-  // Signing out or switching accounts must not leave the previous account's
-  // responses in a cache the next one reads from.
-  if (localStorage.getItem('navi.storage.scope.v1') !== scope && 'caches' in window) {
-    caches.keys().then((keys) => keys.filter((k) => k.startsWith('navi-')).forEach((k) => caches.delete(k)));
-  }
-  localStorage.setItem('navi.storage.scope.v1', scope);
-  ${mayMigrateLegacyState
-    ? "localStorage.setItem('navi.storage.legacy-owner.v1', scope);"
-    : "localStorage.removeItem('navi.storage.legacy-owner.v1');"}
-} catch {}
-`;
+  const requestOrigin = forwardedHost ? \`\${forwardedProto}://\${forwardedHost}\` : undefined;
+
+  /* Must resolve exactly the way the middleware did: a cold PWA launch carries an expired session token, and disagreeing here would put this render's chats under the signed-out storage scope and clear the caches. */
+  const { userId } = clerkConfigured ? await resolveClerkSession(sessionToken, clientUat, requestOrigin) : { userId: null };
+  const storageScope = userId ? \`clerk:\${userId}\` : clerkConfigured ? "signed-out" : "guest";
+  const mayMigrateLegacyState = !clerkConfigured || Boolean(userId && hasClerkUserAllowlist() && isClerkUserAllowed(userId));
+
+  const storageBootScript = \`
+  try {
+    const scope = \${JSON.stringify(storageScope)};
+    // Signing out or switching accounts must not leave the previous account's
+    // responses in a cache the next one reads from.
+    if (localStorage.getItem('navi.storage.scope.v1') !== scope && 'caches' in window) {
+      caches.keys().then((keys) => keys.filter((k) => k.startsWith('navi-')).forEach((k) => caches.delete(k)));
+    }
+    localStorage.setItem('navi.storage.scope.v1', scope);
+    \${mayMigrateLegacyState ? "localStorage.setItem('navi.storage.legacy-owner.v1', scope);" : "localStorage.removeItem('navi.storage.legacy-owner.v1');"}
+  } catch {}
+  \`;
+
   const app = clerkConfigured ? (
     <ClerkProvider
       publishableKey={getClerkPublishableKey()}
@@ -214,14 +215,12 @@ try {
     <html
       lang="en-US"
       data-theme="dark"
-      className={`dark ${displaySerif.variable} ${sans.variable} ${mono.variable}`}
+      className={\`dark \${displaySerif.variable} \${sans.variable} \${mono.variable}\`}
       suppressHydrationWarning
     >
       <head>
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-        {/* Without these an installed PWA boots to a blank white screen. Each
-            image is the app background with the brand mark centred, so the
-            handoff to the launch surface shows no colour change. */}
+        {/* Without these an installed PWA boots to a blank white screen. Each image is the app background with the brand mark centred, so the handoff to the launch surface shows no colour change. */}
         {SPLASH_SCREENS.map((screen) => (
           <link key={screen.href} rel="apple-touch-startup-image" href={screen.href} media={screen.media} />
         ))}
