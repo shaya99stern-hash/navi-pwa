@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Activity,
   ChevronLeft,
   ChevronRight,
   FlaskConical,
@@ -113,7 +112,7 @@ function SectionHeader({ children }: { children: ReactNode }) {
 }
 
 function Group({ children }: { children: ReactNode }) {
-  return <div className="mx-4 mb-6 overflow-hidden rounded-[10px] bg-elev-2">{children}</div>;
+  return <div className="mx-4 mb-6 overflow-hidden rounded-[10px] bg-elev-2 shadow-sm">{children}</div>;
 }
 
 function Row({ label, description, control, fullWidthControl }: {
@@ -462,9 +461,11 @@ export function SettingsSheet({
     onPreferences({ ...preferences, ...patch });
     haptic("selection", preferences.haptics);
   };
+  
   const updateProfile = (patch: Partial<NaviPreferences["profile"]>) => {
     onPreferences({ ...preferences, profile: { ...preferences.profile, ...patch } });
   };
+  
   const openPage = (next: PageId) => {
     if (next === "root" && page === "root") return;
     setPage(next);
@@ -472,6 +473,7 @@ export function SettingsSheet({
       update({ lastMenuSection: next as MenuSection });
     }
   };
+  
   const updateBusy = updateStatus.phase === "checking" || updateStatus.phase === "downloading" || updateStatus.phase === "restarting";
 
   async function signOut() {
@@ -507,6 +509,16 @@ export function SettingsSheet({
   function signIn() {
     haptic("impact-light", preferences.haptics);
     window.location.href = "/sign-in";
+  }
+
+  async function enableNotifications() {
+    if (preferences.notifyOnComplete) {
+      update({ notifyOnComplete: false });
+      return;
+    }
+    if (!("Notification" in window)) return;
+    const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (permission === "granted") update({ notifyOnComplete: true });
   }
 
   const profileInitial = preferences.profile.displayName?.[0] || preferences.profile.fullName?.[0] || account.email?.[0]?.toUpperCase() || "S";
