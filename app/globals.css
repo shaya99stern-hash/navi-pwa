@@ -6,26 +6,30 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Warm charcoal dark theme */
-  --navi-bg-app: #262624;
-  --navi-bg-surface: #2B2A28;
-  --navi-bg-card: #30302E;
+  /* Premium Slate dark theme */
+  --navi-bg-app: #121214;
+  --navi-bg-surface: #18181B;
+  --navi-bg-card: #27272A;
+  
   --navi-text-primary: #F5F4EF;
   --navi-text-secondary: #C2C0B7;
+  
   --navi-border-soft: rgba(255, 255, 255, 0.09);
-  --navi-overlay: rgba(0, 0, 0, 0.44);
+  --navi-overlay: rgba(0, 0, 0, 0.50);
 
-  --bg-page: #1F1E1D;
+  --bg-page: #121214;
   --bg-app: var(--navi-bg-app);
   --bg-surface: var(--navi-bg-surface);
   --bg-card: var(--navi-bg-card);
+  
   --bg-elev-1: var(--navi-bg-card);
-  --bg-elev-2: #393937;
-  --bg-elev-3: #454542;
+  --bg-elev-2: #27272A;
+  --bg-elev-3: #3F3F46;
+  
   --bg-overlay: var(--navi-overlay);
-  --bg-sidebar: #1F1E1D;
-  --bg-bubble-user: #393937;
-  --bg-input: #30302E;
+  --bg-sidebar: #121214;
+  --bg-bubble-user: #27272A;
+  --bg-input: #18181B;
   --text-primary: var(--navi-text-primary);
   --text-secondary: var(--navi-text-secondary);
   --text-tertiary: #9B9A91;
