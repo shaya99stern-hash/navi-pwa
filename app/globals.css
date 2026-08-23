@@ -844,3 +844,6 @@ aside .scroll-area {
   backdrop-filter: blur(22px) saturate(135%);
   -webkit-backdrop-filter: blur(22px) saturate(135%);
 }
+body {
+  font-family: var(--font-display), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif !important;
+}
