@@ -6,8 +6,8 @@ import {
   BookOpen,
   Camera,
   ChevronDown,
-  Code2,
   FileText,
+  Globe,
   Image as ImageIcon,
   LoaderCircle,
   Mic,
@@ -16,7 +16,6 @@ import {
   Check,
   FolderKanban,
   Link2,
-  Search,
   Square,
   Volume2,
   X
@@ -807,46 +806,26 @@ export function ComposerDock({
               {listening || talking ? null : (
               <button
                 type="button"
+                role="switch"
+                aria-checked={research}
+                onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
+                disabled={blocked || generating}
+                className="composer-action"
+                aria-label={research ? "Research is on. Turn it off" : "Research is off. Turn it on"}
+              >
+                <Globe size={19} strokeWidth={1.8} className={research ? "text-orange-500" : ""} />
+              </button>
+              )}
+
+              {listening || talking ? null : (
+              <button
+                type="button"
                 onClick={onOpenEffort}
                 className="flex min-h-9 min-w-0 max-w-[180px] items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2"
                 aria-label={`Effort: ${effortLabel}. Change effort`}
               >
                 <span className="truncate font-semibold text-primary">{effortLabel}</span>
                 <ChevronDown size={13} className="shrink-0 text-tertiary" />
-              </button>
-              )}
-
-              {listening || talking ? null : (
-              /* Chat is the default and goes unnamed — the app already treats
-                 it that way, showing a mode in the status line only when it is
-                 Code. So this is a toggle rather than a picker: there is one
-                 thing to turn on, and its absence is the ordinary case. */
-              <button
-                type="button"
-                role="switch"
-                aria-checked={codeMode}
-                onClick={() => { haptic("selection", haptics); onToggleCode(); }}
-                disabled={blocked || generating}
-                className={`flex min-h-9 shrink-0 items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2 ${codeMode ? "bg-[var(--selection-bg)]" : ""}`}
-                aria-label={codeMode ? "Code mode is on. Turn it off" : "Code mode is off. Turn it on for software, debugging, and repositories"}
-              >
-                <Code2 size={16} strokeWidth={1.8} className={`shrink-0 ${codeMode ? "text-accent" : "text-secondary"}`} />
-                <span className={`font-semibold ${codeMode ? "text-accent" : "text-secondary"}`}>Code</span>
-              </button>
-              )}
-
-              {listening || talking ? null : (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={research}
-                onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
-                disabled={blocked || generating}
-                className={`flex min-h-9 shrink-0 items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2 ${research ? "bg-[var(--selection-bg)]" : ""}`}
-                aria-label={research ? "Research is on. Turn it off" : "Research is off. Turn it on"}
-              >
-                <Search size={16} strokeWidth={1.8} className={`shrink-0 ${research ? "text-accent" : "text-secondary"}`} />
-                <span className={`font-semibold ${research ? "text-accent" : "text-secondary"}`}>Research</span>
               </button>
               )}
 
@@ -1068,9 +1047,9 @@ export function ComposerDock({
                 onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
                 className={menuRow}
               >
-                <Search size={19} strokeWidth={1.8} className={`shrink-0 ${research ? "text-accent" : "text-secondary"}`} />
+                <Globe size={19} strokeWidth={1.8} className={`shrink-0 ${research ? "text-orange-500" : "text-secondary"}`} />
                 <span className="flex-1">Web search</span>
-                {research ? <Check size={18} strokeWidth={2.2} className="shrink-0 text-accent" /> : null}
+                {research ? <Check size={18} strokeWidth={2.2} className="shrink-0 text-orange-500" /> : null}
               </button>
             </div>
 
@@ -1093,4 +1072,3 @@ export function ComposerDock({
     </>
   );
 }
-
