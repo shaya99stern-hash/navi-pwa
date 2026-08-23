@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Check, ChevronDown, Link2, LoaderCircle, LockKeyhole, Plus, RefreshCw, ShieldCheck, Sparkles, Trash2, UserRoundCheck, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Link2, LoaderCircle, LockKeyhole, Plus, RefreshCw, ShieldCheck, Sparkles, Trash2, User, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CONNECTOR_KINDS, type ConnectorAccessMode, type CustomConnector, type CustomConnectorKind, type NaviPreferences } from "@/lib/ai/types";
 import type { CapabilityManifest } from "@/lib/ai/capabilities/manifest";
@@ -419,7 +419,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
 
   return (
     <div className="fixed inset-0 z-[120] flex flex-col bg-[#F2F2F7] dark:bg-black text-primary">
-      <header className="navi-sheet-header sticky top-0 z-10 flex h-[calc(52px+var(--safe-top))] shrink-0 items-center gap-1 bg-[#F2F2F7] dark:bg-black px-2 pt-[var(--safe-top)] border-b border-[var(--border-subtle)]">
+      <header className="navi-sheet-header sticky top-0 z-10 flex min-h-[calc(44px+var(--safe-top))] pt-[var(--safe-top)] pb-1 shrink-0 items-center justify-between bg-[#F2F2F7] dark:bg-black px-2 border-b border-[var(--border-subtle)]">
         <button type="button" onClick={() => { void refresh(); void refreshAccounts(); void refreshCatalog(); }} disabled={loading} className="flex h-11 w-[80px] items-center justify-start pl-3 rounded-full text-[#0A84FF] font-normal text-[1.0625rem] active:opacity-60 disabled:opacity-50">
           {loading ? <LoaderCircle size={20} className="animate-spin" /> : "Refresh"}
         </button>
@@ -457,25 +457,27 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
               const configurable = Boolean(account.connectPath);
               return (
                 <div key={account.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3">
-                  <div className="flex min-h-[28px] items-center gap-3">
-                    <span className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white ${connected ? "bg-[#34C759]" : "bg-[#8E8E93]"}`}>
-                      {account.id === "google" ? <UserRoundCheck size={16} /> : account.id === "github" ? <Link2 size={16} /> : <ShieldCheck size={16} />}
-                    </span>
-                    <div className="min-w-0 flex-1 flex items-center gap-2">
-                      <span className="text-[1rem]/[1.375rem] font-medium text-primary">{account.name}</span>
-                      {connected && (
-                        <span className="shrink-0 rounded-[4px] bg-[#0A84FF]/10 px-1.5 py-0.5 text-[0.625rem]/4 font-bold uppercase tracking-wider text-[#0A84FF]">
-                          {status?.writesEnabled ? "Read / Write" : "Read Only"}
-                        </span>
-                      )}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white ${connected ? "bg-[#34C759]" : "bg-[#8E8E93]"}`}>
+                        {account.id === "google" ? <User size={18} /> : account.id === "github" ? <Link2 size={18} /> : <ShieldCheck size={18} />}
+                      </span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[1rem]/[1.375rem] font-medium text-primary truncate">{account.name}</span>
+                        {connected && (
+                          <span className="shrink-0 rounded-[4px] bg-[#0A84FF]/15 px-1.5 py-0.5 text-[0.625rem]/4 font-bold uppercase tracking-wider text-[#0A84FF]">
+                            {status?.writesEnabled ? "Read / Write" : "Read Only"}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {!configurable ? null : connected ? (
-                      <InlineButton destructive onClick={() => void disconnectAccount(account)}>Disconnect</InlineButton>
+                      <button type="button" onClick={() => void disconnectAccount(account)} className="text-[0.9375rem] font-medium text-[#FF453A] active:opacity-60 shrink-0">Disconnect</button>
                     ) : status?.oauthAvailable === false ? null : (
-                      <a href={account.connectPath} className="flex h-8 items-center rounded-[8px] bg-[#0A84FF]/10 px-3 text-[0.875rem] font-semibold text-[#0A84FF] active:bg-[#0A84FF]/20">Connect</a>
+                      <a href={account.connectPath} className="text-[0.9375rem] font-medium text-[#0A84FF] active:opacity-60 shrink-0">Connect</a>
                     )}
                   </div>
-                  <div className="mt-1.5 pl-[42px] text-[0.8125rem]/[1.125rem] text-tertiary">
+                  <div className="mt-2 text-[0.8125rem]/[1.125rem] text-tertiary pl-[44px]">
                     {connected
                       ? `${status?.label ? `${status.label} · ` : ""}${status?.writesEnabled && account.writes ? `${account.reads}. ${account.writes}.` : `${account.reads}.`}`
                       : status?.oauthAvailable === false || !configurable
@@ -483,7 +485,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                         : `${account.reads}.`}
                   </div>
                   {connected && !status?.writesEnabled && account.unlockWrites && (
-                    <div className="mt-2 pl-[42px] text-[0.8125rem]/[1.125rem] text-tertiary">{account.unlockWrites}</div>
+                    <div className="mt-2 pl-[44px] text-[0.8125rem]/[1.125rem] text-tertiary">{account.unlockWrites}</div>
                   )}
                 </div>
               );
@@ -495,40 +497,42 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
           <Group>
             {catalog.providers.filter((provider) => provider.configured || catalogExpanded || keyDraftFor === provider.id).map((provider) => (
               <div key={provider.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3">
-                <div className="flex min-h-[28px] items-center gap-3">
-                  <span className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white ${provider.configured ? "bg-[#34C759]" : "bg-[#8E8E93]"}`}>
-                    {provider.configured ? <Check size={16} /> : <Plus size={16} />}
-                  </span>
-                  <div className="min-w-0 flex-1 flex items-center gap-2">
-                    <span className="text-[1rem]/[1.375rem] font-medium text-primary">{provider.label}</span>
-                    {provider.free && <span className="shrink-0 rounded-[4px] bg-elev-3 px-1.5 py-0.5 text-[0.625rem]/4 font-bold uppercase tracking-wider text-tertiary">Free</span>}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <span className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white ${provider.configured ? "bg-[#34C759]" : "bg-[#8E8E93]"}`}>
+                      {provider.configured ? <Check size={18} /> : <Plus size={18} />}
+                    </span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[1rem]/[1.375rem] font-medium text-primary truncate">{provider.label}</span>
+                      {provider.free && <span className="shrink-0 rounded-[4px] bg-elev-3 px-1.5 py-0.5 text-[0.625rem]/4 font-bold uppercase tracking-wider text-tertiary">Free</span>}
+                    </div>
                   </div>
                   {provisioning === provider.id ? (
-                    <LoaderCircle size={18} className="shrink-0 animate-spin text-accent" />
+                    <LoaderCircle size={20} className="shrink-0 animate-spin text-accent" />
                   ) : (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-4 shrink-0">
                       {provider.configured && (
-                        <InlineButton disabled={verifying === provider.id} onClick={() => void verify(provider.id)}>
+                        <button type="button" disabled={verifying === provider.id} onClick={() => void verify(provider.id)} className="text-[0.9375rem] font-medium text-[#0A84FF] active:opacity-60 disabled:opacity-50">
                           {verifying === provider.id ? "Testing" : "Test"}
-                        </InlineButton>
+                        </button>
                       )}
-                      <InlineButton onClick={() => { setKeyDraftFor(keyDraftFor === provider.id ? null : provider.id); setKeyDraft(""); haptic("selection", haptics); }}>
+                      <button type="button" onClick={() => { setKeyDraftFor(keyDraftFor === provider.id ? null : provider.id); setKeyDraft(""); haptic("selection", haptics); }} className="text-[0.9375rem] font-medium text-[#0A84FF] active:opacity-60">
                         {provider.configured ? "Edit" : "Add"}
-                      </InlineButton>
+                      </button>
                     </div>
                   )}
                 </div>
-                <div className="mt-1 pl-[42px] text-[0.8125rem]/[1.125rem] text-tertiary">{provider.detail}</div>
+                <div className="mt-2 pl-[44px] text-[0.8125rem]/[1.125rem] text-tertiary">{provider.detail}</div>
                 
                 {verified[provider.id] && (
-                  <div className={`mt-1.5 flex items-center gap-1.5 pl-[42px] text-[0.8125rem] font-medium ${verified[provider.id].ok ? "text-[#34C759]" : "text-[#FF453A]"}`}>
+                  <div className={`mt-2 flex items-center gap-1.5 pl-[44px] text-[0.8125rem] font-medium ${verified[provider.id].ok ? "text-[#34C759]" : "text-[#FF453A]"}`}>
                     {verified[provider.id].ok ? <Check size={14} /> : <AlertTriangle size={14} />}
                     {verified[provider.id].reason}
                   </div>
                 )}
 
                 {keyDraftFor === provider.id && (
-                  <div className="mt-3 pl-[42px] space-y-2 pb-1">
+                  <div className="mt-3 pl-[44px] space-y-2 pb-1">
                     <input
                       value={keyDraft}
                       onChange={(event) => setKeyDraft(event.target.value)}
@@ -573,14 +577,14 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
               return (
                 <div key={server.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <span className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white ${connected ? "bg-[#34C759]" : "bg-[#8E8E93]"}`}><Link2 size={16} /></span>
+                    <span className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white ${connected ? "bg-[#34C759]" : "bg-[#8E8E93]"}`}><Link2 size={18} /></span>
                     <div className="min-w-0 flex-1">
                       <div className="text-[1rem]/[1.375rem] font-medium text-primary">{server.name}</div>
                       <div className="text-[0.8125rem]/[1.125rem] text-tertiary mt-0.5">Remote HTTPS MCP · {server.readOnly ? "read-only" : "writes require confirmation"}</div>
                     </div>
                     {connecting === server.id ? <LoaderCircle size={20} className="animate-spin text-[#0A84FF]" /> : <SettingsToggle value={connected} label={`${connected ? "Disconnect" : "Connect"} ${server.name}`} onChange={() => void toggle(server)} />}
                   </div>
-                  {errors[server.id] && <div className="mt-2 pl-[42px] flex gap-1.5 text-[0.8125rem] font-medium text-[#FF453A]"><AlertTriangle size={14} className="shrink-0" />{errors[server.id]}</div>}
+                  {errors[server.id] && <div className="mt-2 pl-[44px] flex gap-1.5 text-[0.8125rem] font-medium text-[#FF453A]"><AlertTriangle size={14} className="shrink-0" />{errors[server.id]}</div>}
                 </div>
               );
             })}
@@ -597,7 +601,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
           <Group>
             {preferences.customConnectors.map((connector) => (
               <div key={connector.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3 flex items-center gap-3">
-                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white bg-[#34C759]"><Sparkles size={16} /></span>
+                <span className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white bg-[#34C759]"><Sparkles size={18} /></span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[1rem]/[1.375rem] font-medium text-primary truncate">{connector.name}</div>
                   <div className="text-[0.8125rem]/[1.125rem] text-tertiary mt-0.5 truncate">{CONNECTOR_KINDS.find((k) => k.id === connector.kind)?.label ?? connector.kind} · {new URL(connector.baseUrl).hostname}</div>
@@ -608,7 +612,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
             
             {capabilities.map((entry) => (
               <div key={entry.manifest.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3 flex items-center gap-3">
-                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white bg-[#34C759]"><Sparkles size={16} /></span>
+                <span className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white bg-[#34C759]"><Sparkles size={18} /></span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[1rem]/[1.375rem] font-medium text-primary truncate">{entry.manifest.name}</div>
                   <div className="text-[0.8125rem]/[1.125rem] text-tertiary mt-0.5 truncate">{entry.manifest.operations.length} operations · {new URL(entry.manifest.baseUrl).hostname}</div>
