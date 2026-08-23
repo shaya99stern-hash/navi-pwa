@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, NaviPreferences } from "@/lib/ai/types";
+import { DEFAULT_SELF_UPDATE_BRANCH } from "@/lib/ai/self-update-tools";
 import { clampVoiceRate, MAX_VOICE_RATE, MIN_VOICE_RATE } from "@/lib/ui/speech";
 import { categories, isImplemented, type Skill } from "@/lib/skills";
 import { BUILT_IN_PLAYBOOKS, parseSkillMarkdown } from "@/lib/playbooks";
@@ -1234,7 +1235,11 @@ export function SettingsSheet({
             <Group>
               {[
                 ["GITHUB_PAT / NAVI_GITHUB_TOKEN", "Lets Navi Soul read and commit to this app's own repository in Code mode. Without it, self-editing is off."],
-                ["NAVI_SELF_UPDATE_BRANCH", "Which branch self-edits commit to. Defaults to main."],
+                /* Read from the constant rather than restated. This said
+                   "Defaults to main" after the default became a branch behind a
+                   pull request — the screen was telling someone their self-edits
+                   went live when they now wait for CI and a merge. */
+                [`NAVI_SELF_UPDATE_BRANCH`, `Which branch self-edits commit to. Defaults to ${DEFAULT_SELF_UPDATE_BRANCH}, which opens a pull request rather than going live.`],
                 ["GOOGLE_OAUTH_CLIENT_ID / _SECRET", "Lets each person connect their own Gmail and Calendar."],
                 ["GITHUB_OAUTH_CLIENT_ID / _SECRET", "Per-person GitHub. Must be a separate OAuth app from the one Clerk uses for sign-in — one app holds one callback URL."],
                 ["NAVI_VERCEL_TOKEN", "Deployment and build-log reads, for the whole deployment rather than per person."],
