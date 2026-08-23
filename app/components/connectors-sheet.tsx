@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Check, ChevronDown, Link2, LoaderCircle, LockKeyhole, Plus, RefreshCw, ShieldCheck, Sparkles, Trash2, UserRoundCheck, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CONNECTOR_KINDS, type ConnectorAccessMode, type CustomConnector, type CustomConnectorKind, type NaviPreferences } from "@/lib/ai/types";
 import type { CapabilityManifest } from "@/lib/ai/capabilities/manifest";
 import type { AddedCapability } from "@/lib/ai/capabilities/search";
@@ -24,28 +24,15 @@ const MODES: Array<{ id: ConnectorAccessMode; title: string; detail: string }> =
   { id: "always", title: "Always available", detail: "Connected read-only resources stay available in this conversation. Sensitive actions still require explicit confirmation." }
 ];
 
-/**
- * The first-party accounts, in the same place as everything else you connect.
- *
- * These used to live only under Settings → Capabilities → Developer, while this
- * sheet listed the MCP registry — so a connected GitHub was invisible from the
- * screen called Connectors, and an empty registry read as "nothing is
- * connected" when two things were. They are different mechanisms underneath;
- * that is not a reason to make someone learn which is which to find them.
- */
 type AccountConnector = {
   id: "github" | "google" | "vercel";
   name: string;
   detail: string;
-  /** Absent for accounts the deployment configures with a token rather than OAuth. */
   connectPath?: string;
   statusPath?: string;
-  /** What is missing, when this cannot be connected from the phone. */
   setup?: string;
-  /** What the connection permits, stated rather than left to be guessed. */
   reads: string;
   writes?: string;
-  /** How to turn writes on, shown when connected but read-only. */
   unlockWrites?: string;
 };
 
@@ -56,8 +43,6 @@ const ACCOUNTS: AccountConnector[] = [
     detail: "Gmail and Calendar",
     connectPath: "/api/google/oauth/start",
     statusPath: "/api/google/status",
-    /* "Not configured" with no way forward is a dead end. Connecting needs
-       credentials that only exist in the deployment, so say which ones. */
     setup: "Not available on this deployment yet. It has to be enabled by whoever administers it; the steps are under Settings → Developer.",
     reads: "Read your mail and calendar",
     writes: "Send mail and create events"
@@ -71,22 +56,12 @@ const ACCOUNTS: AccountConnector[] = [
     setup: "Not available on this deployment yet. It has to be enabled by whoever administers it; the steps are under Settings → Developer.",
     reads: "Read repositories, pull requests, and CI logs",
     writes: "Commit to a working branch and open pull requests",
-    /* "Read only" with no way forward is the dead end this screen kept
-       hitting: writes are a separate deliberate opt-in, so name the switch. */
     unlockWrites: "Writes are off for this deployment, so Navi Soul can read your repositories but not change them. Turning them on is a deployment setting; the steps are under Settings → Developer."
   },
   {
     id: "vercel",
     name: "Vercel",
     detail: "Deployments and build logs",
-    /* No status route and no Connect button: this one is configured with a
-       deployment-wide token rather than per user, so there is nothing for an
-       individual to authorize. Saying so beats an inert row. */
-    /* Environment-variable names and deploy steps are not consumer copy. What
-       someone reading this screen needs to know is whether they can act on it
-       — and here they cannot, because it is set once for everyone. The name of
-       the variable lives in Settings → Developer, where the person who can
-       actually set it is looking. */
     setup: "Set up once for the whole deployment, not per person. Nothing to connect here.",
     reads: "Read deployments and build logs"
   }
@@ -99,14 +74,39 @@ type AccountStatus = {
   writesEnabled: boolean;
 };
 
-/**
- * The custom-connector types, presented as a drop-down rather than a wall of
- * icons: the list will grow, and a select scales where an icon grid does not.
- */
-function Switch({ value, label, onChange }: { value: boolean; label: string; onChange: () => void }) {
+// UI Components
+function SectionHeader({ children }: { children: ReactNode }) {
+  return <h3 className="mb-1.5 mt-6 px-4 text-[0.8125rem] font-medium text-tertiary uppercase tracking-wide">{children}</h3>;
+}
+
+function Group({ children }: { children: ReactNode }) {
+  return <div className="mx-4 mb-6 overflow-hidden rounded-[10px] bg-elev-2 shadow-sm">{children}</div>;
+}
+
+function InlineButton({ children, onClick, disabled, destructive }: { children: ReactNode; onClick: () => void; disabled?: boolean; destructive?: boolean }) {
   return (
-    <button type="button" role="switch" aria-checked={value} aria-label={label} onClick={onChange} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${value ? "bg-accent" : "bg-elev-3"}`}>
-      <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${value ? "translate-x-6" : "translate-x-1"}`} />
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`h-8 shrink-0 rounded-[8px] px-3 text-[0.875rem] font-semibold active:bg-elev-4 disabled:opacity-50 ${destructive ? "bg-red-500/10 text-[#FF453A]" : "bg-[#0A84FF]/10 text-[#0A84FF]"}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SettingsToggle({ value, onChange, label }: { value: boolean; onChange: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      aria-label={label}
+      onClick={onChange}
+      className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-[120ms] ${value ? "bg-[#0A84FF]" : "bg-[#39393D]"}`}
+    >
+      <span className={`absolute top-[2px] left-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-sm transition-transform duration-[140ms] ${value ? "translate-x-[20px]" : "translate-x-0"}`} />
     </button>
   );
 }
@@ -124,15 +124,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
   const [draftKey, setDraftKey] = useState("");
   const [draftModel, setDraftModel] = useState("");
   const [addState, setAddState] = useState<{ phase: "idle" | "testing" | "error"; message?: string }>({ phase: "idle" });
-  /**
-   * Adding an API by having it describe itself.
-   *
-   * Four states rather than a boolean, because the interesting one is `found`:
-   * the spec has been read and nothing has been saved yet. That gap is where
-   * someone sees what they are about to give Navi Soul — how many operations,
-   * how many of them change things — and it is the only moment they can decline
-   * on the strength of the answer rather than the promise.
-   */
+
   const [apiUrl, setApiUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiOpen, setApiOpen] = useState(false);
@@ -180,10 +172,6 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
     haptic("success", haptics);
     onPreferences({
       ...preferences,
-      /* Re-adding an API replaces it rather than duplicating it, so
-         re-discovering one after it changed is an update and not a second copy
-         under the same id. Approvals are deliberately not carried across: the
-         operations may not be the ones that were approved. */
       capabilities: [
         ...capabilities.filter((entry) => entry?.manifest?.id !== manifest.id),
         { manifest, apiKey: apiKey.trim(), approvedWrites: [] }
@@ -199,8 +187,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
     haptic("impact-light", haptics);
     onPreferences({ ...preferences, capabilities: capabilities.filter((entry) => entry?.manifest?.id !== id) });
   }
-  /* The services NaviOS knows how to connect itself to, and which are set.
-     Presence only — a value is never sent to the browser. */
+
   type CatalogProvider = { id: string; label: string; envKey: string; keyUrl: string; free: boolean; detail: string; configured: boolean };
   const [catalog, setCatalog] = useState<{ selfConfigurable: boolean; setupHint: string | null; providers: CatalogProvider[] }>(
     { selfConfigurable: false, setupHint: null, providers: [] }
@@ -208,18 +195,11 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
   const [keyDraftFor, setKeyDraftFor] = useState<string | null>(null);
   const [keyDraft, setKeyDraft] = useState("");
   const [provisioning, setProvisioning] = useState<string | null>(null);
-  /* Twenty-two services is a useful catalogue and an overwhelming first
-     screen. Connected ones are always shown; the rest wait behind a tap. */
   const [catalogExpanded, setCatalogExpanded] = useState(false);
-  /* "Configured" only means a variable is set. A key that is expired, revoked
-     or under-permissioned looks identical to a working one from here, which is
-     how transcription failed for days while its token sat there looking fine.
-     These are the results of actually calling each service. */
   const [verified, setVerified] = useState<Record<string, { ok: boolean; reason: string }>>({});
   const [verifying, setVerifying] = useState<string | null>(null);
-  /* Whether the preference mirror is actually writing. Read once when the
-     sheet opens rather than at module scope, because signing in flips it. */
   const [keysAreDurable, setKeysAreDurable] = useState(false);
+
   useEffect(() => { if (open) setKeysAreDurable(cloudSyncActive()); }, [open]);
 
   async function verify(id: string) {
@@ -254,8 +234,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
         providers: Array.isArray(data.providers) ? data.providers : []
       });
     } catch {
-      /* A catalogue that cannot be read leaves the section saying "Loading",
-         which is better than claiming nothing can be connected. */
+      // Ignore
     }
   }
 
@@ -303,9 +282,6 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
           writesEnabled: data.writesEnabled === true
         }] as const;
       } catch {
-        /* A status route that cannot be reached is not a disconnected account —
-           saying so would invite a reconnect that fixes nothing. Leave the row
-           unknown and let the refresh button be the remedy. */
         return [account.id, null] as const;
       }
     }));
@@ -316,13 +292,6 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
       return next;
     });
   }
-
-  const connectedCount = useMemo(
-    () => servers.filter((server) => preferences.connectedMcpServers.includes(server.id)).length
-      + Object.values(accounts).filter((status) => status.connected).length
-      + preferences.customConnectors.length,
-    [accounts, preferences.connectedMcpServers, preferences.customConnectors.length, servers]
-  );
 
   async function refresh() {
     setLoading(true);
@@ -449,459 +418,286 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex flex-col bg-app text-primary">
-      <header className="safe-top flex min-h-[64px] shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] bg-elev-1 px-3">
-        <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label="Close connectors"><X size={21} /></button>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[1.0625rem]/6 font-semibold text-primary">Connectors</span>
-          <span className="block text-[0.6875rem]/4 font-medium text-tertiary">{connectedCount} connected · mobile access and approvals</span>
-        </span>
-        <button type="button" onClick={() => { void refresh(); void refreshAccounts(); }} disabled={loading} className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3 disabled:opacity-50" aria-label="Refresh connectors"><RefreshCw size={18} className={loading ? "animate-spin" : ""} /></button>
+    <div className="fixed inset-0 z-[120] flex flex-col bg-[#F2F2F7] dark:bg-black text-primary">
+      <header className="navi-sheet-header sticky top-0 z-10 flex h-[calc(52px+var(--safe-top))] shrink-0 items-center gap-1 bg-[#F2F2F7] dark:bg-black px-2 pt-[var(--safe-top)] border-b border-[var(--border-subtle)]">
+        <button type="button" onClick={() => { void refresh(); void refreshAccounts(); void refreshCatalog(); }} disabled={loading} className="flex h-11 w-[80px] items-center justify-start pl-3 rounded-full text-[#0A84FF] font-normal text-[1.0625rem] active:opacity-60 disabled:opacity-50">
+          {loading ? <LoaderCircle size={20} className="animate-spin" /> : "Refresh"}
+        </button>
+        <div className="flex-1 text-center text-[1.0625rem]/6 font-semibold tracking-[-0.01em] text-primary">
+          Connectors
+        </div>
+        <button type="button" onClick={onClose} className="flex h-11 w-[80px] items-center justify-end pr-3 rounded-full text-[#0A84FF] font-semibold text-[1.0625rem] active:opacity-60">
+          Done
+        </button>
       </header>
 
-      <main className="scroll-area min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[760px] px-4 pb-[calc(24px+var(--safe-bottom))] pt-4">
-          <section className="rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--selection-bg)] text-accent"><ShieldCheck size={21} /></span>
-              <span className="min-w-0 flex-1">
-                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Conversation access mode</h2>
-                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">Controls how connected resources may be used. Sensitive external actions never bypass confirmation.</p>
-              </span>
-            </div>
-            <div className="mt-4 space-y-2">
-              {MODES.map((mode) => (
-                /* One line each, with the explanation only under the chosen
-                   one. Three stacked paragraphs of policy made the first thing
-                   on the screen the densest thing on it. */
-                <button key={mode.id} type="button" onClick={() => { update({ connectorAccessMode: mode.id }); haptic("selection", haptics); }} className="flex min-h-11 w-full items-center gap-3 px-1 text-left active:bg-elev-2">
-                  <span className="min-w-0 flex-1">
-                    <span className={`block text-[0.875rem]/5 ${preferences.connectorAccessMode === mode.id ? "font-semibold text-primary" : "font-medium text-secondary"}`}>{mode.title}</span>
-                    {preferences.connectorAccessMode === mode.id ? <span className="mt-0.5 block text-[0.6875rem]/4 font-medium text-tertiary">{mode.detail}</span> : null}
-                  </span>
-                  {preferences.connectorAccessMode === mode.id ? <Check size={17} className="shrink-0 text-accent" /> : null}
-                </button>
-              ))}
-            </div>
-          </section>
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(24px+var(--safe-bottom))] pt-2">
+        <div className="mx-auto w-full max-w-[760px]">
 
-          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elev-2 text-secondary"><UserRoundCheck size={21} /></span>
-              <span className="min-w-0 flex-1">
-                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Accounts</h2>
-                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">Signed in through this deployment. Tokens are held in cookies the page cannot read, never in the browser.</p>
-              </span>
-            </div>
-
-            <div className="mt-3 divide-y divide-[var(--border-subtle)]">
-              {ACCOUNTS.map((account) => {
-                const status = accounts[account.id];
-                const connected = status?.connected === true;
-                /* Vercel has no status route because it is configured with a
-                   deployment-wide token rather than per user, so it renders as
-                   a statement rather than a control. */
-                const configurable = Boolean(account.connectPath);
-                return (
-                  <div key={account.id}>
-                    <div className="flex min-h-14 items-center gap-3 py-3">
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${connected ? "bg-[var(--selection-bg)] text-accent" : "bg-elev-2 text-secondary"}`}>
-                      <Link2 size={18} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate text-[0.875rem]/5 font-semibold text-primary">{account.name}</span>
-                        {connected ? (
-                          <span className="shrink-0 rounded-full bg-[var(--selection-bg)] px-2 py-0.5 text-[0.625rem]/4 font-semibold uppercase tracking-[0.06em] text-accent">
-                            {status?.writesEnabled ? "Read and write" : "Read only"}
-                          </span>
-                        ) : null}
-                      </span>
-                      {/* What it can do, plainly. A connected account that only
-                          says "GitHub" leaves the one question worth answering
-                          — what did I just allow — unanswered. */}
-                      <span className="mt-0.5 block text-[0.6875rem]/4 font-medium text-tertiary">
-                        {connected
-                          ? `${status?.label ? `${status.label} · ` : ""}${status?.writesEnabled && account.writes ? `${account.reads}. ${account.writes}.` : `${account.reads}.`}`
-                          : status?.oauthAvailable === false || !configurable
-                            ? account.setup ?? account.detail
-                            : `${account.reads}.`}
-                      </span>
-                    </span>
-                    {!configurable ? null : connected ? (
-                      <button type="button" onClick={() => void disconnectAccount(account)} className="min-h-11 shrink-0 rounded-xl px-3 text-[0.8125rem]/5 font-semibold text-danger active:bg-elev-3">Disconnect</button>
-                    ) : status?.oauthAvailable === false ? null : (
-                      <a href={account.connectPath} className="flex min-h-11 shrink-0 items-center rounded-xl bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed">Connect</a>
-                    )}
-                  </div>
-                  {/* Connected but read-only is the state that looks broken:
-                      the account is linked and Navi Soul still refuses to
-                      commit. Name the switch instead of leaving a badge. */}
-                  {connected && !status?.writesEnabled && account.unlockWrites ? (
-                    <p className="ml-[52px] pb-3 text-[0.6875rem]/4 font-medium text-tertiary">{account.unlockWrites}</p>
-                  ) : null}
+          <SectionHeader>Access Mode</SectionHeader>
+          <p className="px-4 mb-2 mt-[-2px] text-[0.8125rem] text-tertiary">Controls how connected resources may be used. Sensitive actions always require confirmation.</p>
+          <Group>
+            {MODES.map((mode) => (
+              <button key={mode.id} type="button" onClick={() => { update({ connectorAccessMode: mode.id }); haptic("selection", haptics); }} className="flex min-h-[44px] w-full items-center justify-between border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-2.5 text-left active:bg-elev-3">
+                <div className="flex flex-col flex-1 min-w-0 pr-4">
+                  <span className="text-[1rem]/[1.375rem] text-primary">{mode.title}</span>
+                  {preferences.connectorAccessMode === mode.id && <span className="text-[0.8125rem]/[1.125rem] text-tertiary mt-0.5">{mode.detail}</span>}
                 </div>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Naming a service is enough. Everything else — the base URL, the
-              variable, where a key comes from — is a fact about that service,
-              not a decision for whoever is holding the phone. Pasting the key
-              here writes it into the deployment and redeploys, so nobody has
-              to find the Vercel dashboard on a phone. */}
-          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--selection-bg)] text-accent"><Sparkles size={21} /></span>
-              <span className="min-w-0 flex-1">
-                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Services NaviOS can connect</h2>
-                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
-                  {catalog.selfConfigurable
-                    ? "Pick one, paste the key, and NaviOS sets it up and redeploys itself. You can also just ask Navi Soul in chat."
-                    : catalog.setupHint ?? "Loading…"}
-                </p>
-              </span>
-            </div>
-
-            <div className="mt-3 divide-y divide-[var(--border-subtle)]">
-              {catalog.providers.filter((provider) => provider.configured || catalogExpanded || keyDraftFor === provider.id).map((provider) => (
-                <div key={provider.id} className="py-3">
-                  <div className="flex min-h-12 items-center gap-3">
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${provider.configured ? "bg-[var(--selection-bg)] text-accent" : "bg-elev-2 text-secondary"}`}>
-                      {provider.configured ? <Check size={17} /> : <Plus size={17} />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate text-[0.875rem]/5 font-semibold text-primary">{provider.label}</span>
-                        {provider.free ? <span className="shrink-0 rounded-full bg-elev-2 px-1.5 py-0.5 text-[0.5625rem]/3 font-semibold uppercase tracking-[0.06em] text-tertiary">Free</span> : null}
-                      </span>
-                      <span className="block text-[0.6875rem]/4 font-medium text-tertiary">{provider.detail}</span>
-                    </span>
-                    {provisioning === provider.id ? (
-                      <LoaderCircle size={18} className="shrink-0 animate-spin text-accent" />
-                    ) : (
-                      <span className="flex shrink-0 items-center">
-                        {provider.configured ? (
-                          <button
-                            type="button"
-                            onClick={() => void verify(provider.id)}
-                            disabled={verifying === provider.id}
-                            className="min-h-10 shrink-0 rounded-xl px-2.5 text-[0.8125rem]/5 font-semibold text-secondary active:bg-elev-3 disabled:opacity-60"
-                          >
-                            {verifying === provider.id ? "Testing…" : "Test"}
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => { setKeyDraftFor(keyDraftFor === provider.id ? null : provider.id); setKeyDraft(""); haptic("selection", haptics); }}
-                          className="min-h-10 shrink-0 rounded-xl px-2.5 text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-3"
-                        >
-                          {provider.configured ? "Replace" : "Add"}
-                        </button>
-                      </span>
-                    )}
-                  </div>
-                  {verified[provider.id] ? (
-                    <p className={`mt-1 flex gap-1.5 pl-12 text-[0.6875rem]/4 font-medium ${verified[provider.id].ok ? "text-accent" : "text-danger"}`}>
-                      {verified[provider.id].ok ? <Check size={13} className="shrink-0" /> : <AlertTriangle size={13} className="shrink-0" />}
-                      {verified[provider.id].reason}
-                    </p>
-                  ) : null}
-
-                  {keyDraftFor === provider.id ? (
-                    <div className="mt-2 space-y-2 pl-12">
-                      <input
-                        value={keyDraft}
-                        onChange={(event) => setKeyDraft(event.target.value)}
-                        placeholder={`Paste your ${provider.label} key`}
-                        type="password"
-                        autoComplete="off"
-                        autoCapitalize="none"
-                        className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-2 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent"
-                      />
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void provision(provider)}
-                          disabled={!keyDraft.trim() || !catalog.selfConfigurable}
-                          className="flex min-h-11 flex-1 items-center justify-center rounded-xl bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed disabled:opacity-60"
-                        >
-                          Connect and deploy
-                        </button>
-                        <a href={provider.keyUrl} target="_blank" rel="noreferrer noopener" className="min-h-11 shrink-0 rounded-xl px-3 py-3 text-[0.8125rem]/5 font-semibold text-secondary active:bg-elev-3">Get a key</a>
-                      </div>
-                      {errors[provider.id] ? (
-                        <p className="flex gap-1.5 text-[0.6875rem]/4 font-medium text-danger"><AlertTriangle size={13} className="shrink-0" />{errors[provider.id]}</p>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-              {!catalog.providers.length ? <p className="py-6 text-center text-[0.8125rem]/5 font-medium text-secondary">Loading services…</p> : null}
-            </div>
-            {catalog.providers.length ? (
-              <button
-                type="button"
-                onClick={() => { setCatalogExpanded(!catalogExpanded); haptic("selection", haptics); }}
-                className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-2"
-              >
-                {catalogExpanded
-                  ? "Show fewer"
-                  : `Show all ${catalog.providers.length} services`}
-                <ChevronDown size={15} className={`shrink-0 transition-transform ${catalogExpanded ? "rotate-180" : ""}`} />
+                {preferences.connectorAccessMode === mode.id && <Check size={20} className="text-[#0A84FF] shrink-0" />}
               </button>
-            ) : null}
-          </section>
+            ))}
+          </Group>
 
-          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elev-2 text-secondary"><Plus size={21} /></span>
-              <span className="min-w-0 flex-1">
-                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Your connectors</h2>
-                {/* Where the key actually is, checked rather than promised.
-                    This said keys "live in your own private account memory" —
-                    true only while the mirror is running. Signed out, or on a
-                    deployment whose cloud memory is unreachable, they are in
-                    this browser and nowhere else, and reinstalling the app
-                    takes them with it. The owner asked directly whether keys
-                    survive a reinstall and was told yes; that answer was right
-                    about the provisioned providers above and wrong about
-                    these, and the screen gave them no way to tell which. */}
-                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
-                  APIs you add yourself, chosen from the drop-down. Keys travel only with your requests.
-                </p>
-                <p className={`mt-1 text-[0.6875rem]/4 font-medium ${keysAreDurable ? "text-tertiary" : "text-warning"}`}>
-                  {keysAreDurable
-                    ? "Synced to your private account memory, so they survive reinstalling the app."
-                    : "Stored in this browser only. Reinstalling NaviOS, or clearing site data, will delete them — sign in with cloud memory working to keep them."}
-                </p>
-              </span>
-            </div>
-
-            {preferences.customConnectors.length ? (
-              <div className="mt-3 divide-y divide-[var(--border-subtle)]">
-                {preferences.customConnectors.map((connector) => (
-                  <div key={connector.id} className="flex min-h-14 items-center gap-3 py-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--selection-bg)] text-accent"><Link2 size={18} /></span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[0.875rem]/5 font-semibold text-primary">{connector.name}</span>
-                      <span className="block truncate text-[0.6875rem]/4 font-medium text-tertiary">
-                        {CONNECTOR_KINDS.find((kind) => kind.id === connector.kind)?.label ?? connector.kind} · {new URL(connector.baseUrl).hostname}{connector.model ? ` · ${connector.model}` : ""}
-                      </span>
+          <SectionHeader>Active Integrations</SectionHeader>
+          <p className="px-4 mb-2 mt-[-2px] text-[0.8125rem] text-tertiary">Signed in through this deployment. Tokens are stored securely.</p>
+          <Group>
+            {ACCOUNTS.map((account) => {
+              const status = accounts[account.id];
+              const connected = status?.connected === true;
+              const configurable = Boolean(account.connectPath);
+              return (
+                <div key={account.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3">
+                  <div className="flex min-h-[28px] items-center gap-3">
+                    <span className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white ${connected ? "bg-[#34C759]" : "bg-[#8E8E93]"}`}>
+                      {account.id === "google" ? <UserRoundCheck size={16} /> : account.id === "github" ? <Link2 size={16} /> : <ShieldCheck size={16} />}
                     </span>
-                    <button type="button" onClick={() => removeCustomConnector(connector.id)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-danger active:bg-elev-3" aria-label={`Remove ${connector.name}`}><Trash2 size={18} /></button>
+                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                      <span className="text-[1rem]/[1.375rem] font-medium text-primary">{account.name}</span>
+                      {connected && (
+                        <span className="shrink-0 rounded-[4px] bg-[#0A84FF]/10 px-1.5 py-0.5 text-[0.625rem]/4 font-bold uppercase tracking-wider text-[#0A84FF]">
+                          {status?.writesEnabled ? "Read / Write" : "Read Only"}
+                        </span>
+                      )}
+                    </div>
+                    {!configurable ? null : connected ? (
+                      <InlineButton destructive onClick={() => void disconnectAccount(account)}>Disconnect</InlineButton>
+                    ) : status?.oauthAvailable === false ? null : (
+                      <a href={account.connectPath} className="flex h-8 items-center rounded-[8px] bg-[#0A84FF]/10 px-3 text-[0.875rem] font-semibold text-[#0A84FF] active:bg-[#0A84FF]/20">Connect</a>
+                    )}
                   </div>
-                ))}
-              </div>
-            ) : null}
+                  <div className="mt-1.5 pl-[42px] text-[0.8125rem]/[1.125rem] text-tertiary">
+                    {connected
+                      ? `${status?.label ? `${status.label} · ` : ""}${status?.writesEnabled && account.writes ? `${account.reads}. ${account.writes}.` : `${account.reads}.`}`
+                      : status?.oauthAvailable === false || !configurable
+                        ? account.setup ?? account.detail
+                        : `${account.reads}.`}
+                  </div>
+                  {connected && !status?.writesEnabled && account.unlockWrites && (
+                    <div className="mt-2 pl-[42px] text-[0.8125rem]/[1.125rem] text-tertiary">{account.unlockWrites}</div>
+                  )}
+                </div>
+              );
+            })}
+          </Group>
 
-            {addOpen ? (
-              <div className="mt-3 space-y-3 rounded-2xl border border-[var(--border-subtle)] bg-elev-2 p-3">
+          <SectionHeader>Available Integrations</SectionHeader>
+          <p className="px-4 mb-2 mt-[-2px] text-[0.8125rem] text-tertiary">{catalog.selfConfigurable ? "Add API keys for external services. Keys travel securely." : catalog.setupHint ?? "Loading…"}</p>
+          <Group>
+            {catalog.providers.filter((provider) => provider.configured || catalogExpanded || keyDraftFor === provider.id).map((provider) => (
+              <div key={provider.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3">
+                <div className="flex min-h-[28px] items-center gap-3">
+                  <span className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white ${provider.configured ? "bg-[#34C759]" : "bg-[#8E8E93]"}`}>
+                    {provider.configured ? <Check size={16} /> : <Plus size={16} />}
+                  </span>
+                  <div className="min-w-0 flex-1 flex items-center gap-2">
+                    <span className="text-[1rem]/[1.375rem] font-medium text-primary">{provider.label}</span>
+                    {provider.free && <span className="shrink-0 rounded-[4px] bg-elev-3 px-1.5 py-0.5 text-[0.625rem]/4 font-bold uppercase tracking-wider text-tertiary">Free</span>}
+                  </div>
+                  {provisioning === provider.id ? (
+                    <LoaderCircle size={18} className="shrink-0 animate-spin text-accent" />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      {provider.configured && (
+                        <InlineButton disabled={verifying === provider.id} onClick={() => void verify(provider.id)}>
+                          {verifying === provider.id ? "Testing" : "Test"}
+                        </InlineButton>
+                      )}
+                      <InlineButton onClick={() => { setKeyDraftFor(keyDraftFor === provider.id ? null : provider.id); setKeyDraft(""); haptic("selection", haptics); }}>
+                        {provider.configured ? "Edit" : "Add"}
+                      </InlineButton>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-1 pl-[42px] text-[0.8125rem]/[1.125rem] text-tertiary">{provider.detail}</div>
+                
+                {verified[provider.id] && (
+                  <div className={`mt-1.5 flex items-center gap-1.5 pl-[42px] text-[0.8125rem] font-medium ${verified[provider.id].ok ? "text-[#34C759]" : "text-[#FF453A]"}`}>
+                    {verified[provider.id].ok ? <Check size={14} /> : <AlertTriangle size={14} />}
+                    {verified[provider.id].reason}
+                  </div>
+                )}
+
+                {keyDraftFor === provider.id && (
+                  <div className="mt-3 pl-[42px] space-y-2 pb-1">
+                    <input
+                      value={keyDraft}
+                      onChange={(event) => setKeyDraft(event.target.value)}
+                      placeholder={`Paste your ${provider.label} key`}
+                      type="password"
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      className="h-10 w-full rounded-[8px] border border-[var(--border-subtle)] bg-elev-3 px-3 text-[0.9375rem] text-primary outline-none placeholder:text-tertiary focus:border-[#0A84FF]"
+                    />
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => void provision(provider)}
+                        disabled={!keyDraft.trim() || !catalog.selfConfigurable}
+                        className="flex h-9 flex-1 items-center justify-center rounded-[8px] bg-[#0A84FF] px-4 text-[0.875rem] font-semibold text-white active:opacity-80 disabled:opacity-50"
+                      >
+                        Connect & Deploy
+                      </button>
+                      <a href={provider.keyUrl} target="_blank" rel="noreferrer noopener" className="flex h-9 items-center justify-center rounded-[8px] bg-elev-3 px-4 text-[0.875rem] font-semibold text-primary active:bg-elev-4">Get Key</a>
+                    </div>
+                    {errors[provider.id] && <div className="flex gap-1.5 text-[0.8125rem] font-medium text-[#FF453A] mt-1"><AlertTriangle size={14} />{errors[provider.id]}</div>}
+                  </div>
+                )}
+              </div>
+            ))}
+            {!catalog.providers.length && <div className="py-6 text-center text-[0.875rem] text-tertiary">Loading services...</div>}
+            {catalog.providers.length > 0 && (
+              <button type="button" onClick={() => { setCatalogExpanded(!catalogExpanded); haptic("selection", haptics); }} className="flex min-h-[44px] w-full items-center justify-center gap-1.5 text-[0.875rem] font-medium text-[#0A84FF] active:bg-elev-3 transition-colors">
+                {catalogExpanded ? "Show fewer" : `Show all ${catalog.providers.length} services`}
+                <ChevronDown size={16} className={`shrink-0 transition-transform ${catalogExpanded ? "rotate-180" : ""}`} />
+              </button>
+            )}
+          </Group>
+
+          <SectionHeader>Remote & MCP Servers</SectionHeader>
+          <p className="px-4 mb-2 mt-[-2px] text-[0.8125rem] text-tertiary">Directory of remote MCP servers configured for this deployment.</p>
+          {errors.directory && <div className="mx-4 mb-3 flex gap-2 rounded-[10px] bg-red-500/10 p-3 text-[0.8125rem] font-medium text-[#FF453A]"><AlertTriangle size={16} className="shrink-0" />{errors.directory}</div>}
+          
+          <Group>
+            {servers.map((server) => {
+              const connected = preferences.connectedMcpServers.includes(server.id);
+              return (
+                <div key={server.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white ${connected ? "bg-[#34C759]" : "bg-[#8E8E93]"}`}><Link2 size={16} /></span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[1rem]/[1.375rem] font-medium text-primary">{server.name}</div>
+                      <div className="text-[0.8125rem]/[1.125rem] text-tertiary mt-0.5">Remote HTTPS MCP · {server.readOnly ? "read-only" : "writes require confirmation"}</div>
+                    </div>
+                    {connecting === server.id ? <LoaderCircle size={20} className="animate-spin text-[#0A84FF]" /> : <SettingsToggle value={connected} label={`${connected ? "Disconnect" : "Connect"} ${server.name}`} onChange={() => void toggle(server)} />}
+                  </div>
+                  {errors[server.id] && <div className="mt-2 pl-[42px] flex gap-1.5 text-[0.8125rem] font-medium text-[#FF453A]"><AlertTriangle size={14} className="shrink-0" />{errors[server.id]}</div>}
+                </div>
+              );
+            })}
+            {!loading && !servers.length && (
+              <div className="py-6 px-4 text-center">
+                <p className="text-[0.875rem] font-medium text-primary">No remote servers yet.</p>
+                <p className="mt-1 text-[0.8125rem] text-tertiary">Connector servers are set up for the whole deployment. Admins can configure them under Settings → Developer.</p>
+              </div>
+            )}
+          </Group>
+
+          <SectionHeader>Custom APIs</SectionHeader>
+          <p className="px-4 mb-2 mt-[-2px] text-[0.8125rem] text-tertiary">Connect any API by pasting its base URL. {keysAreDurable ? "Keys sync to your account." : "Keys are stored locally in this browser."}</p>
+          <Group>
+            {preferences.customConnectors.map((connector) => (
+              <div key={connector.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3 flex items-center gap-3">
+                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white bg-[#34C759]"><Sparkles size={16} /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[1rem]/[1.375rem] font-medium text-primary truncate">{connector.name}</div>
+                  <div className="text-[0.8125rem]/[1.125rem] text-tertiary mt-0.5 truncate">{CONNECTOR_KINDS.find((k) => k.id === connector.kind)?.label ?? connector.kind} · {new URL(connector.baseUrl).hostname}</div>
+                </div>
+                <button type="button" onClick={() => removeCustomConnector(connector.id)} className="flex h-8 w-8 items-center justify-center rounded-full text-[#FF453A] active:bg-elev-3"><Trash2 size={18} /></button>
+              </div>
+            ))}
+            
+            {capabilities.map((entry) => (
+              <div key={entry.manifest.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3 flex items-center gap-3">
+                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white bg-[#34C759]"><Sparkles size={16} /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[1rem]/[1.375rem] font-medium text-primary truncate">{entry.manifest.name}</div>
+                  <div className="text-[0.8125rem]/[1.125rem] text-tertiary mt-0.5 truncate">{entry.manifest.operations.length} operations · {new URL(entry.manifest.baseUrl).hostname}</div>
+                </div>
+                <button type="button" onClick={() => removeApi(entry.manifest.id)} className="flex h-8 w-8 items-center justify-center rounded-full text-[#FF453A] active:bg-elev-3"><Trash2 size={18} /></button>
+              </div>
+            ))}
+
+            <button type="button" onClick={() => { setApiOpen(true); haptic("selection", haptics); }} className="flex min-h-[44px] w-full items-center gap-3 px-4 text-left active:bg-elev-3 transition-colors text-[#0A84FF]">
+              <Plus size={20} />
+              <span className="text-[1rem]/[1.375rem] font-medium">Discover API</span>
+            </button>
+
+            <button type="button" onClick={() => { setAddOpen(true); haptic("selection", haptics); }} className="flex min-h-[44px] border-t border-[var(--border-subtle)] w-full items-center gap-3 px-4 text-left active:bg-elev-3 transition-colors text-[#0A84FF]">
+              <Plus size={20} />
+              <span className="text-[1rem]/[1.375rem] font-medium">Manual Custom Connector</span>
+            </button>
+          </Group>
+
+          {addOpen && (
+            <Group>
+              <div className="p-4 space-y-3 bg-app">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-[1rem] font-semibold text-primary">Manual Connector</h4>
+                  <button type="button" onClick={() => setAddOpen(false)} className="text-[#0A84FF] text-[0.9375rem]">Cancel</button>
+                </div>
                 <label className="block">
-                  <span className="mb-1 block text-[0.6875rem]/4 font-semibold uppercase tracking-[0.06em] text-tertiary">Connector type</span>
+                  <span className="mb-1 block text-[0.8125rem] text-tertiary">Type</span>
                   <span className="relative block">
-                    <select
-                      value={draftKind}
-                      onChange={(event) => { setDraftKind(event.target.value as CustomConnectorKind); setAddState({ phase: "idle" }); }}
-                      className="min-h-11 w-full appearance-none rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 pr-10 text-[0.875rem]/5 font-medium text-primary outline-none focus:border-accent"
-                    >
+                    <select value={draftKind} onChange={(event) => { setDraftKind(event.target.value as CustomConnectorKind); setAddState({ phase: "idle" }); }} className="h-10 w-full appearance-none rounded-[8px] border border-[var(--border-subtle)] bg-elev-3 px-3 pr-10 text-[0.9375rem] text-primary outline-none focus:border-[#0A84FF]">
                       {CONNECTOR_KINDS.map((kind) => <option key={kind.id} value={kind.id}>{kind.label}</option>)}
                     </select>
-                    <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary" />
+                    <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-tertiary" />
                   </span>
                 </label>
-                <input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Name, e.g. My DeepSeek key" className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent" />
-                <input value={draftUrl} onChange={(event) => setDraftUrl(event.target.value)} placeholder={CONNECTOR_KINDS.find((kind) => kind.id === draftKind)?.urlHint} inputMode="url" autoCapitalize="none" className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent" />
-                <input value={draftKey} onChange={(event) => setDraftKey(event.target.value)} placeholder={draftKind === "supabase" ? "Anon key" : "API key"} type="password" autoComplete="off" className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent" />
-                {CONNECTOR_KINDS.find((kind) => kind.id === draftKind)?.needsModel ? (
-                  <input value={draftModel} onChange={(event) => setDraftModel(event.target.value)} placeholder="Default model (optional)" autoCapitalize="none" className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent" />
-                ) : null}
-                {addState.phase === "error" ? (
-                  <div className="flex gap-1.5 text-[0.6875rem]/4 font-medium text-danger"><AlertTriangle size={14} className="shrink-0" />{addState.message}</div>
-                ) : null}
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => void addCustomConnector()} disabled={addState.phase === "testing"} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed disabled:opacity-60">
-                    {addState.phase === "testing" ? <><LoaderCircle size={16} className="animate-spin" />Testing…</> : "Test and add"}
-                  </button>
-                  <button type="button" onClick={() => { setAddOpen(false); setAddState({ phase: "idle" }); }} className="min-h-11 rounded-xl px-4 text-[0.8125rem]/5 font-semibold text-secondary active:bg-elev-3">Cancel</button>
+                <input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Name, e.g. My Database" className="h-10 w-full rounded-[8px] border border-[var(--border-subtle)] bg-elev-3 px-3 text-[0.9375rem] text-primary outline-none placeholder:text-tertiary focus:border-[#0A84FF]" />
+                <input value={draftUrl} onChange={(event) => setDraftUrl(event.target.value)} placeholder={CONNECTOR_KINDS.find((k) => k.id === draftKind)?.urlHint || "https://..."} inputMode="url" autoCapitalize="none" className="h-10 w-full rounded-[8px] border border-[var(--border-subtle)] bg-elev-3 px-3 text-[0.9375rem] text-primary outline-none placeholder:text-tertiary focus:border-[#0A84FF]" />
+                <input value={draftKey} onChange={(event) => setDraftKey(event.target.value)} placeholder={draftKind === "supabase" ? "Anon key" : "API key"} type="password" autoComplete="off" className="h-10 w-full rounded-[8px] border border-[var(--border-subtle)] bg-elev-3 px-3 text-[0.9375rem] text-primary outline-none placeholder:text-tertiary focus:border-[#0A84FF]" />
+                {CONNECTOR_KINDS.find((k) => k.id === draftKind)?.needsModel && (
+                  <input value={draftModel} onChange={(event) => setDraftModel(event.target.value)} placeholder="Default model (optional)" autoCapitalize="none" className="h-10 w-full rounded-[8px] border border-[var(--border-subtle)] bg-elev-3 px-3 text-[0.9375rem] text-primary outline-none placeholder:text-tertiary focus:border-[#0A84FF]" />
+                )}
+                {addState.phase === "error" && <div className="flex gap-1.5 text-[0.8125rem] text-[#FF453A] mt-1"><AlertTriangle size={14} className="shrink-0" />{addState.message}</div>}
+                <button type="button" onClick={() => void addCustomConnector()} disabled={addState.phase === "testing"} className="h-10 w-full rounded-[8px] bg-[#0A84FF] font-semibold text-white active:opacity-80 disabled:opacity-50 mt-2 flex items-center justify-center gap-2">
+                  {addState.phase === "testing" ? <><LoaderCircle size={16} className="animate-spin" />Testing...</> : "Add Connector"}
+                </button>
+              </div>
+            </Group>
+          )}
+
+          {apiOpen && (
+            <Group>
+              <div className="p-4 space-y-3 bg-app">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-[1rem] font-semibold text-primary">Discover API</h4>
+                  <button type="button" onClick={() => { setApiOpen(false); setDiscovery({ phase: "idle" }); }} className="text-[#0A84FF] text-[0.9375rem]">Cancel</button>
                 </div>
-              </div>
-            ) : (
-              <button type="button" onClick={() => { setAddOpen(true); haptic("selection", haptics); }} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-2">
-                <Plus size={16} />Add custom connector
-              </button>
-            )}
-          </section>
+                <input value={apiUrl} onChange={(event) => { setApiUrl(event.target.value); setDiscovery({ phase: "idle" }); }} placeholder="https://api.example.com" inputMode="url" autoCapitalize="none" className="h-10 w-full rounded-[8px] border border-[var(--border-subtle)] bg-elev-3 px-3 text-[0.9375rem] text-primary outline-none placeholder:text-tertiary focus:border-[#0A84FF]" />
+                <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="API key (optional)" type="password" autoCapitalize="none" className="h-10 w-full rounded-[8px] border border-[var(--border-subtle)] bg-elev-3 px-3 text-[0.9375rem] text-primary outline-none placeholder:text-tertiary focus:border-[#0A84FF]" />
+                <p className="text-[0.8125rem] text-tertiary mt-1">Keys travel only with your requests. Not sent for discovery.</p>
 
-          {/* Any API at all, by reading its own description of itself. The
-              drop-down above covers four shapes this app has adapters for;
-              this covers everything that publishes an OpenAPI document, which
-              is most of what anyone would want to add. */}
-          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elev-2 text-secondary"><Sparkles size={21} /></span>
-              <span className="min-w-0 flex-1">
-                <h2 className="text-[0.9375rem]/5 font-semibold text-primary">Any API</h2>
-                <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
-                  Paste an address and Navi Soul reads the API&rsquo;s own description to learn what it can do. Nothing is written without asking you once.
-                </p>
-              </span>
-            </div>
-
-            {capabilities.length ? (
-              <div className="mt-3 divide-y divide-[var(--border-subtle)]">
-                {capabilities.map((entry) => (
-                  <div key={entry.manifest.id} className="flex min-h-14 items-center gap-3 py-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--selection-bg)] text-accent"><Sparkles size={18} /></span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[0.875rem]/5 font-semibold text-primary">{entry.manifest.name}</span>
-                      <span className="block truncate text-[0.6875rem]/4 font-medium text-tertiary">
-                        {entry.manifest.operations.length} operation{entry.manifest.operations.length === 1 ? "" : "s"}
-                        {entry.approvedWrites.length ? ` · ${entry.approvedWrites.length} write${entry.approvedWrites.length === 1 ? "" : "s"} approved` : ""}
-                        {" · "}{new URL(entry.manifest.baseUrl).hostname}
-                      </span>
-                    </span>
-                    <button type="button" onClick={() => removeApi(entry.manifest.id)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-secondary active:bg-elev-3" aria-label={`Remove ${entry.manifest.name}`}>
-                      <Trash2 size={17} />
-                    </button>
+                {discovery.phase === "failed" && (
+                  <div className="mt-2 rounded-[8px] bg-red-500/10 p-3 text-[0.8125rem] text-[#FF453A]">
+                    <div className="flex items-center gap-1.5 font-medium"><AlertTriangle size={14} />{discovery.message}</div>
+                    {discovery.detail && <div className="mt-1 opacity-80 break-all">{discovery.detail}</div>}
                   </div>
-                ))}
-              </div>
-            ) : null}
+                )}
 
-            {apiOpen ? (
-              <div className="mt-3 space-y-2">
-                <input
-                  value={apiUrl}
-                  onChange={(event) => { setApiUrl(event.target.value); setDiscovery({ phase: "idle" }); }}
-                  placeholder="https://api.example.com"
-                  inputMode="url"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  aria-label="API address"
-                  className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent"
-                />
-                <input
-                  value={apiKey}
-                  onChange={(event) => setApiKey(event.target.value)}
-                  placeholder="API key, if it needs one"
-                  type="password"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  aria-label="API key"
-                  className="min-h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-elev-1 px-3 text-[0.875rem]/5 text-primary outline-none placeholder:text-tertiary focus:border-accent"
-                />
-                {/* Said where the key is typed rather than in a policy page:
-                    the key is not sent to discover the API, only to call it. */}
-                <p className="text-[0.6875rem]/4 font-medium text-tertiary">
-                  The key stays on this device and travels only with your own requests. It is not sent to read the description.
-                </p>
-
-                {discovery.phase === "failed" ? (
-                  <div className="rounded-2xl border border-[var(--accent-warning)] bg-elev-2 p-3">
-                    <p className="flex gap-1.5 text-[0.75rem]/4 font-medium text-warning"><AlertTriangle size={14} className="shrink-0" />{discovery.message}</p>
-                    {/* What was actually tried. "We could not find a spec" with
-                        nothing behind it is indistinguishable from not having
-                        looked, and this is the screen where someone decides
-                        whether their API is supported at all. */}
-                    {discovery.detail ? (
-                      <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-[0.625rem]/4 font-medium text-tertiary">{discovery.detail}</pre>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {discovery.phase === "found" ? (
-                  <div className="rounded-2xl border border-[var(--border-strong)] bg-elev-2 p-3">
-                    <p className="text-[0.875rem]/5 font-semibold text-primary">{discovery.manifest.name}</p>
-                    {discovery.manifest.purpose ? (
-                      <p className="mt-1 text-[0.75rem]/4 font-medium text-secondary">{discovery.manifest.purpose}</p>
-                    ) : null}
-                    {/* Reads and writes counted apart, because that is the
-                        number worth knowing before agreeing to any of it. */}
-                    <p className="mt-2 text-[0.6875rem]/4 font-medium text-tertiary">
-                      {discovery.summary.operations} operations · {discovery.summary.reads} read
-                      {discovery.summary.writes ? ` · ${discovery.summary.writes} that change things, each asked about once before its first use` : " · none that change anything"}
-                    </p>
-                    <p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">
-                      {discovery.summary.truncated ? (
-                      /* Said at the moment of adding, which is the only moment
-                         it can change a decision. A large API silently becoming
-                         its first 120 operations surfaces much later as "why
-                         can it not do the thing the docs describe", and by then
-                         nothing on screen explains it. */
-                        <span className="block text-amber-600 dark:text-amber-400">
-                          This API describes {discovery.summary.truncated.declared} operations and the first{" "}
-                          {discovery.summary.truncated.kept} were kept. The rest are not available.
-                        </span>
-                      ) : null}
-                      {discovery.summary.auth === "none"
-                        ? "It needs no key."
-                        : `It authenticates with ${discovery.summary.auth === "bearer" ? "a bearer token" : `a ${discovery.summary.auth}`}.`}
-                    </p>
-                  </div>
-                ) : null}
-
-                <div className="flex gap-2 pt-1">
-                  {discovery.phase === "found" ? (
-                    <button type="button" onClick={saveApi} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed">
-                      <Check size={16} />Add {discovery.manifest.name}
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => void discoverApi()} disabled={discovery.phase === "looking" || !apiUrl.trim()} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-[0.8125rem]/5 font-semibold text-white active:bg-accent-pressed disabled:opacity-60">
-                      {discovery.phase === "looking" ? <><LoaderCircle size={16} className="animate-spin" />Reading the API…</> : "Read this API"}
-                    </button>
-                  )}
-                  <button type="button" onClick={() => { setApiOpen(false); setDiscovery({ phase: "idle" }); }} className="min-h-11 rounded-xl px-4 text-[0.8125rem]/5 font-semibold text-secondary active:bg-elev-3">Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <button type="button" onClick={() => { setApiOpen(true); haptic("selection", haptics); }} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] text-[0.8125rem]/5 font-semibold text-accent active:bg-elev-2">
-                <Plus size={16} />Add an API
-              </button>
-            )}
-          </section>
-
-          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elev-2 text-secondary"><Link2 size={21} /></span>
-              <span className="min-w-0 flex-1"><h2 className="text-[0.9375rem]/5 font-semibold text-primary">Available connectors</h2><p className="mt-1 text-[0.6875rem]/4 font-medium text-tertiary">Configured through the server-side MCP registry. Credentials never enter the browser.</p></span>
-            </div>
-
-            {errors.directory ? <div className="mt-3 flex gap-2 rounded-2xl border border-[var(--accent-danger)] bg-elev-2 p-3 text-[0.75rem]/4 font-medium text-danger"><AlertTriangle size={16} className="shrink-0" />{errors.directory}</div> : null}
-
-            <div className="mt-3 divide-y divide-[var(--border-subtle)]">
-              {servers.map((server) => {
-                const connected = preferences.connectedMcpServers.includes(server.id);
-                return (
-                  <div key={server.id} className="py-3">
-                    <div className="flex min-h-14 items-center gap-3">
-                      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${connected ? "bg-[var(--selection-bg)] text-accent" : "bg-elev-2 text-secondary"}`}><Link2 size={18} /></span>
-                      <span className="min-w-0 flex-1"><span className="block truncate text-[0.875rem]/5 font-semibold text-primary">{server.name}</span><span className="block truncate text-[0.6875rem]/4 font-medium text-tertiary">Remote HTTPS MCP · {server.readOnly ? "read-only" : "writes require confirmation"}</span></span>
-                      {connecting === server.id ? <LoaderCircle size={19} className="animate-spin text-accent" /> : <Switch value={connected} label={`${connected ? "Disconnect" : "Connect"} ${server.name}`} onChange={() => void toggle(server)} />}
+                {discovery.phase === "found" && (
+                  <div className="mt-2 rounded-[8px] bg-[#0A84FF]/10 p-3 border border-[#0A84FF]/20">
+                    <div className="text-[0.9375rem] font-semibold text-[#0A84FF]">{discovery.manifest.name}</div>
+                    {discovery.manifest.purpose && <div className="text-[0.8125rem] text-primary mt-1">{discovery.manifest.purpose}</div>}
+                    <div className="text-[0.8125rem] text-secondary mt-2">
+                      {discovery.summary.operations} operations · {discovery.summary.reads} read {discovery.summary.writes ? `· ${discovery.summary.writes} writes` : ""}
                     </div>
-                    {errors[server.id] ? <div className="ml-[52px] mt-1 flex gap-1.5 text-[0.6875rem]/4 font-medium text-danger"><AlertTriangle size={14} className="shrink-0" />{errors[server.id]}</div> : null}
+                    <div className="text-[0.8125rem] text-secondary mt-1">Auth: {discovery.summary.auth}</div>
+                    <button type="button" onClick={saveApi} className="mt-3 h-10 w-full rounded-[8px] bg-[#0A84FF] font-semibold text-white active:opacity-80 flex items-center justify-center gap-2">
+                      <Check size={16} /> Add {discovery.manifest.name}
+                    </button>
                   </div>
-                );
-              })}
-              {/* There is deliberately no Add button: a connector server carries
-                  credentials, so it is registered in the deployment rather than
-                  typed into a phone. An empty panel with no explanation reads as
-                  a missing feature, so name the thing that adds one. */}
-              {!loading && !servers.length ? (
-                <div className="py-8 text-center">
-                  <p className="text-[0.8125rem]/5 font-medium text-secondary">No connector servers yet.</p>
-                  <p className="mx-auto mt-1 max-w-[46ch] text-[0.6875rem]/4 font-medium text-tertiary">
-                    Connector servers are set up for the whole deployment rather than per person, so there is nothing to add from this device. Whoever administers this deployment can configure them; the details are under Settings → Developer.
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </section>
+                )}
 
-          <section className="mt-4 rounded-[24px] border border-[var(--border-subtle)] bg-elev-1 p-4">
-            <div className="flex gap-3"><LockKeyhole size={17} className="mt-0.5 shrink-0 text-accent" /><p className="text-[0.75rem]/[1.125rem] font-medium text-tertiary">Writes, purchases, bookings, deletes, and sends always ask first, whatever the access mode above says.</p></div>
-          </section>
+                {discovery.phase !== "found" && (
+                  <button type="button" onClick={() => void discoverApi()} disabled={discovery.phase === "looking" || !apiUrl.trim()} className="h-10 w-full rounded-[8px] bg-[#0A84FF] font-semibold text-white active:opacity-80 disabled:opacity-50 mt-2 flex items-center justify-center gap-2">
+                    {discovery.phase === "looking" ? <><LoaderCircle size={16} className="animate-spin" />Reading API...</> : "Read API"}
+                  </button>
+                )}
+              </div>
+            </Group>
+          )}
         </div>
       </main>
     </div>
