@@ -3,20 +3,12 @@
 import {
   AudioLines,
   ArrowUp,
-  BookOpen,
-  Camera,
   ChevronDown,
-  Code2,
   FileText,
-  Image as ImageIcon,
   LoaderCircle,
   Mic,
-  Paperclip,
   Plus,
   Check,
-  FolderKanban,
-  Link2,
-  Search,
   Square,
   Volume2,
   X
@@ -42,10 +34,7 @@ import {
   type AutoStopReason,
   type RecordingSession
 } from "@/lib/ui/recorder";
-import { IntegrationsSheet, type IntegrationStatus } from "./integrations-sheet";
 import type { VoiceConversation } from "@/lib/ui/voice-conversation";
-import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
-import { useOverlayRoute } from "@/lib/ui/overlay-route";
 import { watchProviderStatus } from "@/lib/ui/provider-status";
 import {
   ATTACHMENT_BUDGET,
@@ -63,34 +52,12 @@ const DOCUMENT_ACCEPT = [
 ].join(",");
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
+const COMBINED_ACCEPT = `${IMAGE_ACCEPT},${DOCUMENT_ACCEPT}`;
 
-/**
- * The waveform is a record of what was heard, not a decoration.
- *
- * It used to be fifteen fixed weights driven through a sine of the elapsed
- * second — so it moved identically whether the microphone was picking up a
- * voice or picking up nothing, which is precisely the question the person
- * watching it is asking. Now each bar is the loudest moment of a real 60ms
- * window and they scroll leftwards, which makes silence look like silence and
- * a dead microphone look dead.
- */
 const WAVEFORM_BAR_COUNT = 34;
 const WAVEFORM_BAR_MS = 60;
-
-/* Fixed per-bar weights for the conversation strip, where the row is short and
-   there is no scrolling history to show — only whether the microphone is
-   hearing anything right now. The height comes from the live level; these vary
-   the shape so it reads as a voice rather than a block. */
 const CONVERSATION_BARS = [0.55, 0.85, 1, 0.7, 1, 0.8, 0.6];
 
-/**
- * The loop's state, said plainly.
- *
- * Every phase gets a line, including the ones that pass in under a second.
- * A conversation where the screen goes blank between speaking and hearing is
- * one where nobody can tell a pause from a failure, and the phase is the only
- * thing that answers that.
- */
 const CONVERSATION_PLACEHOLDER: Record<VoiceConversation["phase"], string> = {
   off: "",
   listening: "Listening — just talk",
@@ -98,8 +65,6 @@ const CONVERSATION_PLACEHOLDER: Record<VoiceConversation["phase"], string> = {
   thinking: "Navi Soul is thinking…",
   speaking: "Answering — the mic reopens after"
 };
-
-const menuRow = "flex min-h-[50px] w-full items-center gap-3 px-4 text-left text-[0.9375rem]/[1.375rem] font-medium text-primary active:bg-elev-3";
 
 type Props = {
   value: string;
@@ -110,17 +75,6 @@ type Props = {
   effortLabel: string;
   hasMessages: boolean;
   research: boolean;
-  /**
-   * Code mode, which is a routing preference for the next message and nothing
-   * more.
-   *
-   * It lives here, beside Effort and Research, because that is what it is: a
-   * per-message dial. It used to hold the header's dominant line — the position
-   * every other screen uses to say *where you are* — while behaving as a
-   * setting, so switching it changed the title and not the conversation, and
-   * opening an old chat relabelled it retroactively with a mode it was never
-   * held in.
-   */
   codeMode: boolean;
   onToggleCode: () => void;
   offlineCommand: boolean;
@@ -132,7 +86,6 @@ type Props = {
   onStop: () => void;
   onFiles: (files: FileList | null) => void;
   onOpenEffort: () => void;
-  /** The spoken conversation, owned by the shell and driven from here. */
   conversation: VoiceConversation;
   onToggleResearch: () => void;
   onOpenTools: () => void;
@@ -212,9 +165,7 @@ export function ComposerDock({
 }: Props) {
   const dockRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const documentInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<RecordingSession | null>(null);
 
   useEffect(() => {
@@ -237,77 +188,29 @@ export function ComposerDock({
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  /**
-   * The transcript as it arrives, which is now during the recording rather
-   * than after it.
-   *
-   * Kept apart from the draft until the recording is accepted. The words
-   * appear in the composer as they are spoken — that is the whole point — but
-   * they are a preview until then, so discarding a recording actually
-   * discards it instead of leaving half a sentence behind in the box.
-   */
+
   const [liveTranscript, setLiveTranscript] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [waveform, setWaveform] = useState<number[]>([]);
   const [focused, setFocused] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [providerReady, setProviderReady] = useState<boolean | null>(null);
-  const [integrationsOpen, setIntegrationsOpen] = useState(false);
-  const [integrations, setIntegrations] = useState<IntegrationStatus>({
-    github: false,
-    vercel: false,
-    search: { configured: false, provider: null },
-    loaded: false
-  });
   const [touchKeyboard, setTouchKeyboard] = useState(false);
 
   const valueRef = useRef(value);
   valueRef.current = value;
-  /* Levels arrive fifty times a second. Held in refs and drained on an
-     animation frame, because fifty React renders a second to move a row of
-     bars is measurable on a phone — and the bars only refresh sixty times a
-     second anyway. */
   const peakRef = useRef(0);
   const waveformRef = useRef<number[]>([]);
-  const sourceSheet = useSheetDrag({ open: sourceMenuOpen, onDismiss: () => setSourceMenuOpen(false), haptics });
-
-  useOverlayRoute({ open: sourceMenuOpen, onClose: () => setSourceMenuOpen(false) });
-  useOverlayRoute({ open: integrationsOpen, onClose: () => setIntegrationsOpen(false) });
 
   const commands: Skill[] = value.startsWith("/") && !value.includes("\n") ? suggest(value, 6) : [];
   const showCommands = commands.length > 0 && focused;
 
-  /**
-   * The draft as it will read if this recording is kept.
-   *
-   * Shown in the composer itself rather than in a panel above it, because
-   * that is where the text is going to end up and watching it land there is
-   * what makes dictation feel like typing rather than like filing a request.
-   * Read-only while it is a preview: an editable box whose contents are being
-   * rewritten underneath the caret is a box that eats what you type.
-   *
-   * It stays out of `value` until the recording is accepted, which is what
-   * makes discarding one an actual discard rather than an undo.
-   */
   const dictating = listening || transcribing;
-  /**
-   * The spoken conversation is running, which is a different thing from
-   * dictation and mutually exclusive with it.
-   *
-   * Dictation puts words in the box for someone to read and send. A
-   * conversation sends them itself and answers out loud. Two microphones open
-   * at once would fight over the device and transcribe the same sentence
-   * twice, so each disables the other's button rather than trusting nobody to
-   * press both.
-   */
   const talking = conversation.active;
-  /* What the box shows. In a conversation the words are not going into the
-     draft at all — the turn is sent as soon as the pause lands — so they are
-     shown in the same place for the same reason and then they are gone. */
+
   const previewValue = talking
     ? conversation.transcript
     : dictating && liveTranscript
@@ -324,9 +227,6 @@ export function ComposerDock({
     setTouchKeyboard(window.matchMedia("(pointer: coarse)").matches);
   }, []);
 
-  /* Measured against what is displayed, not against the draft. While dictation
-     is running the box shows the live transcript, and sizing to `value` would
-     leave a growing paragraph scrolled out of sight inside a one-line box. */
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -349,12 +249,6 @@ export function ComposerDock({
       return;
     }
     setProviderReady(Object.values(data.providers ?? {}).some(Boolean));
-    setIntegrations({
-      github: Boolean(data.devTools?.github),
-      vercel: Boolean(data.devTools?.vercel),
-      search: { configured: Boolean(data.search?.configured), provider: data.search?.provider ?? null },
-      loaded: true
-    });
   }), []);
 
   useEffect(() => () => recorderRef.current?.cancel(), []);
@@ -368,15 +262,6 @@ export function ComposerDock({
     ? "Add instructions for these files"
     : hasMessages ? "Write a message…" : "How can I help you today?";
 
-  /**
-   * Which voice is talking, said out loud on the one screen where it matters.
-   *
-   * Silence had four causes that looked the same from both sides. Naming the
-   * engine means the answer to "why can I not hear it" is on screen the moment
-   * it happens, rather than something to be inferred from server logs
-   * afterwards — and if the premium voice is quietly unconfigured, that stops
-   * being a mystery and becomes a sentence.
-   */
   const spokenBy = conversation.voice && conversation.phase === "speaking"
     ? conversation.voice.engine === "premium"
       ? "Answering in the premium voice"
@@ -404,10 +289,6 @@ export function ComposerDock({
       ? "text-accent"
       : !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
 
-  /* Counts up rather than down. The old clock counted towards a sixty-second
-     ceiling that existed because a whole recording had to fit in one request;
-     nothing is held whole now, so there is no deadline to show and a deadline
-     shown is a thought cut short. */
   useEffect(() => {
     if (!listening) { setRecordedSeconds(0); return; }
     const started = Date.now();
@@ -415,9 +296,6 @@ export function ComposerDock({
     return () => window.clearInterval(timer);
   }, [listening]);
 
-  /* One place the waveform advances, at the display's own rate. A bar is the
-     peak of the window it covers rather than the last sample in it, so a
-     short loud syllable cannot fall between two frames and vanish. */
   useEffect(() => {
     if (!listening) {
       waveformRef.current = [];
@@ -444,7 +322,6 @@ export function ComposerDock({
     if ((!value.trim() && attachmentCount === 0) || generating) return;
     if (!online && !offlineCommand) return;
     setSending(true);
-    setSourceMenuOpen(false);
     haptic("impact-light", haptics);
     window.setTimeout(() => setSending(false), 100);
     onSend();
@@ -505,7 +382,6 @@ export function ComposerDock({
     incoming.forEach((file) => transfer.items.add(file));
     setSelectedFiles((current) => [...current, ...incoming].slice(0, MAX_ATTACHMENTS));
     setAttachmentMessage(null);
-    setSourceMenuOpen(false);
     onFiles(transfer.files);
     haptic("selection", haptics);
     window.setTimeout(() => textareaRef.current?.focus(), 80);
@@ -536,15 +412,7 @@ export function ComposerDock({
     addSelectedFiles(event.dataTransfer.files);
   }
 
-  function openSourceMenu() {
-    if (blocked || generating) return;
-    setAttachmentMessage(null);
-    setSourceMenuOpen(true);
-    haptic("selection", haptics);
-  }
-
   function openTools() {
-    setSourceMenuOpen(false);
     haptic("selection", haptics);
     onOpenTools();
   }
@@ -562,23 +430,11 @@ export function ComposerDock({
 
     try {
       const session = await startRecording({
-        /* Recorded into a ref rather than into state; the effect above turns
-           it into bars at the display's rate. */
         onLevel: (level) => { peakRef.current = Math.max(peakRef.current, level); },
         onSpeaking: setSpeaking,
-        /* The words, while they are still being said. Each call is the whole
-           transcript so far and it only ever grows, so this can be rendered
-           straight through without the text reordering itself as later pieces
-           of the recording come back. */
         onTranscript: setLiveTranscript,
         onError: (message) => setVoiceMessage(message),
         onAutoStop: (reason: AutoStopReason) => {
-          /* Only two of these can reach the composer: the fifteen-minute
-             safety stop, and the microphone being taken away by a call or
-             another app. Both mean "this recording is over" rather than "this
-             recording is lost" — everything up to the interruption has
-             already been transcribed, so it is finished rather than
-             discarded. */
           if (reason === "too-long") {
             setVoiceMessage(`Recording stopped at ${Math.round(MAX_RECORDING_SECONDS / 60)} minutes. Keeping what you said.`);
           }
@@ -592,11 +448,6 @@ export function ComposerDock({
       setListening(false);
       setSpeaking(false);
       setTranscribing(false);
-
-      /* Whatever the recorder threw, said as it was thrown. It already tells a
-         refused permission apart from a missing device, and an installed iOS
-         app apart from a browser tab — replacing that with a generic line here
-         would throw away the only part of the message that names the remedy. */
       setVoiceMessage(error instanceof Error ? error.message : "Recording could not start.");
     }
   }
@@ -617,9 +468,6 @@ export function ComposerDock({
     haptic("selection", haptics);
 
     try {
-      /* Usually a short wait now, and often none at all: everything up to the
-         last pause has been transcribing while the person was still talking,
-         so this only has to finish the final segment. */
       const text = await session.stop();
       if (text) {
         const current = valueRef.current;
@@ -641,8 +489,6 @@ export function ComposerDock({
     recorderRef.current = null;
     setListening(false);
     setSpeaking(false);
-    /* The preview goes with it. It was never written into the draft, so
-       discarding is a discard rather than an undo. */
     setLiveTranscript("");
     setVoiceMessage(null);
     haptic("selection", haptics);
@@ -658,40 +504,19 @@ export function ComposerDock({
     <>
       <div
         ref={dockRef}
-        className={`navi-composer-dock relative z-40 shrink-0 border-t transition-colors duration-150 ${dragActive ? "border-accent bg-[var(--selection-bg)]" : "border-[var(--border-subtle)]"}`}
+        className={`navi-composer-dock relative z-40 shrink-0 border-t transition-colors duration-150 ${dragActive ? "border-[#0A84FF] bg-[#0A84FF]/5" : "border-[var(--border-subtle)]"}`}
         onDragEnter={dragOver}
         onDragOver={dragOver}
         onDragLeave={dragLeave}
         onDrop={drop}
       >
         <div className="mx-auto w-full max-w-app">
+          {/* Universal native iOS File Picker mapped to the + button */}
           <input
-            ref={imageInputRef}
+            ref={fileInputRef}
             type="file"
             multiple
-            accept={IMAGE_ACCEPT}
-            className="hidden"
-            onChange={(event) => {
-              addSelectedFiles(event.currentTarget.files);
-              event.currentTarget.value = "";
-            }}
-          />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(event) => {
-              addSelectedFiles(event.currentTarget.files);
-              event.currentTarget.value = "";
-            }}
-          />
-          <input
-            ref={documentInputRef}
-            type="file"
-            multiple
-            accept={DOCUMENT_ACCEPT}
+            accept={COMBINED_ACCEPT}
             className="hidden"
             onChange={(event) => {
               addSelectedFiles(event.currentTarget.files);
@@ -700,7 +525,7 @@ export function ComposerDock({
           />
 
           {dragActive ? (
-            <div className="mb-2 flex min-h-12 items-center justify-center rounded-2xl border border-dashed border-accent bg-elev-2 px-3 text-[0.75rem]/4 font-semibold text-primary">
+            <div className="mb-2 flex min-h-12 items-center justify-center rounded-2xl border border-dashed border-[#0A84FF] bg-elev-2 px-3 text-[0.75rem]/4 font-semibold text-primary">
               Drop files here to attach them
             </div>
           ) : null}
@@ -734,7 +559,7 @@ export function ComposerDock({
             <div
               role="listbox"
               aria-label="Commands"
-              className="mb-1.5 overflow-hidden rounded-card border border-[var(--border-subtle)] bg-elev-1 shadow-menu"
+              className="mb-1.5 overflow-hidden rounded-[14px] border border-[var(--border-subtle)] bg-elev-1 shadow-sm"
             >
               {commands.map((skill) => (
                 <button
@@ -743,13 +568,13 @@ export function ComposerDock({
                   role="option"
                   aria-selected="false"
                   onPointerDown={(event) => { event.preventDefault(); completeCommand(skill); }}
-                  className="flex min-h-[52px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-3 text-left last:border-b-0 active:bg-elev-2"
+                  className="flex min-h-[52px] w-full items-center gap-3 border-b border-[var(--border-subtle)] px-3 text-left last:border-b-0 active:bg-black/5 dark:active:bg-white/5"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[0.875rem]/5 font-semibold text-primary">{skill.triggers.slash}</span>
-                    <span className="block truncate text-[0.75rem]/4 font-medium text-tertiary">{skill.description}</span>
+                    <span className="block truncate text-[17px] tracking-[-0.41px] text-primary">{skill.triggers.slash}</span>
+                    <span className="block truncate text-[13px] text-tertiary">{skill.description}</span>
                   </span>
-                  <span className="shrink-0 rounded-full bg-elev-2 px-2 py-0.5 text-[0.625rem]/4 font-semibold uppercase tracking-wide text-tertiary">
+                  <span className="shrink-0 rounded-[4px] bg-elev-2 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-tertiary">
                     on device
                   </span>
                 </button>
@@ -787,20 +612,23 @@ export function ComposerDock({
               placeholder={talking ? CONVERSATION_PLACEHOLDER[conversation.phase] : listening ? "Listening — speak naturally" : placeholder}
               aria-label="Chat with Navi Soul"
               data-navi-composer=""
-              className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[1rem]/6 font-normal text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
+              className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[17px] tracking-[-0.41px] text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
             <div className="mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
               {listening || talking ? null : (
               <button
                 type="button"
-                onClick={openSourceMenu}
+                onClick={() => {
+                  if (blocked || generating) return;
+                  haptic("selection", haptics);
+                  fileInputRef.current?.click();
+                }}
                 disabled={blocked || generating}
                 className="composer-action"
                 aria-label="Add photos, camera, and files"
-                aria-expanded={sourceMenuOpen}
               >
-                <Plus size={22} strokeWidth={1.8} />
+                <Plus size={22} strokeWidth={1.5} />
               </button>
               )}
 
@@ -808,45 +636,11 @@ export function ComposerDock({
               <button
                 type="button"
                 onClick={onOpenEffort}
-                className="flex min-h-9 min-w-0 max-w-[180px] items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2"
+                className="flex items-center gap-1 px-2 text-[13px] font-medium text-tertiary hover:text-secondary active:opacity-60 transition-colors"
                 aria-label={`Effort: ${effortLabel}. Change effort`}
               >
-                <span className="truncate font-semibold text-primary">{effortLabel}</span>
-                <ChevronDown size={13} className="shrink-0 text-tertiary" />
-              </button>
-              )}
-
-              {listening || talking ? null : (
-              /* Chat is the default and goes unnamed — the app already treats
-                 it that way, showing a mode in the status line only when it is
-                 Code. So this is a toggle rather than a picker: there is one
-                 thing to turn on, and its absence is the ordinary case. */
-              <button
-                type="button"
-                role="switch"
-                aria-checked={codeMode}
-                onClick={() => { haptic("selection", haptics); onToggleCode(); }}
-                disabled={blocked || generating}
-                className={`flex min-h-9 shrink-0 items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2 ${codeMode ? "bg-[var(--selection-bg)]" : ""}`}
-                aria-label={codeMode ? "Code mode is on. Turn it off" : "Code mode is off. Turn it on for software, debugging, and repositories"}
-              >
-                <Code2 size={16} strokeWidth={1.8} className={`shrink-0 ${codeMode ? "text-accent" : "text-secondary"}`} />
-                <span className={`font-semibold ${codeMode ? "text-accent" : "text-secondary"}`}>Code</span>
-              </button>
-              )}
-
-              {listening || talking ? null : (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={research}
-                onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
-                disabled={blocked || generating}
-                className={`flex min-h-9 shrink-0 items-center gap-1 rounded-full px-2 text-[0.8125rem]/4 active:bg-elev-2 ${research ? "bg-[var(--selection-bg)]" : ""}`}
-                aria-label={research ? "Research is on. Turn it off" : "Research is off. Turn it on"}
-              >
-                <Search size={16} strokeWidth={1.8} className={`shrink-0 ${research ? "text-accent" : "text-secondary"}`} />
-                <span className={`font-semibold ${research ? "text-accent" : "text-secondary"}`}>Research</span>
+                <span className="truncate">{effortLabel}</span>
+                <ChevronDown size={13} className="shrink-0" />
               </button>
               )}
 
@@ -854,11 +648,7 @@ export function ComposerDock({
 
               {talking ? (
                 <span
-                  /* The conversation's own strip. It shares the dictation
-                     strip's shape on purpose — same ring, same bars, same
-                     place — because they are the same act from the person's
-                     side, and only the ending differs. */
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-accent" : "ring-transparent"}`}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-[#0A84FF]" : "ring-transparent"}`}
                   role="status"
                   aria-label={CONVERSATION_PLACEHOLDER[conversation.phase]}
                 >
@@ -874,16 +664,12 @@ export function ComposerDock({
                     {CONVERSATION_BARS.map((weight, index) => (
                       <span
                         key={index}
-                        className={`w-1.5 rounded-full transition-[height,background-color] duration-100 ${conversation.hearing ? "bg-accent" : "bg-[var(--border-strong)]"}`}
+                        className={`w-1.5 rounded-full transition-[height,background-color] duration-100 ${conversation.hearing ? "bg-[#0A84FF]" : "bg-[var(--border-strong)]"}`}
                         style={{ height: `${Math.max(4, Math.min(22, 4 + conversation.level * weight * 26))}px` }}
                       />
                     ))}
                   </span>
-                  {/* Which of the four things is happening. The bars only
-                      answer that while the microphone is open; between the
-                      pause and the answer they are flat, and flat is exactly
-                      what a broken microphone looks like. */}
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-accent">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#0A84FF]">
                     {conversation.phase === "speaking"
                       ? <Volume2 size={17} />
                       : conversation.phase === "listening"
@@ -893,13 +679,7 @@ export function ComposerDock({
                 </span>
               ) : listening ? (
                 <span
-                  /* The detector's own answer, not a level threshold read off
-                     the bars. It is the same judgement that decides where a
-                     segment is cut, so the ring lighting up means the words
-                     inside it are on their way — and a ring that never lights
-                     is the clearest possible statement that the microphone is
-                     open but hearing nothing. */
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${speaking ? "ring-accent" : "ring-transparent"}`}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${speaking ? "ring-[#0A84FF]" : "ring-transparent"}`}
                   role="status"
                   aria-label={speaking ? "Listening, speech detected" : "Listening"}
                 >
@@ -913,23 +693,20 @@ export function ComposerDock({
                   </button>
                   <span className="flex min-w-0 flex-1 items-center justify-end gap-[3px] overflow-hidden" aria-hidden="true">
                     {Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
-                      /* Right-aligned and padded on the left, so the first
-                         bars scroll in from the empty side instead of the row
-                         growing outwards from the middle. */
                       const offset = index - (WAVEFORM_BAR_COUNT - waveform.length);
                       const level = offset >= 0 ? waveform[offset] : 0;
                       const height = Math.max(3, Math.round(3 + level * 19));
                       return (
                         <span
                           key={index}
-                          className={`w-[3px] shrink-0 rounded-full transition-[height,background-color] duration-100 ${level > 0.02 ? "bg-accent" : "bg-[var(--border-strong)]"}`}
+                          className={`w-[3px] shrink-0 rounded-full transition-[height,background-color] duration-100 ${level > 0.02 ? "bg-[#0A84FF]" : "bg-[var(--border-strong)]"}`}
                           style={{ height: `${height}px` }}
                         />
                       );
                     })}
                   </span>
                   <span
-                    className="shrink-0 tabular-nums text-[0.75rem]/4 font-semibold text-secondary"
+                    className="shrink-0 tabular-nums text-[13px] font-semibold text-secondary"
                     aria-label={`Recording, ${recordedSeconds} seconds`}
                   >
                     {Math.floor(recordedSeconds / 60)}:{String(recordedSeconds % 60).padStart(2, "0")}
@@ -937,7 +714,7 @@ export function ComposerDock({
                   <button
                     type="button"
                     onClick={toggleVoice}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-[var(--accent-on-primary)] active:bg-accent-pressed"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0A84FF] text-white active:bg-opacity-80"
                     aria-label="Stop recording and transcribe"
                   >
                     <Check size={17} strokeWidth={2.4} />
@@ -951,15 +728,10 @@ export function ComposerDock({
                 className={`composer-action ${transcribing ? "opacity-60" : ""}`}
                 aria-label={transcribing ? "Transcribing" : "Record a message"}
               >
-                <Mic size={19} strokeWidth={1.8} />
+                <Mic size={20} strokeWidth={1.5} />
               </button>
               )}
               {listening || talking ? null : (
-              /* One tap and it is a conversation until it is ended: it
-                 listens, you pause, it answers aloud, it listens again. This
-                 used to open a sheet with a Start button, a Stop button, a
-                 Send button and two switches between wanting to say something
-                 and having said it. */
               <button
                 type="button"
                 onClick={conversation.toggle}
@@ -968,7 +740,7 @@ export function ComposerDock({
                 aria-label="Start a voice conversation"
                 aria-pressed={false}
               >
-                <AudioLines size={19} strokeWidth={1.8} />
+                <AudioLines size={20} strokeWidth={1.5} />
               </button>
               )}
               {value.trim() || attachmentCount || generating ? (
@@ -976,121 +748,24 @@ export function ComposerDock({
                   type={generating ? "button" : "submit"}
                   onClick={generating ? onStop : undefined}
                   disabled={!generating && !canSend}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-[var(--accent-on-primary)] shadow-sm active:scale-95 active:bg-accent-pressed" : "bg-elev-3 text-disabled"}`}
+                  className={`flex h-[34px] w-[34px] ml-1 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-[#0A84FF] text-white shadow-sm active:scale-95 active:bg-opacity-80" : "bg-elev-3 text-disabled"}`}
                   aria-label={generating ? "Stop response" : "Send message"}
                 >
-                  {generating ? <Square size={13} fill="currentColor" /> : <ArrowUp size={18} strokeWidth={2.4} />}
+                  {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={20} strokeWidth={2} />}
                 </button>
               ) : null}
             </div>
           </form>
 
-          <div className="flex items-center justify-center px-3 text-center" role="status" aria-live="polite">
+          <div className="flex items-center justify-center px-3 text-center pb-[max(0px,env(safe-area-inset-bottom))] mb-2" role="status" aria-live="polite">
             {footer ? (
-              <span className={`block max-h-8 overflow-hidden pt-1 text-[0.6875rem]/4 font-medium ${footerTone}`}>{footer}</span>
+              <span className={`block max-h-8 overflow-hidden pt-1 text-[11px] font-medium ${footerTone}`}>{footer}</span>
             ) : hasMessages ? (
-              <span className="block pt-1 text-[0.6875rem]/4 font-medium text-tertiary">Navi Soul is AI and can make mistakes. Double-check important answers.</span>
+              <span className="block pt-1 text-[11px] font-medium text-tertiary">Navi Soul is AI and can make mistakes. Double-check important answers.</span>
             ) : null}
           </div>
         </div>
       </div>
-
-      {sourceMenuOpen ? (
-        <div className="fixed inset-0 z-[85]">
-          <button
-            type="button"
-            aria-label="Close attachment menu"
-            onClick={() => setSourceMenuOpen(false)}
-            {...sourceSheet.scrimProps}
-            className="absolute inset-0 bg-overlay backdrop-blur-[3px]"
-          />
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add to message"
-            {...sourceSheet.sheetProps}
-            className="navi-sheet absolute inset-x-0 bottom-0 mx-auto w-full max-w-app px-gutter pb-[calc(18px+var(--safe-bottom))] pt-1"
-          >
-            <div {...sourceSheet.handleProps} className="navi-sheet-grab mb-1 pt-1"><div className="navi-sheet-grabber" /></div>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[1.0625rem]/6 font-semibold text-primary">Add to message</div>
-                <div className="text-[0.75rem]/4 font-medium text-tertiary">Up to six items · photos are resized to fit</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSourceMenuOpen(false)}
-                className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3"
-                aria-label="Close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="overflow-hidden rounded-card border border-[var(--border-subtle)] bg-elev-2">
-              <button type="button" onClick={() => imageInputRef.current?.click()} className={menuRow}>
-                <ImageIcon size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Add photos</span>
-              </button>
-              <button type="button" onClick={() => cameraInputRef.current?.click()} className={menuRow}>
-                <Camera size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Take a photo</span>
-              </button>
-              <button type="button" onClick={() => documentInputRef.current?.click()} className={menuRow}>
-                <Paperclip size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Add files</span>
-              </button>
-              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenProjects(); }} className={menuRow}>
-                <FolderKanban size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Add to project</span>
-                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
-              </button>
-
-              <div className="h-2 bg-[var(--bg-app)]" aria-hidden="true" />
-
-              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenPlaybooks(); }} className={menuRow}>
-                <BookOpen size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Playbooks</span>
-                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
-              </button>
-              <button type="button" onClick={() => { setSourceMenuOpen(false); setIntegrationsOpen(true); }} className={menuRow}>
-                <Link2 size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Integrations</span>
-                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
-              </button>
-
-              <div className="h-2 bg-[var(--bg-app)]" aria-hidden="true" />
-
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={research}
-                onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
-                className={menuRow}
-              >
-                <Search size={19} strokeWidth={1.8} className={`shrink-0 ${research ? "text-accent" : "text-secondary"}`} />
-                <span className="flex-1">Web search</span>
-                {research ? <Check size={18} strokeWidth={2.2} className="shrink-0 text-accent" /> : null}
-              </button>
-            </div>
-
-            <p className="mt-2.5 px-1 text-center text-[0.6875rem]/4 font-medium text-tertiary">
-              You can also paste a screenshot or drag files onto the composer.
-            </p>
-          </section>
-        </div>
-      ) : null}
-
-      <IntegrationsSheet
-        open={integrationsOpen}
-        status={integrations}
-        connectorCount={connectorCount}
-        connectorAccessMode={connectorAccessMode}
-        haptics={haptics}
-        onClose={() => setIntegrationsOpen(false)}
-        onOpenConnectors={() => { setIntegrationsOpen(false); onOpenConnectors(); }}
-      />
     </>
   );
 }
-

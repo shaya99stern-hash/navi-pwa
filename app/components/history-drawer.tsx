@@ -1,18 +1,15 @@
 "use client";
 
 import {
-  FileText,
-  FolderKanban,
-  Image as ImageIcon,
+  Layers,
+  MessageSquare,
   Pin,
   PinOff,
   Search,
   RefreshCw,
-  Settings,
   SquarePen,
+  SquareTerminal,
   Trash2,
-  UserRound,
-  Wrench,
   X
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -25,28 +22,16 @@ import { useSheetDrag } from "@/lib/ui/use-sheet-drag";
 
 type Props = {
   open: boolean;
-  /** 0-1 while an edge swipe is in progress, null when idle. */
   dragProgress?: number | null;
   chats: StoredChat[];
   activeId: string;
-  /** Display name from the profile; falls back to the workspace label. */
   profileName?: string;
   haptics: boolean;
   onClose: () => void;
   onNew: () => void;
+  onNewCode: () => void;
   onProjects: () => void;
-  /** Count beside the Projects row. The list itself is a screen of its own. */
   projects: NaviProject[];
-  /* Counts sit beside the rows they describe: a drawer that says "Files" tells
-     you the screen exists, one that says "Files 18" tells you it is worth
-     opening. Zero is rendered as no badge rather than as "0". */
-  fileCount: number;
-  imageCount: number;
-  /** Any tool enabled, shown as the green dot beside Tools. */
-  toolsOn: boolean;
-  onFiles: () => void;
-  onImages: () => void;
-  onTools: () => void;
   onSettings: () => void;
   onOpen: (chat: StoredChat) => void;
   onRename: (id: string, title: string) => void;
@@ -54,9 +39,10 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-export function HistoryDrawer({ open, dragProgress = null, chats, activeId, profileName, haptics, onClose, onNew, onProjects, projects, fileCount, imageCount, toolsOn, onFiles, onImages, onTools, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
+export function HistoryDrawer({ open, dragProgress = null, chats, activeId, haptics, onClose, onNew, onNewCode, onProjects, projects, onSettings, onOpen, onRename, onPin, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus | null>(null);
+  
   useEffect(() => {
     const receive = (event: Event) => {
       const detail = (event as CustomEvent<PwaUpdateStatus>).detail;
@@ -65,6 +51,7 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
     window.addEventListener(PWA_UPDATE_STATUS_EVENT, receive);
     return () => window.removeEventListener(PWA_UPDATE_STATUS_EVENT, receive);
   }, []);
+  
   const [selected, setSelected] = useState<StoredChat | null>(null);
   const holdTimer = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -85,18 +72,17 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
 
   const dragging = dragProgress !== null;
   if (!open && !dragging) return null;
+  
   const normalized = query.trim().toLowerCase();
-  /* Search reads every message, not the title and preview it used to — anything
-     said mid-conversation was unfindable, which is most of what anyone comes
-     back looking for. Results are one flat ranked list rather than the usual
-     pinned/recent split: when you are searching, relevance is the ordering you
-     want, and a pinned chat that merely mentions the word should not sit above
-     the thread that is about it. */
+  
   const results = normalized ? searchConversations(query, chats) : [];
   const snippets = new Map(results.map((match) => [match.chat.id, match.snippet]));
   const visible = normalized ? results.map((match) => match.chat) : chats;
   const pinned = normalized ? [] : visible.filter((chat) => chat.pinned);
   const recents = normalized ? visible : visible.filter((chat) => !chat.pinned);
+
+  const recentChats = recents.filter((chat) => !(chat as any).isCodeSession);
+  const recentCodeSessions = recents.filter((chat) => (chat as any).isCodeSession);
 
   function beginHold(chat: StoredChat, clientX?: number) {
     if (holdTimer.current) window.clearTimeout(holdTimer.current);
@@ -117,7 +103,6 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
     startX.current = null;
   }
 
-  /** Sidebar destinations are sheets, not routes — close the drawer, then present. */
   function openSheet(present: () => void) {
     haptic("selection", haptics);
     onClose();
@@ -149,8 +134,6 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
       >
         <button type="button" onClick={() => onOpen(chat)} className="min-w-0 flex-1 px-3 py-2.5 text-left">
           <span className="block truncate text-[0.9375rem]/5 font-normal text-primary">{chat.title}</span>
-          {/* Where the term actually appears. A result list of titles alone
-              makes you open each one to find out which is the right thread. */}
           {snippets.get(chat.id) ? (
             <span className="mt-0.5 block truncate text-[0.75rem]/4 font-normal text-tertiary">{snippets.get(chat.id)}</span>
           ) : null}
@@ -172,21 +155,16 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
         className={`safe-top safe-bottom absolute inset-y-0 left-0 flex w-[314px] max-w-[86vw] flex-col bg-[var(--bg-sidebar)] shadow-menu ${dragging ? "" : "drawer-enter"}`}
         style={dragging ? { transform: `translateX(${((dragProgress ?? 0) - 1) * 100}%)`, transition: "none" } : undefined}
       >
-        {/* The panel names itself and offers the way out, then the search, then
-            navigation. The product switch that used to sit here has moved to
-            the chevron beside the product name in the header — which is what a
-            chevron beside a product name is for, and it stops a durable choice
-            from occupying the top of a panel that answers "what do I have". */}
-        <div className="flex min-h-[52px] shrink-0 items-center gap-2 px-3.5 pt-1">
-          <span className="navi-orb h-[26px] w-[26px] shrink-0 rounded-full" aria-hidden="true" />
-          <span className="text-[0.9375rem]/[1.125rem] font-semibold tracking-[-0.01em] text-primary">NaviOS</span>
+        <div className="flex min-h-[52px] shrink-0 items-center gap-3 px-4 pt-1">
+          <img src="/pwa-icon-192-v5.png" alt="NaviOS" className="h-7 w-7 shrink-0 rounded-[6px] shadow-sm" />
+          <span className="text-[1.0625rem] font-semibold tracking-tight text-primary">NaviOS</span>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close sidebar"
-            className="ml-auto flex h-[38px] w-[38px] items-center justify-center rounded-full text-tertiary active:bg-elev-2"
+            className="ml-auto flex h-9 w-9 items-center justify-center rounded-full text-tertiary active:bg-elev-2"
           >
-            <X size={18} strokeWidth={2} />
+            <X size={20} strokeWidth={2} />
           </button>
         </div>
 
@@ -203,69 +181,47 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
         </div>
 
         <nav className="shrink-0 px-2 pt-2" aria-label="Navigation">
-          <button type="button" onClick={onNew} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <SquarePen size={19} strokeWidth={1.8} className="text-secondary" />
-            New chat
+          <button type="button" onClick={() => { onClose(); onNew(); }} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+            <MessageSquare size={19} strokeWidth={1.8} className="text-secondary" />
+            NaviOS Chat
           </button>
-          {/* No "Chats" row: the recents list is directly below it, so the row
-              navigated to what was already on screen. */}
-          {/* Projects in both modes.
-              The drawer used to swap this row out for Developer and
-              "Connectors and keys" whenever Code mode was on — configuration
-              surfaces, sitting in primary navigation, replacing the user's own
-              content. That is the "why is all this stuff in this side panel"
-              complaint, and it is a real category error rather than a matter of
-              taste: the sidebar answers *what do I have*, Settings answers
-              *how is this set up*. Both of those rows live in Settings already,
-              and Settings → Developer now actually opens instead of bouncing
-              back, so nothing is lost by holding the line. */}
+
+          <button type="button" onClick={() => { onClose(); onNewCode(); }} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
+            <SquareTerminal size={19} strokeWidth={1.8} className="text-secondary" />
+            NaviOS Code
+          </button>
+
           <button type="button" onClick={() => openSheet(onProjects)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <FolderKanban size={19} strokeWidth={1.8} className="text-secondary" />
+            <Layers size={19} strokeWidth={1.8} className="text-secondary" />
             Projects
             {projects.length ? <span className="ml-auto text-[0.71875rem]/[0.6875rem] font-semibold text-tertiary">{projects.length}</span> : null}
           </button>
-          {/* Files and Images are the two things the manifest, the OG copy and
-              the app's own subtitle have always promised. They existed only
-              inside the conversation that produced them, which made "the PDF I
-              sent last Tuesday" findable only by remembering the thread. */}
-          <button type="button" onClick={() => openSheet(onFiles)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <FileText size={19} strokeWidth={1.8} className="text-secondary" />
-            Files
-            {fileCount ? <span className="ml-auto text-[0.71875rem]/[0.6875rem] font-semibold text-tertiary">{fileCount}</span> : null}
-          </button>
-          <button type="button" onClick={() => openSheet(onImages)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <ImageIcon size={19} strokeWidth={1.8} className="text-secondary" />
-            Images
-            {imageCount ? <span className="ml-auto text-[0.71875rem]/[0.6875rem] font-semibold text-tertiary">{imageCount}</span> : null}
-          </button>
-          <button type="button" onClick={() => openSheet(onTools)} className="flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[0.9375rem]/5 font-medium text-primary active:bg-elev-2">
-            <Wrench size={19} strokeWidth={1.8} className="text-secondary" />
-            Tools
-            {toolsOn ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-success" aria-label="Tools enabled" /> : null}
-          </button>
-          {/* Artifacts reached from the Tools screen, which is where the rest
-              of what Navi Soul can produce is listed. */}
         </nav>
 
         <div className="mx-1.5 my-3 h-px shrink-0 bg-[var(--border-subtle)]" aria-hidden="true" />
 
         <div ref={listRef} className="scroll-area min-h-0 flex-1 overflow-y-auto px-2 pb-5 pt-3">
-          {/* Projects have their own row in the navigation above, so the
-              scroll area carries conversations and nothing else. Pinned keeps
-              its heading only while something is pinned — an always-present
-              empty section would be a second heading over one list. */}
           {pinned.length ? (
             <>
               <div className="mb-2 ml-3 text-[0.6875rem]/[0.6875rem] font-semibold uppercase tracking-[0.1em] text-disabled">Pinned</div>
               {pinned.map(chatRow)}
             </>
           ) : null}
-          {recents.length ? (
+          
+          {recentChats.length ? (
             <>
-              <div className={`mb-2 ml-3 text-[0.6875rem]/[0.6875rem] font-semibold uppercase tracking-[0.1em] text-disabled ${pinned.length ? "mt-4" : ""}`}>Recents</div>
-              {recents.map(chatRow)}
+              <div className={`mb-2 ml-3 text-[0.6875rem]/[0.6875rem] font-semibold uppercase tracking-[0.1em] text-disabled ${pinned.length ? "mt-4" : ""}`}>Recent Chats</div>
+              {recentChats.map(chatRow)}
             </>
           ) : null}
+
+          {recentCodeSessions.length ? (
+            <>
+              <div className={`mb-2 ml-3 text-[0.6875rem]/[0.6875rem] font-semibold uppercase tracking-[0.1em] text-disabled ${(pinned.length || recentChats.length) ? "mt-4" : ""}`}>Recent Code Sessions</div>
+              {recentCodeSessions.map(chatRow)}
+            </>
+          ) : null}
+
           {!visible.length ? (
             <div className="px-5 py-10 text-center text-[0.8125rem]/[1.125rem] font-medium text-tertiary">
               {query ? `Nothing found for “${query.trim()}”.` : "Your chats will appear here."}
@@ -274,19 +230,6 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
         </div>
 
         <footer className="shrink-0 border-t border-[var(--border-subtle)] px-2 py-2">
-          {/* Present only when there is genuinely something to install.
-              This used to be a permanent row reading "NaviOS is up to date" —
-              build management sitting in primary navigation, beside Chats and
-              Projects, saying nothing on every single open. Checking for an
-              update is a Settings act and lives in Settings → Account → App.
-
-              What could not simply move there is discovery: an installed PWA
-              updates invisibly, and people were reinstalling the app because
-              they could not find this. So the row survives for the one state
-              that is worth interrupting navigation for — an update actually
-              waiting — and is absent the rest of the time. A control that
-              appears when it has something to do is not clutter; a control
-              that reports "nothing to do" forever is. */}
           {updateStatus?.phase === "available" || updateStatus?.phase === "downloading" || updateStatus?.phase === "restarting" ? (
             <button
               type="button"
@@ -309,14 +252,9 @@ export function HistoryDrawer({ open, dragProgress = null, chats, activeId, prof
             </button>
           ) : null}
           <button type="button" onClick={() => openSheet(onSettings)} className="flex min-h-12 w-full items-center gap-3 rounded-[10px] px-2 text-left active:bg-elev-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-[0.8125rem] font-semibold text-[var(--accent-on-primary)]">
-              <UserRound size={16} />
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E5E5E5] text-[#121214] text-[0.875rem] font-bold shadow-sm">
+              S
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[0.875rem]/5 font-medium text-primary">{profileName || "My workspace"}</span>
-              <span className="block text-[0.6875rem]/4 font-medium text-tertiary">Private · on this device</span>
-            </span>
-            <Settings size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
           </button>
         </footer>
       </aside>
