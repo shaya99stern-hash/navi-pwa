@@ -3,7 +3,17 @@ import { useChat } from "@ai-sdk/react";
 import { describeResult, runInSandbox } from "@/lib/execution/sandbox";
 import { MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type FileUIPart, type UIMessage } from "ai";
-import { ChevronDown, FolderKanban, Ghost, Link2, PanelLeft, WifiOff } from "lucide-react";
+import { 
+  ChevronDown, 
+  FolderKanban, 
+  Ghost, 
+  Link2, 
+  PanelLeft, 
+  WifiOff, 
+  SquarePen, 
+  MessageSquare, 
+  SquareTerminal 
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -180,6 +190,7 @@ export function AppShell({
   );
   const [effortSheetOpen, setEffortSheetOpen] = useState(false);
   const [chatMenuOpen, setChatMenuOpen] = useState(false);
+  const [composeMenuOpen, setComposeMenuOpen] = useState(false);
   const [incognito, setIncognito] = useState(false);
   const [artifactAudit, setArtifactAudit] = useState<{ title: string; findings: string[] } | null>(null);
   const [accountName, setAccountName] = useState("");
@@ -227,6 +238,7 @@ export function AppShell({
   useOverlayRoute({ open: artifactsOpen, onClose: () => setArtifactsOpen(false), path: "/artifacts", restore: restorePath });
   useOverlayRoute({ open: chatMenuOpen, onClose: () => setChatMenuOpen(false), restore: restorePath });
   useOverlayRoute({ open: effortSheetOpen, onClose: () => setEffortSheetOpen(false), restore: restorePath });
+  useOverlayRoute({ open: composeMenuOpen, onClose: () => setComposeMenuOpen(false) });
   useOverlayRoute({ open: contextMessage !== null, onClose: () => setContextMessage(null), restore: restorePath });
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
@@ -1092,7 +1104,8 @@ export function AppShell({
     <div
       data-app-shell="true"
       data-viewport="chat"
-      className={`${preferences.density === "compact" ? "density-compact" : "density-comfortable"} relative flex flex-col bg-app text-primary`}
+      className={`${preferences.density === "compact" ? "density-compact" : "density-comfortable"} relative flex flex-col bg-app text-primary w-full overflow-hidden`}
+      style={{ paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }}
       {...edgeSwipe.handlers}
       onPointerCancel={edgeSwipe.handlers.onPointerUp}
     >
@@ -1121,18 +1134,18 @@ export function AppShell({
         onDelete={deleteChat}
       />
 
-      <header className="navi-header relative z-50 flex min-h-[44px] pt-[max(var(--safe-top),env(safe-area-inset-top))] pb-1 shrink-0 items-center justify-between px-2 bg-app border-b border-[var(--border-subtle)]" data-scrolled={String(scrolled)}>
-        <div className="flex w-14 items-center justify-start">
+      <header className="navi-header relative z-50 flex min-h-[44px] pt-[env(safe-area-inset-top)] pb-2 shrink-0 items-center justify-between bg-[#F2F2F7] dark:bg-black px-[max(8px,env(safe-area-inset-left))] border-b border-[var(--border-subtle)]" style={{ paddingRight: 'max(8px, env(safe-area-inset-right))' }} data-scrolled={String(scrolled)}>
+        <div className="flex w-16 items-center justify-start pl-1">
           <button
             type="button"
             onClick={() => {
               haptic("impact-light", preferences.haptics);
               setHistoryOpen(true);
             }}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-primary active:opacity-60"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[#0A84FF] active:opacity-60"
             aria-label="Open sidebar"
           >
-            <PanelLeft size={24} strokeWidth={1.5} />
+            <PanelLeft size={28} strokeWidth={1.5} className="-ml-1" />
           </button>
         </div>
 
@@ -1144,11 +1157,14 @@ export function AppShell({
           }}
           className="flex flex-1 flex-col items-center justify-center text-center min-w-0 px-2 active:opacity-60"
         >
-          <span className="truncate text-[17px] font-semibold tracking-[-0.41px] text-primary w-full">
-            {view === "chat"
-              ? (activeChat?.title && activeChat.title !== "New chat" ? activeChat.title : (preferences.mode === "code" ? "NaviOS Code" : "NaviOS Chat"))
-              : VIEW_TITLES[view]}
-          </span>
+          <div className="flex items-center justify-center gap-1 w-full">
+            <span className="truncate text-[17px] font-semibold tracking-[-0.41px] text-primary">
+              {view === "chat"
+                ? (activeChat?.title && activeChat.title !== "New chat" ? activeChat.title : (preferences.mode === "code" ? "NaviOS Code" : "NaviOS Chat"))
+                : VIEW_TITLES[view]}
+            </span>
+            {view === "chat" && messages.length > 0 && <ChevronDown size={14} className="text-tertiary shrink-0" />}
+          </div>
           {view !== "chat" && VIEW_SUBTITLES[view] && (
             <span className="block truncate text-[11px] font-medium text-tertiary w-full">
               {VIEW_SUBTITLES[view]}
@@ -1156,14 +1172,60 @@ export function AppShell({
           )}
         </button>
 
-        <div className="flex w-14 items-center justify-end">
+        <div className="flex w-16 items-center justify-end pr-2 gap-2">
           {incognito && (
-            <span className="flex h-11 w-11 items-center justify-center text-accent" title="Incognito">
+            <span className="text-accent" title="Incognito">
               <Ghost size={19} strokeWidth={1.8} />
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              haptic("selection", preferences.haptics);
+              setComposeMenuOpen(true);
+            }}
+            className="flex items-center justify-center text-[#0A84FF] active:opacity-60"
+            aria-label="Compose Menu"
+          >
+            <SquarePen size={26} strokeWidth={1.5} />
+          </button>
         </div>
       </header>
+
+      {/* The beautiful iOS 16 Dropdown Menu for New Chat/Code */}
+      {composeMenuOpen && (
+        <>
+          <div className="fixed inset-0 z-[100]" onClick={() => setComposeMenuOpen(false)} />
+          <div className="absolute top-[calc(env(safe-area-inset-top)+48px)] right-4 z-[110] w-[210px] rounded-[14px] bg-[#F2F2F7]/95 dark:bg-[#1E1E1E]/95 backdrop-blur-xl shadow-[0_4px_24px_rgba(0,0,0,0.15)] border border-[#3C3C434A] dark:border-[#545458A6] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => {
+                setComposeMenuOpen(false);
+                haptic("selection", preferences.haptics);
+                if (preferences.mode !== "chat") updatePreferences({ ...preferences, mode: "chat" });
+                newChat();
+              }}
+              className="flex w-full min-h-[44px] items-center justify-between px-4 text-[17px] tracking-[-0.41px] text-primary border-b border-[#3C3C434A] dark:border-[#545458A6] active:bg-black/10 dark:active:bg-white/10"
+            >
+              New Chat
+              <MessageSquare size={18} className="text-primary" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setComposeMenuOpen(false);
+                haptic("selection", preferences.haptics);
+                if (preferences.mode !== "code") updatePreferences({ ...preferences, mode: "code" });
+                newChat();
+              }}
+              className="flex w-full min-h-[44px] items-center justify-between px-4 text-[17px] tracking-[-0.41px] text-primary active:bg-black/10 dark:active:bg-white/10"
+            >
+              New Code Session
+              <SquareTerminal size={18} className="text-primary" />
+            </button>
+          </div>
+        </>
+      )}
 
       {!online ? (
         <div className="offline-banner flex min-h-10 items-center justify-center gap-2 border-y border-[var(--accent-warning)] bg-elev-2 px-4 text-center text-[0.75rem]/4 font-semibold text-warning" role="status">
@@ -1185,7 +1247,7 @@ export function AppShell({
       <main
         ref={scrollRef}
         data-scroll-region="true"
-        className="min-h-0 flex-1"
+        className="min-h-0 flex-1 w-full"
         onScroll={(event) => {
           const el = event.currentTarget;
           setScrolled(el.scrollTop > 3);
@@ -1392,7 +1454,7 @@ export function AppShell({
       {pendingApproval ? (
         <div className="fixed inset-0 z-[120] flex items-end justify-center md:items-center md:p-4" role="dialog" aria-modal="true" aria-label="Approve a write">
           <div className="absolute inset-0 bg-overlay backdrop-blur-[5px]" />
-          <section className="menu-enter relative w-full max-w-[460px] rounded-t-[28px] border border-b-0 border-[var(--border-subtle)] bg-elev-1 p-5 pb-[calc(20px+var(--safe-bottom))] shadow-sheet md:rounded-[28px] md:border">
+          <section className="menu-enter relative w-full max-w-[460px] rounded-t-[28px] border border-b-0 border-[var(--border-subtle)] bg-elev-1 p-5 pb-[calc(20px+env(safe-area-inset-bottom))] shadow-sheet md:rounded-[28px] md:border">
             <h2 className="text-[17px] font-semibold text-primary">This one changes something</h2>
             <p className="mt-1 text-[13px] font-medium text-secondary">{pendingApproval.title}</p>
             <p className="mt-3 break-words rounded-[14px] bg-elev-2 p-3 font-mono text-[12px] text-secondary">{pendingApproval.detail}</p>
