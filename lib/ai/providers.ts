@@ -262,7 +262,11 @@ export const ROUTES = {
      ids are renamed or retired often; a council whose whole pool 404s produces
      nothing, so these broaden capability coverage and act as the fallback. */
   hfDeepSeekR1: hf("deepseek-ai/DeepSeek-R1", "HF DeepSeek R1", "reasoning"),
-  hfLlama70b: hf("meta-llama/Llama-3.3-70B-Instruct", "HF Llama 3.3 70B", "balanced"),
+  /* No `meta-llama/Llama-3.3-70B-Instruct` here on purpose. It is gated on
+     Hugging Face: without a license acceptance on the token's own account it
+     answers with a permission error whatever the credit balance says, so as a
+     council member it was a guaranteed empty seat. Re-add it only alongside
+     the accepted license. */
   hfQwenCoder: hf("Qwen/Qwen2.5-Coder-32B-Instruct", "HF Qwen2.5 Coder 32B", "coding"),
   hfQwen72b: hf("Qwen/Qwen2.5-72B-Instruct", "HF Qwen2.5 72B", "long-context"),
   hfMistralSmall: hf("mistralai/Mistral-Small-24B-Instruct-2501", "HF Mistral Small 24B", "fast"),
@@ -330,7 +334,6 @@ function configuredHfRoutes(): ProviderRoute[] {
     ROUTES.hfDeepSeekR1,
     ROUTES.hfQwenCoder,
     ROUTES.hfQwen72b,
-    ROUTES.hfLlama70b,
     ROUTES.hfMistralSmall,
     ROUTES.hfGptOssFast
   ];
@@ -566,8 +569,22 @@ export function routeForLane(options: {
     if (availability.deepseek && meteredAllowed) return ROUTES.deepseekFlash;
     if (availability.cerebras) return ROUTES.cerebrasLarge;
     if (availability.openrouter) return ROUTES.openRouterReasoning;
-    if (availability.huggingface) return ROUTES.hfGptOss;
+    /* Groq above Hugging Face, here and in every ladder below.
+       The deployment's HF account is a free one with its monthly Inference
+       Providers credit spent, so an HF-first ladder picks a provider that
+       answers 402 and nothing else. Two stored turns show it: a `data-engine`
+       part for each attempt and no text part at all — two engines tried,
+       nothing produced. `provider-health` already demotes an exhausted
+       provider for thirty minutes, but that memory lives in one edge instance
+       and resets constantly, so it re-learns the same fact all day. The
+       durable fix is the static order. Groq's free tier needs no card and
+       serves the gpt-oss models already named above.
+
+       Not Cerebras first: `app/api/models/route.ts` records a Cerebras key
+       answering Forbidden on every request for weeks while the health check
+       called it ready. Groq, then Gemini, then Cerebras, then Hugging Face. */
     if (availability.groq) return ROUTES.groqReasoning;
+    if (availability.huggingface) return ROUTES.hfGptOss;
     return null;
   }
 
@@ -576,8 +593,13 @@ export function routeForLane(options: {
      this list was last edited. */
   if (discovered && availability.openrouter) return discovered;
   if (availability.openrouter) return ROUTES.openRouterCoding;
-  if (availability.huggingface) return ROUTES.hfKimi;
   if (availability.cerebras) return ROUTES.cerebrasLarge;
+  /* Lane 4 had no Groq branch at all, so a deployment holding Groq and Hugging
+     Face — the shape this one is actually in — sent every whole-repository read
+     to the exhausted provider. `gpt-oss-120b` carries a 131k window, which is
+     what this lane is asking for. */
+  if (availability.groq) return ROUTES.groqReasoning;
+  if (availability.huggingface) return ROUTES.hfKimi;
   return null;
 }
 
@@ -603,11 +625,11 @@ export function selectDirectRoute(options: {
     if ((tools.web || tools.code) && availability.groq) return ROUTES.groqTools;
     if (complex && availability.openrouter) return ROUTES.openRouterCoding;
     if (complex && availability.cerebras) return ROUTES.cerebrasLarge;
-    if (availability.huggingface) return complex ? ROUTES.hfDeepSeek : ROUTES.hfKimi;
-    if (availability.cerebras) return ROUTES.cerebrasFast;
     if (availability.groq) return complex ? ROUTES.groqReasoning : ROUTES.groqFast;
     if (availability.gemini) return ROUTES.geminiSynthesis;
-    throw new Error("No AI provider is configured. Add GEMINI_API_KEY, GROQ_API_KEY, or HF_TOKEN in your Vercel project settings, then redeploy.");
+    if (availability.cerebras) return ROUTES.cerebrasFast;
+    if (availability.huggingface) return complex ? ROUTES.hfDeepSeek : ROUTES.hfKimi;
+    throw new Error("No AI provider is configured. Add GROQ_API_KEY or GEMINI_API_KEY in your Vercel project settings, then redeploy.");
   }
 
   if (preset === "huggingface-direct") {
@@ -629,16 +651,16 @@ export function selectDirectRoute(options: {
      stay inside the request budget. */
   if (complex && availability.cerebras) return ROUTES.cerebrasLarge;
   if (complex && availability.openrouter) return ROUTES.openRouterReasoning;
-  if (complex && availability.huggingface) return ROUTES.hfGptOss;
   if (complex && availability.groq) return ROUTES.groqReasoning;
+  if (complex && availability.huggingface) return ROUTES.hfGptOss;
   if (complex && availability.mistral) return ROUTES.mistralBalanced;
   if (availability.gemini) return ROUTES.geminiSynthesis;
-  if (availability.huggingface) return ROUTES.hfQwen;
-  if (availability.cerebras) return ROUTES.cerebrasFast;
   if (availability.groq) return ROUTES.groqFast;
+  if (availability.cerebras) return ROUTES.cerebrasFast;
+  if (availability.huggingface) return ROUTES.hfQwen;
   if (availability.mistral) return ROUTES.mistralBalanced;
   if (availability.openrouter) return ROUTES.openRouterReasoning;
-  throw new Error("No AI provider is configured. Add GEMINI_API_KEY, GROQ_API_KEY, or HF_TOKEN in your Vercel project settings, then redeploy.");
+  throw new Error("No AI provider is configured. Add GROQ_API_KEY or GEMINI_API_KEY in your Vercel project settings, then redeploy.");
 }
 
 /**
