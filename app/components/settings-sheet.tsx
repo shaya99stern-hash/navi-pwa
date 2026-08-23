@@ -8,7 +8,12 @@ import {
   FlaskConical,
   RefreshCw,
   Sun,
-  X
+  X,
+  Check,
+  Link2,
+  Shield,
+  Mic,
+  Activity
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -28,31 +33,11 @@ import { diagnoseMicrophone, type MicCheck } from "@/lib/ui/recorder";
 import { versionLabel } from "@/lib/version";
 import { releaseOverlaysForNavigation } from "@/lib/ui/overlay-route";
 
-/**
- * Settings, structured the way a native settings surface is: a root list in
- * two groups (Settings, Customize), each page a drill-down with a back
- * button. On phones this reads as the standard iOS settings pattern; the
- * chip-tab sheet it replaces read as neither iOS nor desktop.
- *
- * Control grammar, applied everywhere:
- *  - rows are label-left / control-right with hairline dividers, no cards
- *  - segmented controls hug their content and sit right-aligned
- *  - dropdowns are bare value + chevron (the native select is an invisible
- *    overlay, so iOS still presents its own picker wheel)
- *  - only a standing-instructions textarea may be full width
- */
-
 type Props = {
   open: boolean;
   initialSection?: MenuSection;
   durability: StorageDurability;
   preferences: NaviPreferences;
-  /* Conversations held in IndexedDB on this device — the same list the drawer
-     renders. The "What is stored" screen counted only the cloud mirror, so a
-     signed-out user, or any deployment without Supabase, read `Conversations 0`
-     while five of them sat visible in the drawer beside it. The number was
-     accurate about the cloud and wrong about the question being asked, on a
-     privacy screen, which is the worst place to be technically correct. */
   localChatCount: number;
   onClose: () => void;
   onPreferences: (preferences: NaviPreferences) => void;
@@ -61,16 +46,8 @@ type Props = {
   onExport: () => void;
 };
 
-/**
- * `diagnostics` is deliberately not a `MenuSection`.
- *
- * `MenuSection` is what gets persisted as `lastMenuSection` and reopened next
- * time. A hidden page that reopens itself is not hidden, and it would strand
- * anyone who found it by accident on a screen with no row leading to it.
- */
-type PageId = "root" | "diagnostics" | MenuSection;
+type PageId = "root" | "diagnostics" | "voice" | MenuSection;
 
-/** Taps on the version string that reveal diagnostics, and how long they have. */
 const DIAGNOSTICS_TAPS = 5;
 const DIAGNOSTICS_TAP_WINDOW_MS = 3_000;
 
@@ -112,6 +89,7 @@ const PAGE_TITLES: Record<Exclude<PageId, "root">, string> = {
   connectors: "Connectors",
   skills: "Skills",
   playbooks: "Playbooks",
+  voice: "Voice",
 };
 
 const DURABILITY_DETAIL: Record<StorageDurability, string> = {
@@ -120,19 +98,6 @@ const DURABILITY_DETAIL: Record<StorageDurability, string> = {
   unavailable: "Stored on this device · export regularly, this browser cannot protect it"
 };
 
-/**
- * Whether this build has a sign-in system at all.
- *
- * Computed in next.config.mjs and inlined at build time, so it is the one thing
- * the client can know without waiting for Clerk's script — and so it stays true
- * when the deployment names its keys differently. Reading the publishable key
- * directly here missed both the server-side alias and the case where a key is
- * present but nothing can verify a session with it.
- *
- * A deployment without sign-in has no account to offer and should say so,
- * rather than showing a button leading to a page reading "sign-in is
- * unavailable".
- */
 const CLERK_AVAILABLE = process.env.NEXT_PUBLIC_NAVI_AUTH === "on";
 
 type ClerkGlobal = {
@@ -143,12 +108,10 @@ type ClerkGlobal = {
 
 type AccountState = { email: string; signedIn: boolean; ready: boolean };
 
-/** Section header: bold, sentence case, generous top margin, no dividers of its own. */
 function SectionHeader({ children }: { children: ReactNode }) {
   return <h3 className="mb-1 mt-10 px-4 text-[0.9375rem]/5 font-semibold text-primary first:mt-4">{children}</h3>;
 }
 
-/** Label-left / control-right row. Divider comes from the parent group. */
 function Row({ label, description, control, fullWidthControl }: {
   label: string;
   description?: ReactNode;
@@ -167,17 +130,14 @@ function Row({ label, description, control, fullWidthControl }: {
   );
 }
 
-/** Rows in a section are separated by hairlines; never one after the last. */
 function Group({ children }: { children: ReactNode }) {
   return <div className="divide-y divide-[var(--border-subtle)]">{children}</div>;
 }
 
-/** A number in the control slot. Tabular so a column of them stays aligned. */
 function Count({ value }: { value: number }) {
   return <span className="text-[0.9375rem]/[1.375rem] tabular-nums text-secondary">{value}</span>;
 }
 
-/** C6 — toggle. The accent stays reserved for marks; the ON track is light. */
 export function SettingsToggle({ value, onChange, label }: { value: boolean; onChange: () => void; label: string }) {
   return (
     <button
@@ -186,14 +146,13 @@ export function SettingsToggle({ value, onChange, label }: { value: boolean; onC
       aria-checked={value}
       aria-label={label}
       onClick={onChange}
-      className={`relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors duration-[120ms] ${value ? "bg-[var(--text-primary)]" : "bg-elev-3"}`}
+      className={`relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors duration-[120ms] ${value ? "bg-success" : "bg-elev-3"}`}
     >
-      <span className={`absolute top-[3px] h-5 w-5 rounded-full shadow-sm transition-transform duration-[140ms] ${value ? "translate-x-[21px] bg-[var(--bg-app)]" : "translate-x-[3px] bg-white"}`} />
+      <span className={`absolute top-[3px] h-5 w-5 rounded-full shadow-sm transition-transform duration-[140ms] ${value ? "translate-x-[21px] bg-white" : "translate-x-[3px] bg-white"}`} />
     </button>
   );
 }
 
-/** C1 — icon segmented control. Hugs content, right-aligned by the row. */
 function IconSegmented<T extends string>({ value, options, onChange, label }: {
   value: T;
   options: Array<{ id: T; icon: ReactNode; name: string }>;
@@ -219,7 +178,6 @@ function IconSegmented<T extends string>({ value, options, onChange, label }: {
   );
 }
 
-/** C2 — text segmented control. Same shell as C1, words instead of icons. */
 function TextSegmented<T extends string>({ value, options, onChange, label }: {
   value: T;
   options: Array<{ id: T; name: string }>;
@@ -244,11 +202,6 @@ function TextSegmented<T extends string>({ value, options, onChange, label }: {
   );
 }
 
-/**
- * C3 — bare dropdown: value text + chevron, no box. The real select sits
- * invisibly on top so the device presents its own picker, which is the one
- * part of a native select worth keeping.
- */
 function BareSelect({ value, options, onChange, label }: {
   value: string;
   options: Array<[string, string]>;
@@ -272,7 +225,6 @@ function BareSelect({ value, options, onChange, label }: {
   );
 }
 
-/** C4 — right-aligned text input. */
 function TextField({ value, onChange, label, placeholder }: {
   value: string;
   onChange: (next: string) => void;
@@ -291,7 +243,6 @@ function TextField({ value, onChange, label, placeholder }: {
   );
 }
 
-/** C8 — small inline pill button. */
 function InlineButton({ children, onClick, destructive }: { children: ReactNode; onClick: () => void; destructive?: boolean }) {
   return (
     <button
@@ -309,9 +260,6 @@ function RootRow({ label, active, onOpen }: { label: string; active?: boolean; o
     <button
       type="button"
       onClick={onOpen}
-      /* The selected state only means something beside the pane it selects, so
-         it is a two-pane affordance. The chevron is the opposite: it promises a
-         drill-down, which at two panes is not what happens. */
       aria-current={active ? "page" : undefined}
       className={`flex min-h-[52px] w-full items-center justify-between px-4 text-left active:bg-elev-2 ${active ? "md:bg-elev-2" : ""}`}
     >
@@ -319,6 +267,45 @@ function RootRow({ label, active, onOpen }: { label: string; active?: boolean; o
       <ChevronRight size={18} className="text-tertiary md:hidden" />
     </button>
   );
+}
+
+function ThemeCard({ theme, active, onClick, label }: { theme: "light" | "dark" | "system", active: boolean, onClick: () => void, label: string }) {
+  return (
+    <button type="button" onClick={onClick} className="flex flex-col items-center gap-3 flex-1 active:scale-95 transition-transform">
+      <div className={`w-full aspect-[4/5] rounded-[18px] border-[3px] flex flex-col p-2.5 transition-colors ${active ? "border-accent bg-elev-1" : "border-transparent bg-elev-2"}`}>
+         {theme === "light" ? (
+            <div className="w-full h-full bg-[#FAF9F5] rounded-xl p-2 space-y-2 shadow-sm border border-black/5 overflow-hidden">
+               <div className="w-1/2 h-2.5 bg-gray-200 rounded-full" />
+               <div className="w-full h-7 bg-white rounded-lg shadow-sm flex items-center px-2"><div className="w-2.5 h-2.5 bg-blue-500 rounded-full"/></div>
+               <div className="w-11/12 h-7 bg-white rounded-lg shadow-sm flex items-center px-2 self-end justify-end"><div className="w-2.5 h-2.5 bg-green-500 rounded-full"/></div>
+            </div>
+         ) : theme === "dark" ? (
+            <div className="w-full h-full bg-[#121214] rounded-xl p-2 space-y-2 shadow-sm border border-white/5 overflow-hidden">
+               <div className="w-1/2 h-2.5 bg-gray-700 rounded-full" />
+               <div className="w-full h-7 bg-[#27272A] rounded-lg shadow-sm flex items-center px-2"><div className="w-2.5 h-2.5 bg-blue-400 rounded-full"/></div>
+               <div className="w-11/12 h-7 bg-[#27272A] rounded-lg shadow-sm flex items-center px-2 self-end justify-end"><div className="w-2.5 h-2.5 bg-green-400 rounded-full"/></div>
+            </div>
+         ) : (
+            <div className="w-full h-full rounded-xl shadow-sm border border-black/5 dark:border-white/5 relative overflow-hidden flex">
+               <div className="w-1/2 h-full bg-[#FAF9F5] p-2 space-y-2">
+                  <div className="w-full h-2.5 bg-gray-200 rounded-full" />
+                  <div className="w-full h-7 bg-white rounded-lg flex items-center px-1.5"><div className="w-2 h-2 bg-blue-500 rounded-full"/></div>
+               </div>
+               <div className="w-1/2 h-full bg-[#121214] p-2 space-y-2 flex flex-col items-end">
+                  <div className="w-full h-2.5 bg-gray-700 rounded-full" />
+                  <div className="w-full h-7 bg-[#27272A] rounded-lg flex items-center px-1.5 justify-end"><div className="w-2 h-2 bg-green-400 rounded-full"/></div>
+               </div>
+            </div>
+         )}
+      </div>
+      <div className="flex items-center gap-2">
+        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${active ? "border-accent bg-accent text-[var(--accent-on-primary)]" : "border-tertiary"}`}>
+          {active && <Check size={10} strokeWidth={3} />}
+        </div>
+        <span className={`text-[0.875rem]/4 font-medium ${active ? "text-primary" : "text-tertiary"}`}>{label}</span>
+      </div>
+    </button>
+  )
 }
 
 export function SettingsSheet({
@@ -335,25 +322,16 @@ export function SettingsSheet({
 }: Props) {
   const router = useRouter();
   const [page, setPage] = useState<PageId>("root");
-  /* The OAuth callback returns here with a reason in the query string. Each one
-     gets a sentence — a raw code on screen is not an explanation. The rows
-     themselves live in the Connectors sheet now; this is only the landing. */
   const [oauthNotice, setOauthNotice] = useState("");
   const [diagnosticsTaps, setDiagnosticsTaps] = useState(0);
-  /* What is remembered about this person, and the ability to forget it. Loaded
-     only on the Privacy page: it is a network read, and every other page would
-     be paying for it. */
   const [facts, setFacts] = useState<{ loaded: boolean; configured: boolean; items: Array<{ id: string; fact: string }> }>(
     { loaded: false, configured: false, items: [] }
   );
-  /* What is actually in durable memory, counted from the store. Loaded on the
-     Privacy page only, for the same reason facts are: it is a network read. */
   const [memoryStatus, setMemoryStatus] = useState<{
     loaded: boolean; configured: boolean; signedIn: boolean;
     chats: number; facts: number; skills: number; lessons: number; skillNames: string[]; lessonNames: string[];
   }>({ loaded: false, configured: false, signedIn: false, chats: 0, facts: 0, skills: 0, lessons: 0, skillNames: [], lessonNames: [] });
   const lastTapAt = useRef(0);
-  /* The same checks `diagnose_self` runs, surfaced without a conversation. */
   const [systemChecks, setSystemChecks] = useState<{ running: boolean; results: Array<{ area: string; ok: boolean; detail: string }> }>(
     { running: false, results: [] }
   );
@@ -375,7 +353,6 @@ export function SettingsSheet({
     }
   }
 
-  /* Teaching a skill directly, bypassing the model's tool call entirely. */
   const [teach, setTeach] = useState<{ name: string; instructions: string; saving: boolean; status: { ok: boolean; message: string } | null }>(
     { name: "", instructions: "", saving: false, status: null }
   );
@@ -406,9 +383,7 @@ export function SettingsSheet({
       }));
     }
   }
-  /* The microphone self-test. Three rounds of "the mic doesn't work" were
-     diagnosed by reading source, and two of those guesses were wrong — so the
-     app now answers the question itself instead of being guessed at. */
+
   const [micTest, setMicTest] = useState<{ running: boolean; step: string; checks: MicCheck[] }>(
     { running: false, step: "", checks: [] }
   );
@@ -427,8 +402,6 @@ export function SettingsSheet({
     }
   }
 
-  /* Monthly spend on the one metered lane. Read here and nowhere else: it
-     belongs on the account page, not in the middle of an answer. */
   const [spend, setSpend] = useState<{ configured: boolean; enabled: boolean; durable?: boolean; summary: string | null }>(
     { configured: false, enabled: false, summary: null }
   );
@@ -451,13 +424,9 @@ export function SettingsSheet({
       state: "That sign-in could not be verified. Start it again from Connectors.",
       denied: `${provider} sign-in was cancelled.`,
       exchange: `${provider} did not complete the sign-in. Try again.`,
-      /* Distinct from a failed exchange: Google withholds the refresh token when
-         the account has authorized before and the consent screen was skipped.
-         The connection would look successful and stop working within the hour. */
       norefresh: `${provider} did not return a lasting credential. Remove NaviOS from your Google account's third-party access, then connect again.`,
       unconfigured: `${provider} is not configured on this deployment.`
     }[code] ?? "");
-    /* Clear it from the URL so a reload does not replay the notice. */
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
 
@@ -475,9 +444,6 @@ export function SettingsSheet({
       const data = await response.json() as {
         passed: number; ran: number; total: number; errored: number; meaningful: boolean; durationMs: number;
       };
-      /* A run where every task errored scores zero and means nothing — the
-         requests never reached a model. Reporting "0/12" for that would be a
-         lie about quality rather than a report about configuration. */
       if (!data.meaningful) {
         setEvalState({ phase: "error", message: `All ${data.ran} tasks failed to reach a model. Check that provider keys are configured.` });
         return;
@@ -503,9 +469,6 @@ export function SettingsSheet({
 
   useEffect(() => {
     if (!open) return;
-    /* A section that no longer exists opens the list, not a blank pane.
-       `lastMenuSection` is persisted, so a device that last had Developer open
-       would otherwise reopen Settings onto nothing at all. */
     setPage(initialSection && initialSection in PAGE_TITLES ? initialSection : "root");
   }, [initialSection, open]);
 
@@ -516,8 +479,6 @@ export function SettingsSheet({
       .then((data: { configured?: boolean; facts?: Array<{ id: string; fact: string }> } | null) => {
         setFacts({ loaded: true, configured: data?.configured === true, items: data?.facts ?? [] });
       })
-      /* Unreachable storage is not "nothing remembered" — saying so would
-         invite someone to conclude the feature is off when it is merely down. */
       .catch(() => setFacts((current) => ({ ...current, loaded: true })));
 
     void fetch("/api/memory/status", { cache: "no-store" })
@@ -547,8 +508,6 @@ export function SettingsSheet({
     return () => window.removeEventListener(PWA_UPDATE_STATUS_EVENT, receive);
   }, []);
 
-  /* Read after mount: `display-mode` is a client fact, and consulting it while
-     rendering on the server would hydrate against the wrong answer. */
   const [standalone, setStandalone] = useState(false);
   useEffect(() => {
     setStandalone(
@@ -557,15 +516,6 @@ export function SettingsSheet({
     );
   }, []);
 
-  /* Clerk exposes the signed-in user on `window`, but it loads asynchronously
-     and this sheet can open first. Reading once left the row saying "Local
-     workspace" on a deployment that had an account perfectly well — the state
-     that prompted "why is there no sign in or sign out here". So poll briefly
-     until Clerk reports itself loaded, then stop.
-
-     Hooks are not an option: ClerkProvider only wraps the tree when the
-     deployment is configured, so `useUser` would throw on the deployments this
-     row most needs to describe. */
   useEffect(() => {
     if (!open) return;
     if (!CLERK_AVAILABLE) {
@@ -584,8 +534,6 @@ export function SettingsSheet({
     };
     if (read()) return;
     const poll = window.setInterval(() => { if (read()) window.clearInterval(poll); }, 250);
-    /* Give up rather than spin forever: a Clerk that has not loaded in five
-       seconds is not going to, and the row says so instead of staying blank. */
     const stop = window.setTimeout(() => { window.clearInterval(poll); setAccount((current) => ({ ...current, ready: true })); }, 5_000);
     return () => { window.clearInterval(poll); window.clearTimeout(stop); };
   }, [open]);
@@ -605,9 +553,6 @@ export function SettingsSheet({
       onOpenConnectors();
       return;
     }
-    /* Developer is a route rather than a pane: it is a working surface with
-       its own editor and commit state, which a sheet that closes on a stray
-       swipe is the wrong container for. */
     setPage(next);
     update({ lastMenuSection: next });
   };
@@ -622,13 +567,6 @@ export function SettingsSheet({
     }
   }
 
-  /**
-   * Five taps on the version string, within a few seconds of each other.
-   *
-   * The window is what makes it a gesture rather than a trap: without it, four
-   * stray taps across a whole session would leave the page one tap from
-   * opening, months later, for someone who never intended it.
-   */
   function revealDiagnostics() {
     const now = Date.now();
     const next = now - lastTapAt.current > DIAGNOSTICS_TAP_WINDOW_MS ? 1 : diagnosticsTaps + 1;
@@ -647,17 +585,11 @@ export function SettingsSheet({
   async function forget(id: string) {
     haptic("impact-light", preferences.haptics);
     const response = await fetch(`/api/memory/facts?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => null);
-    /* Only drop it from the list once the server confirms. Removing optimistically
-       would show a fact as forgotten while it was still stored, which is the one
-       lie a privacy control must not tell. */
     if (response?.ok) setFacts((current) => ({ ...current, items: current.items.filter((item) => item.id !== id) }));
   }
 
   function signIn() {
     haptic("impact-light", preferences.haptics);
-    /* A full navigation, not a router push: the sign-in page lives outside the
-       app shell and comes back through a redirect that has to re-establish the
-       session cookie. */
     window.location.href = "/sign-in";
   }
 
@@ -674,8 +606,6 @@ export function SettingsSheet({
   return (
     <div className="fixed inset-0 z-[95] flex flex-col bg-app" role="dialog" aria-modal="true" aria-label="Settings">
       <header className="navi-sheet-header sticky top-0 z-10 flex h-[calc(52px+var(--safe-top))] shrink-0 items-center gap-1 border-b border-[var(--border-subtle)] px-2 pt-[var(--safe-top)]">
-        {/* At two panes the list is always on screen, so a back button points
-            at a page that is not hidden — it reads as an extra step to nowhere. */}
         {page === "root" ? (
           <div className="flex h-11 w-11 items-center justify-center" aria-hidden="true" />
         ) : (
@@ -691,11 +621,6 @@ export function SettingsSheet({
         </button>
       </header>
 
-      {/* One list, two arrangements. Under 768px it is a drill-down: the list
-          fills the sheet and a section replaces it. At 768px and up both are on
-          screen at once, because there is room and because moving between
-          sections is the common act — a drill-down on a wide screen spends a
-          full-width column on nothing and makes every move a round trip. */}
       <div className="flex min-h-0 flex-1 md:mx-auto md:w-full md:max-w-[1000px]">
         <nav
           aria-label="Settings sections"
@@ -705,9 +630,6 @@ export function SettingsSheet({
           <Group>
             <RootRow label="General" active={page === "general"} onOpen={() => openPage("general")} />
             <RootRow label="Account" active={page === "account"} onOpen={() => openPage("account")} />
-            {/* Named for what people look for. "Storage and memory" lives on
-                the Privacy page, and someone hunting for their memory does not
-                think of it as a privacy question — so the row says so. */}
             <RootRow label="Memory and storage" active={page === "privacy"} onOpen={() => openPage("privacy")} />
             <RootRow label="Capabilities" active={page === "capabilities"} onOpen={() => openPage("capabilities")} />
           </Group>
@@ -717,10 +639,6 @@ export function SettingsSheet({
             <RootRow label="Playbooks" active={page === "playbooks"} onOpen={() => openPage("playbooks")} />
             <RootRow label="Connectors" onOpen={() => openPage("connectors")} />
           </Group>
-          {/* Diagnostics live behind this. They are for proving a suspicion
-              about the app, not for using it, and a routing override left on
-              by someone exploring Settings silently disables the routing the
-              product depends on. */}
           <button
             type="button"
             onClick={revealDiagnostics}
@@ -735,57 +653,53 @@ export function SettingsSheet({
         </nav>
 
         <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(24px+var(--safe-bottom))] ${page === "root" ? "hidden md:block" : ""}`}>
-          {/* Wide and nothing chosen yet: the pane says what it is for rather
-              than sitting blank, and choosing is one click away in the list. */}
           {page === "root" ? (
             <p className="px-6 pt-8 text-[0.8125rem]/[1.25rem] text-tertiary">Choose a section.</p>
           ) : null}
 
         {page === "general" ? (
-          <>
-            <SectionHeader>Profile</SectionHeader>
+          <div className="pb-10">
+            <SectionHeader>Appearance</SectionHeader>
+            <div className="px-4 py-3 flex gap-3">
+              <ThemeCard theme="light" active={preferences.theme === "light"} onClick={() => update({ theme: "light" })} label="Light" />
+              <ThemeCard theme="dark" active={preferences.theme === "dark"} onClick={() => update({ theme: "dark" })} label="Dark" />
+              <ThemeCard theme="system" active={preferences.theme === "system"} onClick={() => update({ theme: "system" })} label="System" />
+            </div>
+
+            <SectionHeader>Device & App</SectionHeader>
             <Group>
-              <Row label="Full name" control={<TextField label="Full name" value={preferences.profile.fullName} onChange={(fullName) => updateProfile({ fullName })} />} />
-              <Row label="What should Navi Soul call you?" control={<TextField label="Display name" value={preferences.profile.displayName} onChange={(displayName) => updateProfile({ displayName })} />} />
-              <Row label="What best describes your work?" control={<BareSelect label="Work" value={preferences.profile.work} options={WORK_OPTIONS} onChange={(work) => updateProfile({ work })} />} />
-              <Row
-                label="Instructions for Navi Soul"
-                description="Navi Soul keeps these in mind across every chat on this device."
-                fullWidthControl={
-                  <textarea
-                    aria-label="Instructions for Navi Soul"
-                    value={preferences.profile.instructions}
-                    onChange={(event) => updateProfile({ instructions: event.target.value.slice(0, 4_000) })}
-                    placeholder="e.g. keep explanations brief and to the point"
-                    rows={4}
-                    className="min-h-[112px] w-full resize-y rounded-[12px] bg-elev-2 px-3.5 py-3 text-[0.9375rem]/[1.375rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
-                  />
-                }
-              />
+              <button type="button" onClick={() => openPage("connectors")} className="flex min-h-[50px] w-full items-center px-4 active:bg-elev-2 transition-colors">
+                <div className="flex items-center gap-3 w-full">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-[8px] bg-[#0A84FF] text-white shrink-0"><Link2 size={16} /></span>
+                  <span className="text-[0.9375rem]/[1.375rem] font-medium text-primary flex-1 text-left">Connectors</span>
+                  <ChevronRight size={18} className="text-tertiary" />
+                </div>
+              </button>
+              <button type="button" onClick={() => haptic("selection", preferences.haptics)} className="flex min-h-[50px] w-full items-center px-4 active:bg-elev-2 transition-colors">
+                <div className="flex items-center gap-3 w-full">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-[8px] bg-[#30D158] text-white shrink-0"><Shield size={16} /></span>
+                  <span className="text-[0.9375rem]/[1.375rem] font-medium text-primary flex-1 text-left">Permissions</span>
+                  <ChevronRight size={18} className="text-tertiary" />
+                </div>
+              </button>
+              <button type="button" onClick={() => setPage("voice")} className="flex min-h-[50px] w-full items-center px-4 active:bg-elev-2 transition-colors">
+                <div className="flex items-center gap-3 w-full">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-[8px] bg-[#FF9F0A] text-white shrink-0"><Mic size={16} /></span>
+                  <span className="text-[0.9375rem]/[1.375rem] font-medium text-primary flex-1 text-left">Voice</span>
+                  <ChevronRight size={18} className="text-tertiary" />
+                </div>
+              </button>
+              <div className="flex min-h-[50px] w-full items-center px-4">
+                <div className="flex items-center gap-3 w-full">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-[8px] bg-[#FF453A] text-white shrink-0"><Activity size={16} /></span>
+                  <span className="text-[0.9375rem]/[1.375rem] font-medium text-primary flex-1 text-left">Haptic feedback</span>
+                  <SettingsToggle label="Haptics" value={preferences.haptics} onChange={() => update({ haptics: !preferences.haptics })} />
+                </div>
+              </div>
             </Group>
 
-            <SectionHeader>Preferences</SectionHeader>
+            <SectionHeader>Display</SectionHeader>
             <Group>
-              <Row
-                label="Appearance"
-                /* Installed, changing this reloads: iOS reads the status-bar
-                   style once at launch, so the glyphs keep the old theme's
-                   colour until the app relaunches. Saying so turns an
-                   unexplained flash into an expected one. */
-                description={standalone ? "Relaunches to re-tint the status bar" : undefined}
-                control={
-                  <IconSegmented
-                    label="Appearance"
-                    value={preferences.theme}
-                    options={[
-                      { id: "system", icon: <Monitor size={16} strokeWidth={1.8} />, name: "System" },
-                      { id: "light", icon: <Sun size={16} strokeWidth={1.8} />, name: "Light" },
-                      { id: "dark", icon: <Moon size={16} strokeWidth={1.8} />, name: "Dark" }
-                    ]}
-                    onChange={(theme) => update({ theme })}
-                  />
-                }
-              />
               <Row
                 label="Chat font"
                 control={
@@ -799,7 +713,6 @@ export function SettingsSheet({
               />
               <Row
                 label="Motion"
-                description="Reduce animation in streaming responses and other interface elements."
                 control={
                   <TextSegmented
                     label="Motion"
@@ -820,23 +733,33 @@ export function SettingsSheet({
                   />
                 }
               />
-              <Row
-                label="Haptics"
-                /* What it used to say — "on selection, success, and errors" —
-                   described two thirds of a thing that could not happen. A
-                   haptic needs transient user activation, and success and
-                   error are by definition known after a round trip, by which
-                   time the activation the tap granted has expired. Those ticks
-                   were refused every time, so the same gesture buzzed or did
-                   not depending on whether its outcome happened to be
-                   synchronous. Feedback now fires on the touch, which is the
-                   only moment the platform will honour, and outcomes are
-                   reported where an outcome belongs: on screen. */
-                description="A light tick when a touch is registered — a button, a switch, a sheet opening or closing. Results are shown on screen rather than felt."
-                control={<SettingsToggle label="Haptics" value={preferences.haptics} onChange={() => update({ haptics: !preferences.haptics })} />}
-              />
             </Group>
 
+            <SectionHeader>Profile</SectionHeader>
+            <Group>
+              <Row label="Full name" control={<TextField label="Full name" value={preferences.profile.fullName} onChange={(fullName) => updateProfile({ fullName })} />} />
+              <Row label="What should Navi Soul call you?" control={<TextField label="Display name" value={preferences.profile.displayName} onChange={(displayName) => updateProfile({ displayName })} />} />
+              <Row label="What best describes your work?" control={<BareSelect label="Work" value={preferences.profile.work} options={WORK_OPTIONS} onChange={(work) => updateProfile({ work })} />} />
+              <Row
+                label="Instructions for Navi Soul"
+                description="Navi Soul keeps these in mind across every chat on this device."
+                fullWidthControl={
+                  <textarea
+                    aria-label="Instructions for Navi Soul"
+                    value={preferences.profile.instructions}
+                    onChange={(event) => updateProfile({ instructions: event.target.value.slice(0, 4_000) })}
+                    placeholder="e.g. keep explanations brief and to the point"
+                    rows={4}
+                    className="min-h-[112px] w-full resize-y rounded-[12px] bg-elev-2 px-3.5 py-3 text-[0.9375rem]/[1.375rem] text-primary outline-none placeholder:text-tertiary focus:bg-elev-3"
+                  />
+                }
+              />
+            </Group>
+          </div>
+        ) : null}
+
+        {page === "voice" ? (
+          <>
             <SectionHeader>Voice</SectionHeader>
             <Group>
               <Row
@@ -846,20 +769,10 @@ export function SettingsSheet({
                     label="Voice language"
                     value={preferences.voiceLanguage}
                     options={VOICE_LANGUAGES}
-                    /* The mirror into `navi.voice.language.v1` is gone with the
-                       private copy it fed. Voice mode reads this preference
-                       directly now, so there is one language and no write that
-                       has to remember to keep a second one in step. */
                     onChange={(voiceLanguage) => update({ voiceLanguage })}
                   />
                 }
               />
-              {/* Asked to speak faster, Navi Soul said NaviOS "doesn't let me
-                  adjust my speaking rate directly — it's set by the system
-                  voice settings on your device". Wrong twice over: the device
-                  voice has always been given an explicit rate, and the premium
-                  voice takes a speed of its own. There was nothing to turn, so
-                  the honest-sounding answer was the incorrect one. */}
               <Row
                 label="Speaking rate"
                 control={
@@ -880,10 +793,6 @@ export function SettingsSheet({
                   </span>
                 }
               />
-              {/* Runs the real pipeline — permission, capture, measured signal,
-                  encoding, and the network round trip — and names the first
-                  step that fails. "It doesn't work" describes six different
-                  failures; this says which one. */}
               <Row
                 label="Test microphone"
                 description="Records two seconds and reports exactly which step fails. Speak while it listens."
@@ -917,15 +826,6 @@ export function SettingsSheet({
                 }
               />
             </Group>
-
-            <SectionHeader>Notifications</SectionHeader>
-            <Group>
-              <Row
-                label="Response completions"
-                description="Get notified when Navi Soul has finished a response. Useful for long-running tasks."
-                control={<SettingsToggle label="Response completions" value={preferences.notifyOnComplete} onChange={() => void enableNotifications()} />}
-              />
-            </Group>
           </>
         ) : null}
 
@@ -933,10 +833,6 @@ export function SettingsSheet({
           <>
             <SectionHeader>Account</SectionHeader>
             <Group>
-              {/* Three states, and the row used to render only one of them.
-                  Without a sign-in control the app looked like it had no
-                  account system at all — which is true of exactly one of
-                  these three cases. */}
               {!CLERK_AVAILABLE ? (
                 <Row
                   label="Local workspace"
@@ -957,8 +853,6 @@ export function SettingsSheet({
                   control={<InlineButton onClick={signIn}>Sign in</InlineButton>}
                 />
               )}
-              {/* Only shown when there is actually something to spend. An app
-                  that is entirely free has no business displaying a budget. */}
               {spend.configured ? (
                 <Row
                   label="Monthly usage"
@@ -995,15 +889,6 @@ export function SettingsSheet({
 
         {page === "privacy" ? (
           <>
-            {/* One subject, read top to bottom: the switches that govern
-                memory, then everything memory currently holds.
-
-                It used to be four sections in a different order — a paragraph,
-                the facts list, the switches, then counts that referred to
-                "the list above" across an intervening section, with the
-                storage-durability sentence printed twice. Every part worked;
-                the page was just assembled in the order the features were
-                built rather than the order anyone reads them. */}
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
               Conversations, projects, and preferences live in this browser. Signed in, they also sync to your own
               private cloud memory, readable by your account alone.
@@ -1023,16 +908,6 @@ export function SettingsSheet({
               />
             </Group>
 
-            {/* Counted, not promised. "Saved" with nothing to check it against
-                is exactly the claim that stopped being believable — so this
-                reads the store and shows what is in it, by name. */}
-            {/* Two questions, asked and answered separately, because they have
-                different answers and merging them is what made this screen
-                lie. "What is on this phone" is always answerable and is what
-                the drawer beside it shows. "What has reached my account" is
-                answerable only when a store is configured and someone is
-                signed in — and when it is not, the honest answer is a sentence
-                about sync, never a zero next to the word Conversations. */}
             <SectionHeader>On this device</SectionHeader>
             <Group>
               <Row
@@ -1061,17 +936,11 @@ export function SettingsSheet({
                   <Row label="Conversations" description="Restored on any device you sign in to." control={<Count value={memoryStatus.chats} />} />
                   <Row label="Facts about you" description="Listed below, and removable one by one." control={<Count value={memoryStatus.facts} />} />
                   <Row label="Skills you taught it" description="Applied in every conversation, not only when a request happens to match." control={<Count value={memoryStatus.skills} />} />
-                  {/* Separate from the count above on purpose. These are
-                      conclusions Navi Soul drew on its own, so seeing them
-                      counted — and named below — is the only way to notice one
-                      that is wrong before it quietly shapes every answer. */}
                   <Row label="Lessons it worked out" description="Conclusions Navi Soul drew from experience and carries forward on its own." control={<Count value={memoryStatus.lessons} />} />
                 </>
               )}
             </Group>
 
-            {/* Directly under the count it belongs to, rather than a section
-                away from it. */}
             <p className="px-4 pt-4 text-[0.75rem]/[1.125rem] text-tertiary">Facts about you</p>
             <Group>
               {!facts.loaded ? (
@@ -1132,14 +1001,6 @@ export function SettingsSheet({
 
         {page === "capabilities" ? (
           <>
-            {/* Three switches, one group.
-                They used to sit under four headings — "General", "Visuals",
-                "Code execution and file creation", "Accounts" — one row each,
-                with the third heading repeating its own row's label word for
-                word. Four headings to organise three switches is not
-                organisation; it is the taxonomy costing more than the thing
-                being classified, on a screen whose title already says what all
-                three are. */}
             <SectionHeader>What Navi Soul can do</SectionHeader>
             <Group>
               <Row
@@ -1158,12 +1019,6 @@ export function SettingsSheet({
                 control={<SettingsToggle label="Code execution" value={preferences.tools.code} onChange={() => update({ tools: { ...preferences.tools, code: !preferences.tools.code } })} />}
               />
             </Group>
-            {/* Connecting an account happens in one place. This screen used to
-                carry its own GitHub and Vercel rows while the sheet called
-                Connectors listed only MCP servers, so a connected account was
-                invisible from the screen named after connecting things — and
-                an empty registry read as "nothing is connected" while two
-                accounts were. */}
             <SectionHeader>Accounts</SectionHeader>
             <Group>
               <RootRow label="Connectors" onOpen={() => openPage("connectors")} />
@@ -1183,19 +1038,6 @@ export function SettingsSheet({
               single engine can be blamed or cleared.
             </p>
 
-            {/* What the Developer screen was actually for.
-                That screen was a path box, a textarea and a commit button — a
-                text editor on a phone, and a worse one than simply telling
-                Navi Soul in Code mode to make the change, which reads the file
-                and commits it itself. The editor is gone. What could not go is
-                this: the deployment variables are real and someone has to be
-                able to look them up. They live here, with the other things
-                that exist to answer "why is it behaving like that". */}
-            {/* What is broken, without asking the assistant.
-                `diagnose_self` gives Navi Soul the same answer and that is the
-                one that stops it inventing a cause — but the turn where you
-                most need it is the turn where something in that path may be
-                the broken thing. This needs no model and no conversation. */}
             <SectionHeader>Check everything</SectionHeader>
             <Group>
               <Row
@@ -1259,8 +1101,6 @@ export function SettingsSheet({
                   />
                 }
               />
-              {/* A pin is the one setting here with a lasting cost, and it is
-                  invisible from every other screen once this page is closed. */}
               {preferences.routeOverride ? (
                 <Row
                   label="Routing is pinned"
@@ -1272,9 +1112,6 @@ export function SettingsSheet({
 
             <SectionHeader>Measurement</SectionHeader>
             <Group>
-              {/* The eval harness needed a terminal, so in practice the app's
-                  own quality was never measured. Same task set, same grading,
-                  run by the deployment against itself — from the phone. */}
               <button
                 type="button"
                 onClick={() => void runEvals()}
@@ -1308,15 +1145,6 @@ export function SettingsSheet({
         {page === "playbooks" ? (
           <>
             <p className="px-4 pt-5 text-[0.8125rem]/[1.25rem] text-secondary">
-              {/* This used to promise that any published skill "works here
-                  unchanged". Measured against 35 real published SKILL.md
-                  files: all 35 parsed, but 22 had their instructions cut at
-                  4,000 characters — one kept only a fifth of its body — and
-                  the ones that ship companion scripts or reference files
-                  cannot bring them, because a playbook is prompt text and
-                  nothing else. "Unchanged" was true for a third of them.
-                  The sentence now says what the parser actually does, and
-                  truncation is reported at paste time rather than silently. */}
               Playbooks are methods Navi Soul applies when a request matches one — how to debug, how to review code,
               how to edit a document without disturbing it. They use the SKILL.md format — YAML frontmatter with a
               name and description, then markdown instructions — so a skill file written for any tool that uses it
@@ -1348,9 +1176,6 @@ export function SettingsSheet({
                           const next = preferences.customPlaybooks.filter((entry) => entry.id !== result.playbook.id);
                           update({ customPlaybooks: [...next, result.playbook].slice(0, 40) });
                           setPlaybookDraft("");
-                          /* Said out loud, because the alternative is a
-                             playbook that stops mid-sentence during a real
-                             request and no way to know why. */
                           setPlaybookNotice(result.truncated
                             ? `Added “${result.playbook.name}”, trimmed to the first 4,000 characters.`
                             : `Added “${result.playbook.name}”.`);
@@ -1409,16 +1234,6 @@ export function SettingsSheet({
               Many also work from ordinary words: “format this json:”, “sha256 of…”, “sort lines:”.
             </p>
 
-            {/* Teaching, without a tool call in the way.
-                Asking Navi Soul to learn something went through `learn_skill`,
-                which meant it depended on the model choosing the tool, filling
-                it correctly, and reporting the result honestly — and when the
-                write failed the model narrated a theory instead of the reason.
-                The chat history has the same request made five times.
-
-                This writes to the same store through the same API and shows
-                whatever the server actually says. It is the shortest path
-                between "keep this" and it being kept, and it is checkable. */}
             <SectionHeader>Teach Navi Soul something</SectionHeader>
             <Group>
               <Row
@@ -1450,8 +1265,6 @@ export function SettingsSheet({
                       >
                         {teach.saving ? "Saving…" : "Teach it"}
                       </button>
-                      {/* The server's own words, success or failure. A generic
-                          "could not be saved" is what left everyone guessing. */}
                       {teach.status ? (
                         <span className={`min-w-0 flex-1 text-[0.75rem]/4 ${teach.status.ok ? "text-success" : "text-danger"}`}>
                           {teach.status.message}
