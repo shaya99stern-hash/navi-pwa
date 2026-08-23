@@ -75,7 +75,8 @@ const CONVERSATION_PLACEHOLDER: Record<VoiceConversation["phase"], string> = {
   speaking: "Answering — the mic reopens after"
 };
 
-const menuRow = "flex min-h-[50px] w-full items-center gap-3 px-4 text-left text-[0.9375rem]/[1.375rem] font-medium text-primary active:bg-elev-3";
+// iOS Native Action Sheet Button Style
+const sheetButton = "flex min-h-[58px] w-full items-center justify-between border-b border-[#3C3C434A] dark:border-[#545458A6] last:border-b-0 px-4 active:bg-black/10 dark:active:bg-white/10 transition-colors";
 
 type Props = {
   value: string;
@@ -701,7 +702,7 @@ export function ComposerDock({
                 className="composer-action"
                 aria-label={research ? "Research is on. Turn it off" : "Research is off. Turn it on"}
               >
-                <Globe size={19} strokeWidth={1.8} className={research ? "text-orange-500" : ""} />
+                <Globe size={19} strokeWidth={1.8} className={research ? "text-[#0A84FF]" : ""} />
               </button>
               )}
 
@@ -737,12 +738,12 @@ export function ComposerDock({
                     {CONVERSATION_BARS.map((weight, index) => (
                       <span
                         key={index}
-                        className={`w-1.5 rounded-full transition-[height,background-color] duration-100 ${conversation.hearing ? "bg-accent" : "bg-[var(--border-strong)]"}`}
+                        className={`w-1.5 rounded-full transition-[height,background-color] duration-100 ${conversation.hearing ? "bg-[#0A84FF]" : "bg-[var(--border-strong)]"}`}
                         style={{ height: `${Math.max(4, Math.min(22, 4 + conversation.level * weight * 26))}px` }}
                       />
                     ))}
                   </span>
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-accent">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#0A84FF]">
                     {conversation.phase === "speaking"
                       ? <Volume2 size={17} />
                       : conversation.phase === "listening"
@@ -752,7 +753,7 @@ export function ComposerDock({
                 </span>
               ) : listening ? (
                 <span
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${speaking ? "ring-accent" : "ring-transparent"}`}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${speaking ? "ring-[#0A84FF]" : "ring-transparent"}`}
                   role="status"
                   aria-label={speaking ? "Listening, speech detected" : "Listening"}
                 >
@@ -772,7 +773,7 @@ export function ComposerDock({
                       return (
                         <span
                           key={index}
-                          className={`w-[3px] shrink-0 rounded-full transition-[height,background-color] duration-100 ${level > 0.02 ? "bg-accent" : "bg-[var(--border-strong)]"}`}
+                          className={`w-[3px] shrink-0 rounded-full transition-[height,background-color] duration-100 ${level > 0.02 ? "bg-[#0A84FF]" : "bg-[var(--border-strong)]"}`}
                           style={{ height: `${height}px` }}
                         />
                       );
@@ -787,7 +788,7 @@ export function ComposerDock({
                   <button
                     type="button"
                     onClick={toggleVoice}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-[var(--accent-on-primary)] active:bg-accent-pressed"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0A84FF] text-white active:bg-opacity-80"
                     aria-label="Stop recording and transcribe"
                   >
                     <Check size={17} strokeWidth={2.4} />
@@ -821,7 +822,7 @@ export function ComposerDock({
                   type={generating ? "button" : "submit"}
                   onClick={generating ? onStop : undefined}
                   disabled={!generating && !canSend}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-[var(--accent-on-primary)] shadow-sm active:scale-95 active:bg-accent-pressed" : "bg-elev-3 text-disabled"}`}
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-[#0A84FF] text-white shadow-sm active:scale-95 active:bg-opacity-80" : "bg-elev-3 text-disabled"}`}
                   aria-label={generating ? "Stop response" : "Send message"}
                 >
                   {generating ? <Square size={13} fill="currentColor" /> : <ArrowUp size={18} strokeWidth={2.4} />}
@@ -847,81 +848,69 @@ export function ComposerDock({
             aria-label="Close attachment menu"
             onClick={() => setSourceMenuOpen(false)}
             {...sourceSheet.scrimProps}
-            className="absolute inset-0 bg-overlay backdrop-blur-[3px]"
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
           />
           <section
             role="dialog"
             aria-modal="true"
             aria-label="Add to message"
             {...sourceSheet.sheetProps}
-            className="navi-sheet absolute inset-x-0 bottom-0 mx-auto w-full max-w-app px-gutter pb-[calc(18px+var(--safe-bottom))] pt-1"
+            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[500px] px-2 pb-[calc(10px+var(--safe-bottom))] pt-1"
           >
-            <div {...sourceSheet.handleProps} className="navi-sheet-grab mb-1 pt-1"><div className="navi-sheet-grabber" /></div>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[1.0625rem]/6 font-semibold text-primary">Add to message</div>
-                <div className="text-[0.75rem]/4 font-medium text-tertiary">Up to six items · photos are resized to fit</div>
+            {/* Invisible handle strictly for the drag logic, no visual dot */}
+            <div {...sourceSheet.handleProps} className="h-6 w-full opacity-0" />
+            
+            <div className="overflow-hidden rounded-[14px] bg-[#F2F2F7]/95 dark:bg-[#1E1E1E]/95 backdrop-blur-xl">
+              <div className="px-4 py-3 border-b border-[#3C3C434A] dark:border-[#545458A6] flex flex-col items-center justify-center text-center">
+                <span className="text-[13px] font-semibold text-[#8E8E93]">Add to message</span>
+                <span className="text-[13px] font-normal text-[#8E8E93] mt-0.5">Up to six items · photos are resized</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setSourceMenuOpen(false)}
-                className="flex h-11 w-11 items-center justify-center rounded-full text-secondary active:bg-elev-3"
-                aria-label="Close"
-              >
-                <X size={20} />
-              </button>
-            </div>
 
-            <div className="overflow-hidden rounded-card border border-[var(--border-subtle)] bg-elev-2">
-              <button type="button" onClick={() => imageInputRef.current?.click()} className={menuRow}>
-                <ImageIcon size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Add photos</span>
+              <button type="button" onClick={() => imageInputRef.current?.click()} className={`${sheetButton} text-[#0A84FF]`}>
+                <span className="text-[20px] font-normal">Add Photos</span>
+                <ImageIcon size={22} strokeWidth={1.5} />
               </button>
-              <button type="button" onClick={() => cameraInputRef.current?.click()} className={menuRow}>
-                <Camera size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Take a photo</span>
+              <button type="button" onClick={() => cameraInputRef.current?.click()} className={`${sheetButton} text-[#0A84FF]`}>
+                <span className="text-[20px] font-normal">Take Photo</span>
+                <Camera size={22} strokeWidth={1.5} />
               </button>
-              <button type="button" onClick={() => documentInputRef.current?.click()} className={menuRow}>
-                <Paperclip size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Add files</span>
+              <button type="button" onClick={() => documentInputRef.current?.click()} className={`${sheetButton} text-[#0A84FF]`}>
+                <span className="text-[20px] font-normal">Add Files</span>
+                <Paperclip size={22} strokeWidth={1.5} />
               </button>
-              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenProjects(); }} className={menuRow}>
-                <FolderKanban size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Add to project</span>
-                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
+              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenProjects(); }} className={`${sheetButton} text-primary`}>
+                <span className="text-[20px] font-normal">Add to Project</span>
+                <FolderKanban size={22} strokeWidth={1.5} className="text-primary" />
               </button>
-
-              <div className="h-2 bg-[var(--bg-app)]" aria-hidden="true" />
-
-              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenPlaybooks(); }} className={menuRow}>
-                <BookOpen size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Playbooks</span>
-                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
+              <button type="button" onClick={() => { setSourceMenuOpen(false); onOpenPlaybooks(); }} className={`${sheetButton} text-primary`}>
+                <span className="text-[20px] font-normal">Playbooks</span>
+                <BookOpen size={22} strokeWidth={1.5} className="text-primary" />
               </button>
-              <button type="button" onClick={() => { setSourceMenuOpen(false); setIntegrationsOpen(true); }} className={menuRow}>
-                <Link2 size={19} strokeWidth={1.8} className="shrink-0 text-secondary" />
-                <span className="flex-1">Integrations</span>
-                <ChevronDown size={16} className="-rotate-90 shrink-0 text-tertiary" />
+              <button type="button" onClick={() => { setSourceMenuOpen(false); setIntegrationsOpen(true); }} className={`${sheetButton} text-primary`}>
+                <span className="text-[20px] font-normal">Integrations</span>
+                <Link2 size={22} strokeWidth={1.5} className="text-primary" />
               </button>
-
-              <div className="h-2 bg-[var(--bg-app)]" aria-hidden="true" />
-
               <button
                 type="button"
                 role="menuitemcheckbox"
                 aria-checked={research}
                 onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
-                className={menuRow}
+                className={`${sheetButton} text-primary`}
               >
-                <Globe size={19} strokeWidth={1.8} className={`shrink-0 ${research ? "text-orange-500" : "text-secondary"}`} />
-                <span className="flex-1">Web search</span>
-                {research ? <Check size={18} strokeWidth={2.2} className="shrink-0 text-orange-500" /> : null}
+                <span className="text-[20px] font-normal">Web Search</span>
+                {research ? <Check size={22} strokeWidth={2} className="text-[#0A84FF]" /> : <Globe size={22} strokeWidth={1.5} className="text-primary" />}
               </button>
             </div>
 
-            <p className="mt-2.5 px-1 text-center text-[0.6875rem]/4 font-medium text-tertiary">
-              You can also paste a screenshot or drag files onto the composer.
-            </p>
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setSourceMenuOpen(false)}
+                className="flex min-h-[58px] w-full items-center justify-center rounded-[14px] bg-white dark:bg-[#1E1E1E] text-[20px] font-semibold text-[#0A84FF] active:bg-black/10 dark:active:bg-white/10 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </section>
         </div>
       ) : null}
@@ -933,7 +922,10 @@ export function ComposerDock({
         connectorAccessMode={connectorAccessMode}
         haptics={haptics}
         onClose={() => setIntegrationsOpen(false)}
-        onOpenConnectors={() => { setIntegrationsOpen(false); onOpenConnectors(); }}
+        onOpenConnectors={() => {
+          setIntegrationsOpen(false);
+          onOpenConnectors();
+        }}
       />
     </>
   );
