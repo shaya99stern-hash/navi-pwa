@@ -93,9 +93,23 @@ export async function compactForBudget(options: {
     if (!summary) return { messages, compacted: false };
 
     const compactedMessages: ModelMessage[] = [
-      /* Marked as earlier context rather than presented as a turn, so the model
-         does not answer the summary as though it were the live question. */
-      { role: "system", content: `Summary of the earlier part of this conversation:\n\n${summary}` },
+      /* Carried as a user turn rather than a system one.
+         This was `{ role: "system" }`, which the SDK now refuses outright:
+         "System messages are not allowed in the prompt or messages fields. Use
+         the instructions option instead." Every conversation long enough to
+         compact therefore failed — and only long ones, which is why it looked
+         like an intermittent fault rather than a total one.
+
+         The instructions option is the system prompt, and that is built per
+         *attempt* here while compaction is cached per *budget*; routing a value
+         between them would put a new ordering dependency on the hot path to
+         move a string. The framing below does the work the role was doing —
+         the summary is labelled as background and the live question is still
+         the last message, which is the one being answered. */
+      {
+        role: "user",
+        content: `[Background — the earlier part of this conversation, condensed. Do not answer this; it is context for the message that follows.]\n\n${summary}`
+      },
       ...recent
     ];
 

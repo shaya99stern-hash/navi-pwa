@@ -32,6 +32,7 @@ import { IMAGE_ENGINES, generateNaviImage, type ImageAttachment } from "@/lib/ai
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { classifyTask, createProviderModel, engineName, fallbackRoutes, frontierConfigured, getProviderAvailability, lastResortRoute, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane, type ProviderAvailability } from "@/lib/ai/providers";
 import { markProviderFailure, markProviderSuccess, orderRoutesByHealth } from "@/lib/ai/provider-health";
+import { attributedError, describeAttemptFailure, type AttemptFacts } from "@/lib/ai/attempt-failure";
 import { cachedRoute, refreshFreeModels, refreshRouteHealth } from "@/lib/ai/model-discovery";
 import { getSpendStore, meteredLaneEnabled, readSpend, recordSpend, readUsage } from "@/lib/ai/spend";
 import { buildMcpTools } from "@/lib/ai/mcp-tools";
@@ -2282,6 +2283,27 @@ export async function POST(request: Request): Promise<Response> {
         const flight = outcome;
         const flightRoute = flight.route;
         const flightMetered = flightRoute.provider === "deepseek";
+        /* Everything needed to identify this attempt, fixed before it runs.
+           An audit of seven days of production found 1,093 of 1,961 errors
+           carrying no provider, no model and no status — 56% of everything,
+           arriving as a bare stack frame. A failed attempt is ordinary here and
+           the user should never hear about it; that is the failover working.
+           But silent to the user was also silent to us, and the log is not the
+           user. */
+        const facts: AttemptFacts = {
+          provider: flightRoute.provider,
+          model: flightRoute.model,
+          engine: engineName(flightRoute),
+          lane,
+          dispatch,
+          attempt: index + 1,
+          of: attempts.length,
+          startedAt: Date.now()
+        };
+        const failedWith = (error: unknown): unknown => {
+          console.warn(describeAttemptFailure(facts, error));
+          return attributedError(facts, error);
+        };
         if (flight.rerouted) {
           console.info(`Navi Soul rerouted to ${flightRoute.label} for room: ${describeRequestSize(flight.size, ceiling)}`);
         }
@@ -2362,10 +2384,10 @@ export async function POST(request: Request): Promise<Response> {
           } catch (error) {
             /* Nothing was shown, so another provider may still answer. */
             markProviderFailure(flightRoute.provider, error);
-            lastFailure = error;
+            lastFailure = failedWith(error);
             continue;
           }
-          if (!draft.trim()) { lastFailure = new Error("The response came back empty."); continue; }
+          if (!draft.trim()) { lastFailure = failedWith(new Error("The response came back empty.")); continue; }
           const spent = Date.now() - requestStartedAt;
           const reviewBudget = REQUEST_BUDGET_MS - spent - REVIEW_DELIVERY_RESERVE_MS;
           writer.write(statusChunk({ stage: "verify", detail: "Checking it against the constraints." }));
@@ -2422,7 +2444,7 @@ export async function POST(request: Request): Promise<Response> {
 
           if (!committed) {
             markProviderFailure(flightRoute.provider, failure);
-            lastFailure = failure ?? new Error("The provider produced no content.");
+            lastFailure = failedWith(failure ?? new Error("The provider produced no content."));
             continue;
           }
 
@@ -2463,7 +2485,7 @@ export async function POST(request: Request): Promise<Response> {
           return;
         } catch (error) {
           markProviderFailure(flightRoute.provider, error);
-          lastFailure = error;
+          lastFailure = failedWith(error);
           continue;
         }
       }

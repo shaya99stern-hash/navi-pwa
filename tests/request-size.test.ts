@@ -135,8 +135,23 @@ check("no floor without the key that reaches it",
    means a storage outage degrades to free rather than to unlimited billing. */
 check("no floor when the ledger has not authorised spending",
   lastResortRoute(availability, false), null);
+/* Naming a paid model is not opting in to paying for it. An audit found 67
+   production requests to `anthropic/claude-opus-5`; they failed on an empty
+   balance, not on a guard. "Free tiers only" was enforced by a comment. */
+check("naming a paid frontier model is not by itself permission to bill",
+  lastResortRoute(availability, true), null);
+
+process.env.NAVI_ALLOW_PAID_MODELS = "true";
 const floor = lastResortRoute(availability, true);
 check("a deployment that opted in still gets one", floor?.provider, "openrouter");
+delete process.env.NAVI_ALLOW_PAID_MODELS;
+
+/* A `:free` slug bills nothing by OpenRouter's own naming, so it is not the
+   thing being guarded against and needs no flag. */
+process.env.NAVI_FRONTIER_MODEL = "z-ai/glm-5.2:free";
+check("a free frontier model needs no permission",
+  lastResortRoute(availability, true)?.provider, "openrouter");
+process.env.NAVI_FRONTIER_MODEL = "anthropic/claude-opus-5";
 delete process.env.NAVI_FRONTIER_MODEL;
 
 /* ── The reference blocks compete for room instead of each deciding alone ── */
