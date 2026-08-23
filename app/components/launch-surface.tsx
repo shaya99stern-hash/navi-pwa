@@ -3,14 +3,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Code2, FileText, Sparkles, SquarePen } from "lucide-react";
 
-/
-
-The greeting is a rotating copy line, not a clock label. Each time bucket
-
-carries a handful of original lines and one is picked per launch, so the
-
-launch screen never reads the same twice in a row. All copy is Navi's own.
-*/
 const GREETINGS: Record<"late" | "morning" | "afternoon" | "evening", string[]> = {
 late: [
 "Up late?",
@@ -42,15 +34,9 @@ function greetingForNow(now: Date): string {
 const hour = now.getHours();
 const bucket = hour < 5 ? "late" : hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
 const lines = GREETINGS[bucket];
-// Seeded by launch time so it rotates between visits without flickering
-// within one.
 return lines[Math.floor(now.getTime() / 60_000) % lines.length];
 }
 
-/
-
-Capitalise a name that arrived lowercase.
-*/
 function presentName(name: string): string {
 return name.replace(/(^|[\s-])(\p{Ll})/gu, (_, boundary: string, letter: string) => boundary + letter.toUpperCase());
 }
@@ -91,9 +77,8 @@ window.setTimeout(() => {
 return (
 
 
-{/* Premium glowing brand orb /}
 
-{/ eslint-disable-next-line @next/next/no-img-element */}
+{/* eslint-disable-next-line @next/next/no-img-element */}
 
 
 
@@ -105,7 +90,6 @@ return (
       How can I help you today?
     </p>
 
-    {/* Quick Actions Grid */}
     <div className="mt-10 grid w-full max-w-[420px] grid-cols-2 gap-3">
       {SUGGESTIONS.map((suggestion, index) => {
         const Icon = suggestion.icon;
@@ -133,7 +117,6 @@ return (
       </p>
     ) : null}
 
-    {/* Wraps any children (like ProviderSetupNotice) to maintain width */}
     <div className="mt-6 w-full max-w-[420px] text-left">
       {children}
     </div>
