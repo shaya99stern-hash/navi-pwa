@@ -16,7 +16,7 @@ import type { ProviderName, ProviderRoute } from "./types";
  * recovered one wastes exactly the capacity this exists to protect.
  */
 
-type Health = { failures: number; cooldownUntil: number; rejected?: boolean };
+type Health = { failures: number; cooldownUntil: number; rejected?: boolean; exhausted?: boolean };
 
 const globalHealthState = globalThis as typeof globalThis & {
   __naviProviderHealth?: Map<ProviderName, Health>;
@@ -50,6 +50,46 @@ export function isCredentialRejection(error: unknown): boolean {
     || message.includes("authentication");
 }
 
+/**
+ * Out of credits, which is neither a bad key nor a busy minute.
+ *
+ * An audit found a Hugging Face account with its monthly credits spent:
+ *
+ *     "You have depleted your monthly included credits. Purchase pre-paid
+ *      credits to continue using Inference Providers."
+ *
+ * The token is valid, so this is not a rejection. It will not clear in thirty
+ * seconds, so it is not a cooldown. And roughly twelve of this app's routes are
+ * Hugging Face — so every turn walked all twelve, collected twelve identical
+ * 402s, and spent its whole retry budget learning the same fact it learned on
+ * the first one.
+ *
+ * Checked before the rate-limit exclusion below rather than after: a 402 body
+ * often mentions quotas and credits in the same breath, and reading it as a
+ * rate limit would put the provider back at the front of the queue in a minute.
+ */
+export function isBudgetExhausted(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error ?? "")).toLowerCase();
+  if (!message) return false;
+  return /\b402\b/.test(message)
+    || message.includes("payment required")
+    || message.includes("depleted")
+    || message.includes("insufficient credit")
+    || message.includes("out of credits")
+    || message.includes("purchase pre-paid")
+    || message.includes("requires more credits");
+}
+
+/**
+ * How long an exhausted provider stays at the back.
+ *
+ * Credits reset on a billing period, not on a timer this app can know, so any
+ * number here is a guess about when to look again. Thirty minutes is long
+ * enough that a turn stops paying for the discovery and short enough that
+ * topping the account up is noticed without a redeploy.
+ */
+const EXHAUSTED_COOLDOWN_MS = 30 * 60_000;
+
 function healthMap(): Map<ProviderName, Health> {
   return (globalHealthState.__naviProviderHealth ??= new Map());
 }
@@ -73,7 +113,12 @@ export function markProviderFailure(provider: ProviderName, error?: unknown): vo
   const entry = map.get(provider) ?? { failures: 0, cooldownUntil: 0 };
   entry.failures += 1;
   if (error !== undefined && isCredentialRejection(error)) entry.rejected = true;
-  if (entry.rejected || entry.failures >= FAILURES_BEFORE_COOLDOWN) {
+  /* Immediately, like a rejection and for the same reason: the provider has
+     already said plainly what a second request would only confirm. */
+  if (error !== undefined && isBudgetExhausted(error)) entry.exhausted = true;
+  if (entry.exhausted) {
+    entry.cooldownUntil = Date.now() + EXHAUSTED_COOLDOWN_MS;
+  } else if (entry.rejected || entry.failures >= FAILURES_BEFORE_COOLDOWN) {
     const backoff = BASE_COOLDOWN_MS * 2 ** (Math.max(entry.failures, FAILURES_BEFORE_COOLDOWN) - FAILURES_BEFORE_COOLDOWN);
     entry.cooldownUntil = Date.now() + Math.min(backoff, MAX_COOLDOWN_MS);
   }
@@ -110,6 +155,18 @@ export function orderRoutesByHealth<T extends ProviderRoute>(routes: T[]): T[] {
  */
 export function rejectedProviders(): ProviderName[] {
   return [...healthMap().entries()].filter(([, entry]) => entry.rejected).map(([provider]) => provider);
+}
+
+/**
+ * Providers whose credits are spent.
+ *
+ * Reported apart from cooling and rejected because the remedy is different from
+ * both: not a new key, not waiting, but a billing period or a top-up. An app
+ * that says "Hugging Face is failing" when the truth is "Hugging Face is out of
+ * credits until the month turns over" sends someone to check the wrong thing.
+ */
+export function exhaustedProviders(): ProviderName[] {
+  return [...healthMap().entries()].filter(([, entry]) => entry.exhausted).map(([provider]) => provider);
 }
 
 /** For diagnostics surfaces. Empty when everything is healthy. */

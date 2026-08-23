@@ -2,7 +2,7 @@ import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { PROVIDERS, PROVIDER_IDS, providerApiKey } from "./provider-registry";
 import { PROVIDER_CATALOG, findProvider, isEntryConfigured } from "./provider-catalog";
-import { coolingProviders } from "./provider-health";
+import { coolingProviders, exhaustedProviders } from "./provider-health";
 import { hasWebSearch, searchProviderName } from "./web-tools";
 import { selfUpdateRepo, selfUpdateToken } from "./self-update-tools";
 import { describeProbe, planProbe, runProbe } from "./service-probe";
@@ -164,6 +164,7 @@ export function buildEnvironmentTools({ onActivity = () => {}, connections = {},
         const transcription = transcriptionCandidates();
         const voice = await readTtsUsage();
         const cooling = coolingProviders();
+        const exhausted = exhaustedProviders();
         const repo = selfUpdateRepo();
         const services = PROVIDER_CATALOG.map((entry) => ({ entry, on: isEntryConfigured(entry) }));
 
@@ -176,6 +177,14 @@ export function buildEnvironmentTools({ onActivity = () => {}, connections = {},
           cooling.length
             ? `Currently failing and deprioritised: ${cooling.map((id) => PROVIDERS[id].label).join(", ")}. Requests are routing around them.`
             : "All configured providers are healthy.",
+          /* Reported apart from "failing", because the remedy is different:
+             not a new key and not waiting, but a billing period or a top-up.
+             Saying "Hugging Face is failing" when the truth is "Hugging Face is
+             out of credits" sends someone to check the wrong thing — and this
+             deployment runs roughly twelve routes on that one account. */
+          exhausted.length
+            ? `Out of credits, not broken: ${exhausted.map((id) => PROVIDERS[id].label).join(", ")}. The key is valid and the account has nothing left to spend, so those routes are held back until it is topped up or the billing period turns over. Say that rather than calling them failures.`
+            : "",
           "",
           `Web research: ${hasWebSearch() ? `available through ${searchProviderName()}` : "unavailable — needs TAVILY_API_KEY or EXA_API_KEY"}.`,
           `Image and sound generation: ${providerApiKey(PROVIDERS.huggingface) ? "available" : "unavailable — needs HF_TOKEN"}.`,
