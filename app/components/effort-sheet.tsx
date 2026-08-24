@@ -45,7 +45,7 @@ export function EffortSheet({ open, preferences, onClose, onPreferences }: Props
         <div {...sheet.handleProps} className="h-6 w-full opacity-0 outline-none" />
 
         {/* Main Options Group */}
-        <div className="overflow-hidden rounded-[16px] bg-[#FFFFFF]/90 dark:bg-[#161616]/90 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-2xl">
+        <div className="overflow-hidden rounded-[16px] bg-card/90 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-2xl">
           {EFFORT_LEVELS.map((level, index) => {
             const isActive = preferences.effort === level.id;
             return (
@@ -61,7 +61,7 @@ export function EffortSheet({ open, preferences, onClose, onPreferences }: Props
                 <span className={`text-[15px] font-medium tracking-tight ${
                   isActive 
                     ? "text-black dark:text-white" 
-                    : "text-[#8E8E93] dark:text-[#A1A1A6]"
+                    : "text-tertiary"
                 }`}>
                   {level.label}
                 </span>
@@ -81,7 +81,7 @@ export function EffortSheet({ open, preferences, onClose, onPreferences }: Props
           <button
             type="button"
             onClick={onClose}
-            className="flex h-[48px] w-full items-center justify-center rounded-[16px] bg-[#FFFFFF]/90 dark:bg-[#161616]/90 backdrop-blur-2xl border border-black/5 dark:border-white/5 text-[15px] font-medium text-[#8E8E93] dark:text-[#A1A1A6] active:bg-black/5 dark:active:bg-white/10 transition-colors outline-none shadow-2xl"
+            className="flex h-[48px] w-full items-center justify-center rounded-[16px] bg-card/90 backdrop-blur-2xl border border-black/5 dark:border-white/5 text-[15px] font-medium text-tertiary active:bg-black/5 dark:active:bg-white/10 transition-colors outline-none shadow-2xl"
           >
             Cancel
           </button>

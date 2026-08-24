@@ -1213,7 +1213,7 @@ export function AppShell({
       {composeMenuOpen && (
         <>
           <div className="fixed inset-0 z-[100]" onClick={() => setComposeMenuOpen(false)} />
-          <div className="absolute top-[calc(env(safe-area-inset-top)+48px)] right-4 z-[110] w-[210px] rounded-[14px] bg-[#F2F2F7]/95 dark:bg-[#1E1E1E]/95 backdrop-blur-xl shadow-[0_4px_24px_rgba(0,0,0,0.15)] border border-[#3C3C434A] dark:border-[#545458A6] overflow-hidden">
+          <div className="absolute top-[calc(env(safe-area-inset-top)+48px)] right-4 z-[110] w-[210px] rounded-[14px] bg-surface/95 backdrop-blur-xl shadow-[0_4px_24px_rgba(0,0,0,0.15)] border border-[#3C3C434A] dark:border-[#545458A6] overflow-hidden">
             <button
               type="button"
               onClick={() => {

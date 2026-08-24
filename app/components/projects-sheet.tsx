@@ -164,8 +164,8 @@ export function ProjectsSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex flex-col bg-[#F2F2F7] dark:bg-black text-primary">
-      <header className="navi-sheet-header sticky top-0 z-10 flex h-[calc(52px+var(--safe-top))] shrink-0 items-center gap-1 bg-[#F2F2F7] dark:bg-black px-2 pt-[var(--safe-top)] border-b border-[var(--border-subtle)]">
+    <div className="fixed inset-0 z-[120] flex flex-col bg-page text-primary">
+      <header className="navi-sheet-header sticky top-0 z-10 flex h-[calc(52px+var(--safe-top))] shrink-0 items-center gap-1 bg-page px-2 pt-[var(--safe-top)] border-b border-[var(--border-subtle)]">
         {selected && (
            <button type="button" onClick={() => setSelectedId(null)} aria-label="Back to Projects" className="flex h-11 w-14 items-center justify-center rounded-full text-accent active:opacity-60 md:hidden">
              <ChevronLeft size={30} strokeWidth={1.5} className="-ml-1" />
@@ -232,7 +232,7 @@ export function ProjectsSheet({
           <Group>
             <button type="button" onClick={() => { onSelect(null); haptic("selection", haptics); }} className="flex min-h-[44px] w-full items-center justify-between border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-2.5 text-left active:bg-elev-3">
               <div className="flex items-center gap-3">
-                <span className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] bg-[#8E8E93] text-white shrink-0"><FolderKanban size={16} strokeWidth={2.5}/></span>
+                <span className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] bg-[var(--text-tertiary)] text-white shrink-0"><FolderKanban size={16} strokeWidth={2.5}/></span>
                 <span className="text-[1rem] text-primary font-medium">No project</span>
               </div>
               {activeProjectId === null && <Check size={20} className="text-accent shrink-0" />}

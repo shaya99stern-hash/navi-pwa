@@ -104,7 +104,7 @@ function SettingsToggle({ value, onChange, label }: { value: boolean; onChange: 
       aria-checked={value}
       aria-label={label}
       onClick={onChange}
-      className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-[120ms] ${value ? "bg-accent" : "bg-[#39393D]"}`}
+      className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-[120ms] ${value ? "bg-accent" : "bg-elev-3"}`}
     >
       <span className={`absolute top-[2px] left-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-sm transition-transform duration-[140ms] ${value ? "translate-x-[20px]" : "translate-x-0"}`} />
     </button>
@@ -418,8 +418,8 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex flex-col bg-[#F2F2F7] dark:bg-black text-primary">
-      <header className="navi-sheet-header sticky top-0 z-10 flex min-h-[calc(44px+var(--safe-top))] pt-[var(--safe-top)] pb-1 shrink-0 items-center justify-between bg-[#F2F2F7] dark:bg-black px-2 border-b border-[var(--border-subtle)]">
+    <div className="fixed inset-0 z-[120] flex flex-col bg-page text-primary">
+      <header className="navi-sheet-header sticky top-0 z-10 flex min-h-[calc(44px+var(--safe-top))] pt-[var(--safe-top)] pb-1 shrink-0 items-center justify-between bg-page px-2 border-b border-[var(--border-subtle)]">
         <button type="button" onClick={() => { void refresh(); void refreshAccounts(); void refreshCatalog(); }} disabled={loading} className="flex h-11 w-[80px] items-center justify-start pl-3 rounded-full text-accent font-normal text-[1.0625rem] active:opacity-60 disabled:opacity-50">
           {loading ? <LoaderCircle size={20} className="animate-spin" /> : "Refresh"}
         </button>
@@ -459,7 +459,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                 <div key={account.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <span className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white ${connected ? "bg-success" : "bg-[#8E8E93]"}`}>
+                      <span className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white ${connected ? "bg-success" : "bg-[var(--text-tertiary)]"}`}>
                         {account.id === "google" ? <User size={18} /> : account.id === "github" ? <Link2 size={18} /> : <ShieldCheck size={18} />}
                       </span>
                       <div className="flex items-center gap-2 min-w-0">
@@ -499,7 +499,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
               <div key={provider.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <span className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white ${provider.configured ? "bg-success" : "bg-[#8E8E93]"}`}>
+                    <span className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white ${provider.configured ? "bg-success" : "bg-[var(--text-tertiary)]"}`}>
                       {provider.configured ? <Check size={18} /> : <Plus size={18} />}
                     </span>
                     <div className="flex items-center gap-2 min-w-0">
@@ -577,7 +577,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
               return (
                 <div key={server.id} className="border-b border-[var(--border-subtle)] last:border-b-0 bg-transparent px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <span className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white ${connected ? "bg-success" : "bg-[#8E8E93]"}`}><Link2 size={18} /></span>
+                    <span className={`flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[8px] text-white ${connected ? "bg-success" : "bg-[var(--text-tertiary)]"}`}><Link2 size={18} /></span>
                     <div className="min-w-0 flex-1">
                       <div className="text-[1rem]/[1.375rem] font-medium text-primary">{server.name}</div>
                       <div className="text-[0.8125rem]/[1.125rem] text-tertiary mt-0.5">Remote HTTPS MCP · {server.readOnly ? "read-only" : "writes require confirmation"}</div>
