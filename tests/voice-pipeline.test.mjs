@@ -180,7 +180,9 @@ check("the plus button yields",
    now, and asserting "a switch yields" would pass on either one alone. */
 for (const [name, flag] of [["research", "research"], ["code mode", "codeMode"]]) {
   check(`the ${name} switch yields`,
-    guarded.some((block) => block.slice(0, 900).includes(`aria-checked={${flag}}`)), true);
+    /* The flag inside the aria expression, not the whole expression: research
+       also carries whether a search provider is configured. */
+    guarded.some((block) => new RegExp(`aria-checked=\\{[^}]*\\b${flag}\\b[^}]*\\}`).test(block.slice(0, 1400))), true);
 }
 check("the conversation bar claims the row", code.includes("flex min-w-0 flex-1 items-center gap-2 rounded-full"), true);
 

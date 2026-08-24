@@ -75,8 +75,13 @@ check("the shell hands it the toggle", read("app/components/app-shell.tsx").body
    meant opening a sheet to find a checkbox — for the control most likely to
    change between one message and the next. */
 
-check("research sits in the composer row", /aria-label=\{research \? "Research is on/.test(code), true);
-check("it is a switch", /role="switch"[\s\S]{0,120}aria-checked=\{research\}/.test(code), true);
+/* The property, not the expression. Both of these used to pin the exact
+   shape of a ternary, so making the label conditional on search availability
+   broke a check about *placement*. What matters is that a labelled switch for
+   research is in this row. */
+check("research sits in the composer row", /"Research is on\. Turn off web search"/.test(code), true);
+const researchSwitch = code.split("<button").find((block) => block.includes("aria-checked={searchConfigured && research}")) ?? "";
+check("it is a switch", researchSwitch.includes('role="switch"'), true);
 check("it still calls the existing handler", code.includes("onToggleResearch()"), true);
 /* The plus menu that used to carry a second Research entry moved out of the
    composer in the redesign, so there is now exactly one way to reach the
@@ -85,6 +90,38 @@ check("it still calls the existing handler", code.includes("onToggleResearch()")
    calling them, and web search became unreachable from anywhere in the app
    while the prompt still offered it. */
 check("research is reachable at all", /onToggleResearch\(\)/.test(code), true);
+
+/* ── And it tells the truth about whether it can do anything ─────────────────
+   Reaching the handler was only half of it. `web_search` is registered as
+   `search && hasWebSearch()` — the switch *and* a provider key — so on a
+   deployment with no TAVILY_API_KEY or EXA_API_KEY the globe lit up, set a
+   flag nothing could act on, and the next answer was identical. A control
+   that reports success and does nothing is worse than one that is plainly
+   unavailable, because the first teaches you the feature is broken and the
+   second teaches you what to do.
+
+   The answer was already in the payload the composer fetches: `/api/models`
+   has returned `search.configured` all along, and the composer read only the
+   model providers out of it. */
+
+check("the composer reads whether search is configured", code.includes("data.search?.configured"), true);
+/* Absent is not false. A deployment that did not report leaves the switch
+   alone rather than dimming a feature that works. */
+check("only an explicit false dims it", code.includes('data.search?.configured !== false'), true);
+check("an unconfigured switch does not silently toggle", /if \(!searchConfigured\) \{[\s\S]{0,200}return;/.test(code), true);
+check("it says what is missing instead", /setNotice\("Web search needs a provider key/.test(code), true);
+/* And says what still works — every link the user pastes is read by
+   `fetch_url`, which needs no key and is registered on every turn. */
+check("and what still works", /Links you paste are still read/.test(code), true);
+check("a switch that cannot act does not read as on", code.includes("aria-checked={searchConfigured && research}"), true);
+check("its label names the reason", /Research unavailable — no search provider is configured/.test(code), true);
+
+/* The notice line under the composer. It carried recording failures until the
+   dictation path went, after which it was read in two places and written in
+   none — dead state rendering nothing. */
+check("the notice is set by something", /setNotice\(/.test(code), true);
+check("and read by the footer", /\?\? notice/.test(code), true);
+check("no orphaned voice message survives", code.includes("voiceMessage"), false);
 
 /* ── Orchestration knowledge ─────────────────────────────────────────────── */
 
