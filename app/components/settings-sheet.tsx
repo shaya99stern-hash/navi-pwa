@@ -294,6 +294,21 @@ export function SettingsSheet({
     loaded: boolean; configured: boolean; signedIn: boolean;
     chats: number; facts: number; skills: number; lessons: number; skillNames: string[]; lessonNames: string[];
   }>({ loaded: false, configured: false, signedIn: false, chats: 0, facts: 0, skills: 0, lessons: 0, skillNames: [], lessonNames: [] });
+  /* What the Account rows are allowed to promise.
+     They used to say "chats and settings sync to your private cloud memory"
+     whether or not a cloud was configured — a claim the Memory section three
+     screens down was simultaneously contradicting with "Cloud memory is off.
+     Nothing leaves this device." One of the two was always lying, and which
+     one depended on a deployment variable neither of them read.
+
+     `memoryStatus` is the thing that actually knows, so both read it. While it
+     is still loading, neither promise is made. */
+  const cloudReady = memoryStatus.loaded && memoryStatus.configured;
+  const syncedDescription = !memoryStatus.loaded
+    ? "Checking where your chats are kept…"
+    : cloudReady
+      ? "Chats and settings sync to your private cloud memory."
+      : "Chats and settings stay on this device — cloud memory is not configured on this deployment.";
   const lastTapAt = useRef(0);
   const [systemChecks, setSystemChecks] = useState<{ running: boolean; results: Array<{ area: string; ok: boolean; detail: string }> }>({ running: false, results: [] });
 
@@ -622,16 +637,18 @@ export function SettingsSheet({
                 ) : account.signedIn ? (
                   <Row
                     label="Signed in"
-                    description={`${account.email ? `${account.email} · ` : ""}Chats and settings sync to your private cloud memory.`}
+                    description={`${account.email ? `${account.email} · ` : ""}${syncedDescription}`}
                   />
                 ) : (
                   <Row
                     label="Signed out"
-                    description="Chats stay on this device while signed out. Signing in lets Navi Soul answer and syncs your history to your private cloud memory."
+                    description={`Chats stay on this device while signed out. Signing in lets Navi Soul answer${cloudReady ? " and syncs your history to your private cloud memory" : ""}.`}
                   />
                 )}
                 <div className="px-4 py-2 text-[13px] text-tertiary bg-transparent">
-                  {oauthNotice || "Sign in with Google or GitHub to sync your data securely."}
+                  {oauthNotice || (cloudReady
+                    ? "Sign in with Google or GitHub to sync your data securely."
+                    : "Sign in with Google or GitHub.")}
                 </div>
               </Group>
 
