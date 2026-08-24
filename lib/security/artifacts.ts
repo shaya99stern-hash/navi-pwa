@@ -133,6 +133,7 @@ export function artifactFenceBody(language: string, body: string): string | null
 }
 
 export function looksLikeArtifactFence(body: string): boolean {
+  if (splitHeaderArtifact(body)) return true;
   const parsed = tolerantParseJson(body);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
   const record = parsed as Record<string, unknown>;
@@ -350,6 +351,64 @@ function hasUnterminatedString(text: string): boolean {
   return inString;
 }
 
+/**
+ * The header+body shape: a single-line JSON header, a line of three dashes,
+ * then the document itself, unescaped.
+ *
+ * The old contract asked the model to put a whole HTML document inside a JSON
+ * string. That works — a stored payload proves the escaping was done correctly
+ * — but every quote becomes an escaped quote and every newline a literal
+ * two-character escape, so the document costs roughly twice the tokens to
+ * emit. Against a free tier
+ * metered at 6,000 tokens a minute, a page that would comfortably fit does
+ * not, and generation stops mid-string. The evidence is a stored artifact that
+ * ends, exactly, at `box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);`.
+ *
+ * So this is a cost fix rather than a correctness one: the same document, half
+ * the tokens, and the model no longer has to escape anything.
+ *
+ * The delimiter is the *first* three-dash line, which is what makes a `---`
+ * inside the document harmless — an `<hr>`, a YAML front-matter block, or a
+ * markdown rule in the body all survive, because everything after the first
+ * delimiter is taken verbatim.
+ *
+ * Null when this is not that shape, which sends the caller down the JSON path
+ * unchanged. Legacy artifacts are already stored in the cloud and must keep
+ * rendering.
+ */
+export function splitHeaderArtifact(body: string): { header: string; content: string } | null {
+  const match = /^\s*(\{[^\n]*\})\s*\n\s*-{3,}[ \t]*\n/.exec(body);
+  if (!match) return null;
+  const content = body.slice(match[0].length);
+  if (!content.trim()) return null;
+
+  /* A complete JSON envelope that happens to be followed by a dashed line is
+     not a header. Deciding by whether the object already carries the content
+     keeps the two shapes from competing for the same text. */
+  const parsed = tolerantParseJson(match[1]);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const record = parsed as Record<string, unknown>;
+    if (CONTENT_KEYS.some((key) => typeof record[key] === "string" && (record[key] as string).trim())) return null;
+  }
+  return { header: match[1], content };
+}
+
+/**
+ * A header+body artifact, resolved through the same repair path as every other
+ * shape so it inherits the title, id, kind and height defaulting rather than
+ * growing a second copy of it.
+ */
+function payloadFromHeaderArtifact(split: { header: string; content: string }): ArtifactPayload | null {
+  const parsed = tolerantParseJson(split.header);
+  const record: Record<string, unknown> =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? { ...(parsed as Record<string, unknown>) } : {};
+  /* Under `content` rather than `html`, so the kind is decided by what the
+     document actually is when the header does not say — a header claiming
+     `html` over an `<svg>` document is a mislabel, not an instruction. */
+  record.content = split.content;
+  return repairArtifactPayload(record);
+}
+
 export function recoverArtifactPayload(fenceText: string): { ok: true; payload: ArtifactPayload } | { ok: false; error: string } {
   /* Unwrap first. A payload that arrived inside a second fence is complete and
      valid; only its packaging is wrong, and reporting a JSON error for it
@@ -358,6 +417,15 @@ export function recoverArtifactPayload(fenceText: string): { ok: true; payload: 
   if (unwrapped !== fenceText.trim()) {
     const inner = recoverArtifactPayload(unwrapped);
     if (inner.ok) return inner;
+  }
+
+  /* Before the JSON path: a header+body artifact opens with `{` too, so
+     `tolerantParseJson` would take the header alone as the whole payload and
+     find no content in it. */
+  const split = splitHeaderArtifact(fenceText);
+  if (split) {
+    const payload = payloadFromHeaderArtifact(split);
+    if (payload) return { ok: true, payload };
   }
 
   const parsed = tolerantParseJson(fenceText);

@@ -747,7 +747,14 @@ function ownerBlock(isOwner: boolean): string {
 function artifactInstruction(requested: boolean): string {
   const contract = [
     "NaviOS artifacts are real interactive documents rendered in an isolated browser sandbox.",
-    "Emit them as a fenced navi-artifact JSON block containing id, title, kind, html or svg, and height.",
+    /* Header and raw body, not a JSON envelope. The old contract asked for the
+       whole document inside a JSON string, which the model did correctly — and
+       which roughly doubles the token count, because every quote and every
+       newline becomes an escape. Against a free tier metered per minute that
+       is the difference between a page that fits and one that stops mid-CSS.
+       The reader still accepts the old shape; nothing already stored breaks. */
+    "Emit them as a fenced navi-artifact block. Put a single-line JSON header first — id, title, kind, and height — then a line containing only three dashes, then the raw HTML or SVG. Do not escape the content and do not put it inside a JSON string.",
+    'Exactly this shape: {"id":"tip-calc","title":"Tip calculator","kind":"html","height":420} then a line of three dashes, then <div>...</div> written normally.',
     /* The budget, stated up front. It is enforced at 180 KB and the model was
        never told, so it would generate a large document, have it silently
        rejected, and then — with no error to read — invent an explanation and
@@ -755,8 +762,8 @@ function artifactInstruction(requested: boolean): string {
        attempts deep, over a chat-history export. A limit nobody is told about
        is a trap rather than a limit. */
     "An artifact must stay under 180 KB of content. Plan for that before you start: if the material will not fit, say so first and either narrow it or split it into several artifacts the user asks for one at a time. Do not emit one you expect to be over the limit.",
-    "For documents, reports, and printable pages (including anything the user wants as a PDF), use kind html with a complete styled document in the html field; the viewer offers export from there.",
-    "For interactive HTML, include all markup, CSS, and JavaScript inside the html field. Buttons, inputs, forms, tabs, counters, calculators, and other controls must actually work.",
+    "For documents, reports, and printable pages (including anything the user wants as a PDF), use kind html and write a complete styled document as the body; the viewer offers export from there.",
+    "For interactive HTML, include all markup, CSS, and JavaScript in the body, after the dashes. Buttons, inputs, forms, tabs, counters, calculators, and other controls must actually work.",
     "Use inline script with addEventListener. Do not use onclick or other on* attributes because those are removed by the sanitizer.",
     "Never hardcode a page background or text colour. The sandbox already sets one that matches the user's theme, and a white background renders as a glaring slab in dark mode. Where you need colours, use the supplied variables: var(--navi-bg), var(--navi-fg), var(--navi-muted), var(--navi-border), var(--navi-surface), var(--navi-accent).",
     "Always use the canonical fence exactly: three backticks followed by navi-artifact. Fences labelled artifact, react-component, or anything else are not the contract.",
@@ -1761,7 +1768,16 @@ export async function POST(request: Request): Promise<Response> {
         return;
       }
 
-      const complexRoute = effortLevel === "high" || (effortLevel === "medium" && effort !== "normal");
+      /* An artifact counts as demanding work whatever the wording looked like.
+         It is the most output-heavy thing this app produces — a whole styled,
+         scripted document in one reply — and the fast route was being handed
+         it because "make me a tip calculator" reads as a simple sentence. The
+         request being short says nothing about the answer being short.
+
+         Low still means low: the effort dial is the user's, and an explicit
+         Low keeps the fast route the way it always has. */
+      const complexRoute = effortLevel === "high"
+        || (effortLevel === "medium" && (effort !== "normal" || artifactRequested));
 
       /* Kept only as the safety net for a non-model plan below. The lane that
          actually serves the turn comes from `planTurn`, which reclassifies the

@@ -1,4 +1,4 @@
-import { validateArtifactPayload } from "../security/artifacts";
+import { splitHeaderArtifact, recoverArtifactPayload, validateArtifactPayload } from "../security/artifacts";
 import { assessArtifact } from "./navi-soul/artifact-quality";
 
 /**
@@ -98,6 +98,27 @@ function validateBlock(block: string, fence: string): string {
     : "\n> Navi Soul removed a malformed artifact payload.\n";
 }
 
+/**
+ * The renderable part of a fence that never closed.
+ *
+ * Only the header+body shape qualifies. A JSON envelope cut mid-string cannot
+ * be salvaged without inventing the rest of it, and inventing content is worse
+ * than admitting the loss.
+ *
+ * The floor is the same one `assessArtifact` uses for a finished artifact:
+ * below it there is not enough document to be worth a card.
+ */
+function salvagePartial(inner: string): string | null {
+  const split = splitHeaderArtifact(inner);
+  if (!split || split.content.trim().length < PARTIAL_CONTENT_FLOOR) return null;
+  const recovered = recoverArtifactPayload(inner);
+  if (!recovered.ok) return null;
+  return `\`\`\`navi-artifact\n${JSON.stringify(recovered.payload)}\n\`\`\`\n\n> This artifact was cut off before it finished — you are seeing the part that arrived. Ask for it again, or for a simpler version.\n`;
+}
+
+/** Below this there is not enough document to be worth showing at all. */
+const PARTIAL_CONTENT_FLOOR = 40;
+
 /** Whether the fence at least contained JSON, for the honesty of the notice. */
 function tolerantlyParsed(inner: string): boolean {
   try { JSON.parse(inner.slice(inner.indexOf("{"), inner.lastIndexOf("}") + 1)); return true; } catch { return false; }
@@ -143,9 +164,29 @@ export function createArtifactGate(): ArtifactGate {
       const held = buffer;
       buffer = "";
       if (!openFence) return held;
+      const inner = held.slice(openFence.length).trim();
       openFence = null;
-      /* The stream ended mid-payload. Releasing it would render a broken card
-         from JSON that was never validated, so it is dropped and said so. */
+
+      /* The stream ended mid-payload — the reply ran past its output budget
+         before the fence closed. This is the failure the owner kept reporting,
+         and until the contract changed there was nothing to be done about it:
+         half a JSON envelope is not a document, it is a truncated string with
+         no closing quote, and rendering it produced a card full of escape
+         sequences.
+
+         Header+body changes what is possible here. The header arrives first
+         and is complete long before the budget runs out, and everything after
+         the delimiter is the document itself — so what is held is real markup
+         that simply stops early. A sandboxed browser closes the open tags, the
+         sanitizer runs on it exactly as it would on a whole page, and the
+         reader gets the part that exists with a line saying it was cut short.
+         Some of the answer, labelled honestly, beats none of it. */
+      const partial = salvagePartial(inner);
+      if (partial) return partial;
+
+      /* No usable document: a JSON envelope cut mid-string, or a header with
+         nothing under it. Releasing that would render a broken card, so it is
+         dropped and said so. */
       return "\n> Navi Soul removed an incomplete artifact payload.\n";
     }
   };
