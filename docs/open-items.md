@@ -185,6 +185,43 @@ rather than a build task.
 
 ---
 
+## Two things only the repository's owner can close
+
+Neither is a build task. Both are recorded here because the build environment
+is ephemeral and each has now been re-investigated more than once.
+
+### A webhook pointing at a route that does not exist
+
+Production logs carry 404s for `POST /triggers/github`. There is no such route
+in this repository — `grep -r "triggers/github"` returns nothing outside this
+paragraph — so the requests are a webhook left behind by something that no
+longer exists.
+
+Nothing in the repository can remove it: a webhook is repository configuration,
+not code, and the GitHub tooling available to a build session has no webhook
+API. **Settings → Webhooks → delete the one whose payload URL ends
+`/triggers/github`.**
+
+Do not "fix" this by adding the route. An unauthenticated public endpoint that
+exists only to absorb requests from an unknown sender is worse than the 404,
+which is currently doing exactly the right thing.
+
+### An orphaned Supabase table
+
+`navios_memory` — 0 rows, RLS enabled with **no policies** (so every access is
+already refused), referenced by no code, and present in no migration. Verified
+against the live database, not inferred.
+
+Dropping it is one statement. It is left to the owner because it is a
+production `DROP TABLE`: outside any pull request, outside `git revert`, and
+worth nothing if it goes wrong.
+
+```sql
+drop table if exists public.navios_memory;
+```
+
+---
+
 ## Known gaps recorded elsewhere
 
 `docs/version-2-backlog.md` holds work that was deliberately not done, with the

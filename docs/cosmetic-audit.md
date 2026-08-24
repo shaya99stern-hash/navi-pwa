@@ -22,7 +22,8 @@ exists and is reached — not that it has been felt on a device.
 |Composer|`+` menu|Add photos, camera, files|Opens a sheet driving three real `<input type=file>` elements; dedupes, enforces `MAX_ATTACHMENTS` and `ATTACHMENT_BUDGET`|`real`|
 |Composer|Effort pill|Change effort|Opens `EffortSheet`; `preferences.effort` ships in `requestBody` (`app-shell.tsx:370`)|`real`|
 |Composer|Research toggle|Search the web for this message|`toggleResearch` sets `tools.web`; `tools` ships in `requestBody` (`app-shell.tsx:371`)|`real`|
-|Composer|Mic|Record a message|Records via `MediaRecorder`, uploads to `/api/voice/transcribe`, appends the transcript. **Was `partial`** — see Phase 1 below|`real` (fixed)|
+|Composer|~~Mic~~|—|**Removed.** Two adjacent microphones drawn the same way, doing different things. The dictation path is gone; the conversation loop below is the one voice control|`removed`|
+|Composer|Code mode|Switch to Code mode|`onToggleCode` → `toggleCodeMode` → `preferences.mode`. **Was unreachable** — the prop arrived and nothing called it, so a whole routing lane sat behind a control that existed in no screen|`real` (fixed)|
 |Composer|Voice mode|Spoken conversation|One tap starts a half-duplex loop (`lib/ui/voice-conversation.ts`): it listens, the pause ends the turn, the answer is spoken, the microphone reopens. No sheet|`real`|
 |Composer|Send / Stop|Send, or stop generating|`sendMessage` / `stop` from `useChat`|`real`|
 |Composer|Starter chips|Seed a first message|Writes the draft and refocuses; "Visualize " is phrasing the server's image-intent matcher recognises|`real`|
@@ -38,7 +39,7 @@ exists and is reached — not that it has been felt on a device.
 |General|**Motion**|"Reduce animation in streaming responses and other interface elements."|**Wrote `document.documentElement.dataset.motion` and no CSS rule read it.** The only reduced-motion rules keyed off `prefers-reduced-motion`, which is the OS setting, not this switch. Moving it changed an attribute and shortened nothing|**`cosmetic`** → fixed|
 |General|Density|Comfortable / Compact|Sets `.density-compact`, which `globals.css:595` reads|`real`|
 |General|**Haptics**|"Subtle touch feedback on selection, success, and errors."|Gesture-time ticks fired; **result-time ticks — the "success" and "error" cases named in the copy — were skipped**, because activation expires across an await|**`partial`** → fixed|
-|General|Voice language|Dictation language|Sent as `?language=` to the transcribe route, forwarded to the API as a bare subtag|`real`|
+|General|Voice language|Dictation language|Reaches the recorder through the conversation loop and the read-aloud path, as `?language=`, forwarded as a bare subtag. The composer no longer takes its own copy|`real`|
 |General|Response completions|Notify when a response finishes|Requests permission, posts a Notification when hidden (`app-shell.tsx:307`)|`real`|
 
 ## Settings → Memory and storage
@@ -47,7 +48,17 @@ exists and is reached — not that it has been felt on a device.
 |---|---|---|---|---|
 |Privacy|Local history|Keep chats on this device|Gates the IndexedDB write|`real`|
 |Privacy|Memory|Draw on earlier chats|Gates `recall()`; matched on-device, only used passages sent|`real`|
-|Privacy|**"What is stored" counters**|Conversations / Facts / Skills / Lessons|**Counted the Supabase mirror only.** With no Supabase, or signed out, every counter read `0` while the drawer beside it listed real conversations|**`partial`** → fixed|
+|Privacy|**"What is stored" counters**|Conversations / Facts / Skills / Lessons|**Counted the Supabase mirror only.** With no Supabase, or signed out, every counter read `0` while the drawer beside it listed real conversations|**`partial`** → fixed, **regressed**, fixed again|
+
+The counters regressed exactly once, and in a way worth recording: the fix was
+undone by a redesign that kept `localChatCount` in the props and dropped the row
+that rendered it. Nothing failed — the prop simply arrived and went nowhere,
+which is the same shape as the Research switch, the learned-skill lists and the
+Code mode toggle. Four instances of one defect, none of which looked like a
+defect from inside the file.
+
+`tests/wired-controls.test.mjs` now fails on any destructured prop used nowhere
+in its function body. That is the narrow, unambiguous form all four took.
 |Privacy|Forget a fact|Immediate and irreversible|`DELETE /api/memory/facts`|`real`|
 |Privacy|Export data|Download JSON|Serialises chats, projects, preferences|`real`|
 
