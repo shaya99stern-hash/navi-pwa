@@ -567,6 +567,24 @@ export function routeForLane(options: {
        free answer rather than to an apology. */
     if (frontierConfigured() && availability.openrouter && meteredAllowed) return ROUTES.openRouterFrontier;
     if (availability.deepseek && meteredAllowed) return ROUTES.deepseekFlash;
+    /* Cerebras used to lead this lane, and production settled it. At
+       01:27:57Z on 24 Aug — the minute of a reported failure — `/api/chat`
+       logged `AI_APICallError: Forbidden` followed by
+       `AI_NoOutputGeneratedError: No output generated`, and the engine shown
+       to the user was "Navi Core", which is the label for this lane's
+       `balanced` capability: Cerebras. `app/api/models/route.ts` had already
+       recorded that key answering Forbidden while the health check called it
+       ready.
+
+       The handoff that reordered these ladders said "Groq first, Gemini
+       second, Cerebras third" and then printed a lane 3 snippet with Cerebras
+       still on top. Following the snippet over the principle put every hard
+       turn — and, once artifacts began routing here, every artifact — through
+       the one provider known to refuse. The principle was right.
+
+       `provider-health` still demotes it on a live 403, and still cannot be
+       the only defence: that memory lives in one edge instance and resets. */
+    if (availability.groq) return ROUTES.groqReasoning;
     if (availability.cerebras) return ROUTES.cerebrasLarge;
     if (availability.openrouter) return ROUTES.openRouterReasoning;
     /* Groq above Hugging Face, here and in every ladder below.
@@ -583,7 +601,6 @@ export function routeForLane(options: {
        Not Cerebras first: `app/api/models/route.ts` records a Cerebras key
        answering Forbidden on every request for weeks while the health check
        called it ready. Groq, then Gemini, then Cerebras, then Hugging Face. */
-    if (availability.groq) return ROUTES.groqReasoning;
     if (availability.huggingface) return ROUTES.hfGptOss;
     return null;
   }

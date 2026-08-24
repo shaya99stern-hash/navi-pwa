@@ -46,6 +46,7 @@ import { learnedSkillsBlock, learnedSkillsConfigured, listLearnedSkills } from "
 import { REFLECTION_INSTRUCTION } from "@/lib/ai/reflection-tools";
 import { extractFacts, looksDurable } from "@/lib/memory/extract";
 import { hasWebSearch } from "@/lib/ai/web-tools";
+import { reasoningProviderOptions } from "@/lib/ai/reasoning-budget";
 import { executionInstruction, MAX_REPAIR_ROUNDS } from "@/lib/ai/execution-tools";
 import { historyInstruction } from "@/lib/ai/history-tools";
 import { withoutReasoning } from "@/lib/ai/replay";
@@ -2350,6 +2351,25 @@ export async function POST(request: Request): Promise<Response> {
           ? { tools: flight.tools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
           : {}),
         maxOutputTokens: attemptOutputTokens,
+        /* Reasoning is emitted as output tokens and counted against the same
+           allowance as the answer, so on a tight budget the two compete. They
+           were competing silently: asked for an interactive mood board, the
+           model deliberated at length, emitted a complete artifact *header*,
+           and stopped with no document under it. Nothing was wrong with the
+           request or the contract — it had thought until there was no room
+           left to answer.
+
+           Undefined for every route that does not read the field, so this
+           changes nothing outside the models known to accept it. */
+        ...(() => {
+          const providerOptions = reasoningProviderOptions({
+            route: flightRoute,
+            outputTokens: attemptOutputTokens,
+            artifactRequested,
+            effort: effortLevel
+          });
+          return providerOptions ? { providerOptions } : {};
+        })(),
         maxRetries: 1,
         timeout: { totalMs: 50_000, chunkMs: 14_000 },
         abortSignal: request.signal,
