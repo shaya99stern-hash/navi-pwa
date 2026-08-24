@@ -49,9 +49,12 @@ check("and still picks a good voice", speech.body.includes("pickVoice"), true);
    The sheet was the last holdout, and leaving it there was worse than either
    answer alone: the microphone worked or did not depending on which button was
    pressed. Both record audio and have it transcribed. */
-check("the composer records instead of recognising", composer.body.includes("startRecording"), true);
+check("the conversation records instead of recognising", loop.body.includes("startRecording"), true);
+/* And the composer holds no recorder of its own any more. The dictation mic
+   that used to sit beside the conversation button was a second microphone a
+   thumb apart from the first, drawn the same way and doing something else. */
+check("the composer holds no recorder of its own", composer.body.includes("startRecording"), false);
 check("the composer does not use recognition", composer.body.includes("startSpeechRecognition"), false);
-check("the conversation records too", loop.body.includes("startRecording"), true);
 check("and does not use recognition either", loop.body.includes("startSpeechRecognition"), false);
 /* The one thing recognition did better has been recovered.
  *
@@ -97,7 +100,10 @@ check("through one release path rather than three near-copies",
    needs the preference to be told to it — which removes a way for the two
    surfaces to disagree rather than adding one. */
 check("the conversation takes the preference", /const \{ online, language \} = optionsRef\.current;/.test(loop.body), true);
-check("the shell passes it to the composer", shell.body.includes("voiceLanguage={preferences.voiceLanguage}"), true);
+/* To the message row, which reads a reply aloud. The composer used to take a
+   copy for its own recorder; it has none, so this is now the only place the
+   preference is handed down for speech. */
+check("the shell passes it to what speaks", shell.body.includes("voiceLanguage={preferences.voiceLanguage}"), true);
 check("only the module resolves auto", /navigator\.language/.test(stripComments(composer.source)), false);
 check("resolution lives in the module", speech.body.includes('preference === "auto"'), true);
 
@@ -146,10 +152,12 @@ check("a missing microphone says so instead", /No microphone is available/.test(
 /* Both surfaces show what was thrown rather than a generic line of their own,
    which is what makes the distinction reach the person. */
 check("the conversation surfaces the real reason", /caught instanceof Error \? caught\.message/.test(loop.body), true);
-check("the composer does too", /error instanceof Error \? error\.message/.test(composer.body), true);
-/* Silence after a recording is not a failure of the microphone, and saying
-   "that could not be transcribed" for it sends someone to the wrong problem. */
-check("silence is reported as silence", /Nothing was picked up/.test(composer.source), true);
+/* One surface now, so one assertion. The composer's own copy of this went
+   with the dictation path. */
+/* Silence is not a failure of the microphone. The loop's answer is better
+   than a message: it simply reopens the microphone, because in a conversation
+   a pause is a pause. */
+check("silence reopens the microphone", /if \(!text\) \{ relisten\(\); return; \}/.test(loop.body), true);
 
 /* ---- There is no sheet ------------------------------------------------ */
 
@@ -165,11 +173,14 @@ check("nothing imports it", /voice-mode-sheet/.test(shell.source) || /voice-mode
 check("one tap on the composer starts the conversation",
   /onClick=\{conversation\.toggle\}/.test(composer.body), true);
 check("and there is no sheet left for it to open", /onOpenVoice/.test(composer.source), false);
-/* Two microphones open at once fight over the device and transcribe the same
-   sentence twice, so each control disables the other's. */
-check("dictation and conversation cannot both be running",
-  /disabled=\{blocked \|\| generating \|\| transcribing \|\| !online\}/.test(composer.body), true);
-check("the dictation strip yields to the conversation strip",
+/* Two microphones open at once fought over the device and transcribed the
+   same sentence twice, which each control used to guard against by disabling
+   the other's. There is one now, which is a better answer than a guard: the
+   condition cannot arise. */
+check("there is exactly one microphone in the composer",
+  (composer.body.match(/aria-label="Start a voice conversation"/g) ?? []).length, 1);
+check("and nothing else in the composer opens one", /aria-label="Record a message"/.test(composer.body), false);
+check("the conversation claims the composer row while it runs",
   /\{talking \? \(\s*<span/.test(composer.body), true);
 /* The way out is inside the strip, where the thing to stop is. */
 check("the conversation can be ended from where it is shown",
@@ -193,7 +204,9 @@ check("it travels with the recording", /language=\$\{encodeURIComponent\(languag
 /* "auto" is the absence of a hint, not a default of English. */
 check("auto sends no hint", /language && language !== "auto"/.test(recorderSource.body), true);
 check("the conversation passes the stored preference", /\n        language,/.test(loop.body), true);
-check("the composer passes the same one", /language: voiceLanguage/.test(composer.body), true);
+/* The composer used to pass it too, for its own recorder. It has none now,
+   so the preference reaches the recorder by exactly one path. */
+check("nothing else passes a language", /language: voiceLanguage/.test(composer.body), false);
 check("the route forwards it to the model", /form\.append\("language", language\)/.test(route.body), true);
 /* A bare subtag is what the API takes: `he`, not `he-IL`. And an unvalidated
    query parameter has no business reaching a provider verbatim. */

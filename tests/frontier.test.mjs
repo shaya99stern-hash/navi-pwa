@@ -47,8 +47,18 @@ check("the frontier route is not in the blind fallback chain",
    one indistinguishable symptom — a good answer where a better one was
    available. Nobody would ever notice without being told. */
 check("diagnostics report escalation", diagnostics.includes("Frontier escalation"), true);
+/* "Set but unreachable" is the interesting half: a model named with no key
+   behind it escalates nothing and says nothing. The message used to assert
+   there was no `OPENROUTER_API_KEY` by that exact name, which was a second
+   claim it could not support — the router accepts several spellings, so a
+   deployment using one of the others was told it had no key while the key
+   worked. The check reads the registry now and the sentence says what it
+   knows. */
 check("they distinguish unset from unreachable",
-  /NAVI_FRONTIER_MODEL is set to[\s\S]{0,80}no OPENROUTER_API_KEY/.test(diagnostics), true);
+  /NAVI_FRONTIER_MODEL is set to[\s\S]{0,80}no OpenRouter key is configured/.test(diagnostics), true);
+check("and still names the variable to set", /Set OPENROUTER_API_KEY/.test(diagnostics), true);
+check("the check asks the registry rather than one name",
+  /providerApiKey\(PROVIDERS\.openrouter\)/.test(diagnostics), true);
 check("they name the cost, since it is the reason it is off",
   /costs money per request/.test(diagnostics), true);
 

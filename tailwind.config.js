@@ -19,6 +19,7 @@ module.exports = {
         display: ["var(--font-display)", "ui-serif", "Georgia", "Cambria", "Times New Roman", "serif"]
       },
       colors: {
+        page: "var(--bg-page)",
         app: "var(--bg-app)",
         surface: "var(--bg-surface)",
         card: "var(--bg-card)",
@@ -30,7 +31,7 @@ module.exports = {
         secondary: "var(--text-secondary)",
         tertiary: "var(--text-tertiary)",
         disabled: "var(--text-disabled)",
-        accent: "var(--accent-primary)",
+        accent: "rgb(var(--accent-primary-rgb) / <alpha-value>)",
         "accent-pressed": "var(--accent-primary-pressed)",
         info: "var(--accent-info)",
         success: "var(--accent-success)",

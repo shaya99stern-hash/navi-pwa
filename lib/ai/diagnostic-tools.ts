@@ -492,7 +492,11 @@ function catalogueModelIds(payload: unknown): Set<string> {
  */
 function checkFrontier(): DiagnosticResult {
   const model = (process.env.NAVI_FRONTIER_MODEL ?? "").trim();
-  const openrouter = Boolean((process.env.OPENROUTER_API_KEY ?? "").trim());
+  /* Through the registry, not the one canonical name. A deployment that
+     called it OPENROUTER_KEY has a working escalation path and would have been
+     told here that it has none — a diagnostic contradicting the router it is
+     supposed to be diagnosing. */
+  const openrouter = Boolean(providerApiKey(PROVIDERS.openrouter));
   if (!model) {
     return {
       area: "Frontier escalation",
@@ -501,7 +505,7 @@ function checkFrontier(): DiagnosticResult {
     };
   }
   if (!openrouter) {
-    return { area: "Frontier escalation", ok: false, detail: `NAVI_FRONTIER_MODEL is set to “${model}” but there is no OPENROUTER_API_KEY, so it can never be reached.` };
+    return { area: "Frontier escalation", ok: false, detail: `NAVI_FRONTIER_MODEL is set to “${model}” but no OpenRouter key is configured, so it can never be reached. Set OPENROUTER_API_KEY.` };
   }
   return { area: "Frontier escalation", ok: true, detail: `Hard requests escalate to “${model}” via OpenRouter, within the monthly spending limit. Everything else stays on the free routes.` };
 }

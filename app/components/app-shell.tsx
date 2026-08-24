@@ -30,7 +30,7 @@ import {
   isResizableImage,
   prepareAttachments
 } from "@/lib/ui/attachments";
-import { DEFAULT_PREFERENCES, EFFORT_LEVELS, NAVI_MODES, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
+import { DEFAULT_PREFERENCES, EFFORT_LEVELS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
 import {
   clearLocalState,
   loadLocalState,
@@ -354,10 +354,8 @@ export function AppShell({
   const generating = status === "submitted" || status === "streaming";
   const activeChat = chats.find((chat) => chat.id === activeId);
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
-  const activeMode = NAVI_MODES.find((item) => item.id === preferences.mode) ?? NAVI_MODES[0];
   const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
-  const statusText = streamStatus?.detail ?? (generating ? "Navi Soul is working" : preferences.mode === "code" ? activeMode.label : "");
 
   useEffect(() => {
     type ClerkGlobal = { loaded?: boolean; user?: { id?: string; firstName?: string | null } | null };
@@ -492,6 +490,22 @@ export function AppShell({
   }, [hydrated, incognito, preferences.saveHistory]);
 
   useEffect(() => {
+    /* Until preferences are read back from storage, `preferences` holds the
+       defaults — and this effect used to run against them.
+       
+       That is what produced roughly thirty reloads of /new in seven seconds on
+       an installed phone. The server renders the theme from a cookie, so the
+       first paint is already correct; this effect then compared it against the
+       *default* theme, found a difference, overwrote the cookie, and reloaded.
+       The reload rendered the default, storage hydrated, the real preference
+       disagreed, and it reloaded again — flipping between the two on every
+       pass, forever, with the status bar strobing.
+
+       Every other persistence effect in this file already opens with this
+       line. This one reloads the page, so it was the one where the omission
+       could not stay quiet. Nothing is lost by waiting: the cookie has already
+       put the right theme on screen, which is the entire reason it exists. */
+    if (!hydrated) return;
     const apply = () => {
       const next = resolvedTheme(preferences.theme);
       const changed = document.documentElement.dataset.theme !== next;
@@ -501,13 +515,16 @@ export function AppShell({
       localStorage.setItem("navi.theme.v3", next);
       persistThemeCookie(next);
 
+      /* iOS bakes the status-bar style into the document at load, from a meta
+         tag the server renders against that cookie, so an installed app cannot
+         follow a theme change without one. Once, on a real change. */
       if (changed && standaloneDisplay()) window.location.reload();
     };
     apply();
     const media = window.matchMedia("(prefers-color-scheme: light)");
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
-  }, [preferences.theme]);
+  }, [hydrated, preferences.theme]);
 
   useEffect(() => {
     document.documentElement.dataset.motion = preferences.motion;
@@ -1134,7 +1151,7 @@ export function AppShell({
         onDelete={deleteChat}
       />
 
-      <header className="navi-header relative z-50 flex min-h-[44px] pt-[env(safe-area-inset-top)] pb-2 shrink-0 items-center justify-between bg-[#F2F2F7] dark:bg-black px-[max(8px,env(safe-area-inset-left))] border-b border-[var(--border-subtle)]" style={{ paddingRight: 'max(8px, env(safe-area-inset-right))' }} data-scrolled={String(scrolled)}>
+      <header className="navi-header relative z-50 flex min-h-[44px] pt-[env(safe-area-inset-top)] pb-2 shrink-0 items-center justify-between bg-page px-[max(8px,env(safe-area-inset-left))] border-b border-[var(--border-subtle)]" style={{ paddingRight: 'max(8px, env(safe-area-inset-right))' }} data-scrolled={String(scrolled)}>
         <div className="flex w-16 items-center justify-start pl-1">
           <button
             type="button"
@@ -1142,7 +1159,7 @@ export function AppShell({
               haptic("impact-light", preferences.haptics);
               setHistoryOpen(true);
             }}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-[#0A84FF] active:opacity-60"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-accent active:opacity-60"
             aria-label="Open sidebar"
           >
             <PanelLeft size={28} strokeWidth={1.5} className="-ml-1" />
@@ -1184,7 +1201,7 @@ export function AppShell({
               haptic("selection", preferences.haptics);
               setComposeMenuOpen(true);
             }}
-            className="flex items-center justify-center text-[#0A84FF] active:opacity-60"
+            className="flex items-center justify-center text-accent active:opacity-60"
             aria-label="Compose Menu"
           >
             <SquarePen size={26} strokeWidth={1.5} />
@@ -1320,7 +1337,7 @@ export function AppShell({
               <div className="mt-4 rounded-[14px] border border-[var(--accent-danger)] bg-elev-2 p-4" role="alert">
                 <p className="text-[15px] font-medium text-primary">{error.message || "That didn't go through. Tap to retry."}</p>
                 <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={retry} className="min-h-11 rounded-[10px] bg-[#0A84FF] px-4 text-[15px] font-semibold text-white active:bg-opacity-80">Try again</button>
+                  <button type="button" onClick={retry} className="min-h-11 rounded-[10px] bg-accent px-4 text-[15px] font-semibold text-white active:bg-opacity-80">Try again</button>
                   <button type="button" onClick={clearError} className="min-h-11 rounded-[10px] px-4 text-[15px] font-semibold text-secondary active:bg-elev-3">Dismiss</button>
                 </div>
               </div>
@@ -1356,7 +1373,6 @@ export function AppShell({
       </div>
       <ComposerDock
         inputRef={composerRef}
-        voiceLanguage={preferences.voiceLanguage}
         offlineCommand={parseSlashCommand(draft) !== null}
         value={draft}
         generating={generating}
@@ -1367,10 +1383,7 @@ export function AppShell({
         research={preferences.tools.web}
         codeMode={preferences.mode === "code"}
         onToggleCode={toggleCodeMode}
-        statusText={activeProject ? `${activeProject.name} · ${statusText}` : statusText}
         haptics={preferences.haptics}
-        connectorCount={preferences.connectedMcpServers.length}
-        connectorAccessMode={preferences.connectorAccessMode}
         onChange={setDraft}
         onSend={() => void submit()}
         onFiles={addFiles}
@@ -1382,12 +1395,6 @@ export function AppShell({
         onToggleResearch={toggleResearch}
         onOpenTools={() => {
           setSettingsSection("capabilities");
-          setSettingsOpen(true);
-        }}
-        onOpenProjects={() => setProjectsOpen(true)}
-        onOpenConnectors={() => setConnectorsOpen(true)}
-        onOpenPlaybooks={() => {
-          setSettingsSection("playbooks");
           setSettingsOpen(true);
         }}
         onStop={() => {
@@ -1475,7 +1482,7 @@ export function AppShell({
               <button
                 type="button"
                 onClick={() => { haptic("success", preferences.haptics); approvalAnswer.current?.(true); }}
-                className="flex min-h-12 items-center justify-center rounded-[12px] bg-[#0A84FF] text-[15px] font-semibold text-white active:bg-opacity-80"
+                className="flex min-h-12 items-center justify-center rounded-[12px] bg-accent text-[15px] font-semibold text-white active:bg-opacity-80"
               >
                 Approve
               </button>

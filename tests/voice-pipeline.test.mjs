@@ -159,20 +159,30 @@ check("the client upload cap is under the platform body limit",
    "allow it in your browser settings" advice is wrong there. */
 check("a refused permission reads differently in an installed app", recorder.includes("isStandalone()"), true);
 
-/* ── The composer surrenders the row while recording ─────────────────────────
-   The bar and the leftover flex spacer both claimed flex-1, so the waveform
-   rendered at half width beside controls nobody can reach one-handed. */
+/* ── The composer surrenders the row while a voice turn is live ──────────────
+   The bar and the leftover flex spacer both claimed flex-1, so the meter
+   rendered at half width beside controls nobody can reach one-handed.
 
-check("the spacer yields while recording", code.includes("{listening || talking ? null : <span className=\"min-w-0 flex-1\" />}"), true);
+   The guard used to read `listening || talking` — dictation's state or the
+   conversation's. Dictation is gone, so it reads `talking` alone, and the
+   property is the same one: while a voice turn is live, the row belongs to
+   it. */
+
+check("the spacer yields", code.includes("{talking ? null : <span className=\"min-w-0 flex-1\" />}"), true);
 /* Measured rather than guessed at a character distance: the previous form
    allowed 200 characters between the guard and the label, and an `onClick` body
    growing past that failed a control that had not moved. Each guarded block is
    sliced and asked whether it contains the control. */
-const guarded = code.split("{listening || talking ? null : (").slice(1);
+const guarded = code.split("{talking ? null : (").slice(1);
 check("the plus button yields",
   guarded.some((block) => block.slice(0, 600).includes("Add photos")), true);
-check("the research switch yields", /\{listening \|\| talking \? null : \(\s*<button[\s\S]{0,200}role="switch"/.test(code), true);
-check("the waveform bar claims the row", code.includes("flex min-w-0 flex-1 items-center gap-2 rounded-full"), true);
+/* Both switches, by their own aria state — there are two of them in this row
+   now, and asserting "a switch yields" would pass on either one alone. */
+for (const [name, flag] of [["research", "research"], ["code mode", "codeMode"]]) {
+  check(`the ${name} switch yields`,
+    guarded.some((block) => block.slice(0, 900).includes(`aria-checked={${flag}}`)), true);
+}
+check("the conversation bar claims the row", code.includes("flex min-w-0 flex-1 items-center gap-2 rounded-full"), true);
 
 /* ── Dead modules stay dead ──────────────────────────────────────────────────
    Both created a Supabase client at module load with non-null assertions and

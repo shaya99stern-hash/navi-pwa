@@ -36,7 +36,12 @@
   --text-disabled: #6E6D65;
   --border-subtle: var(--navi-border-soft);
   --border-strong: rgba(255, 255, 255, 0.16);
-  --accent-primary: #D97757;
+  /* Channels, not a hex, because Tailwind can only apply an opacity modifier
+     to a colour it can decompose. `bg-accent/10` against a `var()` holding a
+     hex compiles to nothing at all — silently, so the element simply loses its
+     background. One definition here keeps the two forms from drifting. */
+  --accent-primary-rgb: 217 119 87;
+  --accent-primary: rgb(var(--accent-primary-rgb));
   --accent-primary-pressed: #C15F3C;
   --accent-on-primary: #FFFFFF;
   --accent-secondary: #E0A48A;
@@ -44,9 +49,9 @@
   --accent-success: #7BAE7F;
   --accent-warning: #D4A27F;
   --accent-danger: #E0827A;
-  --selection-bg: rgba(217, 119, 87, 0.22);
+  --selection-bg: rgb(var(--accent-primary-rgb) / 0.22);
   --shadow-base: rgba(0, 0, 0, 0.34);
-  --brand-glow: rgba(217, 119, 87, 0.12);
+  --brand-glow: rgb(var(--accent-primary-rgb) / 0.12);
 
   --navi-radius-card: 16px;
   --navi-radius-sheet: 20px;
@@ -104,7 +109,8 @@
   --text-disabled: #B0AEA5;
   --border-subtle: var(--navi-border-soft);
   --border-strong: rgba(31, 30, 29, 0.18);
-  --accent-primary: #C15F3C;
+  --accent-primary-rgb: 193 95 60;
+  --accent-primary: rgb(var(--accent-primary-rgb));
   --accent-primary-pressed: #A84E2F;
   --accent-on-primary: #FFFFFF;
   --accent-secondary: #9C5A3F;
@@ -112,9 +118,9 @@
   --accent-success: #3E7B4F;
   --accent-warning: #A2683A;
   --accent-danger: #B3382E;
-  --selection-bg: rgba(193, 95, 60, 0.16);
+  --selection-bg: rgb(var(--accent-primary-rgb) / 0.16);
   --shadow-base: rgba(56, 37, 27, 0.10);
-  --brand-glow: rgba(193, 95, 60, 0.10);
+  --brand-glow: rgb(var(--accent-primary-rgb) / 0.10);
 }
 
 * {

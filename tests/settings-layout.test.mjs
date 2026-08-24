@@ -239,5 +239,44 @@ check("the tool and the screen share one implementation",
    check, because the previous version threw and hid forty assertions behind it.
 */
 
+/* ── The app does not contradict itself about where chats live ──────────────
+   The Account section promised "chats and settings sync to your private cloud
+   memory" unconditionally, while the Memory section three screens down was
+   simultaneously offering "Cloud memory is off. Nothing leaves this device."
+   One of the two was always lying, and which one depended on a deployment
+   variable that neither of them read.
+
+   That is the pattern this app keeps producing: prose describing configuration
+   drifts away from the code that reads it, and nothing fails when it does. So
+   the assertion is not about the wording — it is that both sections take the
+   answer from the same place. */
+
+check("the account copy is derived, not asserted", code.includes("const cloudReady = memoryStatus.loaded && memoryStatus.configured"), true);
+check("it reads the same status the memory section does", /syncedDescription[\s\S]{0,400}memoryStatus\.loaded/.test(code), true);
+check("no unconditional promise of sync survives",
+  /description=\{`\$\{account\.email[^}]*Chats and settings sync/.test(code), false);
+/* Neither promise is made while the answer is still being fetched. */
+check("an unloaded status promises nothing", code.includes('"Checking where your chats are kept…"'), true);
+/* And the section that was already honest stays honest. */
+check("the memory section still names the off state", body.includes("Cloud memory is off"), true);
+
+/* ── A failure nobody can see is one nobody fixes ─────────────────────────── */
+
+/* `if (!response.ok) return null;` swallowed every PostgREST answer alike: a
+   401 from an expired third-party auth registration, a 404 from a missing
+   table, and a 403 from a policy refusing the row all arrived at the caller as
+   the same quiet null. Cloud memory sat broken for a week with the app
+   reporting nothing at all. The status code alone separates all three. */
+const cloud = read("lib/memory/cloud.ts");
+check("a failed request is logged", /console\.warn\(`Cloud memory/.test(cloud.body), true);
+check("with the status code", /answered \$\{response\.status\}/.test(cloud.body), true);
+check("and PostgREST's own reason", /response\.text\(\)/.test(cloud.body), true);
+/* Still a null to the caller — memory is an enhancement, and a database error
+   is not something to put in front of the user. */
+check("the caller still sees a null", /console\.warn\(`Cloud memory[\s\S]{0,200}return null;/.test(cloud.body), true);
+/* The timeout above doing its job is not a fault worth a line on every slow
+   network. */
+check("a timeout is not logged as a fault", cloud.body.includes('error.name === "AbortError"'), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

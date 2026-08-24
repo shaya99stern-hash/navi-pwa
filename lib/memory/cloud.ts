@@ -45,7 +45,8 @@ function supabaseKey(): string | undefined {
 /**
  * One request to PostgREST, carrying the caller's own Clerk token. Memory is
  * an enhancement, never a precondition: any failure is a null, not an error
- * the user has to see.
+ * the user has to see — but it is logged, because a failure nobody can see is
+ * one nobody fixes.
  */
 async function request(
   clerkToken: string,
@@ -71,10 +72,24 @@ async function request(
       signal: controller.signal,
       cache: "no-store"
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      /* Still a null to the caller — memory is an enhancement and the user
+         should not be shown a database error. But swallowing it in silence is
+         how cloud memory sat broken for a week with the app reporting nothing
+         at all: a 401 from an expired third-party auth registration, a 404
+         from a missing table, and a 403 from a policy that refuses the row all
+         arrived here as the same quiet null. The status code alone separates
+         all three, and the body carries PostgREST's own reason. */
+      console.warn(`Cloud memory ${init.method ?? "GET"} ${path} answered ${response.status}: ${await response.text().catch(() => "")}`.trim());
+      return null;
+    }
     if (response.status === 204) return "ok";
     return await response.json();
-  } catch {
+  } catch (error) {
+    /* An abort is the timeout above doing its job, not a fault worth a line
+       in the log on every slow network. */
+    if (error instanceof Error && error.name === "AbortError") return null;
+    console.warn(`Cloud memory ${init.method ?? "GET"} ${path} never completed: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   } finally {
     clearTimeout(timer);

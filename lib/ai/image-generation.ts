@@ -1,5 +1,6 @@
 import type { GeneratedImagePayload } from "./types";
 import { validateGeneratedImage } from "./navi-soul/image-preflight";
+import { PROVIDERS, providerApiKey } from "./provider-registry";
 
 export type ImageAttachment = {
   mimeType: "image/png" | "image/jpeg" | "image/webp";
@@ -17,72 +18,23 @@ type ImageBlock = {
   mimeType: GeneratedImagePayload["mimeType"];
 };
 
-function usableSecret(value: string | undefined): string | undefined {
-  const secret = value?.trim();
-  if (!secret || /^(?:undefined|null|none|changeme|your[_ -]?key)$/i.test(secret)) return undefined;
-  return secret;
-}
-
-function normalizedEnvironmentKey(key: string): string {
-  return key.toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
-
-function findEnvironmentSecret(
-  explicitValues: Array<string | undefined>,
-  keyMatcher: (normalizedKey: string) => boolean,
-  valuePrefix: string
-): string | undefined {
-  for (const value of explicitValues) {
-    const secret = usableSecret(value);
-    if (secret) return secret;
-  }
-  for (const [key, rawValue] of Object.entries(process.env)) {
-    const value = usableSecret(rawValue);
-    if (value && keyMatcher(normalizedEnvironmentKey(key))) return value;
-  }
-  for (const rawValue of Object.values(process.env)) {
-    const value = usableSecret(rawValue);
-    if (value?.startsWith(valuePrefix)) return value;
-  }
-  return undefined;
-}
-
+/**
+ * The credentials, from the one table that knows their names.
+ *
+ * This file used to carry its own copy: `usableSecret`,
+ * `normalizedEnvironmentKey`, a three-pass `findEnvironmentSecret`, and the
+ * full list of spellings for both providers — fifteen for Hugging Face, five
+ * for Gemini — written out a second time. Byte for byte the same logic as
+ * `providerApiKey`, and free to drift from it silently, because nothing
+ * compares the two. A deployment whose key was found by the chat route and not
+ * by this one would look like the image feature being broken.
+ */
 function geminiApiKey(): string | undefined {
-  return findEnvironmentSecret(
-    [
-      process.env.GEMINI_API_KEY,
-      process.env.GEMINI_KEY,
-      process.env.GOOGLE_GEMINI_API_KEY,
-      process.env.GOOGLE_AI_API_KEY,
-      process.env.GOOGLE_API_KEY
-    ],
-    (key) => key.includes("GEMINI") && (key.includes("KEY") || key.includes("TOKEN")),
-    "AIza"
-  );
+  return providerApiKey(PROVIDERS.gemini);
 }
 
 function huggingFaceToken(): string | undefined {
-  return findEnvironmentSecret(
-    [
-      process.env.HF_TOKEN,
-      process.env.HUGGING_FACE_FINE_GRAINED_API,
-      process.env.fable_read_Hugging_face,
-      process.env.HUGGING_FACE_API_Write,
-      process.env.HF_API_TOKEN,
-      process.env.HF_API_KEY,
-      process.env.HF_ACCESS_TOKEN,
-      process.env.HUGGINGFACE_API_KEY,
-      process.env.HUGGING_FACE_API_KEY,
-      process.env.HUGGINGFACE_TOKEN,
-      process.env.HUGGING_FACE_TOKEN,
-      process.env.HUGGINGFACE_HUB_TOKEN,
-      process.env.HUGGING_FACE_HUB_TOKEN,
-      process.env.HUGGINGFACE_ACCESS_TOKEN,
-      process.env.HUGGING_FACE_ACCESS_TOKEN
-    ],
-    (key) => (key.includes("HUGGINGFACE") || key.startsWith("HF")) && (key.includes("KEY") || key.includes("TOKEN") || key.includes("SECRET")),
-    "hf_"
-  );
+  return providerApiKey(PROVIDERS.huggingface);
 }
 
 /**
