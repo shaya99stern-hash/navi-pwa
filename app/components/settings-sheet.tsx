@@ -110,11 +110,11 @@ type ClerkGlobal = {
 type AccountState = { email: string; signedIn: boolean; ready: boolean };
 
 function SectionHeader({ children }: { children: ReactNode }) {
-  return <h3 className="mb-1.5 mt-8 px-4 text-[13px] font-normal text-[#6E6E73] dark:text-[#EBEBF599] uppercase tracking-wide">{children}</h3>;
+  return <h3 className="mb-1.5 mt-8 px-4 text-[13px] font-normal text-tertiary uppercase tracking-wide">{children}</h3>;
 }
 
 function Group({ children }: { children: ReactNode }) {
-  return <div className="mx-4 mb-6 rounded-[10px] bg-white dark:bg-[#1C1C1E]">{children}</div>;
+  return <div className="mx-4 mb-6 rounded-[10px] bg-card">{children}</div>;
 }
 
 function Row({ label, description, control, fullWidthControl }: {
@@ -148,7 +148,7 @@ export function SettingsToggle({ value, onChange, label }: { value: boolean; onC
       aria-checked={value}
       aria-label={label}
       onClick={onChange}
-      className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-[200ms] ${value ? "bg-accent" : "bg-[#E5E5EA] dark:bg-[#39393D]"}`}
+      className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-[200ms] ${value ? "bg-accent" : "bg-elev-3"}`}
     >
       <span className={`absolute top-[2px] left-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-sm transition-transform duration-[200ms] ${value ? "translate-x-[20px]" : "translate-x-0"}`} />
     </button>
@@ -162,7 +162,7 @@ function TextSegmented<T extends string>({ value, options, onChange, label }: {
   label: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex shrink-0 items-center gap-0.5 rounded-[8px] bg-elev-3 dark:bg-[#3A3A3C] p-0.5">
+    <div role="radiogroup" aria-label={label} className="flex shrink-0 items-center gap-0.5 rounded-[8px] bg-elev-3 p-0.5">
       {options.map((option) => (
         <button
           key={option.id}
@@ -254,12 +254,18 @@ function ThemeCard({ theme, active, onClick, label }: { theme: "light" | "dark" 
   return (
     <button type="button" onClick={onClick} className={`flex flex-col items-center gap-2 p-2 active:scale-95 transition-all bg-transparent`}>
       <div className={`w-[54px] h-[72px] rounded-[10px] overflow-hidden flex flex-col p-1.5 border-[2px] ${active ? "border-accent" : "border-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.1)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.1)]"}`}>
-         {theme === "light" && <div className="w-full h-full bg-[#FFFFFF] rounded-md shadow-sm" />}
-         {theme === "dark" && <div className="w-full h-full bg-[#1C1C1E] rounded-md shadow-sm" />}
+         {/* Literal on purpose: a token resolves to the theme you are already
+             in, so all three cards would show one colour and the picker would
+             preview nothing. What they should not be is colours the app never
+             paints — these were #FFFFFF and #1C1C1E, while the app is ivory
+             #FAF9F5 and near-black #121214. The preview promised a theme that
+             did not exist. */}
+         {theme === "light" && <div className="w-full h-full bg-[#FAF9F5] rounded-md shadow-sm" />}
+         {theme === "dark" && <div className="w-full h-full bg-[#121214] rounded-md shadow-sm" />}
          {theme === "system" && (
             <div className="w-full h-full rounded-md shadow-sm flex overflow-hidden">
-              <div className="w-1/2 h-full bg-[#FFFFFF]" />
-              <div className="w-1/2 h-full bg-[#1C1C1E]" />
+              <div className="w-1/2 h-full bg-[#FAF9F5]" />
+              <div className="w-1/2 h-full bg-[#121214]" />
             </div>
          )}
       </div>
@@ -543,8 +549,8 @@ export function SettingsSheet({
   const profileInitial = preferences.profile.displayName?.[0] || preferences.profile.fullName?.[0] || account.email?.[0]?.toUpperCase() || "S";
 
   return (
-    <div className="fixed inset-0 z-[95] flex flex-col bg-[#F2F2F7] dark:bg-black" role="dialog" aria-modal="true" aria-label="Settings">
-      <header className="navi-sheet-header sticky top-0 z-10 flex min-h-[44px] pt-[max(var(--safe-top),env(safe-area-inset-top))] pb-2 shrink-0 items-center justify-between bg-[#F2F2F7] dark:bg-black px-2 border-b border-[var(--border-subtle)]">
+    <div className="fixed inset-0 z-[95] flex flex-col bg-page" role="dialog" aria-modal="true" aria-label="Settings">
+      <header className="navi-sheet-header sticky top-0 z-10 flex min-h-[44px] pt-[max(var(--safe-top),env(safe-area-inset-top))] pb-2 shrink-0 items-center justify-between bg-page px-2 border-b border-[var(--border-subtle)]">
         <div className="flex w-24 items-center justify-start">
           {page === "root" ? (
             <div className="h-11 w-11 items-center justify-center" aria-hidden="true" />
@@ -595,7 +601,7 @@ export function SettingsSheet({
 
           <Group>
             <RootRow label="General" active={page === "general"} onOpen={() => openPage("general")} icon={
-              <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#8E8E93] text-white shrink-0"><Settings size={18} strokeWidth={2}/></span>
+              <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[var(--text-tertiary)] text-white shrink-0"><Settings size={18} strokeWidth={2}/></span>
             } />
             <RootRow label="Connectors" onOpen={() => { onClose(); onOpenConnectors(); }} icon={
               <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-accent text-white shrink-0"><Link2 size={18} strokeWidth={2}/></span>
@@ -607,7 +613,7 @@ export function SettingsSheet({
 
           <Group>
             <RootRow label="Memory & Storage" active={page === "privacy"} onOpen={() => openPage("privacy")} icon={
-              <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#30D158] text-white shrink-0"><Shield size={18} strokeWidth={2}/></span>
+              <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-success text-white shrink-0"><Shield size={18} strokeWidth={2}/></span>
             } />
           </Group>
 
@@ -706,7 +712,7 @@ export function SettingsSheet({
               <SectionHeader>Device & App</SectionHeader>
               <Group>
                 <RootRow label="Permissions" onOpen={() => setPage("permissions")} icon={
-                  <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#8E8E93] text-white shrink-0"><Key size={16} strokeWidth={2.5}/></span>
+                  <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[var(--text-tertiary)] text-white shrink-0"><Key size={16} strokeWidth={2.5}/></span>
                 } />
                 <RootRow label="Voice" onOpen={() => setPage("voice")} icon={
                   <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-accent text-white shrink-0"><Volume2 size={16} strokeWidth={2.5}/></span>
@@ -746,7 +752,7 @@ export function SettingsSheet({
                 <div className="relative flex min-h-[44px] w-full items-center justify-between px-4 py-2.5 bg-transparent">
                   <div className="absolute bottom-0 left-[60px] right-0 h-[1px] bg-[#3C3C434A] dark:bg-[#545458A6]" />
                   <div className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-[#FF3B30] text-white shrink-0"><Bell size={16} strokeWidth={2.5}/></span>
+                    <span className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-danger text-white shrink-0"><Bell size={16} strokeWidth={2.5}/></span>
                     <span className="text-[17px] tracking-[-0.41px] text-primary">Notifications</span>
                   </div>
                   <SettingsToggle label="Notifications" value={preferences.notifyOnComplete} onChange={() => void enableNotifications()} />
@@ -805,7 +811,7 @@ export function SettingsSheet({
               </Group>
               {micTest.running || micTest.checks.length ? (
                 <div className="px-4 pb-6">
-                  <div className="rounded-[10px] bg-white dark:bg-[#1C1C1E] p-4">
+                  <div className="rounded-[10px] bg-card p-4">
                     {micTest.running ? (
                       <p className="text-[17px] tracking-[-0.41px] text-secondary">{micTest.step}…</p>
                     ) : (
@@ -1009,6 +1015,29 @@ export function SettingsSheet({
                   </div>
                   <SettingsToggle label="Memory" value={preferences.memory} onChange={() => update({ memory: !preferences.memory })} />
                 </div>
+              </Group>
+
+              {/* On this device first, and unconditionally.
+
+                  This section is the answer to "what is stored", and it used to
+                  answer only for the cloud — so with cloud memory off, or
+                  signed out, it read "Nothing leaves this device" and stopped,
+                  while the history drawer one screen away listed a dozen real
+                  conversations. The count that is always true was arriving as a
+                  prop and being used nowhere.
+
+                  It is also the count that matters for the button underneath
+                  it: Delete all conversations acts on these, not on the
+                  mirror. */}
+              <SectionHeader>On this device</SectionHeader>
+              <Group>
+                <Row
+                  label="Conversations"
+                  description={preferences.saveHistory
+                    ? "Kept in this browser's storage. Never sent anywhere on their own."
+                    : "Local history is off, so nothing new is being kept."}
+                  control={<Count value={localChatCount} />}
+                />
               </Group>
 
               <SectionHeader>Synced to your account</SectionHeader>

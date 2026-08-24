@@ -35,8 +35,14 @@ const laneThreeAt = providers.indexOf("if (lane === 3)");
 const frontierAt = providers.indexOf("return ROUTES.openRouterFrontier");
 check("it lives inside lane 3", laneThreeAt > 0 && frontierAt > laneThreeAt, true);
 /* A spent budget must degrade to a good free answer, not to an apology. */
+/* By position rather than by character distance — the previous form allowed
+   400 characters between the two, so explaining a routing decision in a
+   comment failed a check about *order*. */
+const laneThree = providers.slice(laneThreeAt, providers.indexOf("if (lane === 4)", laneThreeAt));
 check("the free routes still follow it",
-  /return ROUTES\.openRouterFrontier;[\s\S]{0,400}availability\.cerebras\) return ROUTES\.cerebrasLarge/.test(providers), true);
+  laneThree.indexOf("ROUTES.openRouterFrontier") < laneThree.indexOf("ROUTES.cerebrasLarge"), true);
+check("and a free route is there to fall to",
+  laneThree.includes("ROUTES.groqReasoning") && laneThree.includes("ROUTES.cerebrasLarge"), true);
 /* An unnamed model must be unreachable by any other path — an empty model id
    sent to a provider is a request that fails for a reason nobody can read. */
 check("the frontier route is not in the blind fallback chain",

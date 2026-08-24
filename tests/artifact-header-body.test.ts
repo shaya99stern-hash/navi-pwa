@@ -12,7 +12,7 @@
  * chats already in the cloud hold legacy-shaped artifacts, and they have to
  * keep rendering.
  */
-import { artifactFenceBody, looksLikeArtifactFence, recoverArtifactPayload, splitHeaderArtifact } from "@/lib/security/artifacts";
+import { artifactFenceBody, isLoneArtifactHeader, looksLikeArtifactFence, recoverArtifactPayload, splitHeaderArtifact } from "@/lib/security/artifacts";
 import { createArtifactGate } from "@/lib/ai/artifact-gate";
 
 let pass = 0, fail = 0;
@@ -172,6 +172,47 @@ check("a barely-started body is still dropped", barelyStarted.flush().includes("
 const cutEnvelope = createArtifactGate();
 cutEnvelope.push(`\`\`\`navi-artifact\n{"id":"legacy","title":"Legacy","kind":"html","html":"<div class=\\"card\\">Half of`);
 check("a cut JSON envelope is still dropped", cutEnvelope.flush().includes("removed an incomplete"), true);
+
+/* ── A header with nothing under it ──────────────────────────────────────────
+   The artifact that ran out of room. Reported from a phone: asked for an
+   interactive kitchen mood board, the reply contained exactly this and
+   nothing else, in an unlabelled fence — so no alias matched, nothing claimed
+   it, and it reached the reader as a code block full of raw JSON. The exact
+   failure the fence aliases exist to prevent, wearing a different hat. */
+
+const loneHeader = `{"id":"kitchen-moodboard","title":"Kitchen Mood Board","kind":"html","height":500}`;
+check("a lone header is recognised", isLoneArtifactHeader(loneHeader), true);
+check("and so is one that reached the delimiter", isLoneArtifactHeader(`${loneHeader}\n---`), true);
+/* Claimed whatever the fence was labelled — the one that got here had no
+   label at all. */
+check("an unlabelled fence carrying it is claimed", artifactFenceBody("", loneHeader), loneHeader);
+check("a json-labelled one too", artifactFenceBody("json", loneHeader), loneHeader);
+
+const lone = recoverArtifactPayload(loneHeader);
+check("it does not render", lone.ok, false);
+/* And it is not called invalid. The model did nothing wrong; it ran out of
+   room, and "invalid" sends the reader looking for a mistake that is not
+   there. */
+check("it is explained as running out of room", lone.ok === false && lone.error.includes("ran out of room"), true);
+check("it does not blame the payload", lone.ok === false && /invalid|malformed/i.test(lone.error), false);
+check("and says what to do", lone.ok === false && lone.error.includes("Ask again"), true);
+
+/* Recognition has to be tight: claiming an ordinary code block is the worse
+   error. All of id, title, and a real artifact kind, with nothing else in the
+   fence. */
+check("a bare object is not a header", isLoneArtifactHeader('{"a":1}'), false);
+check("nor one without a kind", isLoneArtifactHeader('{"id":"x","title":"y"}'), false);
+check("nor one with a kind nothing renders", isLoneArtifactHeader('{"id":"x","title":"y","kind":"pdf"}'), false);
+check("nor a full envelope", isLoneArtifactHeader(JSON.stringify({ id: "x", title: "y", kind: "html", html: "<p>hi</p>" })), false);
+check("nor a header with its document", isLoneArtifactHeader(headerArtifact), false);
+check("an ordinary json block is left alone", artifactFenceBody("json", '{"id":"x","title":"y"}'), null);
+
+/* Through the gate, which is what the reader sees. */
+const headerOnly = createArtifactGate();
+const shown = headerOnly.push("```navi-artifact\n" + loneHeader + "\n```") + headerOnly.flush();
+check("the gate explains it too", shown.includes("ran out of room"), true);
+check("without calling it invalid", /invalid artifact payload/.test(shown), false);
+check("and never shows the raw header", shown.includes("kitchen-moodboard"), false);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

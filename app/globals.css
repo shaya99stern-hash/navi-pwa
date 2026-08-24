@@ -7,9 +7,14 @@
   color-scheme: dark;
 
   /* Premium Slate dark theme */
+  /* Channels for the same reason the accent has them: Tailwind can only apply
+     an opacity modifier to a colour it can decompose, and the sheets that float
+     over content are translucent. Written once, with the hex derived. */
+  --navi-bg-surface-rgb: 24 24 27;
+  --navi-bg-card-rgb: 39 39 42;
   --navi-bg-app: #121214;
-  --navi-bg-surface: #18181B;
-  --navi-bg-card: #27272A;
+  --navi-bg-surface: rgb(var(--navi-bg-surface-rgb));
+  --navi-bg-card: rgb(var(--navi-bg-card-rgb));
   
   --navi-text-primary: #F5F4EF;
   --navi-text-secondary: #C2C0B7;
@@ -17,7 +22,8 @@
   --navi-border-soft: rgba(255, 255, 255, 0.09);
   --navi-overlay: rgba(0, 0, 0, 0.50);
 
-  --bg-page: #121214;
+  --bg-page-rgb: 18 18 20;
+  --bg-page: rgb(var(--bg-page-rgb));
   --bg-app: var(--navi-bg-app);
   --bg-surface: var(--navi-bg-surface);
   --bg-card: var(--navi-bg-card);
@@ -25,6 +31,11 @@
   --bg-elev-1: var(--navi-bg-card);
   --bg-elev-2: #27272A;
   --bg-elev-3: #3F3F46;
+  /* Four buttons carry `active:bg-elev-4`, and it compiled to nothing —
+     Tailwind silently drops a class naming a colour the theme does not define,
+     so those press states simply did not render. The step is real and the
+     design uses it; it was only ever missing from here. */
+  --bg-elev-4: #52525B;
   
   --bg-overlay: var(--navi-overlay);
   --bg-sidebar: #121214;
@@ -84,21 +95,25 @@
   color-scheme: light;
 
   /* Ivory light theme */
+  --navi-bg-surface-rgb: 245 244 238;
+  --navi-bg-card-rgb: 255 255 255;
   --navi-bg-app: #FAF9F5;
-  --navi-bg-surface: #F5F4EE;
-  --navi-bg-card: #FFFFFF;
+  --navi-bg-surface: rgb(var(--navi-bg-surface-rgb));
+  --navi-bg-card: rgb(var(--navi-bg-card-rgb));
   --navi-text-primary: #1F1E1D;
   --navi-text-secondary: #52504A;
   --navi-border-soft: rgba(31, 30, 29, 0.09);
   --navi-overlay: rgba(31, 30, 29, 0.32);
 
-  --bg-page: #F0EEE6;
+  --bg-page-rgb: 240 238 230;
+  --bg-page: rgb(var(--bg-page-rgb));
   --bg-app: var(--navi-bg-app);
   --bg-surface: var(--navi-bg-surface);
   --bg-card: var(--navi-bg-card);
   --bg-elev-1: var(--navi-bg-card);
   --bg-elev-2: #F0EEE6;
   --bg-elev-3: #E8E6DC;
+  --bg-elev-4: #DDD9CA;
   --bg-overlay: var(--navi-overlay);
   --bg-sidebar: #F5F4EE;
   --bg-bubble-user: #F0EEE6;

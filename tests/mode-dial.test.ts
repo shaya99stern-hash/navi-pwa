@@ -61,8 +61,11 @@ check("and switching it never clears the conversation",
   /setMessages\(\[\]\)/.test(shell.slice(shell.indexOf("function toggleCodeMode"), shell.indexOf("function toggleCodeMode") + 400)), false);
 /* Research stayed in the composer and must keep working there — this file
    caught it arriving as a prop with nothing calling it. */
+/* By its label rather than the shape of its aria expression — that expression
+   now also carries whether a search provider exists, and pinning it here made
+   an unrelated honesty fix fail a check about *placement*. */
 check("research is still a switch in the composer",
-  /role="switch"[\s\S]{0,120}aria-checked=\{research\}/.test(composer), true);
+  /role="switch"[\s\S]{0,400}aria-checked=\{[^}]*\bresearch\b[^}]*\}/.test(composer), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

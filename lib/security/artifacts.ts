@@ -103,6 +103,11 @@ export function isArtifactFenceLanguage(language: string): boolean {
  * Returns the payload text, or null when this is an ordinary fence.
  */
 export function artifactFenceBody(language: string, body: string): string | null {
+  /* Before the label is consulted at all. A fence containing nothing but an
+     artifact header is an artifact however it was labelled — and the one that
+     sent the owner here carried no label, so every check below it missed. */
+  if (isLoneArtifactHeader(body)) return body;
+
   /* The canonical contract renders on the label alone: a malformed payload
      under the exact fence is an artifact that failed, and saying so is the
      gate's job rather than this one's. */
@@ -376,6 +381,38 @@ function hasUnterminatedString(text: string): boolean {
  * unchanged. Legacy artifacts are already stored in the cloud and must keep
  * rendering.
  */
+/**
+ * A header with nothing under it: the artifact that ran out of room.
+ *
+ * Reasoning models emit their deliberation as output tokens, against the same
+ * allowance as the answer. Asked for an interactive mood board on a free tier,
+ * one thought at length and then produced exactly this and stopped:
+ *
+ *     {"id":"kitchen-moodboard","title":"Kitchen Mood Board","kind":"html","height":500}
+ *
+ * A complete, correct header with no document under it. It arrived in an
+ * unlabelled fence, which nothing claimed, so it reached the reader as a code
+ * block full of raw JSON — the exact failure the fence aliases exist to
+ * prevent, wearing a different hat.
+ *
+ * Recognition has to be tight, because claiming an ordinary code block is the
+ * worse error: all of id, title and a real artifact kind, no content key, and
+ * nothing else in the fence at all. That is not a shape anyone writes as a
+ * sample.
+ */
+export function isLoneArtifactHeader(body: string): boolean {
+  /* A trailing delimiter is the same failure one token later: the model got as
+     far as the line that introduces the document and no further. */
+  const trimmed = body.trim().replace(/\n\s*-{3,}[ \t]*$/, "").trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return false;
+  const parsed = tolerantParseJson(trimmed);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  const record = parsed as Record<string, unknown>;
+  if (typeof record.id !== "string" || typeof record.title !== "string") return false;
+  if (record.kind !== "html" && record.kind !== "svg") return false;
+  return !CONTENT_KEYS.some((key) => typeof record[key] === "string" && (record[key] as string).trim());
+}
+
 export function splitHeaderArtifact(body: string): { header: string; content: string } | null {
   const match = /^\s*(\{[^\n]*\})\s*\n\s*-{3,}[ \t]*\n/.exec(body);
   if (!match) return null;
@@ -417,6 +454,16 @@ export function recoverArtifactPayload(fenceText: string): { ok: true; payload: 
   if (unwrapped !== fenceText.trim()) {
     const inner = recoverArtifactPayload(unwrapped);
     if (inner.ok) return inner;
+  }
+
+  /* A header alone parses perfectly and fails validation for having no
+     content, which is true but reads as the model having done something wrong.
+     It did not: it ran out of room. */
+  if (isLoneArtifactHeader(fenceText)) {
+    return {
+      ok: false,
+      error: "Only the heading arrived — this reply ran out of room before it could write the document. Ask again, or for a simpler version."
+    };
   }
 
   /* Before the JSON path: a header+body artifact opens with `{` too, so

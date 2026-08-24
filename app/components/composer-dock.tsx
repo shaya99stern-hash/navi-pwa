@@ -162,10 +162,19 @@ export function ComposerDock({
   const [sending, setSending] = useState(false);
   const [focused, setFocused] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
+  /* One line under the composer explaining why something did not do what it
+     looked like it would. It carried recording failures until the dictation
+     path was removed, after which nothing set it — read in two places and
+     written in none. Renamed rather than deleted, because the Research switch
+     needs exactly this. */
+  const [notice, setNotice] = useState<string | null>(null);
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [providerReady, setProviderReady] = useState<boolean | null>(null);
+  /* Whether a search provider is configured on this deployment. The composer
+     has been fetching this in the same payload all along and reading only the
+     model providers out of it. */
+  const [searchConfigured, setSearchConfigured] = useState(true);
   const [touchKeyboard, setTouchKeyboard] = useState(false);
 
   const valueRef = useRef(value);
@@ -210,6 +219,9 @@ export function ComposerDock({
       return;
     }
     setProviderReady(Object.values(data.providers ?? {}).some(Boolean));
+    /* Absent means "this deployment did not say", which is not the same as
+       "no". Only an explicit `false` dims the switch. */
+    setSearchConfigured(data.search?.configured !== false);
   }), []);
 
   const available = providerReady !== false;
@@ -231,7 +243,7 @@ export function ComposerDock({
 
   const footer = conversation.error
     ?? (talking ? `${spokenBy ?? CONVERSATION_PLACEHOLDER[conversation.phase]} · tap the waveform to end` : null)
-    ?? voiceMessage
+    ?? notice
     ?? attachmentMessage
     ?? (!online && !offlineCommand
       ? "Offline · your draft is saved locally"
@@ -245,7 +257,7 @@ export function ComposerDock({
     ? "text-warning"
     : talking
       ? "text-accent"
-      : !online || !available || voiceMessage || attachmentMessage ? "text-warning" : "text-tertiary";
+      : !online || !available || notice || attachmentMessage ? "text-warning" : "text-tertiary";
 
   function send() {
     if ((!value.trim() && attachmentCount === 0) || generating) return;
@@ -494,11 +506,27 @@ export function ComposerDock({
               <button
                 type="button"
                 role="switch"
-                aria-checked={research}
-                onClick={() => { haptic("selection", haptics); onToggleResearch(); }}
+                aria-checked={searchConfigured && research}
+                onClick={() => {
+                  haptic("selection", haptics);
+                  /* The switch used to flip regardless, and with no search
+                     provider configured that turned a flag nothing could act
+                     on: `web_search` is only registered when a key exists, so
+                     the globe lit up and the next answer was identical. A
+                     control that reports success and does nothing is worse
+                     than one that is plainly unavailable. */
+                  if (!searchConfigured) {
+                    setNotice("Web search needs a provider key — no search runs without one. Links you paste are still read.");
+                    return;
+                  }
+                  setNotice(null);
+                  onToggleResearch();
+                }}
                 disabled={blocked || generating}
-                className={`composer-action ${research ? "text-accent" : ""}`}
-                aria-label={research ? "Research is on. Turn off web search" : "Research is off. Turn on web search"}
+                className={`composer-action ${!searchConfigured ? "text-disabled" : research ? "text-accent" : ""}`}
+                aria-label={!searchConfigured
+                  ? "Research unavailable — no search provider is configured"
+                  : research ? "Research is on. Turn off web search" : "Research is off. Turn on web search"}
               >
                 <Globe size={20} strokeWidth={1.5} />
               </button>

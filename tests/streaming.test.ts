@@ -116,7 +116,13 @@ check("malformed JSON is replaced", broken.includes("malformed artifact payload"
 check("malformed JSON never reaches the reader", broken.includes("not json"), false);
 
 const wrongShape = streamThrough(["```navi-artifact\n" + JSON.stringify({ id: "x" }) + "\n```"]);
-check("an invalid payload is replaced", /removed an (invalid|malformed) artifact payload/.test(wrongShape), true);
+/* The property, not the sentence: whatever the notice says, the payload does
+   not reach the reader and something explains why. The wording moved once
+   already — "removed an invalid artifact payload" was written when every
+   reason was a validation failure, and it made a truncated reply read as a
+   mistake the model had made. */
+check("an invalid payload never reaches the reader", wrongShape.includes('"id"'), false);
+check("and is replaced by an explanation", /^\n> Navi Soul .+\n$/.test(wrongShape), true);
 
 // Two payloads in one answer both get checked.
 const two = streamThrough([`${fenced}\nand\n${fenced}`]);

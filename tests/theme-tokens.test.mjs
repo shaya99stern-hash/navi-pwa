@@ -90,9 +90,14 @@ check("no rgba copy of the light accent survives", css.includes("rgba(193, 95, 6
  * A manifest cannot be theme-aware, so the dark page colour is the one it
  * takes — that is what the app opens as. The other two follow it.
  */
-const pageColours = [...css.matchAll(/--bg-page:\s*(#[0-9A-Fa-f]{6});/g)].map((m) => m[1].toUpperCase());
-check("both themes define a page colour", pageColours.length, 2);
-const [darkPage, lightPage] = pageColours;
+/* Read from the channels, because that is where the value now lives — the
+   page colour is derived so `bg-page/95` can exist. Comparing the hex the
+   manifest hardcodes against the channels the app paints is the whole point:
+   two spellings of one colour is exactly how they drift apart. */
+const toHex = (channels) => `#${channels.trim().split(/\s+/).map((n) => Number(n).toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+const pageChannels = [...css.matchAll(/--bg-page-rgb:\s*([\d\s]+);/g)].map((m) => m[1]);
+check("both themes define a page colour", pageChannels.length, 2);
+const [darkPage, lightPage] = pageChannels.map(toHex);
 
 const manifest = readFileSync("app/manifest.ts", "utf8");
 check("the splash matches the dark page", manifest.includes(`background_color: "${darkPage}"`), true);
@@ -137,6 +142,55 @@ check("and re-runs once storage arrives", /\}, \[hydrated, preferences\.theme\]\
    without one. Once, on a real change. */
 check("a real theme change still reloads", /if \(changed && standaloneDisplay\(\)\) window\.location\.reload\(\);/.test(themeEffect), true);
 check("and only when something actually changed", /const changed = document\.documentElement\.dataset\.theme !== next;/.test(themeEffect), true);
+
+/* ---- Classes that compile to nothing ------------------------------------ */
+
+/**
+ * Tailwind drops a class naming a colour the theme does not define. Silently:
+ * no warning, no error, no rule in the stylesheet, and the element simply does
+ * not get the style. Twice now:
+ *
+ *   - `bg-accent/10` against a `var()` holding a hex — six elements that would
+ *     have lost their background.
+ *   - `active:bg-elev-4` on four buttons, against an elevation step that was
+ *     never defined. Those press states did not render at all.
+ *
+ * Neither looks like a bug in the source. Both read as perfectly ordinary
+ * Tailwind. So the check is mechanical: every colour a class names must exist
+ * in the config, and every colour used with an opacity modifier must be
+ * defined in channels, or the modifier is thrown away.
+ */
+const colorBlock = /colors:\s*\{([\s\S]*?)\n {6}\}/.exec(config)?.[1] ?? "";
+check("the colour block is found", colorBlock.length > 0, true);
+const defined = new Set([...colorBlock.matchAll(/^\s*"?([\w-]+)"?:/gm)].map((m) => m[1]));
+
+/* Tailwind's own palette and the non-colour words that share these prefixes
+   (`border-t`, `rounded-b`, `shadow-menu`, `bg-gradient-to-b`). Only names the
+   theme is expected to own reach the assertion. */
+const NOT_OURS = /^(white|black|transparent|current|inherit|none|auto|red|blue|green|yellow|amber|orange|purple|pink|gray|grey|slate|zinc|neutral|stone|lime|emerald|teal|cyan|sky|indigo|violet|fuchsia|rose)(-\d{2,3})?$|^(left|right|top|bottom|center|start|end|clip|ellipsis|nowrap|wrap|balance|pretty|solid|dashed|dotted|double|hidden|menu|sheet|dock|composer|card|gradient-to-[a-z]{1,2}|opacity-\d+|[btlrxy]|[btlrxy]-\d+|xs|sm|md|lg|xl|\d?xl|\d+)$/;
+const CLASS = /(?<![\w-])(?:[a-z-]+:)*(bg|text|border|ring|fill|stroke|divide|outline|placeholder|caret|from|to|via)-([a-z][a-z0-9-]*)(\/\d+)?(?![\w[-])/g;
+
+const undefinedColours = [];
+const alphaOnOpaque = [];
+for (const path of sources.filter((p) => p.endsWith(".tsx"))) {
+  const source = readFileSync(path, "utf8");
+  for (const match of source.matchAll(CLASS)) {
+    const [, , name, alpha] = match;
+    if (NOT_OURS.test(name)) continue;
+    if (!defined.has(name)) { undefinedColours.push(`${path}: ${match[0]}`); continue; }
+    /* An opacity modifier on a colour the config spells as a bare `var()`
+       produces no rule at all. */
+    if (alpha && !new RegExp(`"?${name}"?:\\s*"rgb\\(var`).test(colorBlock)) {
+      alphaOnOpaque.push(`${path}: ${match[0]}`);
+    }
+  }
+}
+check("every colour class names a colour that exists", [...new Set(undefinedColours)], []);
+check("every opacity modifier is on a colour that can take one", [...new Set(alphaOnOpaque)], []);
+
+/* The step four buttons reach for on press, specifically. */
+check("the fourth elevation exists", defined.has("elev-4"), true);
+check("both themes define it", (css.match(/--bg-elev-4:/g) ?? []).length, 2);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

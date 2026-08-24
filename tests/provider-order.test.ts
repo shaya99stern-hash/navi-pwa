@@ -86,6 +86,37 @@ for (const preset of LADDER_PRESETS) {
   }
 }
 
+/* ---- Groq above Cerebras, on production's evidence --------------------- */
+
+/* Lane 3 led with Cerebras until a reported failure was traced to it: at
+   01:27:57Z on 24 Aug `/api/chat` logged `AI_APICallError: Forbidden` and then
+   `AI_NoOutputGeneratedError`, with "Navi Core" — this lane's `balanced`
+   label — shown to the user as the engine. The key answers Forbidden while
+   every credential check calls it ready, which is why nothing upstream
+   catches it.
+
+   Lane 3 is where hard work and every artifact land, so this is the ladder
+   where leading with a provider that refuses costs the most. */
+check(
+  "lane 3 prefers groq to cerebras",
+  routeForLane({ lane: 3, availability: avail("cerebras", "groq"), tools: NO_TOOLS, hasFiles: false })?.model,
+  ROUTES.groqReasoning.model
+);
+/* Still reachable — a Forbidden key today is a working key after someone
+   fixes the account, and the demotion must not become a removal. */
+check(
+  "cerebras still serves lane 3 alone",
+  routeForLane({ lane: 3, availability: avail("cerebras"), tools: NO_TOOLS, hasFiles: false })?.provider,
+  "cerebras"
+);
+/* High effort with everything configured must not quietly become the fast
+   route either. */
+check(
+  "lane 3 is still a reasoning route",
+  routeForLane({ lane: 3, availability: avail(...PROVIDER_IDS), tools: NO_TOOLS, hasFiles: false })?.capability,
+  "reasoning"
+);
+
 /* ---- Cerebras above Hugging Face in lane 4 ---------------------------- */
 
 check(

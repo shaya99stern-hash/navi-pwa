@@ -19,13 +19,16 @@ module.exports = {
         display: ["var(--font-display)", "ui-serif", "Georgia", "Cambria", "Times New Roman", "serif"]
       },
       colors: {
-        page: "var(--bg-page)",
+        /* The three that float or tint take an alpha value; see the note in
+           globals.css. The rest are opaque everywhere they are used. */
+        page: "rgb(var(--bg-page-rgb) / <alpha-value>)",
         app: "var(--bg-app)",
-        surface: "var(--bg-surface)",
-        card: "var(--bg-card)",
+        surface: "rgb(var(--navi-bg-surface-rgb) / <alpha-value>)",
+        card: "rgb(var(--navi-bg-card-rgb) / <alpha-value>)",
         "elev-1": "var(--bg-elev-1)",
         "elev-2": "var(--bg-elev-2)",
         "elev-3": "var(--bg-elev-3)",
+        "elev-4": "var(--bg-elev-4)",
         overlay: "var(--bg-overlay)",
         primary: "var(--text-primary)",
         secondary: "var(--text-secondary)",

@@ -93,8 +93,13 @@ function validateBlock(block: string, fence: string): string {
      is genuinely nothing renderable does the reader see a notice instead. */
   const assessed = assessArtifact(inner);
   if (assessed.ok) return `\`\`\`navi-artifact\n${JSON.stringify(assessed.payload)}\n\`\`\``;
+  /* "removed an invalid artifact payload: …" was written when every reason
+     was a validation failure. Truncation is not invalidity — the model did
+     nothing wrong, it ran out of room — and leading with "invalid" told the
+     reader to look for a mistake that was not there. One neutral opener, then
+     the reason as its own sentence. */
   return tolerantlyParsed(inner)
-    ? `\n> Navi Soul removed an invalid artifact payload: ${assessed.error}\n`
+    ? `\n> Navi Soul could not show this artifact. ${assessed.error}\n`
     : "\n> Navi Soul removed a malformed artifact payload.\n";
 }
 
