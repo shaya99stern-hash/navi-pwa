@@ -32,7 +32,24 @@ export type ProviderAdapter = {
    * written out three times, and the header was wrong in one of them.
    */
   modelsAuth?: "bearer" | "google";
-  /** Environment variable names this key has been called, in priority order. */
+  /**
+   * Environment variable names this key has been called, in priority order.
+   *
+   * Short on purpose. The two passes below this one already find most
+   * spellings — `envHint` catches any name containing the provider and looking
+   * like a secret, `keyPrefixes` catches a key by its own shape — so a name
+   * only belongs here when it is *canonical* or when those passes genuinely
+   * cannot see it. `NIM_API_KEY` names no provider; `fable_read_Hugging_face`
+   * looks like nothing at all.
+   *
+   * This list held forty-seven names, eleven of them Hugging Face spellings
+   * differing by an underscore, every one of which the predicate was already
+   * matching. A long list reads as though each entry is load bearing, so
+   * nobody trims it, and the handful that genuinely are become invisible among
+   * the ones that are not. `tests/env-aliases.test.ts` still asserts that all
+   * forty-seven resolve, whichever pass does the work — so this can be trimmed
+   * again, safely, and cannot be trimmed too far.
+   */
   envKeys: string[];
   /**
    * Substring that identifies this provider in an environment variable name,
@@ -102,7 +119,11 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
        404" against a key that was perfectly good. */
     modelsUrl: "https://generativelanguage.googleapis.com/v1beta/models",
     modelsAuth: "google",
-    envKeys: ["GEMINI_API_KEY", "GEMINI_KEY", "GOOGLE_GEMINI_API_KEY", "GOOGLE_AI_API_KEY", "GOOGLE_API_KEY"],
+    envKeys: [
+      "GEMINI_API_KEY",
+      "GOOGLE_AI_API_KEY",
+      "GOOGLE_API_KEY"
+    ],
     envHint: "GEMINI",
     keyPrefixes: ["AIza"],
     supportsTools: true,
@@ -115,7 +136,10 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     label: "Groq",
     baseURL: "https://api.groq.com/openai/v1",
     modelsUrl: "https://api.groq.com/openai/v1/models",
-    envKeys: ["GROQ_API_KEY", "GROQ_API", "GROQ_KEY", "GROQ_TOKEN", "GROQ_API_TOKEN", "GROQ_SECRET_KEY"],
+    envKeys: [
+      "GROQ_API_KEY",
+      "GROQ_API"
+    ],
     envHint: "GROQ",
     keyPrefixes: ["gsk_"],
     supportsTools: true,
@@ -135,18 +159,7 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
       "HF_TOKEN",
       "HUGGING_FACE_FINE_GRAINED_API",
       "fable_read_Hugging_face",
-      "HUGGING_FACE_API_Write",
-      "HF_API_TOKEN",
-      "HF_API_KEY",
-      "HF_ACCESS_TOKEN",
-      "HUGGINGFACE_API_KEY",
-      "HUGGING_FACE_API_KEY",
-      "HUGGINGFACE_TOKEN",
-      "HUGGING_FACE_TOKEN",
-      "HUGGINGFACE_HUB_TOKEN",
-      "HUGGING_FACE_HUB_TOKEN",
-      "HUGGINGFACE_ACCESS_TOKEN",
-      "HUGGING_FACE_ACCESS_TOKEN"
+      "HUGGING_FACE_API_Write"
     ],
     envHint: "HUGGINGFACE",
     keyPrefixes: ["hf_"],
@@ -169,7 +182,7 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     label: "Cerebras",
     baseURL: "https://api.cerebras.ai/v1",
     modelsUrl: "https://api.cerebras.ai/v1/models",
-    envKeys: ["CEREBRAS_API_KEY", "CEREBRAS_KEY", "CEREBRAS_API_TOKEN"],
+    envKeys: ["CEREBRAS_API_KEY"],
     envHint: "CEREBRAS",
     keyPrefixes: ["csk-"],
     supportsTools: true,
@@ -182,7 +195,7 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     label: "OpenRouter",
     baseURL: "https://openrouter.ai/api/v1",
     modelsUrl: "https://openrouter.ai/api/v1/models",
-    envKeys: ["OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY", "OPENROUTER_KEY", "OPENROUTER_TOKEN"],
+    envKeys: ["OPENROUTER_API_KEY"],
     envHint: "OPENROUTER",
     keyPrefixes: ["sk-or-"],
     supportsTools: true,
@@ -205,7 +218,7 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     label: "DeepSeek",
     baseURL: "https://api.deepseek.com/v1",
     modelsUrl: "https://api.deepseek.com/v1/models",
-    envKeys: ["DEEPSEEK_API_KEY", "DEEPSEEK_KEY", "DEEPSEEK_API_TOKEN"],
+    envKeys: ["DEEPSEEK_API_KEY"],
     envHint: "DEEPSEEK",
     keyPrefixes: [],
     supportsTools: true,
@@ -218,7 +231,7 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     label: "Mistral",
     baseURL: "https://api.mistral.ai/v1",
     modelsUrl: "https://api.mistral.ai/v1/models",
-    envKeys: ["MISTRAL_API_KEY", "MISTRAL_KEY", "MISTRAL_API_TOKEN"],
+    envKeys: ["MISTRAL_API_KEY"],
     envHint: "MISTRAL",
     keyPrefixes: [],
     supportsTools: true,
@@ -236,7 +249,7 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     label: "Together",
     baseURL: "https://api.together.xyz/v1",
     modelsUrl: "https://api.together.xyz/v1/models",
-    envKeys: ["TOGETHER_API_KEY", "TOGETHER_KEY", "TOGETHER_API_TOKEN"],
+    envKeys: ["TOGETHER_API_KEY"],
     envHint: "TOGETHER",
     keyPrefixes: [],
     supportsTools: true,
@@ -249,7 +262,10 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     label: "NVIDIA NIM",
     baseURL: "https://integrate.api.nvidia.com/v1",
     modelsUrl: "https://integrate.api.nvidia.com/v1/models",
-    envKeys: ["NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY", "NIM_API_KEY"],
+    envKeys: [
+      "NVIDIA_API_KEY",
+      "NIM_API_KEY"
+    ],
     envHint: "NVIDIA",
     keyPrefixes: ["nvapi-"],
     supportsTools: true,
@@ -262,7 +278,7 @@ export const PROVIDERS: Record<ProviderName, ProviderAdapter> = {
     label: "SambaNova",
     baseURL: "https://api.sambanova.ai/v1",
     modelsUrl: "https://api.sambanova.ai/v1/models",
-    envKeys: ["SAMBANOVA_API_KEY", "SAMBANOVA_KEY"],
+    envKeys: ["SAMBANOVA_API_KEY"],
     envHint: "SAMBANOVA",
     keyPrefixes: [],
     supportsTools: true,
