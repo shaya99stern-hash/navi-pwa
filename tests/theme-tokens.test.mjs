@@ -110,5 +110,33 @@ check("the header is found", header.length > 0, true);
 check("the header takes the page colour", header.includes("bg-page"), true);
 check("the header paints no literal of its own", /bg-\[#|dark:bg-black/.test(header), false);
 
+/* ---- The reload loop ---------------------------------------------------- */
+
+/**
+ * Roughly thirty reloads of /new in seven seconds, on an installed phone, with
+ * the status bar strobing.
+ *
+ * The server renders the theme from a cookie, so the first paint is already
+ * right. The effect that keeps the theme in sync ran before storage had been
+ * read back, compared that correct paint against the *default* preference,
+ * found a difference, overwrote the cookie and reloaded. The reload rendered
+ * the default, storage hydrated, the real preference disagreed, and it
+ * reloaded again — flipping between the two forever.
+ *
+ * Every other persistence effect in the shell already waits for `hydrated`.
+ * This one reloads the page, so it is the one where the omission could not
+ * stay quiet.
+ */
+const shellSource = readFileSync("app/components/app-shell.tsx", "utf8");
+const themeEffect = /useEffect\(\(\) => \{[\s\S]*?resolvedTheme\(preferences\.theme\)[\s\S]*?\}, \[[^\]]*\]\);/.exec(shellSource)?.[0] ?? "";
+check("the theme effect is found", themeEffect.length > 0, true);
+check("it waits for storage before doing anything", themeEffect.includes("if (!hydrated) return;"), true);
+check("and re-runs once storage arrives", /\}, \[hydrated, preferences\.theme\]\);$/.test(themeEffect.trim()), true);
+/* The reload itself stays — iOS bakes the status-bar style in at load from a
+   server-rendered meta tag, so an installed app cannot follow a theme change
+   without one. Once, on a real change. */
+check("a real theme change still reloads", /if \(changed && standaloneDisplay\(\)\) window\.location\.reload\(\);/.test(themeEffect), true);
+check("and only when something actually changed", /const changed = document\.documentElement\.dataset\.theme !== next;/.test(themeEffect), true);
+
 console.log(`\n${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

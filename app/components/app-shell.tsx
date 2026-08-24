@@ -490,6 +490,22 @@ export function AppShell({
   }, [hydrated, incognito, preferences.saveHistory]);
 
   useEffect(() => {
+    /* Until preferences are read back from storage, `preferences` holds the
+       defaults — and this effect used to run against them.
+       
+       That is what produced roughly thirty reloads of /new in seven seconds on
+       an installed phone. The server renders the theme from a cookie, so the
+       first paint is already correct; this effect then compared it against the
+       *default* theme, found a difference, overwrote the cookie, and reloaded.
+       The reload rendered the default, storage hydrated, the real preference
+       disagreed, and it reloaded again — flipping between the two on every
+       pass, forever, with the status bar strobing.
+
+       Every other persistence effect in this file already opens with this
+       line. This one reloads the page, so it was the one where the omission
+       could not stay quiet. Nothing is lost by waiting: the cookie has already
+       put the right theme on screen, which is the entire reason it exists. */
+    if (!hydrated) return;
     const apply = () => {
       const next = resolvedTheme(preferences.theme);
       const changed = document.documentElement.dataset.theme !== next;
@@ -499,13 +515,16 @@ export function AppShell({
       localStorage.setItem("navi.theme.v3", next);
       persistThemeCookie(next);
 
+      /* iOS bakes the status-bar style into the document at load, from a meta
+         tag the server renders against that cookie, so an installed app cannot
+         follow a theme change without one. Once, on a real change. */
       if (changed && standaloneDisplay()) window.location.reload();
     };
     apply();
     const media = window.matchMedia("(prefers-color-scheme: light)");
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
-  }, [preferences.theme]);
+  }, [hydrated, preferences.theme]);
 
   useEffect(() => {
     document.documentElement.dataset.motion = preferences.motion;
