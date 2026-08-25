@@ -50,10 +50,9 @@ check("and still picks a good voice", speech.body.includes("pickVoice"), true);
    answer alone: the microphone worked or did not depending on which button was
    pressed. Both record audio and have it transcribed. */
 check("the conversation records instead of recognising", loop.body.includes("startRecording"), true);
-/* And the composer holds no recorder of its own any more. The dictation mic
-   that used to sit beside the conversation button was a second microphone a
-   thumb apart from the first, drawn the same way and doing something else. */
-check("the composer holds no recorder of its own", composer.body.includes("startRecording"), false);
+/* The composer deliberately has a recorder again: the mic turns speech into
+   an editable draft, while the waveform runs the automatic conversation. */
+check("composer dictation uses the same robust recorder", composer.body.includes("startRecording"), true);
 check("the composer does not use recognition", composer.body.includes("startSpeechRecognition"), false);
 check("and does not use recognition either", loop.body.includes("startSpeechRecognition"), false);
 /* The one thing recognition did better has been recovered.
@@ -67,6 +66,8 @@ check("and does not use recognition either", loop.body.includes("startSpeechReco
 check("the transcript arrives while it is being spoken", loop.body.includes("onTranscript: setTranscript"), true);
 check("and reaches the box the words would have been typed into",
   /previewValue = talking\s*\?\s*conversation\.transcript/.test(composer.body), true);
+check("composer dictation also streams words into the box",
+  /onTranscript:\s*\(text\) => \{[\s\S]{0,180}setLiveTranscript\(text\)/.test(composer.body), true);
 /* Every phase gets a line, including the ones that pass in under a second.
    A screen that goes blank between the pause and the answer cannot be told
    apart from one that has stopped working. */
@@ -169,17 +170,22 @@ check("silence reopens the microphone", /if \(!text\) \{ relisten\(\); return; \
    component is the thing the next change reaches for. */
 check("the sheet component is gone", existsSync(join(process.cwd(), "app/components/voice-mode-sheet.tsx")), false);
 check("nothing imports it", /voice-mode-sheet/.test(shell.source) || /voice-mode-sheet/.test(composer.source), false);
-/* The composer no longer opens anything: the button is the feature. */
+/* The waveform button starts the conversation directly through a guard. */
 check("one tap on the composer starts the conversation",
-  /onClick=\{conversation\.toggle\}/.test(composer.body), true);
+  /onClick=\{toggleConversation\}/.test(composer.body), true);
 check("and there is no sheet left for it to open", /onOpenVoice/.test(composer.source), false);
-/* Two microphones open at once fought over the device and transcribed the
-   same sentence twice, which each control used to guard against by disabling
-   the other's. There is one now, which is a better answer than a guard: the
-   condition cannot arise. */
-check("there is exactly one microphone in the composer",
+/* The controls have different jobs and names, and explicit exclusion guards
+   prevent them from fighting over one MediaStream. */
+check("the composer has one dictation mic",
+  (composer.body.match(/"Record a message"/g) ?? []).length, 1);
+check("and one hands-free waveform",
   (composer.body.match(/aria-label="Start a voice conversation"/g) ?? []).length, 1);
-check("and nothing else in the composer opens one", /aria-label="Record a message"/.test(composer.body), false);
+check("their labels make the two jobs distinguishable",
+  /"Record a message"/.test(composer.body) && /aria-label="Start a voice conversation"/.test(composer.body), true);
+check("dictation refuses to start while conversation is active",
+  /async function startDictation\(\) \{[\s\S]{0,180}\btalking\b[\s\S]{0,80}return;/.test(composer.body), true);
+check("conversation refuses to start while dictation is active",
+  /function toggleConversation\(\) \{[\s\S]{0,220}\bdictating\b[\s\S]{0,80}return;/.test(composer.body), true);
 check("the conversation claims the composer row while it runs",
   /\{talking \? \(\s*<span/.test(composer.body), true);
 /* The way out is inside the strip, where the thing to stop is. */
@@ -204,9 +210,8 @@ check("it travels with the recording", /language=\$\{encodeURIComponent\(languag
 /* "auto" is the absence of a hint, not a default of English. */
 check("auto sends no hint", /language && language !== "auto"/.test(recorderSource.body), true);
 check("the conversation passes the stored preference", /\n        language,/.test(loop.body), true);
-/* The composer used to pass it too, for its own recorder. It has none now,
-   so the preference reaches the recorder by exactly one path. */
-check("nothing else passes a language", /language: voiceLanguage/.test(composer.body), false);
+/* Both recorder-backed paths honour the same stored language preference. */
+check("composer dictation passes the stored language", /language: voiceLanguage/.test(composer.body), true);
 check("the route forwards it to the model", /form\.append\("language", language\)/.test(route.body), true);
 /* A bare subtag is what the API takes: `he`, not `he-IL`. And an unvalidated
    query parameter has no business reaching a provider verbatim. */
@@ -221,6 +226,9 @@ check("only the primary subtag is sent", /requested\.split\("-"\)\[0\]\.toLowerC
 /* Hands-free is not a switch any more, it is what the mode is. The recorder is
    opened one way and only one way. */
 check("the microphone always ends its own turn", /handsFree: true,/.test(loop.body), true);
+check("composer dictation waits for the user to stop it", /handsFree: false,/.test(composer.body), true);
+check("composer cleanup cancels an open recording",
+  /useEffect\(\(\) => \(\) => \{[\s\S]{0,180}recorderRef\.current\?\.cancel\(\)/.test(composer.body), true);
 /* Detected by the recorder, which is the one place that knows. The sheet used
    to run a second detector of its own over the level meter, with a fixed
    threshold — so hands-free worked in a quiet room and nowhere else, while the

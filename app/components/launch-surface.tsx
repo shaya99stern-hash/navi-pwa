@@ -77,15 +77,16 @@ export function LaunchSurface({ online, name, children }: { online: boolean; nam
     setGreeting(greetingForNow(new Date()));
   }, [name]);
 
+  const returningName = name?.trim().split(/\s+/u)[0] || "Shaya";
+
   return (
-    <div className="navi-launch launch-surface flex min-h-full flex-col px-gutter pb-28 pt-6">
-      {/* Left-aligned, not centred: the same edge the header title and the
-          composer start from, which is where the eye already is on a phone. */}
-      <div className="mx-auto flex w-full max-w-app flex-1 flex-col justify-center">
-        <h1 className="greeting-title flex items-center gap-3 pl-0.5 text-[1.75rem]/[2.125rem] text-primary">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand-spark.png" alt="" aria-hidden="true" className="h-[30px] w-[30px] shrink-0" />
-          {greeting}
+    <div
+      className="navi-launch launch-surface flex min-h-full flex-col px-gutter"
+      data-launch-greeting={greeting}
+    >
+      <div className="home-welcome mx-auto flex w-full max-w-app flex-1 flex-col items-center justify-center text-center">
+        <h1 className="greeting-title flex items-center gap-3 pl-0.5 text-[1.5rem]/[1.875rem] text-secondary">
+          {presentName(returningName)} returns!
         </h1>
 
         {!online ? (

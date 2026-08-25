@@ -13,7 +13,7 @@ export const NAVI_MODES: Array<{ id: NaviMode; label: string; detail: string }> 
   { id: "code", label: "NaviOS Code", detail: "Software, debugging, repositories" }
 ];
 
-/** The internal routes a diagnostics pin may select. Never shown otherwise. */
+/** Stable Navi Soul routes plus direct-provider pins used by Diagnostics. */
 export const DIAGNOSTIC_ROUTES: Array<{ id: ModelPreset; label: string }> = [
   { id: "navi-soul", label: "Automatic" },
   { id: "navi-soul-deep", label: "Staged council" },

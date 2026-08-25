@@ -343,6 +343,27 @@ textarea {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.navi-header[data-home="true"] {
+  min-height: calc(76px + var(--safe-top));
+  padding-right: 12px !important;
+  padding-left: 12px;
+  border-bottom-color: transparent;
+  background: var(--bg-app);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.navi-header[data-home="true"][data-scrolled="true"] {
+  border-bottom-color: transparent;
+}
+
+.home-header-button {
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-input) 88%, transparent);
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--shadow-base) 55%, transparent);
+  transition: transform var(--navi-motion-fast) ease, border-color var(--navi-motion-fast) ease;
+}
+
 .hero-title,
 .font-display {
   font-family: var(--font-display), ui-serif, Georgia, Cambria, "Times New Roman", serif;
@@ -380,6 +401,10 @@ textarea {
 
 .launch-surface {
   background: var(--bg-app);
+}
+
+.home-welcome {
+  padding-bottom: 1.5rem;
 }
 
 /**
@@ -459,6 +484,11 @@ textarea {
   background: var(--bg-app);
 }
 
+.navi-composer-dock[data-home="true"] {
+  padding: 4px var(--navi-page-gutter) calc(10px + var(--safe-bottom));
+  border-top-color: transparent;
+}
+
 .navi-composer {
   min-height: var(--navi-composer-min-height);
   border: 1px solid var(--border-subtle);
@@ -470,6 +500,128 @@ textarea {
 
 .navi-composer:focus-within {
   border-color: var(--border-strong);
+}
+
+.navi-composer[data-home="true"] {
+  display: grid;
+  grid-template-columns: 42px 72px minmax(40px, 1fr) 38px 42px;
+  align-items: center;
+  gap: 8px;
+  min-height: 96px;
+  padding: 8px;
+  border-radius: 30px;
+  background: color-mix(in srgb, var(--bg-input) 92%, black);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--shadow-base) 72%, transparent);
+}
+
+.navi-composer[data-home="true"] > textarea {
+  grid-column: 3;
+  grid-row: 1;
+  width: 100%;
+  min-height: 44px;
+  max-height: 56px;
+  padding: 10px 4px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.navi-composer[data-home="true"] > .navi-composer-actions {
+  display: contents;
+}
+
+.navi-composer[data-home="true"] .home-attachment-action {
+  grid-column: 1;
+  grid-row: 1;
+  width: 42px;
+  height: 42px;
+  background: var(--bg-elev-2);
+  color: var(--text-primary);
+}
+
+.navi-composer[data-home="true"] :is(.composer-secondary-action, .composer-row-spacer) {
+  display: none;
+}
+
+.navi-composer[data-home="true"] .composer-model-action {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: stretch;
+  justify-content: center;
+  width: 72px;
+  height: 36px;
+  min-height: 36px;
+  max-width: 72px;
+  margin: 0;
+  padding: 0 7px;
+  overflow: hidden;
+  background: var(--bg-elev-2);
+  font-size: 12px;
+}
+
+.navi-composer[data-home="true"] .composer-effort-label {
+  display: none;
+}
+
+.navi-composer[data-home="true"][data-dictating="true"] .composer-model-action {
+  display: none;
+}
+
+.navi-composer[data-home="true"][data-dictating="true"] > textarea {
+  grid-column: 2 / 4;
+  padding: 10px 4px;
+}
+
+.navi-composer[data-home="true"] .home-mic {
+  display: flex;
+  grid-column: 4;
+  grid-row: 1;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  color: var(--text-secondary);
+}
+
+.home-mic[aria-pressed="true"] {
+  color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.navi-composer[data-home="true"] .composer-voice-action {
+  grid-column: 5;
+  grid-row: 1;
+  width: 42px;
+  height: 42px;
+  background: var(--text-primary);
+  color: var(--bg-app);
+}
+
+.navi-composer[data-home="true"][data-has-send="true"]:not([data-dictating="true"]) .home-mic {
+  display: none;
+}
+
+.navi-composer[data-home="true"][data-has-send="true"] .composer-voice-action {
+  grid-column: 4;
+}
+
+.navi-composer[data-home="true"] .composer-send-action {
+  grid-column: 5;
+  grid-row: 1;
+  width: 42px;
+  height: 42px;
+  margin-left: 0;
+}
+
+.navi-composer[data-home="true"][data-talking="true"] > textarea {
+  display: none;
+}
+
+.navi-composer[data-home="true"] .composer-voice-status {
+  grid-column: 1 / -1;
+  grid-row: 1;
 }
 
 /* Focusing the message box is the default state of the whole app; an accent
@@ -864,7 +1016,4 @@ aside .scroll-area {
   background: color-mix(in srgb, var(--bg-app) 94%, transparent);
   backdrop-filter: blur(22px) saturate(135%);
   -webkit-backdrop-filter: blur(22px) saturate(135%);
-}
-body {
-  font-family: var(--font-display), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif !important;
 }

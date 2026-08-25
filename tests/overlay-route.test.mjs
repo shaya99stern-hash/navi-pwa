@@ -30,7 +30,7 @@ const composer = stripComments(readFileSync(join(root, "app/components/composer-
    a conversation instead of opening a layer, so there is no layer to route. */
 const SHELL_OVERLAYS = [
   "historyOpen", "settingsOpen", "connectorsOpen", "projectsOpen",
-  "artifactsOpen", "chatMenuOpen", "effortSheetOpen"
+  "artifactsOpen", "chatMenuOpen", "modelPickerOpen"
 ];
 for (const name of SHELL_OVERLAYS) {
   check(`${name} is dismissable by back`, new RegExp(`useOverlayRoute\\(\\{\\s*open:\\s*${name}\\b`).test(shell), true);
@@ -54,6 +54,8 @@ const declared = [...shell.matchAll(/const \[(\w+Open), set\w+\] = useState/g)].
 const routed = new Set([...shell.matchAll(/useOverlayRoute\(\{\s*open:\s*(\w+)/g)].map((m) => m[1]));
 const unrouted = declared.filter((name) => !routed.has(name));
 check("no shell overlay is left out", unrouted, []);
+check("the old effort-only overlay state is gone", /effortSheetOpen/.test(shell), false);
+check("model and effort now share one routed picker", /<ModelPickerSheet/.test(shell), true);
 
 /* ── The address follows the screen ─────────────────────────────────────── */
 

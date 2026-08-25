@@ -8,43 +8,44 @@ const check = (n, a, e) => {
 
 const { body } = read("app/components/composer-dock.tsx");
 const code = stripComments(body);
+const shell = stripComments(read("app/components/app-shell.tsx").body);
+const modelPicker = stripComments(read("app/components/model-picker-sheet.tsx").body);
 
-/* ── One voice control, not two ──────────────────────────────────────────────
-   The composer carried two adjacent microphones. One recorded a clip,
-   transcribed it and pasted the text into the box to edit before sending; the
-   other opened the spoken conversation. Two buttons a thumb apart, both
-   drawn as a microphone, doing different things — and on a phone the only way
-   to learn which was which was to press one.
+/* ── Two voice controls with two clear jobs ─────────────────────────────────
+   The plain microphone records a message into the editable draft. The
+   waveform starts the hands-free conversation loop. They intentionally use
+   the same recorder pipeline, but they must never own the microphone at the
+   same time and their accessible names must say which job each one performs. */
 
-   The dictation path is gone. What follows is not a check that it was
-   deleted, which git already records, but that it was deleted *whole*: a
-   half-removal leaves a recorder still allocating a MediaRecorder, or state
-   that updates on every audio frame for a control nobody can see. That is a
-   worse outcome than either keeping it or removing it.
-
-   Everything asserted here about the conversation loop was true before and
-   stays true; it is now the only voice control there is. */
-
-check("no dictation button survives", code.includes('"Record a message"'), false);
-check("nothing toggles a recording", code.includes("toggleVoice"), false);
-check("the recorder is no longer imported", code.includes("startRecording"), false);
-check("no recording session is held", code.includes("RecordingSession"), false);
+check("the dictation button names its job", code.includes('"Record a message"'), true);
+check("the dictation button has its own toggle", code.includes("toggleDictation"), true);
+check("dictation uses the robust recorder", code.includes("startRecording"), true);
+check("a recording session is held until Stop", code.includes("RecordingSession"), true);
 check("the clip timer is gone", code.includes("recordedSeconds"), false);
 check("so is the level meter it drove", code.includes("WAVEFORM_BAR_COUNT"), false);
 check("and the frame loop behind it", code.includes("peakRef"), false);
-check("no live-transcript preview state remains", code.includes("liveTranscript"), false);
-/* `listening` was dictation's; `conversation.phase === "listening"` is the
-   loop's and must survive. Asserting the bare identifier is absent would fail
-   on the wrong one, so this asks for what actually matters: no state of our
-   own tracking a recording. */
-check("no recording state of our own", /\[listening, setListening\]|\[transcribing, setTranscribing\]/.test(code), false);
+check("dictation shows the live transcript", code.includes("liveTranscript"), true);
+check("dictation tracks recording and transcription separately",
+  /\[listening, setListening\]/.test(code) && /\[transcribing, setTranscribing\]/.test(code), true);
+check("composer dictation waits for a deliberate stop", /handsFree:\s*false/.test(code), true);
+check("live words update the visible preview", /onTranscript:\s*\(text\) => \{[\s\S]{0,180}setLiveTranscript\(text\)/.test(code), true);
+check("the final transcript is appended to the current draft",
+  /const current = valueRef\.current;[\s\S]{0,120}onChange\(`\$\{current\}/.test(code), true);
+check("unmount releases an open composer microphone",
+  /useEffect\(\(\) => \(\) => \{[\s\S]{0,180}recorderRef\.current\?\.cancel\(\)/.test(code), true);
 check("the conversation still reads its own phase", code.includes('conversation.phase === "listening"'), true);
 
-/* The one that remains, and what it has to keep doing. */
+/* The waveform remains a separate hands-free action. */
 check("the conversation button is still there", code.includes('aria-label="Start a voice conversation"'), true);
-check("it starts and stops the loop", code.includes("onClick={conversation.toggle}"), true);
+check("it starts and stops the loop through the exclusion guard", code.includes("onClick={toggleConversation}"), true);
 check("it can be ended from inside the loop", code.includes('aria-label="End the voice conversation"'), true);
-check("it needs a network", /disabled=\{blocked \|\| generating \|\| !online\}/.test(code), true);
+check("both voice actions have distinct accessible labels",
+  code.includes('"Record a message"') && code.includes('aria-label="Start a voice conversation"'), true);
+check("the conversation needs a network", /disabled=\{blocked \|\| generating \|\| !online \|\| dictating\}/.test(code), true);
+check("a conversation cannot start while dictation owns the recorder",
+  /function toggleConversation\(\) \{[\s\S]{0,180}recorderRef\.current[\s\S]{0,80}dictating[\s\S]{0,80}return;/.test(code), true);
+check("dictation cannot start during a conversation",
+  /async function startDictation\(\) \{[\s\S]{0,180}\btalking\b[\s\S]{0,80}return;/.test(code), true);
 
 /* A level meter moves for a door slamming. What tells someone the app is
    actually hearing *them* is the detector, so the ring is bound to that rather
@@ -53,9 +54,23 @@ check("speech detection is shown, not just level", /conversation\.hearing \? "ri
 
 /* A box whose contents are being rewritten underneath the caret is a box that
    eats what you type. The conversation's turn in flight still lands there. */
-check("the box is read-only while the loop is talking", code.includes("readOnly={talking}"), true);
+check("the box is read-only while either voice path owns it", code.includes("readOnly={talking || dictating}"), true);
 check("the turn in flight is a preview, not the draft", /onChange\(previewValue\)/.test(code), false);
 check("and the textarea is sized to what is displayed", /\}, \[previewValue\]\);/.test(code), true);
+
+/* ── The quiet center pill is the model picker ────────────────────────────── */
+
+check("the composer shows the selected model", code.includes("{modelLabel}"), true);
+check("the model pill opens the picker", code.includes("onClick={onOpenModels}"), true);
+check("its label exposes model and effort",
+  /aria-label=\{`Model: \$\{modelLabel\}\. Effort: \$\{effortLabel\}/.test(code), true);
+check("the shell wires the pill to the model picker", /onOpenModels=\{\(\) => \{[\s\S]{0,160}setModelPickerOpen\(true\)/.test(shell), true);
+check("the picker is rendered from that state",
+  /<ModelPickerSheet[\s\S]{0,120}open=\{modelPickerOpen\}/.test(shell), true);
+check("Automatic clears a pinned route",
+  /routeOverride:\s*model === "navi-soul" \? undefined : model/.test(modelPicker), true);
+check("only stable Navi routes appear in the composer picker",
+  /DIAGNOSTIC_ROUTES\.filter\(\(\{ id \}\) => id\.startsWith\("navi-soul"\)\)/.test(modelPicker), true);
 
 /* ── Code mode is reachable ──────────────────────────────────────────────────
    The same defect as Research below, found the same way and one release

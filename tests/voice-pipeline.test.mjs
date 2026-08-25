@@ -159,16 +159,25 @@ check("the client upload cap is under the platform body limit",
    "allow it in your browser settings" advice is wrong there. */
 check("a refused permission reads differently in an installed app", recorder.includes("isStandalone()"), true);
 
-/* ── The composer surrenders the row while a voice turn is live ──────────────
+/* ── The composer coordinates both recorder-backed voice paths ──────────────
    The bar and the leftover flex spacer both claimed flex-1, so the meter
    rendered at half width beside controls nobody can reach one-handed.
 
-   The guard used to read `listening || talking` — dictation's state or the
-   conversation's. Dictation is gone, so it reads `talking` alone, and the
-   property is the same one: while a voice turn is live, the row belongs to
-   it. */
+   A hands-free turn still owns the row. Composer dictation is a distinct
+   operation: it keeps the draft visible, transcribes incrementally, and its
+   exclusion guard prevents the waveform from opening a second recorder. */
 
-check("the spacer yields", code.includes("{talking ? null : <span className=\"min-w-0 flex-1\" />}"), true);
+check("the spacer yields to the conversation",
+  code.includes('{talking ? null : <span className="composer-row-spacer min-w-0 flex-1" />}'), true);
+check("composer dictation uses the recorder without automatic turn ending",
+  /startRecording\(\{[\s\S]{0,100}handsFree:\s*false/.test(code), true);
+check("the live composer transcript is emitted into state",
+  /onTranscript:\s*\(text\) => \{[\s\S]{0,180}setLiveTranscript\(text\)/.test(code), true);
+check("an unmounted composer releases its recording",
+  /useEffect\(\(\) => \(\) => \{[\s\S]{0,180}recorderRef\.current\?\.cancel\(\)/.test(code), true);
+check("the waveform is disabled while dictation is active",
+  /aria-label="Start a voice conversation"[\s\S]{0,160}/.test(code)
+    && /disabled=\{blocked \|\| generating \|\| !online \|\| dictating\}/.test(code), true);
 /* Measured rather than guessed at a character distance: the previous form
    allowed 200 characters between the guard and the label, and an `onClick` body
    growing past that failed a control that had not moved. Each guarded block is

@@ -8,6 +8,7 @@ import {
   SquareTerminal,
   FileText,
   LoaderCircle,
+  Mic,
   Plus,
   Square,
   Volume2,
@@ -27,6 +28,12 @@ import {
 import { suggest, type Skill } from "@/lib/skills";
 import type { ConnectorAccessMode } from "@/lib/ai/types";
 import { haptic } from "@/lib/ui/haptics";
+import {
+  MAX_RECORDING_SECONDS,
+  startRecording,
+  type AutoStopReason,
+  type RecordingSession
+} from "@/lib/ui/recorder";
 import type { VoiceConversation } from "@/lib/ui/voice-conversation";
 import { watchProviderStatus } from "@/lib/ui/provider-status";
 import {
@@ -62,6 +69,7 @@ type Props = {
   generating: boolean;
   online: boolean;
   attachmentCount: number;
+  modelLabel: string;
   effortLabel: string;
   hasMessages: boolean;
   research: boolean;
@@ -69,12 +77,13 @@ type Props = {
   onToggleCode: () => void;
   offlineCommand: boolean;
   haptics: boolean;
+  voiceLanguage: string;
   inputRef?: RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
   onFiles: (files: FileList | null) => void;
-  onOpenEffort: () => void;
+  onOpenModels: () => void;
   conversation: VoiceConversation;
   onToggleResearch: () => void;
   onOpenTools: () => void;
@@ -123,6 +132,7 @@ export function ComposerDock({
   generating,
   online,
   attachmentCount,
+  modelLabel,
   effortLabel,
   hasMessages,
   research,
@@ -130,12 +140,13 @@ export function ComposerDock({
   onToggleCode,
   offlineCommand,
   haptics,
+  voiceLanguage,
   inputRef,
   onChange,
   onSend,
   onStop,
   onFiles,
-  onOpenEffort,
+  onOpenModels,
   conversation,
   onToggleResearch,
   onOpenTools
@@ -143,6 +154,11 @@ export function ComposerDock({
   const dockRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<RecordingSession | null>(null);
+  const startingRef = useRef(false);
+  const finishingRef = useRef(false);
+  const dictationEpochRef = useRef(0);
+  const dictationBaseRef = useRef("");
 
   useEffect(() => {
     const dock = dockRef.current;
@@ -176,6 +192,11 @@ export function ComposerDock({
      model providers out of it. */
   const [searchConfigured, setSearchConfigured] = useState(true);
   const [touchKeyboard, setTouchKeyboard] = useState(false);
+  const [dictationStarting, setDictationStarting] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [speaking, setSpeaking] = useState(false);
 
   const valueRef = useRef(value);
   valueRef.current = value;
@@ -184,8 +205,20 @@ export function ComposerDock({
   const showCommands = commands.length > 0 && focused;
 
   const talking = conversation.active;
+  const dictating = dictationStarting || listening || transcribing;
+  const compactModelLabel = modelLabel === "Automatic"
+    ? "Auto"
+    : modelLabel === "Staged council"
+      ? "Deep"
+      : modelLabel === "Parallel council"
+        ? "Team"
+        : modelLabel;
 
-  const previewValue = talking ? conversation.transcript : value;
+  const previewValue = talking
+    ? conversation.transcript
+    : dictating && liveTranscript
+      ? `${dictationBaseRef.current}${dictationBaseRef.current.trim() ? " " : ""}${liveTranscript}`
+      : value;
 
   function completeCommand(skill: Skill) {
     haptic("selection", haptics);
@@ -224,14 +257,34 @@ export function ComposerDock({
     setSearchConfigured(data.search?.configured !== false);
   }), []);
 
+  useEffect(() => {
+    if (!talking || (!startingRef.current && !finishingRef.current && !recorderRef.current)) return;
+    dictationEpochRef.current += 1;
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
+    startingRef.current = false;
+    finishingRef.current = false;
+    setDictationStarting(false);
+    setListening(false);
+    setTranscribing(false);
+    setSpeaking(false);
+    setLiveTranscript("");
+  }, [talking]);
+
+  useEffect(() => () => {
+    dictationEpochRef.current += 1;
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
+  }, []);
+
   const available = providerReady !== false;
-  const canSend = (online || offlineCommand) && !generating && Boolean(value.trim() || attachmentCount);
+  const canSend = (online || offlineCommand) && !generating && !dictating && Boolean(value.trim() || attachmentCount);
   const blocked = false;
   const hiddenAttachmentCount = Math.max(0, attachmentCount - selectedFiles.length);
 
   const placeholder = attachmentCount
     ? "Add instructions for these files"
-    : hasMessages ? "Write a message…" : "How can I help you today?";
+    : hasMessages ? "Write a message…" : "";
 
   const spokenBy = conversation.voice && conversation.phase === "speaking"
     ? conversation.voice.engine === "premium"
@@ -243,6 +296,13 @@ export function ComposerDock({
 
   const footer = conversation.error
     ?? (talking ? `${spokenBy ?? CONVERSATION_PLACEHOLDER[conversation.phase]} · tap the waveform to end` : null)
+    ?? (dictationStarting
+      ? "Opening the microphone…"
+      : listening
+        ? `${speaking ? "Listening" : "Ready"} · tap the mic to add this transcript`
+        : transcribing
+          ? "Finishing the transcript…"
+          : null)
     ?? notice
     ?? attachmentMessage
     ?? (!online && !offlineCommand
@@ -255,12 +315,112 @@ export function ComposerDock({
 
   const footerTone = conversation.error
     ? "text-warning"
-    : talking
+    : talking || dictating
       ? "text-accent"
       : !online || !available || notice || attachmentMessage ? "text-warning" : "text-tertiary";
 
+  async function startDictation() {
+    if (startingRef.current || finishingRef.current || recorderRef.current || talking || generating || !online) return;
+
+    startingRef.current = true;
+    const epoch = dictationEpochRef.current + 1;
+    dictationEpochRef.current = epoch;
+    dictationBaseRef.current = valueRef.current;
+    setNotice(null);
+    setLiveTranscript("");
+    setSpeaking(false);
+    setDictationStarting(true);
+    haptic("selection", haptics);
+
+    try {
+      const session = await startRecording({
+        language: voiceLanguage,
+        handsFree: false,
+        onSpeaking: (next) => {
+          if (dictationEpochRef.current === epoch) setSpeaking(next);
+        },
+        onTranscript: (text) => {
+          if (dictationEpochRef.current === epoch) setLiveTranscript(text);
+        },
+        onError: (message) => {
+          if (dictationEpochRef.current === epoch) setNotice(message);
+        },
+        onAutoStop: (reason: AutoStopReason) => {
+          if (dictationEpochRef.current !== epoch) return;
+          if (reason === "too-long") {
+            setNotice(`Recording stopped at ${Math.round(MAX_RECORDING_SECONDS / 60)} minutes. Keeping what you said.`);
+          }
+          window.setTimeout(() => void finishDictation(), 0);
+        }
+      });
+
+      if (dictationEpochRef.current !== epoch || conversation.active) {
+        session.cancel();
+        return;
+      }
+      recorderRef.current = session;
+      setListening(true);
+    } catch (error) {
+      if (dictationEpochRef.current === epoch) {
+        setNotice(error instanceof Error ? error.message : "Recording could not start.");
+      }
+    } finally {
+      if (dictationEpochRef.current === epoch) {
+        setDictationStarting(false);
+        startingRef.current = false;
+      }
+    }
+  }
+
+  async function finishDictation() {
+    if (finishingRef.current) return;
+    const session = recorderRef.current;
+    recorderRef.current = null;
+    if (!session) return;
+
+    const epoch = dictationEpochRef.current;
+    finishingRef.current = true;
+    setListening(false);
+    setSpeaking(false);
+    setTranscribing(true);
+    haptic("selection", haptics);
+
+    try {
+      const text = (await session.stop()).trim();
+      if (dictationEpochRef.current !== epoch) return;
+      if (text) {
+        const current = valueRef.current;
+        onChange(`${current}${current.trim() ? " " : ""}${text}`);
+        window.setTimeout(() => textareaRef.current?.focus(), 0);
+      } else {
+        setNotice("Nothing was picked up.");
+      }
+    } catch (error) {
+      if (dictationEpochRef.current === epoch) {
+        setNotice(error instanceof Error ? error.message : "That recording could not be transcribed.");
+      }
+    } finally {
+      finishingRef.current = false;
+      if (dictationEpochRef.current === epoch) {
+        setTranscribing(false);
+        setLiveTranscript("");
+      }
+    }
+  }
+
+  function toggleDictation() {
+    if (dictationStarting || transcribing) return;
+    if (listening) void finishDictation();
+    else void startDictation();
+  }
+
+  function toggleConversation() {
+    if (startingRef.current || finishingRef.current || recorderRef.current || dictating) return;
+    conversation.toggle();
+  }
+
   function send() {
-    if ((!value.trim() && attachmentCount === 0) || generating) return;
+    if ((!value.trim() && attachmentCount === 0) || generating || dictating) return;
     if (!online && !offlineCommand) return;
     setSending(true);
     haptic("impact-light", haptics);
@@ -362,6 +522,7 @@ export function ComposerDock({
     <>
       <div
         ref={dockRef}
+        data-home={hasMessages ? "false" : "true"}
         className={`navi-composer-dock relative z-40 shrink-0 border-t transition-colors duration-150 ${dragActive ? "border-accent bg-accent/5" : "border-[var(--border-subtle)]"}`}
         onDragEnter={dragOver}
         onDragOver={dragOver}
@@ -443,6 +604,10 @@ export function ComposerDock({
           <form
             onSubmit={submit}
             data-focused={focused ? "true" : "false"}
+            data-home={hasMessages ? "false" : "true"}
+            data-talking={talking ? "true" : "false"}
+            data-dictating={dictating ? "true" : "false"}
+            data-has-send={value.trim() || attachmentCount || generating ? "true" : "false"}
             className={`navi-composer flex flex-col p-2 ${sending ? "scale-[0.985]" : "scale-100"}`}
           >
             <textarea
@@ -466,24 +631,32 @@ export function ComposerDock({
               autoCorrect="on"
               spellCheck
               disabled={blocked}
-              readOnly={talking}
-              placeholder={talking ? CONVERSATION_PLACEHOLDER[conversation.phase] : placeholder}
+              readOnly={talking || dictating}
+              placeholder={talking
+                ? CONVERSATION_PLACEHOLDER[conversation.phase]
+                : dictationStarting
+                  ? "Opening microphone…"
+                  : listening
+                    ? "Listening — speak naturally"
+                    : transcribing
+                      ? "Finishing transcript…"
+                      : placeholder}
               aria-label="Chat with Navi Soul"
               data-navi-composer=""
               className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[17px] tracking-[-0.41px] text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
-            <div className="mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
+            <div className="navi-composer-actions mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
               {talking ? null : (
               <button
                 type="button"
                 onClick={() => {
-                  if (blocked || generating) return;
+                  if (blocked || generating || dictating) return;
                   haptic("selection", haptics);
                   fileInputRef.current?.click();
                 }}
-                disabled={blocked || generating}
-                className="composer-action"
+                disabled={blocked || generating || dictating}
+                className="home-attachment-action composer-action"
                 aria-label="Add photos, camera, and files"
               >
                 <Plus size={22} strokeWidth={1.5} />
@@ -522,8 +695,8 @@ export function ComposerDock({
                   setNotice(null);
                   onToggleResearch();
                 }}
-                disabled={blocked || generating}
-                className={`composer-action ${!searchConfigured ? "text-disabled" : research ? "text-accent" : ""}`}
+                disabled={blocked || generating || dictating}
+                className={`composer-secondary-action composer-action ${!searchConfigured ? "text-disabled" : research ? "text-accent" : ""}`}
                 aria-label={!searchConfigured
                   ? "Research unavailable — no search provider is configured"
                   : research ? "Research is on. Turn off web search" : "Research is off. Turn on web search"}
@@ -547,8 +720,8 @@ export function ComposerDock({
                 role="switch"
                 aria-checked={codeMode}
                 onClick={() => { haptic("selection", haptics); onToggleCode(); }}
-                disabled={blocked || generating}
-                className={`composer-action ${codeMode ? "text-accent" : ""}`}
+                disabled={blocked || generating || dictating}
+                className={`composer-secondary-action composer-action ${codeMode ? "text-accent" : ""}`}
                 aria-label={codeMode ? "Code mode is on. Switch back to chat" : "Code mode is off. Turn on code mode"}
               >
                 <SquareTerminal size={20} strokeWidth={1.5} />
@@ -558,20 +731,22 @@ export function ComposerDock({
               {talking ? null : (
               <button
                 type="button"
-                onClick={onOpenEffort}
-                className="flex items-center gap-1 px-2 text-[13px] font-medium text-tertiary hover:text-secondary active:opacity-60 transition-colors"
-                aria-label={`Effort: ${effortLabel}. Change effort`}
+                onClick={onOpenModels}
+                disabled={dictating}
+                className="composer-model-action flex min-h-9 min-w-0 max-w-[180px] items-center gap-1 rounded-full px-2 text-[13px] font-medium text-tertiary hover:text-secondary active:bg-elev-2 disabled:opacity-50"
+                aria-label={`Model: ${modelLabel}. Effort: ${effortLabel}. Change model or effort`}
               >
-                <span className="truncate">{effortLabel}</span>
+                <span className="composer-model-label truncate font-semibold text-primary">{compactModelLabel}</span>
+                <span className="composer-effort-label shrink-0">{effortLabel}</span>
                 <ChevronDown size={13} className="shrink-0" />
               </button>
               )}
 
-              {talking ? null : <span className="min-w-0 flex-1" />}
+              {talking ? null : <span className="composer-row-spacer min-w-0 flex-1" />}
 
               {talking ? (
                 <span
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-accent" : "ring-transparent"}`}
+                  className={`composer-voice-status flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-accent" : "ring-transparent"}`}
                   role="status"
                   aria-label={CONVERSATION_PLACEHOLDER[conversation.phase]}
                 >
@@ -602,11 +777,33 @@ export function ComposerDock({
                 </span>
               ) : null}
               {talking ? null : (
+                <button
+                  type="button"
+                  onClick={toggleDictation}
+                  disabled={blocked || generating || !online || dictationStarting || transcribing}
+                  className={`home-mic composer-dictation-action composer-action ${listening ? "text-accent" : ""}`}
+                  aria-label={dictationStarting
+                    ? "Opening the microphone"
+                    : transcribing
+                      ? "Transcribing the recording"
+                      : listening
+                        ? "Stop recording and add transcript"
+                        : "Record a message"}
+                  aria-pressed={listening}
+                >
+                  {dictationStarting || transcribing
+                    ? <LoaderCircle size={19} className="animate-spin" />
+                    : listening
+                      ? <Square size={13} fill="currentColor" />
+                      : <Mic size={20} strokeWidth={1.6} />}
+                </button>
+              )}
+              {talking ? null : (
               <button
                 type="button"
-                onClick={conversation.toggle}
-                disabled={blocked || generating || !online}
-                className="composer-action"
+                onClick={toggleConversation}
+                disabled={blocked || generating || !online || dictating}
+                className="composer-voice-action composer-action"
                 aria-label="Start a voice conversation"
                 aria-pressed={false}
               >
@@ -618,7 +815,7 @@ export function ComposerDock({
                   type={generating ? "button" : "submit"}
                   onClick={generating ? onStop : undefined}
                   disabled={!generating && !canSend}
-                  className={`flex h-[34px] w-[34px] ml-1 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-white shadow-sm active:scale-95 active:bg-opacity-80" : "bg-elev-3 text-disabled"}`}
+                  className={`composer-send-action flex h-[34px] w-[34px] ml-1 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-white shadow-sm active:scale-95 active:bg-opacity-80" : "bg-elev-3 text-disabled"}`}
                   aria-label={generating ? "Stop response" : "Send message"}
                 >
                   {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={20} strokeWidth={2} />}

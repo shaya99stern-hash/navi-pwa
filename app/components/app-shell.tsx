@@ -8,6 +8,7 @@ import {
   FolderKanban, 
   Ghost, 
   Link2, 
+  Menu,
   PanelLeft, 
   WifiOff, 
   SquarePen, 
@@ -30,7 +31,7 @@ import {
   isResizableImage,
   prepareAttachments
 } from "@/lib/ui/attachments";
-import { DEFAULT_PREFERENCES, EFFORT_LEVELS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
+import { DEFAULT_PREFERENCES, DIAGNOSTIC_ROUTES, EFFORT_LEVELS, chatPreview, chatTitle, createId, messageText, sortChats } from "@/lib/chat";
 import {
   clearLocalState,
   loadLocalState,
@@ -68,9 +69,10 @@ import { LaunchSurface } from "./launch-surface";
 import { ProviderSetupNotice } from "./provider-setup-notice";
 import { MessageActionSheet } from "./message-action-sheet";
 import { MessageRow } from "./message-row";
+import { NaviMark } from "./navi-mark";
 import { ArtifactsSheet } from "./artifacts-sheet";
 import { ChatMenuSheet } from "./chat-menu-sheet";
-import { EffortSheet } from "./effort-sheet";
+import { ModelPickerSheet } from "./model-picker-sheet";
 import { ProjectsSheet } from "./projects-sheet";
 import { PwaPlatformBanner } from "./pwa-platform-banner";
 import { SettingsSheet } from "./settings-sheet";
@@ -188,7 +190,7 @@ export function AppShell({
   const [settingsSection, setSettingsSection] = useState<MenuSection | undefined>(
     initialLayer === "customize" ? "skills" : undefined
   );
-  const [effortSheetOpen, setEffortSheetOpen] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [chatMenuOpen, setChatMenuOpen] = useState(false);
   const [composeMenuOpen, setComposeMenuOpen] = useState(false);
   const [incognito, setIncognito] = useState(false);
@@ -237,7 +239,7 @@ export function AppShell({
   useOverlayRoute({ open: projectsOpen, onClose: () => setProjectsOpen(false), path: "/projects", restore: restorePath });
   useOverlayRoute({ open: artifactsOpen, onClose: () => setArtifactsOpen(false), path: "/artifacts", restore: restorePath });
   useOverlayRoute({ open: chatMenuOpen, onClose: () => setChatMenuOpen(false), restore: restorePath });
-  useOverlayRoute({ open: effortSheetOpen, onClose: () => setEffortSheetOpen(false), restore: restorePath });
+  useOverlayRoute({ open: modelPickerOpen, onClose: () => setModelPickerOpen(false), restore: restorePath });
   useOverlayRoute({ open: composeMenuOpen, onClose: () => setComposeMenuOpen(false) });
   useOverlayRoute({ open: contextMessage !== null, onClose: () => setContextMessage(null), restore: restorePath });
 
@@ -355,6 +357,8 @@ export function AppShell({
   const activeChat = chats.find((chat) => chat.id === activeId);
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
   const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
+  const activeModel = DIAGNOSTIC_ROUTES.find((route) => route.id === (preferences.routeOverride ?? "navi-soul"))
+    ?? DIAGNOSTIC_ROUTES[0];
   const connectorMode = activeChat?.connectorAccessMode ?? preferences.connectorAccessMode;
 
   useEffect(() => {
@@ -1117,6 +1121,8 @@ export function AppShell({
     haptic("selection", preferences.haptics);
   }
 
+  const home = view === "chat" && messages.length === 0;
+
   return (
     <div
       data-app-shell="true"
@@ -1151,7 +1157,12 @@ export function AppShell({
         onDelete={deleteChat}
       />
 
-      <header className="navi-header relative z-50 flex min-h-[44px] pt-[env(safe-area-inset-top)] pb-2 shrink-0 items-center justify-between bg-page px-[max(8px,env(safe-area-inset-left))] border-b border-[var(--border-subtle)]" style={{ paddingRight: 'max(8px, env(safe-area-inset-right))' }} data-scrolled={String(scrolled)}>
+      <header
+        className="navi-header relative z-50 flex min-h-[44px] pt-[env(safe-area-inset-top)] pb-2 shrink-0 items-center justify-between bg-page px-[max(8px,env(safe-area-inset-left))] border-b border-[var(--border-subtle)]"
+        style={{ paddingRight: 'max(8px, env(safe-area-inset-right))' }}
+        data-scrolled={String(scrolled)}
+        data-home={String(home)}
+      >
         <div className="flex w-16 items-center justify-start pl-1">
           <button
             type="button"
@@ -1159,14 +1170,18 @@ export function AppShell({
               haptic("impact-light", preferences.haptics);
               setHistoryOpen(true);
             }}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-accent active:opacity-60"
+            className={home
+              ? "home-header-button flex h-11 w-11 items-center justify-center rounded-full text-secondary active:scale-95"
+              : "flex h-11 w-11 items-center justify-center rounded-full text-accent active:opacity-60"}
             aria-label="Open sidebar"
           >
-            <PanelLeft size={28} strokeWidth={1.5} className="-ml-1" />
+            {home
+              ? <Menu size={25} strokeWidth={1.45} />
+              : <PanelLeft size={28} strokeWidth={1.5} className="-ml-1" />}
           </button>
         </div>
 
-        <button
+        {home ? <span className="flex-1" aria-hidden="true" /> : <button
           type="button"
           onClick={() => {
             haptic("selection", preferences.haptics);
@@ -1187,10 +1202,10 @@ export function AppShell({
               {VIEW_SUBTITLES[view]}
             </span>
           )}
-        </button>
+        </button>}
 
         <div className="flex w-16 items-center justify-end pr-2 gap-2">
-          {incognito && (
+          {!home && incognito && (
             <span className="text-accent" title="Incognito">
               <Ghost size={19} strokeWidth={1.8} />
             </span>
@@ -1201,10 +1216,14 @@ export function AppShell({
               haptic("selection", preferences.haptics);
               setComposeMenuOpen(true);
             }}
-            className="flex items-center justify-center text-accent active:opacity-60"
+            className={home
+              ? "home-header-button flex h-11 w-11 items-center justify-center rounded-full active:scale-95"
+              : "flex items-center justify-center text-accent active:opacity-60"}
             aria-label="Compose Menu"
           >
-            <SquarePen size={26} strokeWidth={1.5} />
+            {home
+              ? <NaviMark className="h-[25px] w-[25px] object-contain" label="NaviOS compose menu" />
+              : <SquarePen size={26} strokeWidth={1.5} />}
           </button>
         </div>
       </header>
@@ -1378,18 +1397,20 @@ export function AppShell({
         generating={generating}
         online={online}
         attachmentCount={pendingFiles.length}
+        modelLabel={activeModel.label}
         effortLabel={activeEffort.label}
         hasMessages={messages.length > 0}
         research={preferences.tools.web}
         codeMode={preferences.mode === "code"}
         onToggleCode={toggleCodeMode}
         haptics={preferences.haptics}
+        voiceLanguage={preferences.voiceLanguage}
         onChange={setDraft}
         onSend={() => void submit()}
         onFiles={addFiles}
-        onOpenEffort={() => {
+        onOpenModels={() => {
           haptic("selection", preferences.haptics);
-          setEffortSheetOpen(true);
+          setModelPickerOpen(true);
         }}
         conversation={conversation}
         onToggleResearch={toggleResearch}
@@ -1418,10 +1439,10 @@ export function AppShell({
         onExport={exportData}
       />
 
-      <EffortSheet
-        open={effortSheetOpen}
+      <ModelPickerSheet
+        open={modelPickerOpen}
         preferences={preferences}
-        onClose={() => setEffortSheetOpen(false)}
+        onClose={() => setModelPickerOpen(false)}
         onPreferences={updatePreferences}
       />
 

@@ -111,7 +111,7 @@ export type NaviProfile = {
 
 export type NaviPreferences = {
   mode: NaviMode;
-  /** Diagnostics-only route pin. Absent for every ordinary user. */
+  /** Optional route pin. Automatic routing is represented by an absent value. */
   routeOverride?: ModelPreset;
   style: ResponseStyle;
   effort: EffortLevel;
