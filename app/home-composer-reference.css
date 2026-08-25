@@ -1,0 +1,152 @@
+/* Home composer reference treatment.
+   Scoped to the empty-chat home state AND to the keyboard-closed viewport so
+   the compact keyboard layout and all established chat composers stay intact. */
+:root:not([data-keyboard-open="true"]) .navi-composer-dock[data-home="true"] {
+  padding: 4px 12px calc(10px + var(--safe-bottom));
+  border-top-color: transparent;
+  background: var(--bg-app);
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] {
+  display: grid;
+  grid-template-columns: 44px minmax(96px, max-content) minmax(0, 1fr) 44px 44px;
+  grid-template-rows: minmax(72px, 1fr) 44px;
+  column-gap: 8px;
+  row-gap: 0;
+  align-items: end;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--bg-app) 97%, black);
+  box-shadow: none;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] > textarea {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: stretch;
+  width: 100%;
+  min-height: 72px;
+  max-height: 92px;
+  padding: 8px 10px 0;
+  background: transparent;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] > .navi-composer-actions {
+  display: contents;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .home-attachment-action {
+  grid-column: 1;
+  grid-row: 2;
+  width: 44px;
+  height: 44px;
+  background: var(--bg-elev-2);
+  color: var(--text-primary);
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] :is(.composer-secondary-action, .composer-row-spacer) {
+  display: none;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-model-action {
+  display: flex;
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: start;
+  justify-content: center;
+  width: auto;
+  min-width: 96px;
+  max-width: 150px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  font-size: 14px;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-model-label {
+  font-weight: 600;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-effort-label {
+  display: inline;
+  opacity: 0.48;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-model-action svg {
+  display: none;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .home-mic {
+  display: flex;
+  grid-column: 4;
+  grid-row: 2;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  color: var(--text-primary);
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-voice-action {
+  display: flex;
+  grid-column: 5;
+  grid-row: 2;
+  width: 44px;
+  height: 44px;
+  background: var(--text-primary);
+  color: var(--bg-app);
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-send-action {
+  grid-column: 5;
+  grid-row: 2;
+  width: 44px;
+  height: 44px;
+  margin-left: 0;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"][data-has-send="true"]:not([data-dictating="true"]) .home-mic {
+  display: none;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"][data-has-send="true"] .composer-voice-action {
+  grid-column: 4;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"][data-dictating="true"] .composer-model-action {
+  display: none;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"][data-dictating="true"] > textarea {
+  grid-column: 1 / -1;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"][data-talking="true"] > textarea {
+  display: none;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-voice-status {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+}
+
+@media (max-width: 390px) {
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] {
+    grid-template-columns: 44px minmax(88px, max-content) minmax(0, 1fr) 44px 44px;
+    column-gap: 6px;
+    padding: 10px;
+  }
+
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-model-action {
+    min-width: 88px;
+    padding-inline: 11px;
+  }
+}
