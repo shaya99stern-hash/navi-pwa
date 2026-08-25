@@ -17,6 +17,7 @@ import {
 } from "@/lib/auth/session";
 import { SPLASH_SCREENS } from "@/lib/ui/splash-screens";
 import "./globals.css";
+import "./home-composer-reference.css";
 import "./shell.css";
 import { GlobalPwaPlatformBanner } from "./components/pwa-platform-banner";
 import { ViewportMetrics } from "./components/viewport-metrics";
@@ -66,7 +67,6 @@ async function buildMetadata(): Promise<Metadata> {
       address: false,
       email: false
     },
-    /* iOS reads this once at launch and ignores later mutation, so it has to be rendered per request. black-translucent draws white glyphs, which vanish against the ivory light theme; default keeps them dark. */
     appleWebApp: {
       capable: true,
       title: "NaviOS",
@@ -110,41 +110,23 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  /* Chromium shrinks the layout viewport instead of overlaying the keyboard, so the fixed shell lands above it with no scripting. iOS ignores this today — visualViewport in ViewportMetrics covers iOS — but declaring it costs nothing and fixes Android outright. Deliberately no maximum-scale or user-scalable: iOS ignores both and they break pinch-zoom for low-vision users. The 16px floor in globals.css is the real zoom fix. */
   interactiveWidget: "resizes-content",
   colorScheme: "dark light",
   themeColor: [
     { media: "(prefers-color-scheme: dark)", color: "#121214" },
-    /* `--bg-page`, not `--bg-app`. The page is what sits behind the status
-       bar, and declaring the app surface instead put a visible band along the
-       top edge in light mode. */
     { media: "(prefers-color-scheme: light)", color: "#F0EEE6" }
   ]
 };
 
 export const THEME_COOKIE_NAME = "navi.theme";
 
-/** The status bar style is baked in at launch, so the server needs the theme. */
 async function readThemeCookie(): Promise<"dark" | "light"> {
   const value = (await cookies()).get(THEME_COOKIE_NAME)?.value;
   return value === "light" ? "light" : "dark";
 }
 
-/* The cookie is authoritative because the server rendered against it; mirror it back into localStorage so existing readers stay in sync. */
-
-/**
- * Matches the app's root size to iOS Dynamic Type.
- *
- * Only the -apple-system-body shorthand resolves to the size the user chose in
- * Settings, and CSS cannot clamp a font shorthand, so the value is measured and
- * bounded here. The cap is deliberate: controls, sheets and the composer have
- * fixed heights, so unbounded growth would clip text rather than reflow it.
- * Runs before paint, so there is no jump from one size to another.
- */
 const dynamicTypeBootScript = `
 try {
-  // The auth pages are Clerk's layout, not ours, and it measures its own boxes
-  // against a 16px root. Scaling underneath it clips its field labels.
   if (/^\\/(sign-in|sign-up)(\\/|$)/.test(location.pathname)) throw 0;
   var probe = document.createElement('div');
   probe.className = 'navi-type-probe';
@@ -174,14 +156,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const sessionToken = cookieStore?.get(CLERK_SESSION_COOKIE_NAME)?.value;
   const clientUat = cookieStore?.get(CLERK_CLIENT_UAT_COOKIE_NAME)?.value;
 
-  // Verify against the origin actually serving this request so custom domains
-  // resolve the same user the middleware did.
   const requestHeaders = clerkConfigured ? await headers() : undefined;
   const forwardedHost = requestHeaders?.get("x-forwarded-host") ?? requestHeaders?.get("host") ?? undefined;
   const forwardedProto = requestHeaders?.get("x-forwarded-proto") ?? "https";
   const requestOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : undefined;
 
-  /* Must resolve exactly the way the middleware did: a cold PWA launch carries an expired session token, and disagreeing here would put this render's chats under the signed-out storage scope and clear the caches. */
   const { userId } = clerkConfigured ? await resolveClerkSession(sessionToken, clientUat, requestOrigin) : { userId: null };
   const storageScope = userId ? `clerk:${userId}` : clerkConfigured ? "signed-out" : "guest";
   const mayMigrateLegacyState = !clerkConfigured || Boolean(userId && hasClerkUserAllowlist() && isClerkUserAllowed(userId));
@@ -189,8 +168,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const storageBootScript = `
   try {
     const scope = ${JSON.stringify(storageScope)};
-    // Signing out or switching accounts must not leave the previous account's
-    // responses in a cache the next one reads from.
     if (localStorage.getItem('navi.storage.scope.v1') !== scope && 'caches' in window) {
       caches.keys().then((keys) => keys.filter((k) => k.startsWith('navi-')).forEach((k) => caches.delete(k)));
     }
@@ -223,7 +200,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     >
       <head>
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-        {/* Without these an installed PWA boots to a blank white screen. Each image is the app background with the brand mark centred, so the handoff to the launch surface shows no colour change. */}
         {SPLASH_SCREENS.map((screen) => (
           <link key={screen.href} rel="apple-touch-startup-image" href={screen.href} media={screen.media} />
         ))}
