@@ -81,6 +81,12 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
   const [spokenBy, setSpokenBy] = useState<string | null>(null);
   const holdTimer = useRef<number | null>(null);
   const holdStart = useRef<{ x: number; y: number } | null>(null);
+  /* This hook must stay above the empty-row return below. A streaming
+     assistant row can temporarily have no text while it only contains tool
+     parts; when that stream finishes, the row takes the empty return. Keeping
+     this ref below that branch changed the hook count between those renders
+     and crashed production with React error #300. */
+  const spoken = useRef<SpokenHandle | null>(null);
 
   useEffect(() => () => {
     if (holdTimer.current) window.clearTimeout(holdTimer.current);
@@ -115,11 +121,6 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_300);
   }
-
-  /* The handle for whatever is currently speaking. Premium audio is an
-     `Audio` element and has to be stopped through its own handle;
-     `speechSynthesis.cancel()` does nothing to it. */
-  const spoken = useRef<SpokenHandle | null>(null);
 
   function readAloud() {
     if (speaking) {

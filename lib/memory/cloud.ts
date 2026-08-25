@@ -1,5 +1,6 @@
 import "server-only";
 import type { StoredChat } from "../ai/types";
+import { readPostgrestPayload } from "./postgrest-response";
 
 /**
  * Cloud memory: conversations and preferences that follow the person.
@@ -83,8 +84,7 @@ async function request(
       console.warn(`Cloud memory ${init.method ?? "GET"} ${path} answered ${response.status}: ${await response.text().catch(() => "")}`.trim());
       return null;
     }
-    if (response.status === 204) return "ok";
-    return await response.json();
+    return (await readPostgrestPayload(response)) ?? "ok";
   } catch (error) {
     /* An abort is the timeout above doing its job, not a fault worth a line
        in the log on every slow network. */

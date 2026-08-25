@@ -10,6 +10,8 @@ const check = (n: string, a: unknown, e: unknown) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${n}${ok ? "" : `\n   got:  ${JSON.stringify(a)}\n   want: ${JSON.stringify(e)}`}`);
 };
 
+const readSource = (relative: string) => readFileSync(join(process.cwd(), relative), "utf8").replace(/\r\n?/g, "\n");
+
 /* ── The report ──────────────────────────────────────────────────────────────
    The owner said the app claimed a GitHub connection it did not have. It did,
    and it was not the model inventing one: `inspect_environment` — which the
@@ -161,9 +163,9 @@ async function main() {
 
   const root = process.cwd();
   const strip = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  const envTools = strip(readFileSync(join(root, "lib/ai/environment-tools.ts"), "utf8"));
-  const registry = strip(readFileSync(join(root, "lib/tools/registry.ts"), "utf8"));
-  const route = strip(readFileSync(join(root, "app/api/chat/route.ts"), "utf8"));
+  const envTools = strip(readSource("lib/ai/environment-tools.ts"));
+  const registry = strip(readSource("lib/tools/registry.ts"));
+  const route = strip(readSource("app/api/chat/route.ts"));
 
   /* The exact line the owner was reading, and the word it must no longer use.
      A present variable is a present variable. */

@@ -8,6 +8,9 @@ const check = (n: string, a: unknown, e: unknown) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${n}${ok ? "" : `\n   got:  ${JSON.stringify(a)}\n   want: ${JSON.stringify(e)}`}`);
 };
 
+const root = process.cwd();
+const readSource = (relative: string) => readFileSync(join(root, relative), "utf8").replace(/\r\n?/g, "\n");
+
 /* ── The conversation this exists to prevent ─────────────────────────────────
    Asked "isn't it supposed to be using the Eleven Labs voice?", the app said:
 
@@ -53,8 +56,7 @@ restore();
 
 /* ── The three states, kept apart ──────────────────────────────────────────── */
 
-const root = process.cwd();
-const environment = readFileSync(join(root, "lib/ai/environment-tools.ts"), "utf8");
+const environment = readSource("lib/ai/environment-tools.ts");
 
 /* Not configured at all is a working deployment. Calling that a fault sends
    someone to fix something that is not broken — the assertion this replaced
@@ -75,7 +77,7 @@ check("an untouched allowance is read as evidence rather than health",
 
 /* ── The variables it invented ─────────────────────────────────────────────── */
 
-const facts = readFileSync(join(root, "lib/ai/self-description.ts"), "utf8");
+const facts = readSource("lib/ai/self-description.ts");
 check("the voice id variable is named where the model can read it",
   /NAVI_TTS_VOICE_ID/.test(facts), true);
 check("along with the key it needs beside it",
@@ -89,7 +91,7 @@ check("and it says there is no on/off switch to invent",
    An assertion against the prose would have failed on its own documentation. */
 const reads = (source: string) => /process\.env\.(ENABLE_ELEVEN_LABS_TTS|ELEVEN_LABS_VOICE_ID)/.test(source);
 check("nothing in the app reads the invented variables",
-  [facts, environment, readFileSync(join(root, "lib/ai/voice/tts.ts"), "utf8")].some(reads), false);
+  [facts, environment, readSource("lib/ai/voice/tts.ts")].some(reads), false);
 
 /* The fabricated architecture, denied at the source. */
 check("the premium voice is stated to speak every reply",
@@ -99,8 +101,8 @@ check("with no second voice to switch between",
 
 /* ── What only the device knows ────────────────────────────────────────────── */
 
-const shell = readFileSync(join(root, "app/components/app-shell.tsx"), "utf8");
-const route = readFileSync(join(root, "app/api/chat/route.ts"), "utf8");
+const shell = readSource("app/components/app-shell.tsx");
+const route = readSource("app/api/chat/route.ts");
 
 check("the device reports which voice actually spoke",
   /spokenBy: lastVoiceRef\.current \?\? undefined/.test(shell), true);
@@ -128,7 +130,7 @@ check("and forbidding a guessed variable name",
    a gesture that was not held, an unplayable format, a load that interrupted
    the request, and everything else. */
 
-const speech = readFileSync(join(root, "lib/ui/speech.ts"), "utf8");
+const speech = readSource("lib/ui/speech.ts");
 check("a permission refusal says so", /would not play audio without a fresh tap/.test(speech), true);
 check("an unplayable format says so", /cannot play the audio format the voice service returned/.test(speech), true);
 check("an unknown failure still carries its name",

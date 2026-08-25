@@ -10,11 +10,12 @@ const check = (n: string, a: unknown, e: unknown) => {
 };
 
 const root = process.cwd();
-const route = readFileSync(join(root, "app/api/chat/route.ts"), "utf8");
+const readSource = (relative: string) => readFileSync(join(root, relative), "utf8").replace(/\r\n?/g, "\n");
+const route = readSource("app/api/chat/route.ts");
 /* The filter lives in its own module: the route imports `server-only`, so a
    test cannot load it, and a pure transformation had no business living in a
    file that cannot be exercised. */
-const replay = readFileSync(join(root, "lib/ai/replay.ts"), "utf8");
+const replay = readSource("lib/ai/replay.ts");
 
 /* ── One reasoning reply must not break the rest of the conversation ─────────
    Production, repeatedly, on turn two:
@@ -148,7 +149,7 @@ check("a user turn is never rewritten",
    event either, so the loop's `done` never resolved and the microphone never
    reopened. */
 
-const speech = readFileSync(join(root, "lib/ui/speech.ts"), "utf8");
+const speech = readSource("lib/ui/speech.ts");
 
 check("the priming playback is held rather than fired and forgotten",
   /let priming: Promise<void> \| null = null;/.test(speech), true);
@@ -165,8 +166,8 @@ check("the primer unmutes in exactly one place",
 
 /* ── A turn that failed must not read as a turn still working ──────────────── */
 
-const loop = readFileSync(join(root, "lib/ui/voice-conversation.ts"), "utf8");
-const shell = readFileSync(join(root, "app/components/app-shell.tsx"), "utf8");
+const loop = readSource("lib/ui/voice-conversation.ts");
+const shell = readSource("app/components/app-shell.tsx");
 
 check("the loop is told when a request failed", /failedAt\?: number \| null;/.test(loop), true);
 check("and reopens the microphone instead of waiting for a reply that is not coming",

@@ -121,7 +121,7 @@ check("and a limit past the ceiling is clamped",
 
 const fs = require("node:fs") as typeof import("node:fs");
 const path = require("node:path") as typeof import("node:path");
-const read = (relative: string) => fs.readFileSync(path.join(process.cwd(), relative), "utf8");
+const read = (relative: string) => fs.readFileSync(path.join(process.cwd(), relative), "utf8").replace(/\r\n?/g, "\n");
 
 const declaration = read("lib/ai/history-tools.ts");
 const registry = read("lib/tools/registry.ts");

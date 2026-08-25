@@ -168,7 +168,8 @@ check("a refused permission reads differently in an installed app", recorder.inc
    property is the same one: while a voice turn is live, the row belongs to
    it. */
 
-check("the spacer yields", code.includes("{talking ? null : <span className=\"min-w-0 flex-1\" />}"), true);
+check("the spacer yields",
+  /\{talking \? null : <span className="[^"]*\bmin-w-0 flex-1\b[^"]*" \/>\}/.test(code), true);
 /* Measured rather than guessed at a character distance: the previous form
    allowed 200 characters between the guard and the label, and an `onClick` body
    growing past that failed a control that had not moved. Each guarded block is

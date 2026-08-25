@@ -110,7 +110,7 @@ check("the light status bar matches the light page", layout.includes(`(prefers-c
 /* The header sits directly under the status bar, so a different colour there
    is a visible seam whatever the manifest says. */
 const shell = stripComments(readFileSync("app/components/app-shell.tsx", "utf8"));
-const header = /<header className="navi-header[^"]*"/.exec(shell)?.[0] ?? "";
+const header = /<header\s+[\s\S]{0,500}?className="navi-header[^"]*"/.exec(shell)?.[0] ?? "";
 check("the header is found", header.length > 0, true);
 check("the header takes the page colour", header.includes("bg-page"), true);
 check("the header paints no literal of its own", /bg-\[#|dark:bg-black/.test(header), false);

@@ -8,7 +8,9 @@ const check = (n: string, a: unknown, e: unknown) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${n}${ok ? "" : `\n   got:  ${JSON.stringify(a)}\n   want: ${JSON.stringify(e)}`}`);
 };
 
-const source = readFileSync(join(process.cwd(), "lib/ui/voice-conversation.ts"), "utf8");
+const readSource = (relative: string) => readFileSync(join(process.cwd(), relative), "utf8").replace(/\r\n?/g, "\n");
+
+const source = readSource("lib/ui/voice-conversation.ts");
 
 /* ── An effect must not depend on a value it sets ────────────────────────────
    This one cost the entire feature, silently, and every symptom of it pointed
@@ -67,7 +69,7 @@ check("before listening again", /await handle\.done;[\s\S]{0,400}relisten\(/.tes
    it should." Being unable to stop something that has misunderstood you is the
    difference between talking to it and waiting for it. */
 
-const bargeIn = readFileSync(join(process.cwd(), "lib/ui/barge-in.ts"), "utf8");
+const bargeIn = readSource("lib/ui/barge-in.ts");
 check("the loop listens while it speaks", /await watchForInterruption\(\{/.test(source), true);
 /* Armed after playback starts, so the microphone is never opened between
    earning the playback grant and using it. */
@@ -144,8 +146,8 @@ check("an empty answer stays empty", spokenText("   "), "");
    and the screen says it while the reply is playing. The next report of "it
    does not talk" arrives as a fact. */
 
-const speech = readFileSync(join(process.cwd(), "lib/ui/speech.ts"), "utf8");
-const composer = readFileSync(join(process.cwd(), "app/components/composer-dock.tsx"), "utf8");
+const speech = readSource("lib/ui/speech.ts");
+const composer = readSource("app/components/composer-dock.tsx");
 
 check("the handle names its engine", /engine: SpokenEngine;/.test(speech), true);
 check("and why it was not the premium one", /why: string;/.test(speech), true);
@@ -184,7 +186,7 @@ check("and an unknown reason is carried rather than flattened",
   /the premium voice declined\$\{reason \? ` \(\$\{reason\}\)` : " without saying why"\}/.test(speech), true);
 check("and no exit falls back without saying why", /return local\(\);/.test(speech), false);
 
-check("the loop carries it out", /setVoice\(\{ engine: handle\.engine, why: handle\.why \}\)/.test(speech + readFileSync(join(process.cwd(), "lib/ui/voice-conversation.ts"), "utf8")), true);
+check("the loop carries it out", /setVoice\(\{ engine: handle\.engine, why: handle\.why \}\)/.test(speech + source), true);
 check("and the screen says which voice is talking",
   /Answering in the premium voice/.test(composer), true);
 check("naming the device voice as the device voice",
@@ -218,7 +220,7 @@ check("at zero volume, so priming it is not audible",
    everywhere — so it reports its fallback too, and the two surfaces together
    say whether the problem is the loop or the speech. */
 
-const row = readFileSync(join(process.cwd(), "app/components/message-row.tsx"), "utf8");
+const row = readSource("app/components/message-row.tsx");
 check("the read-aloud button reports a fallback too",
   /setSpokenBy\(handle\.engine === "premium" \? null : handle\.why\)/.test(row), true);
 /* Only the fallbacks. Announcing the good voice on every tap would be noise on
@@ -233,7 +235,7 @@ check("and says nothing when the good voice worked",
    guess, which is the failure this whole codebase keeps finding in new clothes.
    Three rounds of chasing silence went past that gap without closing it. */
 
-const environment = readFileSync(join(process.cwd(), "lib/ai/environment-tools.ts"), "utf8");
+const environment = readSource("lib/ai/environment-tools.ts");
 check("the environment tool reads the premium voice", /ttsConfigured\(\)/.test(environment), true);
 check("and its remaining budget", /const voice = await readTtsUsage\(\);/.test(environment), true);
 /* Not configured is a working configuration, not a fault — saying otherwise
@@ -283,11 +285,11 @@ check("the primer is real silence rather than a muted sound",
    was simply nothing to turn, so the honest-sounding answer was the incorrect
    one. */
 
-const settings = readFileSync(join(process.cwd(), "app/components/settings-sheet.tsx"), "utf8");
-const tts = readFileSync(join(process.cwd(), "lib/ai/voice/tts.ts"), "utf8");
-const knowledge = readFileSync(join(process.cwd(), "lib/ai/app-knowledge.ts"), "utf8");
+const settings = readSource("app/components/settings-sheet.tsx");
+const tts = readSource("lib/ai/voice/tts.ts");
+const knowledge = readSource("lib/ai/app-knowledge.ts");
 
-check("the rate is a stored preference", /voiceRate: number;/.test(readFileSync(join(process.cwd(), "lib/ai/types.ts"), "utf8")), true);
+check("the rate is a stored preference", /voiceRate: number;/.test(readSource("lib/ai/types.ts")), true);
 check("with a control to move it", /label="Speaking rate"/.test(settings), true);
 /* One dial, both engines. A number that means something different depending on
    which voice happens to answer is worse than no number. */
@@ -298,7 +300,7 @@ check("clamped to the same range on both",
 /* Both callers pass it, or the dial moves one surface and not the other. */
 check("the conversation reads it", /optionsRef\.current\.rate/.test(source), true);
 check("and so does the read-aloud button",
-  /speakBest\(text, language, voiceRate\)/.test(readFileSync(join(process.cwd(), "app/components/message-row.tsx"), "utf8")), true);
+  /speakBest\(text, language, voiceRate\)/.test(row), true);
 /* And the model is told to stop saying the opposite. */
 check("and the app stops claiming the device controls it",
   /never tell the user their device\n {2}controls it/.test(knowledge), true);

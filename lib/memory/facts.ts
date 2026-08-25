@@ -1,5 +1,7 @@
 import "server-only";
 
+import { readPostgrestPayload } from "./postgrest-response";
+
 /**
  * Durable facts, remembered across conversations.
  *
@@ -124,8 +126,7 @@ async function request(
           : `Supabase refused the request: ${response.status}${detail ? ` ${detail}` : ""}`);
       return null;
     }
-    if (response.status === 204) return null;
-    return await response.json();
+    return await readPostgrestPayload(response);
   } catch (error) {
     /* Memory is an enhancement, never a precondition. A storage outage must
        cost the recalled context and nothing else — an answer without a

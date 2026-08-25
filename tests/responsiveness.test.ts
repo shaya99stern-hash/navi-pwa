@@ -8,6 +8,8 @@ const check = (n: string, a: unknown, e: unknown) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${n}${ok ? "" : `\n   got:  ${JSON.stringify(a)}\n   want: ${JSON.stringify(e)}`}`);
 };
 
+const readSource = (relative: string) => readFileSync(join(process.cwd(), relative), "utf8").replace(/\r\n?/g, "\n");
+
 /* ── The attachment budget follows the real conversation ─────────────────────
    The defect: the budget assumed a fixed 400 KB of conversation, so in a chat
    that already contained photos an image was resized to "fit" and the request
@@ -26,7 +28,7 @@ check("the budget never goes negative", heavy > 0, true);
 check("an enormous conversation still returns the floor", attachmentBudgetFor(50_000_000), 250_000);
 check("the budget falls as the conversation grows", attachmentBudgetFor(3_000_000) < attachmentBudgetFor(1_000_000), true);
 
-const shell = readFileSync(join(process.cwd(), "app/components/app-shell.tsx"), "utf8");
+const shell = readSource("app/components/app-shell.tsx");
 check("the composer measures the conversation", shell.includes("const conversationBytes = JSON.stringify(messages).length"), true);
 check("and passes it to the sizer", /prepareAttachments\(pendingFiles, preserveDetail, conversationBytes\)/.test(shell), true);
 
@@ -35,7 +37,7 @@ check("and passes it to the sizer", /prepareAttachments\(pendingFiles, preserveD
    every turn is megabytes of upload from a phone before a single token can be
    generated — a large part of why the app felt slow. */
 
-const route = readFileSync(join(process.cwd(), "app/api/chat/route.ts"), "utf8");
+const route = readSource("app/api/chat/route.ts");
 check("stale attachments are redacted", route.includes("function redactStaleAttachments"), true);
 check("the redaction runs on the replayed history", route.includes("redactStaleAttachments(messages)"), true);
 check("a replay window exists", route.includes("ATTACHMENT_REPLAY_WINDOW"), true);
@@ -83,8 +85,8 @@ check("the old dispatch-keyed form is gone", /\bmode === "code" \? codeModeInstr
    and there is nothing to restart — so the property to protect is no longer
    "it recovers well" but "it is not used at all". */
 
-const speech = readFileSync(join(process.cwd(), "lib/ui/speech.ts"), "utf8");
-const recorder = readFileSync(join(process.cwd(), "lib/ui/recorder.ts"), "utf8");
+const speech = readSource("lib/ui/speech.ts");
+const recorder = readSource("lib/ui/recorder.ts");
 
 check("nothing recognises speech any more", /SpeechRecognition/.test(speech), false);
 /* And nothing encodes a container any more either. MediaRecorder hands back
@@ -114,7 +116,7 @@ check("and retires the capture node rather than only unplugging it",
 /* A stray tap is not speech. The guard used to be a byte count on the whole
    blob; it is now a duration of detected speech inside the segment, which is
    the thing actually being asked about. */
-check("a stray tap is not sent", /minSpeechMs/.test(readFileSync(join(process.cwd(), "lib/ui/audio/vad.ts"), "utf8")), true);
+check("a stray tap is not sent", /minSpeechMs/.test(readSource("lib/ui/audio/vad.ts")), true);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

@@ -8,6 +8,7 @@ import {
   FolderKanban, 
   Ghost, 
   Link2, 
+  Menu,
   PanelLeft, 
   WifiOff, 
   SquarePen, 
@@ -68,6 +69,7 @@ import { LaunchSurface } from "./launch-surface";
 import { ProviderSetupNotice } from "./provider-setup-notice";
 import { MessageActionSheet } from "./message-action-sheet";
 import { MessageRow } from "./message-row";
+import { NaviMark } from "./navi-mark";
 import { ArtifactsSheet } from "./artifacts-sheet";
 import { ChatMenuSheet } from "./chat-menu-sheet";
 import { EffortSheet } from "./effort-sheet";
@@ -1117,6 +1119,8 @@ export function AppShell({
     haptic("selection", preferences.haptics);
   }
 
+  const home = view === "chat" && messages.length === 0;
+
   return (
     <div
       data-app-shell="true"
@@ -1151,7 +1155,12 @@ export function AppShell({
         onDelete={deleteChat}
       />
 
-      <header className="navi-header relative z-50 flex min-h-[44px] pt-[env(safe-area-inset-top)] pb-2 shrink-0 items-center justify-between bg-page px-[max(8px,env(safe-area-inset-left))] border-b border-[var(--border-subtle)]" style={{ paddingRight: 'max(8px, env(safe-area-inset-right))' }} data-scrolled={String(scrolled)}>
+      <header
+        className="navi-header relative z-50 flex min-h-[44px] pt-[env(safe-area-inset-top)] pb-2 shrink-0 items-center justify-between bg-page px-[max(8px,env(safe-area-inset-left))] border-b border-[var(--border-subtle)]"
+        style={{ paddingRight: 'max(8px, env(safe-area-inset-right))' }}
+        data-scrolled={String(scrolled)}
+        data-home={String(home)}
+      >
         <div className="flex w-16 items-center justify-start pl-1">
           <button
             type="button"
@@ -1159,14 +1168,18 @@ export function AppShell({
               haptic("impact-light", preferences.haptics);
               setHistoryOpen(true);
             }}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-accent active:opacity-60"
+            className={home
+              ? "home-header-button flex h-11 w-11 items-center justify-center rounded-full text-secondary active:scale-95"
+              : "flex h-11 w-11 items-center justify-center rounded-full text-accent active:opacity-60"}
             aria-label="Open sidebar"
           >
-            <PanelLeft size={28} strokeWidth={1.5} className="-ml-1" />
+            {home
+              ? <Menu size={25} strokeWidth={1.45} />
+              : <PanelLeft size={28} strokeWidth={1.5} className="-ml-1" />}
           </button>
         </div>
 
-        <button
+        {home ? <span className="flex-1" aria-hidden="true" /> : <button
           type="button"
           onClick={() => {
             haptic("selection", preferences.haptics);
@@ -1187,10 +1200,10 @@ export function AppShell({
               {VIEW_SUBTITLES[view]}
             </span>
           )}
-        </button>
+        </button>}
 
         <div className="flex w-16 items-center justify-end pr-2 gap-2">
-          {incognito && (
+          {!home && incognito && (
             <span className="text-accent" title="Incognito">
               <Ghost size={19} strokeWidth={1.8} />
             </span>
@@ -1201,10 +1214,14 @@ export function AppShell({
               haptic("selection", preferences.haptics);
               setComposeMenuOpen(true);
             }}
-            className="flex items-center justify-center text-accent active:opacity-60"
+            className={home
+              ? "home-header-button flex h-11 w-11 items-center justify-center rounded-full active:scale-95"
+              : "flex items-center justify-center text-accent active:opacity-60"}
             aria-label="Compose Menu"
           >
-            <SquarePen size={26} strokeWidth={1.5} />
+            {home
+              ? <NaviMark className="h-[25px] w-[25px] object-contain" label="NaviOS compose menu" />
+              : <SquarePen size={26} strokeWidth={1.5} />}
           </button>
         </div>
       </header>

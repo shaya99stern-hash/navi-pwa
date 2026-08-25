@@ -140,6 +140,27 @@ const MAX_CODE_TOOL_STEPS = 28;
  */
 const REQUEST_BUDGET_MS = 240_000;
 const REVIEW_DELIVERY_RESERVE_MS = 2_000;
+/**
+ * What is left for the answering stream, and why it is derived rather than fixed.
+ *
+ * `timeout.totalMs` is merged into the call's abort signal, so it bounds the
+ * *entire* multi-step loop — every tool step, every tool execution, and every
+ * retry sleep — not one HTTP request. It was a literal 50s inside a function
+ * with `maxDuration = 300` and a stated budget of 240s, and that mismatch was
+ * the single largest source of production failure: `TimeoutError: The operation
+ * was aborted due to timeout`, half of all errors on the deployment.
+ *
+ * It also made retry structurally impossible. The SDK honours `retry-after`
+ * when it is under a minute, and the provider returns values up to 52s — a
+ * sleep that can never finish inside a 50s budget. The rate-limit failures and
+ * the timeouts were one incident counted twice.
+ *
+ * So the stream gets what the request actually has left, minus a reserve for
+ * flushing what it produced, and never less than a floor that still clears the
+ * longest backoff the SDK will accept.
+ */
+const STREAM_DELIVERY_RESERVE_MS = 20_000;
+const MIN_STREAM_BUDGET_MS = 65_000;
 /** Past this many turns a conversation is a context problem, not a hard one. */
 const LONG_CONTEXT_TURNS = 14;
 /**
@@ -2347,6 +2368,25 @@ export async function POST(request: Request): Promise<Response> {
         model: createProviderModel(flightRoute, origin),
         system: flight.system,
         messages: flight.messages,
+        /* The last guard, and the only one that can see intra-turn reasoning.
+           `withoutReasoning` already runs on the inbound history, and it could
+           not reach the message that was actually being rejected: in a tool
+           loop the SDK accumulates its own `step.response.messages` and replays
+           them verbatim on the next step, so the assistant turn carrying the
+           reasoning is generated *after* every inbound guard has run. The
+           openai-compatible provider then serialises those parts as
+           `reasoning_content`, which Groq accepts on the way out and refuses on
+           the way in:
+
+               'messages.2' : for 'role:assistant' the following must be
+               satisfied[('messages.2' : property 'reasoning_content' is
+               unsupported)]
+
+           `messages.2` is exactly the step-one assistant turn. Every multi-turn
+           tool conversation broke there. `prepareStep` is the one hook that
+           runs on each step's input, which is the only place this can be
+           caught. */
+        prepareStep: ({ messages: stepMessages }) => ({ messages: withoutReasoning(stepMessages) }),
         ...(attemptToolNames.length
           ? { tools: flight.tools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
           : {}),
@@ -2370,8 +2410,14 @@ export async function POST(request: Request): Promise<Response> {
           });
           return providerOptions ? { providerOptions } : {};
         })(),
-        maxRetries: 1,
-        timeout: { totalMs: 50_000, chunkMs: 14_000 },
+        maxRetries: 2,
+        timeout: {
+          totalMs: Math.max(
+            MIN_STREAM_BUDGET_MS,
+            REQUEST_BUDGET_MS - (Date.now() - requestStartedAt) - STREAM_DELIVERY_RESERVE_MS
+          ),
+          chunkMs: 14_000
+        },
         abortSignal: request.signal,
         experimental_transform: smoothStream({ delayInMs: 26, chunking: "word" }),
         onError: ({ error }) => console.error("Navi Soul provider stream failed:", error)

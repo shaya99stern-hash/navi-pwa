@@ -12,10 +12,23 @@
  * sequences rather than inferred from a live provider.
  */
 
-/** Chunk types that mean this lane has produced something a person would see. */
+/**
+ * Chunk types that mean this lane has produced something a person would see.
+ *
+ * `reasoning-delta` is deliberately absent. On a reasoning model the *first*
+ * chunk of every stream is reasoning, so counting it here committed the lane
+ * before a single character of answer existed — which quietly disabled
+ * fallback for exactly the models most likely to need it. A failure arriving
+ * at step two then surfaced as half an answer plus an error card instead of a
+ * clean switch to a healthy provider.
+ *
+ * Reasoning is intermediate work, not the answer, and it is buffered as
+ * preamble and replayed the moment the lane does commit — so nothing is lost
+ * visually, and `MAX_PREAMBLE_CHUNKS` still bounds how long a lane may
+ * deliberate before it is treated as committed anyway.
+ */
 export const COMMITTING_CHUNK_TYPES = new Set([
   "text-delta",
-  "reasoning-delta",
   "tool-input-start",
   "tool-input-delta",
   "tool-input-available",

@@ -64,6 +64,30 @@ async function main() {
   ]));
   check("tool call commits the lane", tooling.committed, true);
 
+  /* Reasoning is not an answer. On a reasoning model the first chunk of every
+     stream is `reasoning-delta`, so treating it as content committed the lane
+     before anything readable existed and disabled fallback for exactly the
+     models that fail most. A failure arriving after the reasoning must still
+     be recoverable. */
+  const deliberating = await readUntilCommitted(readerOf([
+    { type: "start" },
+    { type: "reasoning-start" },
+    { type: "reasoning-delta" },
+    { type: "reasoning-delta" },
+    { type: "error", errorText: "Rate limit reached." }
+  ]));
+  check("reasoning alone does not commit the lane", deliberating.committed, false);
+  check("a failure after reasoning is still recoverable", deliberating.failure?.message, "Rate limit reached.");
+
+  /* ...and once the answer does start, the reasoning that preceded it is
+     replayed rather than dropped. */
+  const thenAnswered = await readUntilCommitted(readerOf([
+    { type: "start" },
+    { type: "reasoning-delta" },
+    { type: "text-delta" }
+  ]));
+  check("reasoning is replayed once the lane commits", thenAnswered.preamble.map((c) => c.type), ["start", "reasoning-delta", "text-delta"]);
+
   // A lane that only ever emits preamble is delivered rather than discarded.
   const chatty = await readUntilCommitted(readerOf(
     Array.from({ length: MAX_PREAMBLE_CHUNKS + 4 }, () => ({ type: "start-step" }))

@@ -59,12 +59,11 @@ check("the name is accepted", /name\?: string/.test(launch), true);
 
 /* ── One left edge, in the greeting and in the header ────────────────────── */
 
-/* Both used to be centred, and both sat above left-aligned content: the
-   greeting above the suggestion cards, the header title above the thread. Two
-   competing edges on one screen. Reading on a phone starts at the left, so
-   that is where both now begin. */
-check("the greeting row is left-aligned", /flex w-full items-center justify-center/.test(launch), false);
-check("the greeting keeps the spark beside it", /flex items-center gap-3 pl-0\.5/.test(launch), true);
+/* The empty home now follows the supplied launch reference: the welcome line
+   is centred and the product mark occupies the top-right circular control. */
+check("the greeting row is centred", /items-center justify-center text-center/.test(launch), true);
+check("the greeting no longer duplicates the mark", launch.includes("/brand-spark.png"), false);
+check("the header carries the current mark", shell.includes("<NaviMark") && shell.includes('data-home={String(home)}'), true);
 check("the greeting is no longer 2rem", launch.includes("text-[2rem]/[2.375rem]"), false);
 
 /* In flow and left-aligned. The absolute centring it replaced is what forced

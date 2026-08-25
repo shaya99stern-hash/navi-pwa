@@ -66,7 +66,7 @@ export type DiscoveryResult = {
  */
 const STALE_FALLBACK_IDS = [
   "deepseek/deepseek-r1:free",
-  "qwen/qwen-2.5-coder-32b-instruct:free",
+  "qwen/qwen3-coder:free",
   "meta-llama/llama-3.3-70b-instruct:free"
 ];
 

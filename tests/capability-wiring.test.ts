@@ -109,8 +109,9 @@ check("twenty APIs add exactly the same three tools",
 /* ── Read from the production wiring ───────────────────────────────────────── */
 
 const root = process.cwd();
-const route = readFileSync(join(root, "app/api/chat/route.ts"), "utf8");
-const shell = readFileSync(join(root, "app/components/app-shell.tsx"), "utf8");
+const readSource = (relative: string) => readFileSync(join(root, relative), "utf8").replace(/\r\n?/g, "\n");
+const route = readSource("app/api/chat/route.ts");
+const shell = readSource("app/components/app-shell.tsx");
 
 check("the route validates what the device sent", /parseCapabilities\(body\.capabilities\)/.test(route), true);
 /* Same gate as the connectors beside them: "ask" means this chat does not reach

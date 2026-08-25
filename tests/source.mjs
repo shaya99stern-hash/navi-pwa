@@ -55,7 +55,10 @@ export function sourceBody(source) {
 
 /** Read a repository file, ready to assert against. */
 export function read(relativePath) {
-  const source = readFileSync(join(process.cwd(), relativePath), "utf8");
+  /* Source-shape assertions are about tokens and layout, not the checkout's
+     newline convention. Normalising here also keeps mixed-line-ending files
+     from making a nearby, unrelated edit change what a test can see. */
+  const source = readFileSync(join(process.cwd(), relativePath), "utf8").replace(/\r\n?/g, "\n");
   return { source, body: sourceBody(source), code: stripComments(source) };
 }
 

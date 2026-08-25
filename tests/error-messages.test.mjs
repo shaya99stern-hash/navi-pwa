@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
    that no provider text reaches the user: a provider echoed its own retirement
    notice into a chat bubble, naming a third party and telling the user nothing
    they could act on. */
-const src = readFileSync('app/api/chat/route.ts', 'utf8');
+const src = readFileSync('app/api/chat/route.ts', 'utf8').replace(/\r\n?/g, '\n');
 const body = src.slice(src.indexOf('function streamError'), src.indexOf('\n}\n', src.indexOf('function streamError')) + 2)
   .replace(/: unknown/g, '').replace(/: string/g, '');
 const streamError = new Function(`${body}; return streamError;`)();

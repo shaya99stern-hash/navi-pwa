@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isLessonName } from "./lesson";
+import { readPostgrestPayload } from "./postgrest-response";
 
 /**
  * Skills Navi Soul has learned and keeps.
@@ -127,8 +128,7 @@ async function request(
           : `Supabase refused the write: ${response.status}${detail ? ` ${detail}` : ""}`);
       return null;
     }
-    if (response.status === 204) return "ok";
-    return await response.json();
+    return (await readPostgrestPayload(response)) ?? "ok";
   } catch (error) {
     onFailure?.(error instanceof Error && error.name === "AbortError"
       ? "Cloud memory timed out."

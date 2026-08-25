@@ -8,6 +8,7 @@ import {
   SquareTerminal,
   FileText,
   LoaderCircle,
+  Mic,
   Plus,
   Square,
   Volume2,
@@ -231,7 +232,7 @@ export function ComposerDock({
 
   const placeholder = attachmentCount
     ? "Add instructions for these files"
-    : hasMessages ? "Write a message…" : "How can I help you today?";
+    : hasMessages ? "Write a message…" : "";
 
   const spokenBy = conversation.voice && conversation.phase === "speaking"
     ? conversation.voice.engine === "premium"
@@ -362,6 +363,7 @@ export function ComposerDock({
     <>
       <div
         ref={dockRef}
+        data-home={hasMessages ? "false" : "true"}
         className={`navi-composer-dock relative z-40 shrink-0 border-t transition-colors duration-150 ${dragActive ? "border-accent bg-accent/5" : "border-[var(--border-subtle)]"}`}
         onDragEnter={dragOver}
         onDragOver={dragOver}
@@ -443,6 +445,9 @@ export function ComposerDock({
           <form
             onSubmit={submit}
             data-focused={focused ? "true" : "false"}
+            data-home={hasMessages ? "false" : "true"}
+            data-talking={talking ? "true" : "false"}
+            data-has-send={value.trim() || attachmentCount || generating ? "true" : "false"}
             className={`navi-composer flex flex-col p-2 ${sending ? "scale-[0.985]" : "scale-100"}`}
           >
             <textarea
@@ -473,7 +478,7 @@ export function ComposerDock({
               className="max-h-[168px] min-h-11 w-full overflow-y-auto bg-transparent px-3 pb-1 pt-2.5 text-[17px] tracking-[-0.41px] text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
             />
 
-            <div className="mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
+            <div className="navi-composer-actions mt-0.5 flex min-h-11 items-center gap-0.5 px-1 pb-1">
               {talking ? null : (
               <button
                 type="button"
@@ -483,7 +488,7 @@ export function ComposerDock({
                   fileInputRef.current?.click();
                 }}
                 disabled={blocked || generating}
-                className="composer-action"
+                className="home-attachment-action composer-action"
                 aria-label="Add photos, camera, and files"
               >
                 <Plus size={22} strokeWidth={1.5} />
@@ -523,7 +528,7 @@ export function ComposerDock({
                   onToggleResearch();
                 }}
                 disabled={blocked || generating}
-                className={`composer-action ${!searchConfigured ? "text-disabled" : research ? "text-accent" : ""}`}
+                className={`composer-secondary-action composer-action ${!searchConfigured ? "text-disabled" : research ? "text-accent" : ""}`}
                 aria-label={!searchConfigured
                   ? "Research unavailable — no search provider is configured"
                   : research ? "Research is on. Turn off web search" : "Research is off. Turn on web search"}
@@ -548,7 +553,7 @@ export function ComposerDock({
                 aria-checked={codeMode}
                 onClick={() => { haptic("selection", haptics); onToggleCode(); }}
                 disabled={blocked || generating}
-                className={`composer-action ${codeMode ? "text-accent" : ""}`}
+                className={`composer-secondary-action composer-action ${codeMode ? "text-accent" : ""}`}
                 aria-label={codeMode ? "Code mode is on. Switch back to chat" : "Code mode is off. Turn on code mode"}
               >
                 <SquareTerminal size={20} strokeWidth={1.5} />
@@ -559,7 +564,7 @@ export function ComposerDock({
               <button
                 type="button"
                 onClick={onOpenEffort}
-                className="flex items-center gap-1 px-2 text-[13px] font-medium text-tertiary hover:text-secondary active:opacity-60 transition-colors"
+                className="composer-effort-action flex items-center gap-1 px-2 text-[13px] font-medium text-tertiary hover:text-secondary active:opacity-60 transition-colors"
                 aria-label={`Effort: ${effortLabel}. Change effort`}
               >
                 <span className="truncate">{effortLabel}</span>
@@ -567,11 +572,11 @@ export function ComposerDock({
               </button>
               )}
 
-              {talking ? null : <span className="min-w-0 flex-1" />}
+              {talking ? null : <span className="composer-row-spacer min-w-0 flex-1" />}
 
               {talking ? (
                 <span
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-accent" : "ring-transparent"}`}
+                  className={`composer-voice-status flex min-w-0 flex-1 items-center gap-2 rounded-full bg-elev-2 px-2 py-1 ring-1 transition-colors duration-150 ${conversation.hearing ? "ring-accent" : "ring-transparent"}`}
                   role="status"
                   aria-label={CONVERSATION_PLACEHOLDER[conversation.phase]}
                 >
@@ -602,11 +607,16 @@ export function ComposerDock({
                 </span>
               ) : null}
               {talking ? null : (
+                <span className="home-mic" aria-hidden="true">
+                  <Mic size={20} strokeWidth={1.6} />
+                </span>
+              )}
+              {talking ? null : (
               <button
                 type="button"
                 onClick={conversation.toggle}
                 disabled={blocked || generating || !online}
-                className="composer-action"
+                className="composer-voice-action composer-action"
                 aria-label="Start a voice conversation"
                 aria-pressed={false}
               >
@@ -618,7 +628,7 @@ export function ComposerDock({
                   type={generating ? "button" : "submit"}
                   onClick={generating ? onStop : undefined}
                   disabled={!generating && !canSend}
-                  className={`flex h-[34px] w-[34px] ml-1 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-white shadow-sm active:scale-95 active:bg-opacity-80" : "bg-elev-3 text-disabled"}`}
+                  className={`composer-send-action flex h-[34px] w-[34px] ml-1 shrink-0 items-center justify-center rounded-full transition-all duration-[120ms] ${generating || canSend ? "bg-accent text-white shadow-sm active:scale-95 active:bg-opacity-80" : "bg-elev-3 text-disabled"}`}
                   aria-label={generating ? "Stop response" : "Send message"}
                 >
                   {generating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={20} strokeWidth={2} />}

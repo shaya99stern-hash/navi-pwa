@@ -220,7 +220,10 @@ export const ROUTES = {
   },
   openRouterCoding: {
     provider: "openrouter",
-    model: process.env.OPENROUTER_CODE_MODEL ?? "qwen/qwen-2.5-coder-32b-instruct:free",
+    /* `qwen/qwen-2.5-coder-32b-instruct:free` was retired. OpenRouter answers
+       404 with the replacement in the message itself, and production was still
+       hitting it on the current deployment. */
+    model: process.env.OPENROUTER_CODE_MODEL ?? "qwen/qwen3-coder:free",
     label: "OpenRouter coding",
     capability: "coding"
   },

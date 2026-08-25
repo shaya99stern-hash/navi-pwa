@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-const src = readFileSync('app/api/chat/route.ts', 'utf8');
+const src = readFileSync('app/api/chat/route.ts', 'utf8').replace(/\r\n?/g, '\n');
 const start = src.indexOf('/* Operations that only make sense');
 const end = src.indexOf('\n}\n', src.indexOf('function imageGenerationIntent')) + 2;
 const body = src.slice(start, end)
