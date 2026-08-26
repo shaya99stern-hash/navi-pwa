@@ -139,5 +139,7 @@ export type SubcallPurpose = keyof TurnBudget["subcallTokens"];
 /** Mechanical planner/verifier calls never inherit the full answer allowance. */
 export function subcallOutputBudget(budget: TurnBudget, purpose: SubcallPurpose, providerRoom: number): number {
   const target = budget.subcallTokens[purpose];
-  return Math.max(128, Math.min(target, providerRoom));
+  if (!Number.isFinite(providerRoom)) return target;
+  if (providerRoom <= 0) return 1;
+  return Math.max(1, Math.min(target, Math.floor(providerRoom)));
 }
