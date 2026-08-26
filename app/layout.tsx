@@ -17,6 +17,7 @@ import {
 } from "@/lib/auth/session";
 import { SPLASH_SCREENS } from "@/lib/ui/splash-screens";
 import "./globals.css";
+import "./theme-accessibility.css";
 import "./home-composer-reference.css";
 import "./settings-claude.css";
 import "./shell.css";
