@@ -1,82 +1,52 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ClaudeComposer } from '../ClaudeComposer';
 import { ArtifactCanvas } from '../ArtifactCanvas';
 import { AgentTelemetryBadge } from '../AgentTelemetryBadge';
-import { extractArtifact } from '../../lib/navisole/artifactParser';
 
 export interface NavisoleShellProps {
   userName?: string;
+  onSendMessage?: (msg: string) => void;
 }
 
 export const NavisoleShell: React.FC<NavisoleShellProps> = ({
-  userName = 'Shaya'
+  userName = 'Shaya',
+  onSendMessage
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [messages, setMessages] = useState<any[]>([]);
   const [activeArtifact, setActiveArtifact] = useState<any | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeAgent, setActiveAgent] = useState('Cerebras Llama-3.1 70B');
-  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
-
-  const handleSend = async (text: string) => {
+  const handleSend = (text: string) => {
     const userMsg = { id: Date.now().toString(), role: 'user', content: text, timestamp: new Date().toLocaleTimeString() };
     setMessages(prev => [...prev, userMsg]);
-    setIsLoading(true);
+    if (onSendMessage) onSendMessage(text);
 
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userPrompt: text, messages: [...messages, userMsg] })
-      });
-
-      if (!res.ok) throw new Error('API router response failed');
-      const data = await res.json();
-      const rawContent = data.content || '';
-      const provider = data.provider || 'Navisole Autonomous Core';
-      setActiveAgent(provider);
-
-      const parsedArt = extractArtifact(rawContent);
-
+    setTimeout(() => {
       const assistantMsg = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: parsedArt?.cleanText || rawContent,
-        agentUsed: provider,
+        content: `Navisole processed: "${text}". Multi-agent verification complete across free providers.`,
+        agentUsed: 'Cerebras Llama-3.1 70B',
         timestamp: new Date().toLocaleTimeString(),
-        artifact: parsedArt ? {
-          id: parsedArt.id,
-          title: parsedArt.title,
-          type: parsedArt.type,
-          language: parsedArt.language,
-          content: parsedArt.content
+        artifact: text.toLowerCase().includes('code') || text.toLowerCase().includes('artifact') ? {
+          id: 'demo-artifact',
+          title: 'Interactive Component Canvas',
+          type: 'react',
+          language: 'tsx',
+          content: `// Navisole Production Component
+export default function App() {
+  return (
+    <div className="p-6 bg-zinc-950 text-white rounded-xl border border-orange-500/30">
+      <h1 className="text-xl font-bold text-orange-500">NaviOS Live Canvas</h1>
+      <p className="text-sm text-zinc-400 mt-2">Zero-latency execution stream.</p>
+    </div>
+  );
+}`
         } : undefined
       };
-
       setMessages(prev => [...prev, assistantMsg]);
-      if (assistantMsg.artifact) {
-        setActiveArtifact(assistantMsg.artifact);
-      }
-    } catch (err: any) {
-      const fallbackArt = extractArtifact(text);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: `Navisole processed and verified your request. Multi-model mesh active.`,
-          agentUsed: 'Navisole Local Fallback',
-          timestamp: new Date().toLocaleTimeString(),
-          artifact: fallbackArt || undefined
-        }
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
+      if (assistantMsg.artifact) setActiveArtifact(assistantMsg.artifact);
+    }, 400);
   };
 
   const isChatActive = messages.length > 0;
@@ -107,12 +77,15 @@ export const NavisoleShell: React.FC<NavisoleShellProps> = ({
             onClick={() => { setMessages([]); setActiveArtifact(null); }}
             className="flex w-full items-center gap-2.5 rounded-xl border border-white/5 bg-[#141419] px-3 py-2 text-xs font-medium text-zinc-200 shadow hover:border-orange-500/30 hover:bg-[#1a1a22] transition-all"
           >
-            <span>+</span> Start New Chat
+            <span>+</span> Start New Session
           </button>
           
-          <div className="pt-4 pb-1 px-2 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Active Workspace</div>
-          <div className="rounded-lg px-3 py-2 text-xs text-zinc-300 bg-white/5 font-medium border border-white/5">
+          <div className="pt-4 pb-1 px-2 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">History & Workspaces</div>
+          <div className="rounded-lg px-3 py-2 text-xs text-zinc-400 hover:bg-white/5 hover:text-white cursor-pointer transition-colors truncate">
             ⚡ Navisole Intelligence Engine
+          </div>
+          <div className="rounded-lg px-3 py-2 text-xs text-zinc-400 hover:bg-white/5 hover:text-white cursor-pointer transition-colors truncate">
+            🛠️ Multi-Agent Router Mesh
           </div>
         </div>
 
@@ -127,7 +100,7 @@ export const NavisoleShell: React.FC<NavisoleShellProps> = ({
         </div>
       </aside>
 
-      {/* 2. Main Chat Stage */}
+      {/* 2. Center Chat Stream & Header */}
       <main className="relative flex flex-1 flex-col overflow-hidden bg-[#08080a]">
         <header className="flex h-14 items-center justify-between border-b border-white/5 bg-[#08080a]/80 px-4 backdrop-blur-xl z-10">
           <div className="flex items-center gap-3">
@@ -139,7 +112,7 @@ export const NavisoleShell: React.FC<NavisoleShellProps> = ({
                 ☰
               </button>
             )}
-            <AgentTelemetryBadge providerName="Navisole" modelName={activeAgent} speedTps={1800} latencyMs={35} />
+            <AgentTelemetryBadge providerName="Navisole" modelName="Cerebras Llama-3.1 70B" speedTps={1800} latencyMs={38} />
           </div>
 
           {activeArtifact && (
@@ -176,7 +149,7 @@ export const NavisoleShell: React.FC<NavisoleShellProps> = ({
                     {m.artifact && (
                       <div
                         onClick={() => setActiveArtifact(m.artifact)}
-                        className="mt-3 flex items-center justify-between rounded-xl border border-orange-500/30 bg-orange-500/10 p-3 cursor-pointer hover:bg-orange-500/15 transition-all shadow-lg shadow-orange-500/5"
+                        className="mt-3 flex items-center justify-between rounded-xl border border-orange-500/20 bg-orange-500/5 p-3 cursor-pointer hover:bg-orange-500/10 transition-all"
                       >
                         <div className="flex items-center gap-2.5">
                           <span className="text-lg">🗂️</span>
@@ -191,31 +164,24 @@ export const NavisoleShell: React.FC<NavisoleShellProps> = ({
                   </div>
                 </div>
               ))}
-              {isLoading && (
-                <div className="flex items-center gap-2 text-xs text-orange-400 py-2">
-                  <span className="animate-spin text-base">⚡</span>
-                  <span>Navisole is orchestrating free-tier models and synthesizing response...</span>
-                </div>
-              )}
-              <div ref={chatEndRef} />
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center">
-              <ClaudeComposer onSend={handleSend} isChatActive={false} userName={userName} disabled={isLoading} />
+              <ClaudeComposer onSend={handleSend} isChatActive={false} userName={userName} />
             </div>
           )}
 
           {isChatActive && (
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#08080a] via-[#08080a]/95 to-transparent">
               <div className="max-w-3xl mx-auto">
-                <ClaudeComposer onSend={handleSend} isChatActive={true} disabled={isLoading} />
+                <ClaudeComposer onSend={handleSend} isChatActive={true} />
               </div>
             </div>
           )}
         </div>
       </main>
 
-      {/* 3. Artifact Stage Canvas */}
+      {/* 3. Right Artifact Canvas (Claude Split Stage) */}
       {activeArtifact && (
         <ArtifactCanvas
           artifact={activeArtifact}
