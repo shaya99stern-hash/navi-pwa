@@ -12,7 +12,7 @@ interface ArtifactCanvasProps {
 }
 
 export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({ artifact, onClose }) => {
-  const [tab, setTab] = useState<'preview' | 'code'>('code');
+  const [tab, setTab] = useState<'preview' | 'code'>('preview');
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -21,26 +21,20 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({ artifact, onClos
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const isHtml = artifact.type === 'html' || artifact.language === 'html' || artifact.content.includes('<html') || artifact.content.includes('<div');
+
   return (
-    <aside className="relative flex w-[480px] lg:w-[560px] flex-col border-l border-white/5 bg-[#0d0d12] shadow-2xl transition-all duration-300">
-      <div className="flex h-14 items-center justify-between border-b border-white/5 px-4 bg-[#101016]">
+    <aside className="relative flex w-full md:w-[480px] lg:w-[600px] flex-col border-l border-white/5 bg-[#0e0e12] shadow-2xl transition-all duration-300">
+      <div className="flex h-14 items-center justify-between border-b border-white/5 px-4 bg-[#121218]">
         <div className="flex items-center gap-2">
           <span className="text-base">🗂️</span>
           <div className="flex flex-col">
             <h3 className="text-xs font-semibold text-white truncate max-w-[200px]">{artifact.title}</h3>
-            <span className="text-[10px] text-zinc-400 capitalize">{artifact.language}</span>
+            <span className="text-[10px] text-zinc-400 capitalize">{artifact.language} Canvas</span>
           </div>
         </div>
 
         <div className="flex items-center rounded-lg bg-zinc-900 border border-white/5 p-0.5">
-          <button
-            onClick={() => setTab('code')}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-              tab === 'code' ? 'bg-orange-500 text-white shadow' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Code
-          </button>
           <button
             onClick={() => setTab('preview')}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
@@ -48,6 +42,14 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({ artifact, onClos
             }`}
           >
             Preview
+          </button>
+          <button
+            onClick={() => setTab('code')}
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+              tab === 'code' ? 'bg-orange-500 text-white shadow' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Code
           </button>
         </div>
 
@@ -67,15 +69,24 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({ artifact, onClos
         </div>
       </div>
 
-      <div className="relative flex-1 overflow-auto bg-[#08080a] p-4">
-        {tab === 'code' ? (
-          <pre className="font-mono text-xs text-zinc-200 leading-relaxed overflow-x-auto">
+      <div className="relative flex-1 overflow-hidden bg-[#08080a]">
+        {tab === 'preview' ? (
+          isHtml ? (
+            <iframe
+              srcDoc={artifact.content}
+              sandbox="allow-scripts allow-modals"
+              className="h-full w-full border-none bg-white"
+              title="Live Artifact Preview"
+            />
+          ) : (
+            <div className="p-6 text-sm text-zinc-400 font-mono">
+              <pre><code>{artifact.content}</code></pre>
+            </div>
+          )
+        ) : (
+          <pre className="h-full w-full overflow-auto p-4 font-mono text-xs text-zinc-200 leading-relaxed bg-[#0a0a0e]">
             <code>{artifact.content}</code>
           </pre>
-        ) : (
-          <div className="flex h-full w-full items-center justify-center rounded-xl border border-white/5 bg-zinc-950 p-6 text-center text-xs text-zinc-400">
-            Interactive Preview Sandbox
-          </div>
         )}
       </div>
     </aside>
