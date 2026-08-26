@@ -1,0 +1,14 @@
+/* Accessibility corrections that intentionally override the legacy light-theme
+   values in globals.css. Keep these values mirrored in lib/ui/design-tokens.ts
+   and auth-shell.tsx until the palette is generated at build time. */
+:root[data-theme="light"] {
+  /* 4.62:1 on #FAF9F5 (normal-size WCAG AA). */
+  --text-tertiary: #74716A;
+  /* 4.98:1 on #FAF9F5 (normal-size WCAG AA). */
+  --accent-primary-rgb: 173 81 50;
+  --accent-primary: rgb(var(--accent-primary-rgb));
+  --accent-primary-pressed: #963F25;
+  --accent-secondary: #8F4A34;
+  --selection-bg: rgb(var(--accent-primary-rgb) / 0.16);
+  --brand-glow: rgb(var(--accent-primary-rgb) / 0.10);
+}
