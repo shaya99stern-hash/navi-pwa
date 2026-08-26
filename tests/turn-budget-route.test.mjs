@@ -12,14 +12,25 @@ function check(label, pattern) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}`);
 }
 
+function checkAbsent(label, pattern) {
+  const ok = !pattern.test(route);
+  if (ok) passed += 1;
+  else failed += 1;
+  console.log(`${ok ? "PASS" : "FAIL"}  ${label}`);
+}
+
 console.log("--- the live chat executor must obey the compiled turn budget ---");
 check(
   "compiles a budget for the current turn",
   /\bcompileTurnBudget\s*\(\s*\{[\s\S]{0,700}?request:\s*lastUserText[\s\S]{0,700}?dispatch[\s\S]{0,700}?artifactRequested[\s\S]{0,700}?hasFiles[\s\S]{0,700}?\}\s*\)/
 );
 check(
-  "caps model-visible tools with the turn budget",
-  /\bcapToolsForTurn\s*\(\s*buildToolset\(toolsetContext\)\s*,\s*turnBudget\.maxTools\s*\)/
+  "keeps the registry as the sole authority for model-visible tools",
+  /const\s+availableTools\s*=\s*buildToolset\(toolsetContext\)\s*;/
+);
+checkAbsent(
+  "does not blindly re-trim the registry's relevance-aware toolset",
+  /\bcapToolsForTurn\s*\(/
 );
 check(
   "reserves only the turn's minimum reply room",
