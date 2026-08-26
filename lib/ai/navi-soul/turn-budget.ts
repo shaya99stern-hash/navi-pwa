@@ -1,5 +1,3 @@
-import type { ToolSet } from "ai";
-
 export type TurnBudgetClass = "trivial" | "standard" | "research" | "artifact" | "code" | "deep";
 export type TurnDispatch = "general" | "research" | "reasoning" | "code";
 export type TurnEffort = "low" | "medium" | "high";
@@ -21,9 +19,7 @@ export type TurnBudget = {
   maxOutputTokens: number;
   /** Smallest useful reply worth reserving while fitting a provider payload. */
   minOutputTokens: number;
-  /** Maximum model-visible tool schemas. Earlier registry entries keep priority. */
-  maxTools: number;
-  /** Maximum tool round trips before the answer must finish. */
+  /** Maximum tool round trips before the answer must finish. Tool visibility belongs to the relevance-aware registry. */
   maxToolSteps: number;
   /** Maximum model calls inside a mission/decomposition loop. */
   maxEngineCalls: number;
@@ -44,7 +40,6 @@ const BASE: Record<TurnBudgetClass, TurnBudget> = {
     class: "trivial",
     maxOutputTokens: 512,
     minOutputTokens: 192,
-    maxTools: 0,
     maxToolSteps: 1,
     maxEngineCalls: 1,
     subcallTokens: { decompose: 384, step: 512, verify: 384, revise: 512, fast: 384 }
@@ -53,7 +48,6 @@ const BASE: Record<TurnBudgetClass, TurnBudget> = {
     class: "standard",
     maxOutputTokens: 1_800,
     minOutputTokens: 512,
-    maxTools: 6,
     maxToolSteps: 4,
     maxEngineCalls: 3,
     subcallTokens: { decompose: 600, step: 1_200, verify: 600, revise: 1_400, fast: 600 }
@@ -62,7 +56,6 @@ const BASE: Record<TurnBudgetClass, TurnBudget> = {
     class: "research",
     maxOutputTokens: 3_600,
     minOutputTokens: 900,
-    maxTools: 10,
     maxToolSteps: 8,
     maxEngineCalls: 6,
     subcallTokens: { decompose: 750, step: 2_000, verify: 800, revise: 2_400, fast: 700 }
@@ -71,7 +64,6 @@ const BASE: Record<TurnBudgetClass, TurnBudget> = {
     class: "artifact",
     maxOutputTokens: 4_800,
     minOutputTokens: 1_400,
-    maxTools: 8,
     maxToolSteps: 8,
     maxEngineCalls: 6,
     subcallTokens: { decompose: 700, step: 2_600, verify: 800, revise: 2_800, fast: 650 }
@@ -80,7 +72,6 @@ const BASE: Record<TurnBudgetClass, TurnBudget> = {
     class: "code",
     maxOutputTokens: 6_000,
     minOutputTokens: 1_200,
-    maxTools: 14,
     maxToolSteps: 14,
     maxEngineCalls: 10,
     subcallTokens: { decompose: 800, step: 3_000, verify: 900, revise: 3_200, fast: 700 }
@@ -89,7 +80,6 @@ const BASE: Record<TurnBudgetClass, TurnBudget> = {
     class: "deep",
     maxOutputTokens: 6_400,
     minOutputTokens: 1_200,
-    maxTools: 12,
     maxToolSteps: 12,
     maxEngineCalls: 10,
     subcallTokens: { decompose: 850, step: 3_000, verify: 900, revise: 3_200, fast: 700 }
@@ -128,7 +118,12 @@ function withPresentationAdjustments(budget: TurnBudget, input: TurnBudgetInput)
 /**
  * Compile one user turn into deterministic resource limits before any provider
  * request is assembled. A simple greeting must not inherit the same 8k output
- * reserve, tool roster, and agent-loop depth as repository surgery.
+ * reserve or agent-loop depth as repository surgery.
+ *
+ * Tool availability is intentionally not part of this object. The tool registry
+ * already owns relevance filtering, per-mode ceilings, connector priority, and
+ * account-tool preservation. Keeping one owner prevents a second blind cap from
+ * silently removing the exact tools a relevant turn needs.
  *
  * This is intentionally not an LLM classifier. Routing may use models elsewhere,
  * but budgeting is a safety/performance boundary and therefore stays cheap,
@@ -137,14 +132,6 @@ function withPresentationAdjustments(budget: TurnBudget, input: TurnBudgetInput)
 export function compileTurnBudget(input: TurnBudgetInput): TurnBudget {
   const klass = classifyTurn(input);
   return withPresentationAdjustments(BASE[klass], input);
-}
-
-/** Keep the registry's priority order while removing schemas this turn cannot justify. */
-export function capToolsForTurn<T extends ToolSet>(tools: T, maxTools: number): ToolSet {
-  if (maxTools <= 0) return {};
-  const entries = Object.entries(tools);
-  if (entries.length <= maxTools) return tools;
-  return Object.fromEntries(entries.slice(0, maxTools)) as ToolSet;
 }
 
 export type SubcallPurpose = keyof TurnBudget["subcallTokens"];
