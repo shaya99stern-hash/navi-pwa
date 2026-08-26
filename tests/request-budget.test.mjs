@@ -32,9 +32,9 @@ check("the output cap is no longer a flat constant",
 check("it is sized per attempt",
   /maxOutputTokens: attemptOutputTokens/.test(chat.code), true);
 check("from what the route has left after the prompt",
-  /attemptOutputTokens = Math\.min\(MAX_OUTPUT_TOKENS, ceiling - input\.total\)/.test(chat.code), true);
+  /attemptOutputTokens = Math\.min\(turnBudget.maxOutputTokens, ceiling - input\.total\)/.test(chat.code), true);
 check("with a floor, so a route is never sent a request it cannot answer",
-  /attemptOutputTokens < MIN_OUTPUT_TOKENS/.test(chat.code), true);
+  /attemptOutputTokens < turnBudget.minOutputTokens/.test(chat.code), true);
 
 /* ── The budget counts the whole payload ────────────────────────────────── */
 
@@ -49,7 +49,7 @@ check("the system prompt is measured before the request is sent",
 check("so are the tool schemas",
   /estimateToolTokens\(attemptTools\)/.test(chat.code), true);
 check("and compaction is given the budget that remains",
-  /ceiling - fixed - MIN_OUTPUT_TOKENS/.test(chat.code), true);
+  /ceiling - fixed - turnBudget.minOutputTokens/.test(chat.code), true);
 
 /* The system prompt has to be built before it can be weighed. Inlining it back
    into the `streamText` call would silently restore the blind spot. */
