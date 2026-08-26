@@ -1,0 +1,16 @@
+/* UI truthfulness fixes.
+   TextSegmented already exposes the correct selected state through
+   aria-checked. Its original class expression treated any non-empty value as
+   selected, so every segment could look active at the same time. Keep the
+   visual treatment bound to the semantic state until the control is split out
+   of the large settings sheet. */
+[role="radiogroup"] > [role="radio"][aria-checked="false"] {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-secondary) !important;
+}
+
+[role="radiogroup"] > [role="radio"][aria-checked="true"] {
+  background: var(--bg-elev-1) !important;
+  color: var(--text-primary) !important;
+}
