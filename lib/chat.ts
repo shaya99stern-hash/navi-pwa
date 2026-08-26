@@ -13,16 +13,15 @@ export const NAVI_MODES: Array<{ id: NaviMode; label: string; detail: string }> 
   { id: "code", label: "NaviOS Code", detail: "Software, debugging, repositories" }
 ];
 
-/** Stable Navi Soul routes plus direct-provider pins used by Diagnostics. */
+/** Stable Navi Soul strategies plus direct-provider pins used by Diagnostics. */
 export const DIAGNOSTIC_ROUTES: Array<{ id: ModelPreset; label: string }> = [
-  { id: "navi-soul", label: "Automatic" },
-  { id: "navi-soul-deep", label: "Staged council" },
-  { id: "navi-soul-direct", label: "Parallel council" },
+  { id: "navi-soul", label: "Auto" },
+  { id: "navi-soul-deep", label: "Deep" },
+  { id: "navi-soul-direct", label: "Team" },
   { id: "huggingface-direct", label: "Hugging Face" },
   { id: "gemini-direct", label: "Gemini" },
   { id: "groq-direct", label: "Groq" }
 ];
-
 
 export const RESPONSE_STYLES: Array<{ id: ResponseStyle; label: string }> = [
   { id: "balanced", label: "Balanced" },
@@ -101,7 +100,6 @@ export function chatTitle(messages: UIMessage[]): string {
   const first = messages.find((message) => message.role === "user");
   const raw = first ? messageText(first) : "";
   if (!raw) return "New chat";
-  // First sentence only, without its lead-in or closing punctuation.
   const sentence = (raw.split(/(?<=[.?!])\s+/, 1)[0] ?? raw).replace(/\s+/g, " ").trim();
   const stripped = sentence.replace(TITLE_LEAD_IN, "").replace(/[.?!,;:\s]+$/, "").trim();
   const body = stripped.length >= 3 ? stripped : sentence.replace(/[.?!,;:\s]+$/, "");
