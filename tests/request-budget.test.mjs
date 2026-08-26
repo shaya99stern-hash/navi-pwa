@@ -26,7 +26,9 @@ const models = read("app/api/models/route.ts");
 
 /* The single line that broke production. A flat 8,000-token reservation is the
    whole of Groq's free-tier per-minute allowance, so every request — including
-   a one-word question — was over the limit before the prompt was counted. */
+   a one-word question — was over the limit before the prompt was counted.
+   These assertions deliberately follow turnBudget, so changing a task profile
+   changes the cap and floor without making this regression guard stale. */
 check("the output cap is no longer a flat constant",
   /maxOutputTokens: MAX_OUTPUT_TOKENS/.test(chat.code), false);
 check("it is sized per attempt",
