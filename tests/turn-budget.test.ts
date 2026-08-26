@@ -93,6 +93,8 @@ check("deep work remains bounded", deep.maxOutputTokens <= 6_400 && deep.maxTool
 
 check("mechanical verify call never inherits answer budget", subcallOutputBudget(code, "verify", 20_000) <= 900);
 check("subcall obeys provider room", subcallOutputBudget(code, "step", 600) === 600);
+check("subcall never reserves more tokens than a tiny provider window", subcallOutputBudget(code, "verify", 72) === 72);
+check("subcall keeps a valid positive ceiling when provider room is exhausted", subcallOutputBudget(code, "verify", 0) === 1);
 
 console.log(`${passed}/${passed + failed} passed`);
 if (failed) process.exit(1);
