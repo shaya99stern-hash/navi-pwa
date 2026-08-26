@@ -1,3 +1,5 @@
+@import "./chat-calm.css";
+
 /* Stable Claude-like composer treatment.
    The composer used to be styled only while a thread was empty. The instant
    the first message landed, data-home flipped to false and the same component
