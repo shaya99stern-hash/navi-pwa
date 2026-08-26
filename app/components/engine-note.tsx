@@ -48,6 +48,7 @@ export function EngineNote({ note }: { note: NaviEngineNote }) {
 
   return (
     <span
+      data-engine-note=""
       className="inline-flex items-center gap-1.5 text-[0.6875rem]/[0.875rem] font-medium text-tertiary"
       /* The visible text is already the whole content, so the title carries the
          part that is not obvious: why this reply came from where it did. */
