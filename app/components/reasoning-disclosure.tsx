@@ -70,14 +70,14 @@ export function ReasoningDisclosure({ text, streaming, haptics }: {
       >
         <Brain size={13} className={`shrink-0 ${streaming ? "animate-pulse text-accent" : "text-tertiary"}`} />
         <span className="min-w-0 truncate text-[0.6875rem]/4 font-medium">
-          {streaming ? "Thinking…" : "Thought"}
+          {streaming ? "Thinking…" : "Thought about this"}
         </span>
         <ChevronDown size={12} className={`shrink-0 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open ? (
         <div className="mt-1 max-w-[min(32rem,calc(100vw-3rem))] rounded-[14px] border border-[var(--border-subtle)] bg-elev-1 px-3 py-2.5">
-          <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-[0.72rem]/[1.18rem] text-tertiary">{text}</p>
+          <p className="max-h-72 overflow-y-auto whitespace-pre-wrap text-[0.72rem]/[1.18rem] text-tertiary">{text}</p>
         </div>
       ) : null}
     </div>
@@ -90,7 +90,7 @@ export function ReasoningTrace() {
     <div className="navi-reasoning-disclosure my-1.5 flex min-h-7 w-fit items-center gap-1.5 rounded-full px-2 text-tertiary">
       <Brain size={13} className="shrink-0" />
       <span className="text-[0.6875rem]/4 font-medium">
-        Thought
+        Thought about this — the notes are not kept
       </span>
     </div>
   );
