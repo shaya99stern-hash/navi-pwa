@@ -13,7 +13,10 @@
  */
 import { WORKER_SOURCE } from "@/lib/execution/sandbox";
 
-export const runtime = "edge";
+/* This route is build-time constant, so keep it static. Next.js 16 does not
+   support `runtime = "edge"` together with `dynamic = "force-static"`; that
+   combination produced a build warning and disabled the static optimization
+   we actually want for this immutable worker body. */
 export const dynamic = "force-static";
 
 export function GET(): Response {
