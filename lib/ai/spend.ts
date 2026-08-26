@@ -1,43 +1,26 @@
 /**
- * The spend ceiling for the one metered lane.
+ * Spend protection for optional metered routes.
  *
- * Built before the provider it guards, deliberately. A model that can loop tool
- * calls can loop spend, and a budget added afterwards is a budget added after
- * the first surprise bill.
+ * NaviOS is zero-dollar by default. Paid inference is dormant unless an
+ * operator explicitly opts in with NAVI_ALLOW_PAID_MODELS=true and also sets a
+ * positive monthly budget. Free-tier routing does not depend on this ledger.
  *
- * Three things this gets right that a naive counter would not:
- *
- * 1. **Cost comes from the usage object, never from request counts.** Every
- *    response reports how many prompt tokens hit the cache and how many missed,
- *    and those differ by roughly fifty times in price. Estimating from request
- *    counts would be wrong by orders of magnitude in either direction.
- * 2. **Pricing is pessimistic.** The provider has announced peak-hour pricing
- *    at double the base rate with no confirmed effective date. Rather than
- *    guess which window a request landed in, every request is billed to the
- *    ledger at the higher rate. The ledger can then only ever *over*-count,
- *    which means the budget can be underspent but never blown.
- * 3. **A cap is only hard if the ledger is durable.** Serverless instances come
- *    and go; an in-memory counter resets with them, so on its own it cannot
- *    enforce anything. Rather than call that a hard cap, the lane refuses to
- *    turn on without either a durable store or an explicit acknowledgement.
+ * If paid inference is ever intentionally enabled, the ledger still prices
+ * from real usage, assumes the expensive interpretation of ambiguous usage,
+ * and refuses to call a cap "hard" unless the store survives serverless
+ * instance restarts.
  */
 
 export type TokenUsage = {
   /** Prompt tokens served from the provider's prefix cache. Roughly free. */
   cacheHitTokens: number;
-  /** Prompt tokens that had to be processed. The expensive half. */
+  /** Prompt tokens that had to be processed. */
   cacheMissTokens: number;
   outputTokens: number;
 };
 
 export type SpendTier = "flash" | "pro";
 
-/**
- * USD per million tokens, from the provider's own pricing page dated
- * 2026-07-31. Overridable by environment so a published price change is a
- * configuration edit rather than a deploy, and so an operator who sees a
- * surprise on their invoice can correct the ledger immediately.
- */
 type RateCard = { cacheHit: number; cacheMiss: number; output: number };
 
 const BASE_RATES: Record<SpendTier, RateCard> = {
@@ -45,11 +28,7 @@ const BASE_RATES: Record<SpendTier, RateCard> = {
   pro: { cacheHit: 0.003625, cacheMiss: 0.435, output: 0.87 }
 };
 
-/**
- * Peak-hour pricing is announced at double the base rate, and the effective
- * date is not published. Billing the ledger at the peak rate always costs
- * nothing real — it only makes the ceiling arrive sooner than the invoice.
- */
+/** Price pessimistically if paid inference has been deliberately enabled. */
 const PESSIMISTIC_MULTIPLIER = 2;
 
 function rateFor(tier: SpendTier): RateCard {
@@ -78,11 +57,8 @@ export function costOf(usage: TokenUsage, tier: SpendTier): number {
 /**
  * Read usage off a provider response.
  *
- * Field names vary between the OpenAI-compatible shape and the provider's own
- * extensions, and an unreadable usage object must not read as "this request was
- * free". Anything unparseable falls back to the total prompt tokens counted as
- * cache *misses* — the expensive reading — so a shape change makes the ledger
- * cautious rather than blind.
+ * An unreadable usage shape must never be interpreted as free. If cache detail
+ * is absent, all prompt tokens are counted as misses.
  */
 export function readUsage(raw: unknown): TokenUsage | null {
   if (!raw || typeof raw !== "object") return null;
@@ -97,15 +73,12 @@ export function readUsage(raw: unknown): TokenUsage | null {
 
   const prompt = num(record.prompt_tokens) || num(record.input_tokens) || num(record.inputTokens);
   if (!prompt && !output) return null;
-  // Cache fields absent: assume every prompt token missed, which is the
-  // expensive assumption and therefore the safe one.
   return { cacheHitTokens: 0, cacheMissTokens: prompt, outputTokens: output };
 }
 
 /* ── The ledger's storage ─────────────────────────────────────────────────── */
 
 export type SpendStore = {
-  /** True when the store survives an instance restart. */
   durable: boolean;
   read: (key: string) => Promise<number>;
   add: (key: string, amount: number) => Promise<number>;
@@ -124,15 +97,6 @@ const memoryStore: SpendStore = {
   }
 };
 
-/**
- * A durable ledger over the REST API that Vercel's KV and Upstash integrations
- * both expose. Chosen because it needs no dependency and no TCP socket, which
- * is what makes it usable from the edge runtime at all.
- *
- * Amounts are stored as integer micro-dollars: `INCRBY` is atomic, so two
- * concurrent requests cannot lose an increment the way a read-modify-write
- * would, and integers avoid float drift accumulating across thousands of adds.
- */
 function restStore(url: string, token: string): SpendStore {
   const call = async (command: string[]): Promise<number> => {
     const response = await fetch(url, {
@@ -160,18 +124,25 @@ export function getSpendStore(): SpendStore {
   return url && token ? restStore(url, token) : memoryStore;
 }
 
-/* ── The ceiling ──────────────────────────────────────────────────────────── */
+/* ── Zero-dollar policy and optional paid ceiling ─────────────────────────── */
 
-export const DEFAULT_BUDGET_USD = 10;
-/** Below this fraction of budget the lane runs; above it, it degrades. */
+/**
+ * Financial default: zero. This is intentionally separate from per-turn token
+ * and step envelopes, which exist to fit free-provider rate limits and make the
+ * app faster; they are not a money budget.
+ */
+export const DEFAULT_BUDGET_USD = 0;
 const DEGRADE_AT = 0.8;
+
+export function paidModelsExplicitlyEnabled(): boolean {
+  return process.env.NAVI_ALLOW_PAID_MODELS === "true";
+}
 
 export function monthlyBudget(): number {
   const value = Number(process.env.NAVI_MONTHLY_BUDGET_USD);
   return Number.isFinite(value) && value >= 0 ? value : DEFAULT_BUDGET_USD;
 }
 
-/** One ledger key per calendar month, so the budget rolls without a cron. */
 export function ledgerKey(now = new Date()): string {
   return `navi:spend:${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
@@ -185,16 +156,17 @@ export function budgetState(spent: number, budget = monthlyBudget()): BudgetStat
 }
 
 /**
- * Whether the metered lane may run at all.
+ * A metered lane is impossible by default. It requires all of:
+ * 1. NAVI_ALLOW_PAID_MODELS=true
+ * 2. a positive NAVI_MONTHLY_BUDGET_USD
+ * 3. a durable ledger, unless the operator separately accepts an unenforced cap
  *
- * Without a durable ledger the ceiling cannot be enforced across instances, so
- * calling it a hard cap would be a lie. The lane therefore stays off unless the
- * operator either provides a durable store or states in the environment that
- * they accept an unenforced ceiling — which is a reasonable thing to accept
- * while spending the provider's free signup tokens, and an unreasonable thing
- * to have chosen for them.
+ * Missing or malformed configuration always falls toward $0, never toward
+ * spending.
  */
 export function meteredLaneEnabled(store: SpendStore): boolean {
+  if (!paidModelsExplicitlyEnabled()) return false;
+  if (monthlyBudget() <= 0) return false;
   if (store.durable) return true;
   return process.env.NAVI_ALLOW_UNMETERED_SPEND === "true";
 }
@@ -209,19 +181,16 @@ export type SpendSnapshot = {
 export async function readSpend(): Promise<SpendSnapshot> {
   const store = getSpendStore();
   const budget = monthlyBudget();
-  /* A ledger that cannot be read is treated as exhausted. The alternative —
-     assuming zero — turns an outage into unlimited spend. */
   const spent = await store.read(ledgerKey()).catch(() => budget);
   return { spent, budget, state: budgetState(spent, budget), durable: store.durable };
 }
 
 export async function recordSpend(usage: TokenUsage, tier: SpendTier): Promise<void> {
+  if (!paidModelsExplicitlyEnabled()) return;
   const cost = costOf(usage, tier);
   if (cost <= 0) return;
   const store = getSpendStore();
   await store.add(ledgerKey(), cost).catch((error) => {
-    /* Losing a write means undercounting, which is the one direction that can
-       overspend, so it is logged loudly rather than swallowed. */
     console.error("Navi Soul could not record spend against the monthly budget:", error);
   });
 }
