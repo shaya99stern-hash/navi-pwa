@@ -27,7 +27,7 @@ import { readUrl } from "@/lib/ai/web-tools";
 import { LESSON_PREFIX } from "@/lib/memory/lesson";
 import { decideLocally } from "@/lib/ai/navi-soul/router";
 import { describePlan, planTurn } from "@/lib/ai/navi-soul/orchestrator";
-import { capToolsForTurn, compileTurnBudget, subcallOutputBudget } from "@/lib/ai/navi-soul/turn-budget";
+import { compileTurnBudget, subcallOutputBudget } from "@/lib/ai/navi-soul/turn-budget";
 import { createArtifactGate } from "@/lib/ai/artifact-gate";
 import { IMAGE_ENGINES, generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
@@ -1706,7 +1706,7 @@ export async function POST(request: Request): Promise<Response> {
         onActivity: announce,
         mcpTools
       };
-      const availableTools = capToolsForTurn(buildToolset(toolsetContext), turnBudget.maxTools);
+      const availableTools = buildToolset(toolsetContext);
       /* Retrieval before generation. A mid-tier model handed the exact three
          relevant files beats a frontier model handed the wrong ones, and the
          read tools alone do not close that gap — a weaker model answers from
