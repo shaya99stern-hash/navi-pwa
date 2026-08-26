@@ -27,6 +27,7 @@ import { readUrl } from "@/lib/ai/web-tools";
 import { LESSON_PREFIX } from "@/lib/memory/lesson";
 import { decideLocally } from "@/lib/ai/navi-soul/router";
 import { describePlan, planTurn } from "@/lib/ai/navi-soul/orchestrator";
+import { capToolsForTurn, compileTurnBudget, subcallOutputBudget } from "@/lib/ai/navi-soul/turn-budget";
 import { createArtifactGate } from "@/lib/ai/artifact-gate";
 import { IMAGE_ENGINES, generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
@@ -1563,6 +1564,15 @@ export async function POST(request: Request): Promise<Response> {
     : plan.lane === "research" ? "research"
       : plan.lane === "reasoning" ? "reasoning"
         : "general";
+  const turnBudget = compileTurnBudget({
+    request: lastUserText,
+    dispatch,
+    effort: effortLevel,
+    style,
+    artifactRequested,
+    hasFiles,
+    planSteps: plan.steps.length
+  });
   const dispatchedPreset: ModelPreset = preset === "navi-soul" && dispatch === "code" ? "navi-code" : preset;
   const resolvedPreset = resolveHeadlinePreset({
     preset: dispatchedPreset,
@@ -1696,7 +1706,7 @@ export async function POST(request: Request): Promise<Response> {
         onActivity: announce,
         mcpTools
       };
-      const availableTools = buildToolset(toolsetContext);
+      const availableTools = capToolsForTurn(buildToolset(toolsetContext), turnBudget.maxTools);
       /* Retrieval before generation. A mid-tier model handed the exact three
          relevant files beats a frontier model handed the wrong ones, and the
          read tools alone do not close that gap — a weaker model answers from
@@ -1994,10 +2004,8 @@ export async function POST(request: Request): Promise<Response> {
         const subMessages: ModelMessage[] = [{ role: "user", content: prompt }];
         /* Whatever the ceiling has left once the prompt is counted, floored at
            the shortest reply worth making and capped like any other reply. */
-        const outputReserve = Math.max(
-          MIN_OUTPUT_TOKENS,
-          Math.min(MAX_OUTPUT_TOKENS, subCeiling - estimateTextTokens(prompt) - PROMPT_RESERVE_TOKENS)
-        );
+        const providerRoom = subCeiling - estimateTextTokens(prompt) - PROMPT_RESERVE_TOKENS;
+        const outputReserve = subcallOutputBudget(turnBudget, purpose, providerRoom);
         const outcome = preflightPayload({
           route: subRoute,
           availability,
@@ -2123,7 +2131,7 @@ export async function POST(request: Request): Promise<Response> {
           }, {
             /* High effort buys more steps, not unlimited ones. An autonomous
                loop without a meter is how a free tier is spent on one message. */
-            maxEngineCalls: effortLevel === "high" ? 12 : 8
+            maxEngineCalls: turnBudget.maxEngineCalls
           });
         } catch (error) {
           console.warn("Navi Soul mission failed; answering as an ordinary turn:", error);
@@ -2243,7 +2251,7 @@ export async function POST(request: Request): Promise<Response> {
            to spare and still answer worse for being handed a huge history. */
         const inputBudget = Math.min(
           Math.floor(PROVIDERS[attempt.provider].contextWindow * CONTEXT_INPUT_SHARE),
-          ceiling - fixed - MIN_OUTPUT_TOKENS
+          ceiling - fixed - turnBudget.minOutputTokens
         );
 
         /* Checked before compaction rather than left to the arithmetic below.
@@ -2264,13 +2272,13 @@ export async function POST(request: Request): Promise<Response> {
            call, which on the 8,000-token route was the entire allowance — so
            even a one-word question was refused before the prompt was counted. */
         const input = measureRequest({ system: attemptSystem, tools: attemptTools, messages: attemptMessages, output: 0 });
-        const attemptOutputTokens = Math.min(MAX_OUTPUT_TOKENS, ceiling - input.total);
+        const attemptOutputTokens = Math.min(turnBudget.maxOutputTokens, ceiling - input.total);
 
         /* Compaction is best-effort — it returns the conversation unchanged
            when the summariser is down — so the decision is made on what the
            payload actually weighs now, not on what the budget hoped it would.
            Skipping costs one round trip that was going to be refused anyway. */
-        if (attemptOutputTokens < MIN_OUTPUT_TOKENS) { tooSmall(input.total); continue; }
+        if (attemptOutputTokens < turnBudget.minOutputTokens) { tooSmall(input.total); continue; }
         console.info(`Navi Soul sending to ${attempt.label}: ${describeRequestSize({ ...input, output: attemptOutputTokens, total: input.total + attemptOutputTokens }, ceiling)}`);
 
         /* The last measurement before the stream opens, and the only one that
@@ -2348,7 +2356,7 @@ export async function POST(request: Request): Promise<Response> {
         system: flight.system,
         messages: flight.messages,
         ...(attemptToolNames.length
-          ? { tools: flight.tools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }
+          ? { tools: flight.tools, stopWhen: stepCountIs(turnBudget.maxToolSteps) }
           : {}),
         maxOutputTokens: attemptOutputTokens,
         /* Reasoning is emitted as output tokens and counted against the same
