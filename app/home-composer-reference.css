@@ -1,13 +1,19 @@
-/* Home composer reference treatment.
-   Scoped to the empty-chat home state AND to the keyboard-closed viewport so
-   the compact keyboard layout and all established chat composers stay intact. */
-:root:not([data-keyboard-open="true"]) .navi-composer-dock[data-home="true"] {
+/* Stable Claude-like composer treatment.
+   The composer used to be styled only while a thread was empty. The instant
+   the first message landed, data-home flipped to false and the same component
+   collapsed into a different one-row control. That made the second screen feel
+   like a different app. Keep one visual contract for empty and active chats.
+
+   We still deliberately leave the keyboard-open layout alone: on iPhone the
+   compact keyboard state is a separate space constraint, not a new product
+   state. */
+:root:not([data-keyboard-open="true"]) .navi-composer-dock[data-home] {
   padding: 4px 12px calc(10px + var(--safe-bottom));
   border-top-color: transparent;
   background: var(--bg-app);
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] {
   display: grid;
   grid-template-columns: 44px minmax(96px, max-content) minmax(0, 1fr) 44px 44px;
   grid-template-rows: minmax(72px, 1fr) 44px;
@@ -22,7 +28,12 @@
   box-shadow: none;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] > textarea {
+:root[data-theme="light"]:not([data-keyboard-open="true"]) .navi-composer[data-home] {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-input) 88%, var(--bg-app));
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] > textarea {
   grid-column: 1 / -1;
   grid-row: 1;
   align-self: stretch;
@@ -33,11 +44,11 @@
   background: transparent;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] > .navi-composer-actions {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] > .navi-composer-actions {
   display: contents;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .home-attachment-action {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] .home-attachment-action {
   grid-column: 1;
   grid-row: 2;
   width: 44px;
@@ -46,11 +57,13 @@
   color: var(--text-primary);
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] :is(.composer-secondary-action, .composer-row-spacer) {
+/* Research and Code stay available from the same model/tool surfaces but do
+   not make the resting composer grow a second personality after send. */
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] :is(.composer-secondary-action, .composer-row-spacer) {
   display: none;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-model-action {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-model-action {
   display: flex;
   grid-column: 2;
   grid-row: 2;
@@ -69,20 +82,20 @@
   font-size: 14px;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-model-label {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-model-label {
   font-weight: 600;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-effort-label {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-effort-label {
   display: inline;
   opacity: 0.48;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-model-action svg {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-model-action svg {
   display: none;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .home-mic {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] .home-mic {
   display: flex;
   grid-column: 4;
   grid-row: 2;
@@ -95,7 +108,7 @@
   color: var(--text-primary);
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-voice-action {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-voice-action {
   display: flex;
   grid-column: 5;
   grid-row: 2;
@@ -105,7 +118,7 @@
   color: var(--bg-app);
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-send-action {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-send-action {
   grid-column: 5;
   grid-row: 2;
   width: 44px;
@@ -113,39 +126,39 @@
   margin-left: 0;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"][data-has-send="true"]:not([data-dictating="true"]) .home-mic {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home][data-has-send="true"]:not([data-dictating="true"]) .home-mic {
   display: none;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"][data-has-send="true"] .composer-voice-action {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home][data-has-send="true"] .composer-voice-action {
   grid-column: 4;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"][data-dictating="true"] .composer-model-action {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home][data-dictating="true"] .composer-model-action {
   display: none;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"][data-dictating="true"] > textarea {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home][data-dictating="true"] > textarea {
   grid-column: 1 / -1;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"][data-talking="true"] > textarea {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home][data-talking="true"] > textarea {
   display: none;
 }
 
-:root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-voice-status {
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-voice-status {
   grid-column: 1 / -1;
   grid-row: 1 / -1;
 }
 
 @media (max-width: 390px) {
-  :root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] {
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home] {
     grid-template-columns: 44px minmax(88px, max-content) minmax(0, 1fr) 44px 44px;
     column-gap: 6px;
     padding: 10px;
   }
 
-  :root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-model-action {
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-model-action {
     min-width: 88px;
     padding-inline: 11px;
   }
