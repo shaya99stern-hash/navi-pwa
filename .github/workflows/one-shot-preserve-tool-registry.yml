@@ -1,0 +1,56 @@
+name: One-shot preserve relevance-aware tool registry
+
+on:
+  push:
+    branches:
+      - upgrade/navi-soul-budget-firewall
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Apply minimal GREEN fix
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("app/api/chat/route.ts")
+          text = path.read_text()
+
+          old_import = 'import { capToolsForTurn, compileTurnBudget, subcallOutputBudget } from "@/lib/ai/navi-soul/turn-budget";'
+          new_import = 'import { compileTurnBudget, subcallOutputBudget } from "@/lib/ai/navi-soul/turn-budget";'
+          old_assignment = 'const availableTools = capToolsForTurn(buildToolset(toolsetContext), turnBudget.maxTools);'
+          new_assignment = 'const availableTools = buildToolset(toolsetContext);'
+
+          if old_import not in text:
+              raise SystemExit("Expected capToolsForTurn import was not found; refusing an ambiguous patch")
+          if old_assignment not in text:
+              raise SystemExit("Expected second tool-cap assignment was not found; refusing an ambiguous patch")
+
+          text = text.replace(old_import, new_import, 1)
+          text = text.replace(old_assignment, new_assignment, 1)
+          path.write_text(text)
+
+      - name: Verify targeted regression turns GREEN
+        run: |
+          node tests/turn-budget-route.test.mjs
+          ! grep -q 'capToolsForTurn' app/api/chat/route.ts
+
+      - name: Remove one-shot workflow and commit
+        run: |
+          git rm .github/workflows/one-shot-preserve-tool-registry.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/api/chat/route.ts
+          git diff --cached --check
+          git commit -m "GREEN: preserve relevance-aware tool registry"
+          git push origin HEAD:${{ github.ref_name }}
