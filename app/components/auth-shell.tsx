@@ -1,30 +1,17 @@
 import { NaviMark } from "./navi-mark";
 
 /**
- * The first screen anyone sees, in the same app as the rest of it.
+ * The first screen anyone sees, in the same visual system as the workspace.
  *
- * This file used to hardcode #191614, #c76740, #b85c38, #f7f0e8 and a 16px
- * radius — none of which exist anywhere else in the product. The app's ground
- * is #262624 and its accent #D97757, so sign-in was the one screen that was
- * off-brand, and it was dark-only regardless of the theme the user had chosen.
- *
- * That second part was not only a colour problem. `statusBarStyle` is chosen
- * from the theme cookie: a light-theme user gets `default`, which draws dark
- * glyphs. Painting a near-black background under dark glyphs removed the
- * clock, battery and signal entirely. Rendering in the user's actual theme is
- * what fixes both.
- *
- * Clerk computes its own hover and focus shades from these values, so they
- * have to be literal colours rather than `var(--…)` references — a `var()`
- * would survive as a background and then break every derived shade. The two
- * tables below are the same tokens as `globals.css`, kept literal for that
- * one reason.
+ * Clerk needs literal colours because it derives hover/focus shades from them;
+ * the values below therefore mirror the canonical NaviOS palette instead of
+ * passing CSS variables through to Clerk.
  */
 const PALETTE = {
   dark: {
-    background: "#262624",
-    surface: "#2B2A28",
-    input: "#30302E",
+    background: "#121214",
+    surface: "#18181B",
+    input: "#27272A",
     text: "#F5F4EF",
     textSecondary: "#C2C0B7",
     textTertiary: "#9B9A91",
@@ -38,10 +25,10 @@ const PALETTE = {
     input: "#FFFFFF",
     text: "#1F1E1D",
     textSecondary: "#52504A",
-    textTertiary: "#83827B",
+    textTertiary: "#74716A",
     border: "rgba(31,30,29,0.18)",
-    accent: "#C15F3C",
-    accentPressed: "#A84E2F"
+    accent: "#AD5132",
+    accentPressed: "#963F25"
   }
 } as const;
 
@@ -101,17 +88,14 @@ export function AuthShell({
   return (
     /* `.navi-page` rather than `py-8`: the shell owns the safe areas for every
        screen inside it, and these full-bleed pages sit outside the shell. With
-       `black-translucent` the status bar overlays content, so 32px of padding
-       against a 59px inset put the wordmark under the Dynamic Island. */
+       `black-translucent` the status bar overlays content, so the safe-area
+       padding must come from the same shell primitive as the rest of NaviOS. */
     <main className="navi-page flex flex-col justify-center">
       <section className="mx-auto w-full max-w-[360px]">
         <NaviMark className="h-11 w-11 text-accent" label="NaviOS" />
         <p className="mt-5 text-[0.6875rem]/[0.6875rem] font-semibold uppercase tracking-[0.16em] text-accent">NaviOS</p>
         <h1 className="hero-title mt-3 text-[2rem]/[2.375rem] font-normal tracking-[-0.025em]">{title}</h1>
         <p className="mt-3 max-w-[30ch] text-[0.875rem]/[1.3125rem] font-normal text-secondary">{description}</p>
-        {/* overflow-visible so a label or focus ring can never be clipped, and
-            no card frame around it: the widget is the content of this screen,
-            not a panel sitting on it. */}
         <div className="mt-7 overflow-visible">{children}</div>
         <p className="mt-6 text-[0.75rem]/5 font-normal text-tertiary">NaviOS is a private, local-first workspace.</p>
       </section>
