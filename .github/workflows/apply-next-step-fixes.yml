@@ -33,23 +33,22 @@ jobs:
               file.write_text(text.replace(old, new))
               print(f"patched {path}: {old!r} -> {new!r} ({count}x)")
 
-          # The old request-budget assertions pinned the former global limits.
-          # Preserve the contract — output fits the provider and keeps a floor —
-          # but assert the new per-turn source of truth.
+          # Preserve the original request-budget contract while following the
+          # new per-turn budget source of truth instead of stale global caps.
           replace_exact(
               "tests/request-budget.test.mjs",
-              r'/attemptOutputTokens = Math\\.min\\(MAX_OUTPUT_TOKENS, ceiling - input\\.total\\)/.test(chat.code), true);',
-              r'/attemptOutputTokens = Math\\.min\\(turnBudget\\.maxOutputTokens, ceiling - input\\.total\\)/.test(chat.code), true);',
+              "MAX_OUTPUT_TOKENS, ceiling - input",
+              "turnBudget.maxOutputTokens, ceiling - input",
           )
           replace_exact(
               "tests/request-budget.test.mjs",
-              r'/attemptOutputTokens < MIN_OUTPUT_TOKENS/.test(chat.code), true);',
-              r'/attemptOutputTokens < turnBudget\\.minOutputTokens/.test(chat.code), true);',
+              "attemptOutputTokens < MIN_OUTPUT_TOKENS",
+              "attemptOutputTokens < turnBudget.minOutputTokens",
           )
           replace_exact(
               "tests/request-budget.test.mjs",
-              r'/ceiling - fixed - MIN_OUTPUT_TOKENS/.test(chat.code), true);',
-              r'/ceiling - fixed - turnBudget\\.minOutputTokens/.test(chat.code), true);',
+              "ceiling - fixed - MIN_OUTPUT_TOKENS",
+              "ceiling - fixed - turnBudget.minOutputTokens",
           )
 
           # Tailwind cannot apply /opacity to these var()-backed semantic colours.
@@ -59,8 +58,7 @@ jobs:
           replace_exact("app/components/connectors-sheet.tsx", "bg-elev-2/20", "connector-soft-elev-20", expected=2)
           replace_exact("app/components/connectors-sheet.tsx", "bg-danger/10", "connector-soft-danger")
 
-          # Large API discovery must tell the user that the manifest was clipped
-          # before they save it, not just keep the fact in metadata.
+          # Large API discovery must disclose clipping before the API is saved.
           replace_exact(
               "app/components/connectors-sheet.tsx",
               "Keeping the first {discovery.summary.truncated.kept} of {discovery.summary.truncated.declared} declared operations.",
