@@ -5,37 +5,22 @@ import { CONNECTOR_KINDS } from "@/lib/ai/types";
 import { credentialNames } from "@/lib/ai/credentials";
 import { EFFORT_LEVELS, NAVI_MODES } from "@/lib/chat";
 
-let pass = 0, fail = 0;
-const check = (n: string, a: unknown, e: unknown) => {
-  const ok = JSON.stringify(a) === JSON.stringify(e); ok ? pass++ : fail++;
-  console.log(`${ok ? "PASS" : "FAIL"}  ${n}${ok ? "" : `\n   got:  ${JSON.stringify(a)}\n   want: ${JSON.stringify(e)}`}`);
+let pass = 0;
+let fail = 0;
+const check = (name: string, actual: unknown, expected: unknown) => {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  ok ? pass++ : fail++;
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${ok ? "" : `\n   got:  ${JSON.stringify(actual)}\n   want: ${JSON.stringify(expected)}`}`);
 };
-
-/* ── An app that describes a screen it does not have ─────────────────────────
-   `APP_KNOWLEDGE` is prose someone wrote about this app, and prose about a
-   moving app goes stale. It documented `/settings/Developer` — a section
-   deleted long enough ago that `lib/ai/types.ts` carries a comment explaining
-   its removal — and it described a voice sheet that no longer exists. Both
-   reached the user as an assistant confidently describing something that is
-   not there, which is indistinguishable, from the outside, from the assistant
-   being broken.
-
-   Prose cannot be derived. The list of screens can be *checked*, and that is
-   what this does: it walks the filesystem the way the router does and requires
-   the documented list to match exactly. A page added or deleted without
-   touching the list fails here instead of becoming a wrong answer months
-   later. */
 
 const root = process.cwd();
 const appDir = join(root, "app");
 
-/** Every route the App Router serves from a `page.tsx`, as the router sees it. */
 function pageRoutes(dir: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
-      /* Route groups and private folders are not path segments. */
       if (entry.startsWith("_") || entry.startsWith("@")) continue;
       found.push(...pageRoutes(full));
       continue;
@@ -47,165 +32,64 @@ function pageRoutes(dir: string): string[] {
   return found;
 }
 
-const actual = pageRoutes(appDir).sort();
-const documented = ROUTES.map((route) => route.path).sort();
-
-check("every screen the router serves is documented", actual.filter((path) => !documented.includes(path)), []);
-/* The other direction matters just as much, and is the failure that actually
-   happened: a screen described in the prompt that nobody can navigate to. */
-check("and nothing is documented that does not exist", documented.filter((path) => !actual.includes(path)), []);
-check("no screen is listed twice", documented.length, new Set(documented).size);
+const actualRoutes = pageRoutes(appDir).sort();
+const documentedRoutes = ROUTES.map((route) => route.path).sort();
+check("every served screen is documented", actualRoutes.filter((path) => !documentedRoutes.includes(path)), []);
+check("nothing is documented that does not exist", documentedRoutes.filter((path) => !actualRoutes.includes(path)), []);
+check("no screen is listed twice", documentedRoutes.length, new Set(documentedRoutes).size);
 check("every screen says what it is for", ROUTES.every((route) => route.what.trim().length > 8), true);
 
-/* ── Rendered from the objects, not typed out beside them ──────────────────── */
-
 const facts = derivedAppFacts();
-
-/* The GitHub token was resolved in four modules that read four different sets
-   of variables, and the prompt named one of them. Someone following the app's
-   own advice configured a capability that stayed off. Naming them from the
-   shared list is the only way the advice and the resolver cannot disagree. */
-for (const name of credentialNames("github")) {
-  check(`the ${name} variable is named`, facts.includes(name), true);
-}
-/* Committing is the one capability that must not widen when a build platform
-   hands over a token, and the description has to say why rather than just
-   listing a different set of names. */
-check("and the reason commits take a narrower set is stated",
-  /build platforms set those two automatically/.test(facts), true);
-
-/* The connectable kinds were a table in the screen and a prose sentence here,
-   and the prose was already the stale copy. Now there is one list. */
+for (const name of credentialNames("github")) check(`the ${name} variable is named`, facts.includes(name), true);
+check("commit credentials explain the narrower set", /build platforms set those two automatically/.test(facts), true);
 for (const kind of CONNECTOR_KINDS) {
   check(`${kind.label} is offered`, facts.includes(kind.label), true);
-  check(`and says what it is for`, facts.includes(kind.purpose), true);
+  check(`${kind.label} says what it is for`, facts.includes(kind.purpose), true);
 }
-
-/* Every screen reaches the description, so "what screens are there" is
-   answerable without the model reasoning from what it assumes. */
-check("every screen appears in the rendered facts",
-  ROUTES.every((route) => facts.includes(route.path)), true);
-
-/* ── What it must NOT claim ──────────────────────────────────────────────────
-   Which credentials are actually *set* is a runtime fact. Freezing it into a
-   prompt makes it stale the moment anything changes, and the app already has a
-   tool that reads it live. The description's job is to say which variable
-   governs what, and to send the model to look for the rest. */
-check("it sends the model to look rather than answering from the prompt",
-  /call `inspect_environment` for that/.test(facts), true);
-check("and says plainly that it does not carry the answer",
-  /never guess it from this list/.test(facts), true);
-
-/* ── Wired, not merely written ───────────────────────────────────────────────
-   A block nobody includes is the dead-code shape this repository keeps finding
-   in itself — a capability that exists, is tested, and influences nothing. */
+check("every screen reaches rendered facts", ROUTES.every((route) => facts.includes(route.path)), true);
+check("runtime configuration is inspected instead of guessed", /call `inspect_environment` for that/.test(facts), true);
+check("the static description says not to guess runtime state", /never guess it from this list/.test(facts), true);
 
 const route = readFileSync(join(root, "app/api/chat/route.ts"), "utf8");
 const knowledge = readFileSync(join(root, "lib/ai/app-knowledge.ts"), "utf8");
+check("derived facts reach the prompt", /derivedAppFacts\(\)/.test(route), true);
+check("derived facts share the app-knowledge condition", /needsAppKnowledge\(request\) \? derivedAppFacts\(\) : ""/.test(route), true);
+check("deleted Developer route is absent from prose", /settings\/Developer/.test(knowledge), false);
+check("screen list is not duplicated in prose", /`\/recents` — all saved chats/.test(knowledge), false);
+check("connector kinds are not duplicated in prose", /OpenAI-compatible, Anthropic-\s*\n?\s*compatible, Supabase, MCP over HTTPS/.test(knowledge), false);
+check("credential names are not duplicated in prose", /NAVI_GITHUB_TOKEN/.test(knowledge), false);
 
-check("the derived facts reach the prompt", /derivedAppFacts\(\)/.test(route), true);
-/* Carried on the same condition as the prose it accompanies: both answer
-   questions about the app, and including one without the other would leave the
-   model with half a description. */
-check("on the same condition as the prose it accompanies",
-  /needsAppKnowledge\(request\) \? derivedAppFacts\(\) : ""/.test(route), true);
-
-/* The drift itself. These are not hypothetical — both shipped. */
-check("the deleted Developer screen is gone from the prose",
-  /settings\/Developer/.test(knowledge), false);
-/* And the duplicates, removed rather than left to disagree with the derived
-   copy. Two descriptions of one list is how the stale one gets read. */
-check("the screen list is not written out a second time",
-  /`\/recents` — all saved chats/.test(knowledge), false);
-check("nor the connectable kinds", /OpenAI-compatible, Anthropic-\s*\n?\s*compatible, Supabase, MCP over HTTPS/.test(knowledge), false);
-check("nor the credential names", /NAVI_GITHUB_TOKEN/.test(knowledge), false);
-
-/* ── One owner, who is entitled to know what they own ───────────────────────
-   The owner block already settled authority — their product decisions are
-   final — and left the other half open. Asked what was configured, what a key
-   does, or why something was off, the reply came back hedged: the shape a model
-   reaches for when a question sounds like it might be about someone else's
-   secrets. Nobody else uses this deployment. */
-
-check("the owner is told the configuration is their own property",
-  /every question about it — what is set, what is failing, which variable governs what, why a capability is off — is a question about their own property/.test(route), true);
-/* The answer has to come from looking. Standing to know is worth nothing if
-   the model still answers a configuration question from memory — that is how it
-   invented a Settings path and an environment flag in the first place. */
-check("and to answer from the tools rather than from memory",
-  /from `inspect_environment` and the other diagnostic tools rather than from memory/.test(route), true);
-check("and not to hedge as though the setup belonged to someone else",
-  /never hedge as though the setup belonged to someone else/.test(route), true);
-
-/* The one thing that stays shut, with the reason stated — a boundary given
-   without a reason reads as the same stonewalling this block exists to end. */
-check("the credential value is still never printed",
-  /Do not print one, because a secret repeated into a conversation is in every copy of that conversation afterwards/.test(route), true);
-check("and what is offered instead is named",
-  /Name the variable, say whether it is set, say what it enables/.test(route), true);
-/* Authority was already settled and must not be traded away for the new half. */
-check("authority is still settled too",
-  /Their decisions about how NaviOS should look, behave, and be built are final/.test(route), true);
-check("and still does not outrank accuracy",
-  /This settles authority, not accuracy/.test(route), true);
-/* None of it applies to a caller who is not the owner. */
-check("and none of this reaches a non-owner", /if \(!isOwner\) return "";/.test(route), true);
-
-
-/* ── Controls the app could not recognise as its own ─────────────────────────
-   The prose said effort had three levels called "Standard, Extended, Maximum".
-   The composer has shown Quick, Considered and Deep for a long time. So the
-   owner asked what had happened to the three levels of thinking they switch
-   between — a control that was on screen and working — and the app, reading its
-   own description, did not recognise the names of its own dial.
-
-   Same failure as the credentials and the screens before it: a list written by
-   hand drifts from the thing it describes, and the only durable fix is to stop
-   writing it down. */
+check("owner configuration questions are treated as their property", /every question about it — what is set, what is failing, which variable governs what, why a capability is off — is a question about their own property/.test(route), true);
+check("owner configuration answers come from diagnostic tools", /from `inspect_environment` and the other diagnostic tools rather than from memory/.test(route), true);
+check("owner configuration is not hedged as someone else's", /never hedge as though the setup belonged to someone else/.test(route), true);
+check("credential values remain secret", /Do not print one, because a secret repeated into a conversation is in every copy of that conversation afterwards/.test(route), true);
+check("safe credential status is offered instead", /Name the variable, say whether it is set, say what it enables/.test(route), true);
+check("owner product authority remains explicit", /Their decisions about how NaviOS should look, behave, and be built are final/.test(route), true);
+check("authority does not outrank accuracy", /This settles authority, not accuracy/.test(route), true);
+check("owner-only guidance stays owner-only", /if \(!isOwner\) return "";/.test(route), true);
 
 const controls = derivedAppFacts();
-for (const level of EFFORT_LEVELS) {
-  check(`the ${level.label} effort level is named from the constant`, controls.includes(level.label), true);
-}
-check("the default is marked as such", /\*\*Considered\*\*[^\n]*The default\./.test(controls), true);
-check("both modes are named", NAVI_MODES.every((mode) => controls.includes(mode.label)), true);
-/* The names it used to claim, gone from the prose that claimed them. */
-const knowledgeCode = readFileSync(join(process.cwd(), "lib/ai/app-knowledge.ts"), "utf8")
-  .replace(/\/\*[\s\S]*?\*\//g, "");
-check("the invented level names are gone",
-  /Standard, Extended, Maximum/.test(knowledgeCode), false);
-check("and the prose defers to the derived list instead",
-  /never name them from memory/.test(knowledgeCode), true);
-/* Denying a control the user is looking at is worse than admitting a gap. */
-check("an unrecognised control is not denied out of hand",
-  controls.includes("say so plainly rather than denying the control exists"), true);
-/* Interrupting is new and nothing told the model it existed. */
-check("talking over it is described", controls.includes("interrupted by talking over it"), true);
-/* ── Variable names shown to a person must be ones the code reads ────────────
-   An audit flagged `GITHUB_PAT` as a "ghost variable" read by no code. It was
-   wrong — `readCredential` reads it out of a name table as `process.env[name]`,
-   which a scan for the literal `process.env.GITHUB_PAT` cannot see. Worth
-   recording, because the same scan would call every credential in that table a
-   ghost.
+for (const level of EFFORT_LEVELS) check(`${level.label} effort level is derived from the constant`, controls.includes(level.label), true);
+check("default effort is identified", /\*\*Considered\*\*[^\n]*The default\./.test(controls), true);
+check("all Navi modes are derived from constants", NAVI_MODES.every((mode) => controls.includes(mode.label)), true);
+const knowledgeCode = knowledge.replace(/\/\*[\s\S]*?\*\//g, "");
+check("invented effort labels are gone", /Standard, Extended, Maximum/.test(knowledgeCode), false);
+check("prose defers control names to derived facts", /never name them from memory/.test(knowledgeCode), true);
+check("unknown controls are not denied without checking", controls.includes("say so plainly rather than denying the control exists"), true);
+check("voice interruption is described", controls.includes("interrupted by talking over it"), true);
 
-   But the scan landed next to a real one: the Settings screen said
-   `NAVI_SELF_UPDATE_BRANCH` "Defaults to main" after the default became a
-   branch behind a pull request — telling someone their self-edits go live when
-   they now wait for CI and a merge. */
+const settings = readFileSync(join(root, "app/components/settings-sheet.tsx"), "utf8");
+check("self-update branch is read from the constant", settings.includes("Defaults to ${DEFAULT_SELF_UPDATE_BRANCH}"), true);
+check("the obsolete main-default claim stays gone", /Defaults to main\./.test(settings), false);
+/* Compact settings no longer explains the whole deployment flow inline. The
+   important regression boundary is that it must not claim a self-edit goes
+   live automatically; the full pull-request behavior remains in the derived
+   app description and self-update tools. */
+check("settings does not claim self-edits go directly live", /self-edits? (?:go|goes) live|commits? directly to production/i.test(settings), false);
 
-const settings = readFileSync(join(process.cwd(), "app/components/settings-sheet.tsx"), "utf8");
-check("the self-update branch is read from the constant, not restated",
-  settings.includes("Defaults to ${DEFAULT_SELF_UPDATE_BRANCH}"), true);
-check("and the claim it replaced is gone", /Defaults to main\./.test(settings), false);
-check("with the pull request said out loud",
-  settings.includes("opens a pull request rather than going live"), true);
-
-/* An error naming one of four accepted names sends someone to set a variable
-   they may already have set under a different one. */
-const commit = readFileSync(join(process.cwd(), "app/api/commit/route.ts"), "utf8");
-check("the commit route names every credential it would accept",
-  /credentialAdvice\("github"\)/.test(commit), true);
-check("rather than only the first", commit.includes("GITHUB_PAT missing"), false);
+const commit = readFileSync(join(root, "app/api/commit/route.ts"), "utf8");
+check("commit route names every credential it accepts", /credentialAdvice\("github"\)/.test(commit), true);
+check("commit route does not pretend only GITHUB_PAT works", commit.includes("GITHUB_PAT missing"), false);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
