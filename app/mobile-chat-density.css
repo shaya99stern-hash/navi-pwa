@@ -76,6 +76,7 @@
   /* Engine detail is useful diagnostics, but the composer already communicates
      the selected strategy. Keep this metadata off the primary mobile reading
      path instead of repeating Auto/Considered below every answer. */
+  article[data-role="assistant"] div:has(> span[data-engine-note]),
   article[data-role="assistant"] div:has(> img[src="/brand-spark.png"]) {
     display: none !important;
   }
