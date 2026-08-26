@@ -22,6 +22,14 @@ check(
   /\bcapToolsForTurn\s*\(\s*buildToolset\(toolsetContext\)\s*,\s*turnBudget\.maxTools\s*\)/
 );
 check(
+  "reserves only the turn's minimum reply room",
+  /ceiling\s*-\s*fixed\s*-\s*turnBudget\.minOutputTokens/
+);
+check(
+  "accepts a useful reply at the turn-specific floor",
+  /attemptOutputTokens\s*<\s*turnBudget\.minOutputTokens/
+);
+check(
   "caps streamed answer tokens with the turn budget",
   /const\s+attemptOutputTokens\s*=\s*Math\.min\(\s*turnBudget\.maxOutputTokens\s*,\s*ceiling\s*-\s*input\.total\s*\)/
 );
