@@ -18,6 +18,7 @@ import {
 import { SPLASH_SCREENS } from "@/lib/ui/splash-screens";
 import "./globals.css";
 import "./home-composer-reference.css";
+import "./settings-claude.css";
 import "./shell.css";
 import { GlobalPwaPlatformBanner } from "./components/pwa-platform-banner";
 import { ViewportMetrics } from "./components/viewport-metrics";
@@ -45,7 +46,7 @@ const mono = JetBrains_Mono({
   variable: "--font-mono"
 });
 
-const siteUrl = getNaviAuthCanonicalOrigin() ?? "https://navisonnet.vercel.app";
+const siteUrl = getNaviAuthCanonicalOrigin() ?? "https://navikeep.org";
 
 async function buildMetadata(): Promise<Metadata> {
   const theme = await readThemeCookie();
