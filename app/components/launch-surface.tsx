@@ -38,24 +38,9 @@ function greetingForNow(now: Date): string {
   const hour = now.getHours();
   const bucket = hour < 5 ? "late" : hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
   const lines = GREETINGS[bucket];
-  // Seeded by launch time so it rotates between visits without flickering
-  // within one.
   return lines[Math.floor(now.getTime() / 60_000) % lines.length];
 }
 
-/**
- * Capitalise a name that arrived lowercase.
- *
- * The name falls back to the account handle when no display name is set, and a
- * handle is whatever its owner typed — "shaya", not "Shaya". Printing it
- * verbatim in a greeting produced "Evening, shaya", which reads as a database
- * field rather than as being addressed.
- *
- * Only the leading letter of each word is raised, and only when the word
- * starts lowercase: anything already capitalised is left exactly as it is, so
- * "McDonald", "d'Angelo" and "van der Berg" survive a fallback that a blanket
- * title-case would mangle. A name the user typed themselves is their business.
- */
 function presentName(name: string): string {
   return name.replace(/(^|[\s-])(\p{Ll})/gu, (_, boundary: string, letter: string) => boundary + letter.toUpperCase());
 }
@@ -64,10 +49,6 @@ export function LaunchSurface({ online, name, children }: { online: boolean; nam
   const [greeting, setGreeting] = useState("Good evening");
 
   useEffect(() => {
-    /* A name turns the line into an address, so the bare time-of-day form is
-       the only one that reads correctly beside it — "Where should we begin
-       today?, Sam" is not a sentence. With no name the rotation stands; a
-       placeholder would be worse than the variety it replaced. */
     if (name) {
       const hour = new Date().getHours();
       const part = hour < 5 ? "Late night" : hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
@@ -77,7 +58,7 @@ export function LaunchSurface({ online, name, children }: { online: boolean; nam
     setGreeting(greetingForNow(new Date()));
   }, [name]);
 
-  const returningName = name?.trim().split(/\s+/u)[0] || "Shaya";
+  const returningName = name?.trim().split(/\s+/u)[0];
 
   return (
     <div
@@ -86,7 +67,7 @@ export function LaunchSurface({ online, name, children }: { online: boolean; nam
     >
       <div className="home-welcome mx-auto flex w-full max-w-app flex-1 flex-col items-center justify-center text-center">
         <h1 className="greeting-title flex items-center gap-3 pl-0.5 text-[1.5rem]/[1.875rem] text-secondary">
-          {presentName(returningName)} returns!
+          {returningName ? `${presentName(returningName)} returns!` : "Welcome back"}
         </h1>
 
         {!online ? (
@@ -95,8 +76,6 @@ export function LaunchSurface({ online, name, children }: { online: boolean; nam
           </p>
         ) : null}
 
-        {/* Setup guidance belongs with the greeting so it is on screen, not
-            pushed below the fold by the centred layout. */}
         {children}
       </div>
     </div>
