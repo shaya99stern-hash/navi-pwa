@@ -19,6 +19,7 @@ import { SPLASH_SCREENS } from "@/lib/ui/splash-screens";
 import "./globals.css";
 import "./home-composer-reference.css";
 import "./shell.css";
+import "./ui-integrity.css";
 import { GlobalPwaPlatformBanner } from "./components/pwa-platform-banner";
 import { ViewportMetrics } from "./components/viewport-metrics";
 import PWARegister from "./pwa-register";
