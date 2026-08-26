@@ -13,7 +13,9 @@
  */
 import { WORKER_SOURCE } from "@/lib/execution/sandbox";
 
-export const runtime = "edge";
+/* This route is a deterministic build artifact. `force-static` is the correct
+   contract; pairing it with the Edge runtime makes Next disable the static
+   generation we explicitly asked for and emits a production build warning. */
 export const dynamic = "force-static";
 
 export function GET(): Response {
