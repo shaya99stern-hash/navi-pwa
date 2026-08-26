@@ -151,14 +151,91 @@
   grid-row: 1 / -1;
 }
 
+/* Active threads should keep the same visual language without keeping the
+   oversized empty-state footprint. The user's screenshot showed the composer
+   consuming roughly a quarter of the viewport after a one-line reply. */
+:root:not([data-keyboard-open="true"]) .navi-composer-dock[data-home="false"] {
+  padding-top: 2px;
+  padding-bottom: calc(5px + var(--safe-bottom));
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="false"] {
+  grid-template-columns: 40px minmax(88px, max-content) minmax(0, 1fr) 40px 40px;
+  grid-template-rows: minmax(48px, 1fr) 40px;
+  column-gap: 6px;
+  min-height: 112px;
+  padding: 9px 10px 8px;
+  border-radius: 24px;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="false"] > textarea {
+  min-height: 48px;
+  max-height: 72px;
+  padding: 5px 8px 0;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="false"] :is(.home-attachment-action, .home-mic, .composer-voice-action, .composer-send-action) {
+  width: 40px;
+  height: 40px;
+}
+
+:root:not([data-keyboard-open="true"]) .navi-composer[data-home="false"] .composer-model-action {
+  min-width: 88px;
+  max-width: 138px;
+  min-height: 40px;
+  height: 40px;
+  padding-inline: 11px;
+  font-size: 13px;
+}
+
+/* Chat clarity: the answer is the primary content. Do not let large Dynamic
+   Type rem scaling turn assistant prose into a headline inside every bubble. */
+.navi-message-enter[data-role="assistant"] .navi-markdown {
+  font-size: 15px !important;
+  line-height: 1.45rem !important;
+  letter-spacing: -0.01em;
+}
+
+.navi-message-enter[data-role="assistant"] div:has(> .navi-markdown) {
+  padding: 10px 12px;
+  border-radius: 18px;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Mobile already exposes message actions through the long-press path. Five
+     permanent icons under every reply duplicate that surface and swamp short
+     answers, so leave the prose visually quiet. */
+  .navi-message-enter[data-role="assistant"] div:has(> button[aria-label="Copy response"]) {
+    display: none;
+  }
+
+  .navi-engine-note,
+  .navi-message-enter[data-role="assistant"] div:has(> img[src="/brand-spark.png"]) {
+    display: none;
+  }
+
+  /* Keep the safety note available but let it behave like footer copy rather
+     than a second message competing with the composer. */
+  .navi-composer-dock[data-home="false"] [role="status"] > span.text-tertiary {
+    max-width: calc(100vw - 48px);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 9px;
+    line-height: 12px;
+    font-weight: 500;
+    opacity: 0.52;
+  }
+}
+
 @media (max-width: 390px) {
-  :root:not([data-keyboard-open="true"]) .navi-composer[data-home] {
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] {
     grid-template-columns: 44px minmax(88px, max-content) minmax(0, 1fr) 44px 44px;
     column-gap: 6px;
     padding: 10px;
   }
 
-  :root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-model-action {
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home="true"] .composer-model-action {
     min-width: 88px;
     padding-inline: 11px;
   }
