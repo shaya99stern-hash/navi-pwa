@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+const SITE_ORIGIN = "https://navikeep.org";
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
@@ -7,7 +9,7 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
       disallow: ["/api/", "/offline"]
     },
-    sitemap: "https://navisonnet.vercel.app/sitemap.xml",
-    host: "https://navisonnet.vercel.app"
+    sitemap: `${SITE_ORIGIN}/sitemap.xml`,
+    host: SITE_ORIGIN
   };
 }

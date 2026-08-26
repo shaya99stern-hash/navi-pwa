@@ -10,13 +10,16 @@ export const NAVI_LAYOUT = {
   radiusSheet: 20
 } as const;
 
+/* Keep the TypeScript contract aligned with the CSS variables in globals.css.
+   These values are consumed by tests/tooling; they must describe the product
+   that actually renders rather than a previous palette. */
 export const NAVI_MOTION = {
   pressMs: 150,
-  sheetMs: 340,
+  sheetMs: 400,
   drawerMs: 300,
   messageMs: 150,
   easeStandard: "cubic-bezier(0.2, 0.8, 0.2, 1)",
-  easeSheet: "cubic-bezier(0.32, 0.72, 0, 1)",
+  easeSheet: "cubic-bezier(0.25, 1, 0.5, 1)",
   easeExit: "cubic-bezier(0.4, 0, 1, 1)"
 } as const;
 
@@ -27,18 +30,20 @@ export const NAVI_COLORS = {
     card: "#FFFFFF",
     textPrimary: "#1F1E1D",
     textSecondary: "#52504A",
-    accent: "#C15F3C",
+    textTertiary: "#74716A",
+    accent: "#AD5132",
     borderSoft: "rgba(31,30,29,0.09)",
     overlay: "rgba(31,30,29,0.32)"
   },
   dark: {
-    app: "#262624",
-    surface: "#2B2A28",
-    card: "#30302E",
+    app: "#121214",
+    surface: "#18181B",
+    card: "#27272A",
     textPrimary: "#F5F4EF",
     textSecondary: "#C2C0B7",
+    textTertiary: "#9B9A91",
     accent: "#D97757",
     borderSoft: "rgba(255,255,255,0.09)",
-    overlay: "rgba(0,0,0,0.44)"
+    overlay: "rgba(0,0,0,0.50)"
   }
 } as const;

@@ -108,9 +108,10 @@ check("the dark status bar matches the dark page", layout.includes(`(prefers-col
 check("the light status bar matches the light page", layout.includes(`(prefers-color-scheme: light)", color: "${lightPage}"`), true);
 
 /* The header sits directly under the status bar, so a different colour there
-   is a visible seam whatever the manifest says. */
+   is a visible seam whatever the manifest says. JSX formatting is allowed to
+   place className on the next line, so the matcher accepts normal whitespace. */
 const shell = stripComments(readFileSync("app/components/app-shell.tsx", "utf8"));
-const header = /<header className="navi-header[^"]*"/.exec(shell)?.[0] ?? "";
+const header = /<header\s+className="navi-header[^"]*"/.exec(shell)?.[0] ?? "";
 check("the header is found", header.length > 0, true);
 check("the header takes the page colour", header.includes("bg-page"), true);
 check("the header paints no literal of its own", /bg-\[#|dark:bg-black/.test(header), false);
