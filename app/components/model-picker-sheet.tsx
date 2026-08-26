@@ -16,17 +16,28 @@ type Props = {
 
 type Pane = "models" | "effort";
 
-const MODEL_DETAILS: Partial<Record<ModelPreset, string>> = {
-  "navi-soul": "Chooses the best available route for each request.",
-  "navi-soul-deep": "A staged council for difficult, high-effort work.",
-  "navi-soul-direct": "Several independent routes answer in parallel."
+type ModeCopy = { label: string; detail: string };
+
+const MODE_COPY: Partial<Record<ModelPreset, ModeCopy>> = {
+  "navi-soul": {
+    label: "Auto",
+    detail: "Chooses the best available route for each request."
+  },
+  "navi-soul-deep": {
+    label: "Deep",
+    detail: "Stages planning, execution, and review for difficult work."
+  },
+  "navi-soul-direct": {
+    label: "Team",
+    detail: "Runs independent routes in parallel, then synthesizes the strongest result."
+  }
 };
 
 /* Direct provider pins remain in Diagnostics because a provider can be
-   unavailable on a deployment. These three Navi Soul routes are stable
-   product choices and keep the composer picker useful without offering a
-   button that may knowingly fail. */
-const COMPOSER_MODELS = DIAGNOSTIC_ROUTES.filter(({ id }) => id.startsWith("navi-soul"));
+   unavailable on a deployment. These three Navi Soul routes are stable product
+   choices. They are orchestration modes, not raw model names, so the picker
+   describes them truthfully. */
+const COMPOSER_MODES = DIAGNOSTIC_ROUTES.filter(({ id }) => id.startsWith("navi-soul"));
 
 function PickRow({ label, detail, selected, onPick }: {
   label: string;
@@ -60,10 +71,10 @@ export function ModelPickerSheet({ open, preferences, onClose, onPreferences }: 
 
   if (!open) return null;
 
-  const selectedModel = preferences.routeOverride ?? "navi-soul";
+  const selectedMode = preferences.routeOverride ?? "navi-soul";
   const effort = EFFORT_LEVELS.find((item) => item.id === preferences.effort) ?? EFFORT_LEVELS[1];
 
-  const pickModel = (model: ModelPreset) => {
+  const pickMode = (model: ModelPreset) => {
     onPreferences({
       ...preferences,
       routeOverride: model === "navi-soul" ? undefined : model
@@ -82,7 +93,7 @@ export function ModelPickerSheet({ open, preferences, onClose, onPreferences }: 
     <div className="fixed inset-0 z-[120] flex flex-col justify-end">
       <button
         type="button"
-        aria-label="Close model picker"
+        aria-label="Close Navi Soul picker"
         onClick={onClose}
         {...sheet.scrimProps}
         className="absolute inset-0 bg-overlay"
@@ -91,7 +102,7 @@ export function ModelPickerSheet({ open, preferences, onClose, onPreferences }: 
         {...sheet.sheetProps}
         role="dialog"
         aria-modal="true"
-        aria-label={pane === "models" ? "Choose a model" : "Choose effort"}
+        aria-label={pane === "models" ? "Choose Navi Soul mode" : "Choose effort"}
         className="navi-sheet relative mx-auto flex max-h-[80dvh] w-full max-w-[480px] flex-col overflow-hidden pb-[calc(10px+var(--safe-bottom))]"
       >
         <div {...sheet.handleProps} className="navi-sheet-grab shrink-0 pt-1">
@@ -103,7 +114,7 @@ export function ModelPickerSheet({ open, preferences, onClose, onPreferences }: 
             <button
               type="button"
               onClick={() => setPane("models")}
-              aria-label="Back to models"
+              aria-label="Back to Navi Soul modes"
               className="flex h-10 w-10 items-center justify-center rounded-full text-primary active:bg-elev-2"
             >
               <ChevronLeft size={20} strokeWidth={1.8} />
@@ -111,20 +122,28 @@ export function ModelPickerSheet({ open, preferences, onClose, onPreferences }: 
             <span className="flex-1 text-center text-[15px]/5 font-semibold text-primary">Effort</span>
             <span className="h-10 w-10" aria-hidden="true" />
           </header>
-        ) : null}
+        ) : (
+          <header className="px-5 pb-2 pt-2">
+            <h2 className="text-[17px]/6 font-semibold text-primary">Navi Soul</h2>
+            <p className="mt-0.5 text-[13px]/5 text-tertiary">Choose how Navi routes and reviews this conversation.</p>
+          </header>
+        )}
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {pane === "models" ? (
             <>
-              {COMPOSER_MODELS.map((model) => (
-                <PickRow
-                  key={model.id}
-                  label={model.label}
-                  detail={MODEL_DETAILS[model.id] ?? "Use this Navi Soul route."}
-                  selected={selectedModel === model.id}
-                  onPick={() => pickModel(model.id)}
-                />
-              ))}
+              {COMPOSER_MODES.map((model) => {
+                const copy = MODE_COPY[model.id] ?? { label: model.label, detail: "Use this Navi Soul route." };
+                return (
+                  <PickRow
+                    key={model.id}
+                    label={copy.label}
+                    detail={copy.detail}
+                    selected={selectedMode === model.id}
+                    onPick={() => pickMode(model.id)}
+                  />
+                );
+              })}
               <div className="mx-5 my-1 border-t border-[var(--border-subtle)]" />
               <button
                 type="button"

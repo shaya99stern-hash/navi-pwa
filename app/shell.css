@@ -24,3 +24,140 @@
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
 }
+
+/* Audit branch: one composer, one geometry.
+   The empty-chat state used to replace the normal flex composer with a two-row
+   grid. On the first send, data-home flipped and every control jumped to a new
+   layout. Keep the same surface and action row before and after the first turn;
+   only the conversation above it is allowed to change. */
+.navi-composer-dock[data-home="true"] {
+  padding: 4px var(--navi-page-gutter) calc(10px + var(--safe-bottom));
+  border-top-color: transparent;
+  background: var(--bg-app);
+}
+
+.navi-composer[data-home="true"] {
+  display: flex;
+  flex-direction: column;
+  min-height: var(--navi-composer-min-height);
+  padding: 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--navi-radius-composer);
+  background: var(--bg-input);
+  box-shadow: 0 2px 12px var(--shadow-base);
+}
+
+.navi-composer[data-home="true"] > textarea {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  max-height: 168px;
+  padding: 10px 12px 4px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.navi-composer[data-home="true"] > .navi-composer-actions {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 2px;
+}
+
+.navi-composer[data-home="true"] :is(.composer-secondary-action, .home-attachment-action, .home-mic, .composer-voice-action, .composer-send-action) {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.navi-composer[data-home="true"] .composer-secondary-action {
+  display: inline-flex !important;
+}
+
+.navi-composer[data-home="true"] .composer-row-spacer {
+  display: block !important;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.navi-composer[data-home="true"] .home-attachment-action,
+.navi-composer[data-home="true"] .home-mic,
+.navi-composer[data-home="true"] .composer-voice-action,
+.navi-composer[data-home="true"] .composer-send-action {
+  width: 44px;
+  height: 44px;
+}
+
+.navi-composer[data-home="true"] .composer-model-action {
+  display: flex;
+  grid-column: auto;
+  grid-row: auto;
+  justify-self: auto;
+  justify-content: flex-start;
+  width: auto;
+  min-width: 0;
+  max-width: 160px;
+  height: 36px;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 13px;
+}
+
+.navi-composer[data-home="true"] .composer-effort-label {
+  display: inline;
+}
+
+.navi-composer[data-home="true"] .composer-model-action svg {
+  display: block !important;
+}
+
+.navi-composer[data-home="true"] .home-mic,
+.navi-composer[data-home="true"] .home-attachment-action {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.navi-composer[data-home="true"][data-has-send="true"]:not([data-dictating="true"]) .home-mic {
+  display: none;
+}
+
+.navi-composer[data-home="true"][data-has-send="true"] .composer-voice-action {
+  grid-column: auto;
+}
+
+.navi-composer[data-home="true"][data-dictating="true"] .composer-model-action {
+  display: none;
+}
+
+.navi-composer[data-home="true"][data-talking="true"] > textarea {
+  display: none;
+}
+
+.navi-composer[data-home="true"] .composer-voice-status {
+  grid-column: auto;
+  grid-row: auto;
+  width: 100%;
+}
+
+/* The segmented-control implementation already exposes the correct state via
+   aria-checked, but a truthiness typo paints every non-empty string as selected.
+   Render from the semantic state so Motion and Density cannot show two choices
+   selected at once while the source fix is reviewed separately. */
+button[role="radio"][aria-checked="false"] {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-secondary) !important;
+}
+
+button[role="radio"][aria-checked="true"] {
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16) !important;
+  color: var(--text-primary) !important;
+}
+
+:root[data-theme="dark"] button[role="radio"][aria-checked="true"] {
+  background: #636366 !important;
+}
