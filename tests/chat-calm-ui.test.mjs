@@ -20,8 +20,9 @@ test("provider metadata is removed from the resting mobile thread", () => {
 
 test("finished reasoning is a quiet disclosure instead of a full-width card", () => {
   assert.match(reasoning, /navi-reasoning-disclosure/);
-  assert.match(reasoning, /streaming \? "Thinking…" : "Thought"/);
-  assert.doesNotMatch(reasoning, /Thought about this/);
+  assert.match(reasoning, /streaming \? "Thinking…" : "Thought about this"/);
+  assert.match(reasoning, /min-h-7/);
+  assert.doesNotMatch(reasoning, /rounded-\[18px\][\s\S]*bg-elev-2/);
 });
 
 test("calm chat stylesheet is loaded by the composer reference layer", () => {
