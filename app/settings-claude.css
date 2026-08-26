@@ -1,6 +1,7 @@
 /* Settings visual system — intentionally calmer and closer to Claude's product
    grammar than to the previous iOS Settings imitation. Functionality and DOM
-   semantics stay in settings-sheet.tsx; this file owns only presentation. */
+   semantics stay in settings-sheet.tsx; this file owns presentation and also
+   suppresses two legacy controls whose source overstates browser permissions. */
 
 [role="dialog"][aria-label="Settings"] {
   --settings-column: 650px;
@@ -25,6 +26,20 @@
 
 [role="dialog"][aria-label="Settings"] nav {
   background: color-mix(in srgb, var(--bg-surface) 72%, var(--bg-app));
+}
+
+/* The old profile subtitle literally copied Apple's settings copy. Do not show
+   another product's account vocabulary inside NaviOS. */
+[role="dialog"][aria-label="Settings"] nav > .mt-4 .bg-card button .text-tertiary {
+  display: none;
+}
+
+[role="dialog"][aria-label="Settings"] nav > .mt-4 .bg-card button > div > .flex-col::after {
+  content: "Profile, preferences, and account";
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 18px;
 }
 
 /* Claude-like cards: quiet border, larger radius, no imitation table chrome. */
@@ -91,6 +106,24 @@
 
 [role="dialog"][aria-label="Settings"] button[role="switch"][aria-checked="true"] > span {
   transform: translateX(18px) !important;
+}
+
+/* Camera and microphone are browser-managed permissions. The legacy rows used
+   permanently-on switches, which looked authoritative but could not read or
+   change the real permission. Hide those false controls from layout and the
+   accessibility tree, then expose an honest status label instead. */
+[role="dialog"][aria-label="Settings"] button[role="switch"][aria-label="Camera"],
+[role="dialog"][aria-label="Settings"] button[role="switch"][aria-label="Microphone"] {
+  display: none !important;
+}
+
+[role="dialog"][aria-label="Settings"] div:has(> button[role="switch"][aria-label="Camera"])::after,
+[role="dialog"][aria-label="Settings"] div:has(> button[role="switch"][aria-label="Microphone"])::after {
+  content: "Managed by browser";
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 /* Correct the visual state even on old stored bundles where the segmented
