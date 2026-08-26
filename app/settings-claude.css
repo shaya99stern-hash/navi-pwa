@@ -190,6 +190,25 @@ aside footer > button:last-child > span[class*="rounded-full"] {
   font-weight: 600;
 }
 
+/* Semantic connector tints live in CSS because success, danger, and elevation
+   tokens are opaque var() colours in Tailwind. A utility like bg-success/10
+   compiles to no rule at all, while color-mix keeps the intent explicit. */
+.connectors-dialog .connector-soft-success {
+  background: color-mix(in srgb, var(--accent-success) 10%, transparent);
+}
+
+.connectors-dialog .connector-soft-danger {
+  background: color-mix(in srgb, var(--accent-danger) 10%, transparent);
+}
+
+.connectors-dialog .connector-soft-elev-30 {
+  background: color-mix(in srgb, var(--bg-elev-2) 30%, transparent);
+}
+
+.connectors-dialog .connector-soft-elev-20 {
+  background: color-mix(in srgb, var(--bg-elev-2) 20%, transparent);
+}
+
 @media (min-width: 768px) {
   .settings-dialog > .navi-sheet-header + div {
     width: min(100%, 980px);

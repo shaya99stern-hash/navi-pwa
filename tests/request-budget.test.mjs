@@ -26,15 +26,17 @@ const models = read("app/api/models/route.ts");
 
 /* The single line that broke production. A flat 8,000-token reservation is the
    whole of Groq's free-tier per-minute allowance, so every request — including
-   a one-word question — was over the limit before the prompt was counted. */
+   a one-word question — was over the limit before the prompt was counted.
+   These assertions deliberately follow turnBudget, so changing a task profile
+   changes the cap and floor without making this regression guard stale. */
 check("the output cap is no longer a flat constant",
   /maxOutputTokens: MAX_OUTPUT_TOKENS/.test(chat.code), false);
 check("it is sized per attempt",
   /maxOutputTokens: attemptOutputTokens/.test(chat.code), true);
 check("from what the route has left after the prompt",
-  /attemptOutputTokens = Math\.min\(MAX_OUTPUT_TOKENS, ceiling - input\.total\)/.test(chat.code), true);
+  /attemptOutputTokens = Math\.min\(turnBudget.maxOutputTokens, ceiling - input\.total\)/.test(chat.code), true);
 check("with a floor, so a route is never sent a request it cannot answer",
-  /attemptOutputTokens < MIN_OUTPUT_TOKENS/.test(chat.code), true);
+  /attemptOutputTokens < turnBudget.minOutputTokens/.test(chat.code), true);
 
 /* ── The budget counts the whole payload ────────────────────────────────── */
 
@@ -49,7 +51,7 @@ check("the system prompt is measured before the request is sent",
 check("so are the tool schemas",
   /estimateToolTokens\(attemptTools\)/.test(chat.code), true);
 check("and compaction is given the budget that remains",
-  /ceiling - fixed - MIN_OUTPUT_TOKENS/.test(chat.code), true);
+  /ceiling - fixed - turnBudget.minOutputTokens/.test(chat.code), true);
 
 /* The system prompt has to be built before it can be weighed. Inlining it back
    into the `streamText` call would silently restore the blind spot. */

@@ -23,8 +23,8 @@ const greeting = compileTurnBudget({
 });
 check("greeting is trivial", greeting.class === "trivial");
 check("greeting never inherits 8k output", greeting.maxOutputTokens <= 512);
-check("greeting exposes no model tools", greeting.maxTools === 0);
 check("greeting cannot enter a long tool loop", greeting.maxToolSteps === 1);
+check("turn budgets do not own model-visible tool selection", !("maxTools" in greeting));
 
 const shortHardQuestion = compileTurnBudget({
   request: "Explain quantum entanglement",
@@ -37,7 +37,7 @@ const shortHardQuestion = compileTurnBudget({
 });
 check("short substantive question is not mistaken for trivial", shortHardQuestion.class === "standard");
 check("standard answer is bounded", shortHardQuestion.maxOutputTokens <= 1_800);
-check("standard tool roster is bounded", shortHardQuestion.maxTools <= 6);
+check("standard turn leaves tool visibility to the registry", !("maxTools" in shortHardQuestion));
 
 const research = compileTurnBudget({
   request: "Research the latest changes and compare the sources",
@@ -75,7 +75,7 @@ const code = compileTurnBudget({
   planSteps: 6
 });
 check("code gets code budget", code.class === "code");
-check("code can use more tools than chat", code.maxTools > research.maxTools);
+check("code leaves tool visibility to the registry", !("maxTools" in code));
 check("code is still capped below the historical 28-step loop", code.maxToolSteps <= 14);
 check("even detailed code stays below absolute 8k output", code.maxOutputTokens < 8_000);
 
