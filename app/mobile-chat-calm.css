@@ -1,0 +1,45 @@
+/* Mobile conversation hierarchy: keep the reply primary and everything else quiet. */
+@media (max-width: 767px) {
+  article[data-role="assistant"] .navi-markdown {
+    font-size: 0.9375rem;
+    line-height: 1.45rem;
+    letter-spacing: -0.008em;
+  }
+
+  article[data-role="assistant"] > div > div:has(> .navi-markdown) {
+    border-radius: 18px;
+    padding: 10px 13px;
+  }
+
+  article[data-role="assistant"] button[aria-label="Good response"],
+  article[data-role="assistant"] button[aria-label="Bad response"],
+  article[data-role="assistant"] button[aria-label="Retry response"] {
+    display: none;
+  }
+
+  article[data-role="assistant"] div:has(> button[aria-label="Copy response"]) {
+    min-height: 32px;
+    margin-top: 3px;
+    gap: 0;
+    opacity: 0.68;
+  }
+
+  article[data-role="assistant"] button[aria-label="Copy response"],
+  article[data-role="assistant"] button[aria-label="Copied"],
+  article[data-role="assistant"] button[aria-label="Read aloud"],
+  article[data-role="assistant"] button[aria-label="Stop reading aloud"] {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* The model/effort chip already lives in the composer; repeating it under
+     every answer is visual noise on a phone. Keep that diagnostic detail for
+     wider layouts. */
+  article[data-role="assistant"] .group > div:has(> img[src="/brand-spark.png"]) {
+    display: none;
+  }
+
+  .navi-reasoning-disclosure {
+    max-width: max-content;
+  }
+}
