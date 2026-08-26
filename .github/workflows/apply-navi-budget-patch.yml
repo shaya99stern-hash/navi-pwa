@@ -1,0 +1,103 @@
+name: Apply Navi budget patch
+
+on:
+  push:
+    branches:
+      - upgrade/navi-soul-budget-firewall
+    paths:
+      - .github/workflows/apply-navi-budget-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: upgrade/navi-soul-budget-firewall
+          fetch-depth: 0
+      - name: Wire compiled turn budget into chat executor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/api/chat/route.ts")
+          text = path.read_text()
+
+          replacements = [
+              (
+                  'import { describePlan, planTurn } from "@/lib/ai/navi-soul/orchestrator";\n',
+                  'import { describePlan, planTurn } from "@/lib/ai/navi-soul/orchestrator";\nimport { capToolsForTurn, compileTurnBudget, subcallOutputBudget } from "@/lib/ai/navi-soul/turn-budget";\n',
+                  "turn-budget import",
+              ),
+              (
+                  '  const dispatchedPreset: ModelPreset = preset === "navi-soul" && dispatch === "code" ? "navi-code" : preset;\n',
+                  '  const turnBudget = compileTurnBudget({\n    request: lastUserText,\n    dispatch,\n    effort: effortLevel,\n    style,\n    artifactRequested,\n    hasFiles,\n    planSteps: plan.steps.length\n  });\n  const dispatchedPreset: ModelPreset = preset === "navi-soul" && dispatch === "code" ? "navi-code" : preset;\n',
+                  "turn budget compilation",
+              ),
+              (
+                  '      const availableTools = buildToolset(toolsetContext);\n',
+                  '      const availableTools = capToolsForTurn(buildToolset(toolsetContext), turnBudget.maxTools);\n',
+                  "tool cap",
+              ),
+              (
+                  '        const outputReserve = Math.max(\n          MIN_OUTPUT_TOKENS,\n          Math.min(MAX_OUTPUT_TOKENS, subCeiling - estimateTextTokens(prompt) - PROMPT_RESERVE_TOKENS)\n        );\n',
+                  '        const providerRoom = subCeiling - estimateTextTokens(prompt) - PROMPT_RESERVE_TOKENS;\n        const outputReserve = subcallOutputBudget(turnBudget, purpose, providerRoom);\n',
+                  "subcall output budget",
+              ),
+              (
+                  '            maxEngineCalls: effortLevel === "high" ? 12 : 8\n',
+                  '            maxEngineCalls: turnBudget.maxEngineCalls\n',
+                  "mission engine-call cap",
+              ),
+              (
+                  '          ceiling - fixed - MIN_OUTPUT_TOKENS\n',
+                  '          ceiling - fixed - turnBudget.minOutputTokens\n',
+                  "turn-specific output floor reserve",
+              ),
+              (
+                  '        const attemptOutputTokens = Math.min(MAX_OUTPUT_TOKENS, ceiling - input.total);\n',
+                  '        const attemptOutputTokens = Math.min(turnBudget.maxOutputTokens, ceiling - input.total);\n',
+                  "stream output cap",
+              ),
+              (
+                  '        if (attemptOutputTokens < MIN_OUTPUT_TOKENS) { tooSmall(input.total); continue; }\n',
+                  '        if (attemptOutputTokens < turnBudget.minOutputTokens) { tooSmall(input.total); continue; }\n',
+                  "turn-specific minimum output",
+              ),
+              (
+                  '          ? { tools: flight.tools, stopWhen: stepCountIs(dispatch === "code" ? MAX_CODE_TOOL_STEPS : MAX_TOOL_STEPS) }\n',
+                  '          ? { tools: flight.tools, stopWhen: stepCountIs(turnBudget.maxToolSteps) }\n',
+                  "tool-step cap",
+              ),
+          ]
+
+          changed = False
+          for old, new, label in replacements:
+              count = text.count(old)
+              if count == 1:
+                  text = text.replace(old, new, 1)
+                  changed = True
+                  print(f"patched: {label}")
+              elif new in text:
+                  print(f"already patched: {label}")
+              else:
+                  raise SystemExit(f"expected exactly one source match for {label}, found {count}")
+
+          if changed:
+              path.write_text(text)
+          PY
+      - name: Commit deterministic source patch
+        run: |
+          if git diff --quiet -- app/api/chat/route.ts; then
+            echo "Budget wiring is already present."
+            exit 0
+          fi
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/api/chat/route.ts
+          git commit -m "Wire chat executor to turn budgets"
+          git push origin HEAD:upgrade/navi-soul-budget-firewall
