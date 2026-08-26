@@ -1,0 +1,62 @@
+/* Calm active-chat hierarchy.
+   Keep the conversation itself visually dominant on phones: reasoning,
+   engine metadata, secondary feedback controls, and safety copy all stay
+   available without competing with the answer. */
+
+@media (max-width: 767px) {
+  article[data-role="user"] > div {
+    max-width: 82%;
+    padding: 9px 13px !important;
+    border-radius: 17px !important;
+    font-size: 15px !important;
+    line-height: 1.4 !important;
+    letter-spacing: -0.01em;
+  }
+
+  article[data-role="assistant"] .navi-markdown {
+    font-size: 15px !important;
+    line-height: 1.48 !important;
+    letter-spacing: -0.008em;
+  }
+
+  article[data-role="assistant"] div:has(> .navi-markdown) {
+    padding: 10px 12px !important;
+    border-radius: 16px !important;
+  }
+
+  /* Mobile keeps the two highest-value response actions visible. Rating and
+     retry are still available from desktop/hover surfaces and long-press
+     response actions, but they do not need to occupy every phone turn. */
+  article[data-role="assistant"] .group > div[class*="mt-1.5"][class*="min-h-9"] {
+    min-height: 30px !important;
+    margin-top: 4px !important;
+    gap: 0 !important;
+    opacity: 0.68 !important;
+  }
+
+  article[data-role="assistant"] .group > div[class*="mt-1.5"][class*="min-h-9"] > button {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  article[data-role="assistant"] .group > div[class*="mt-1.5"][class*="min-h-9"] > button:nth-child(n + 3) {
+    display: none;
+  }
+
+  /* Provider/effort metadata is useful diagnostics, not primary conversation
+     chrome. Keep it out of the resting mobile thread; the model picker and
+     diagnostics surfaces remain the source of truth. */
+  article[data-role="assistant"] .group > div[class*="ml-2.5"][class*="gap-2"] {
+    display: none;
+  }
+
+  /* Keep dynamic composer notices readable, while demoting routine footer
+     copy so it does not become a fifth visual layer under every answer. */
+  .navi-composer-dock [role="status"][aria-live="polite"] > span {
+    max-width: 280px;
+    padding-top: 2px !important;
+    font-size: 9.5px !important;
+    line-height: 12px !important;
+    opacity: 0.64;
+  }
+}
