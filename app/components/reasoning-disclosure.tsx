@@ -61,25 +61,25 @@ export function ReasoningDisclosure({ text, streaming, haptics }: {
   if (!text) return null;
 
   return (
-    <div className="my-3 overflow-hidden rounded-[18px] border border-[var(--border-subtle)] bg-elev-2">
+    <div className={`navi-reasoning-disclosure my-1.5 overflow-hidden rounded-[12px] border transition-colors ${open ? "border-[var(--border-subtle)] bg-elev-2" : "border-transparent bg-transparent"}`}>
       <button
         type="button"
         onClick={() => { setOpen((value) => !value); haptic("impact-light", haptics); }}
-        className="flex min-h-10 w-full items-center gap-2.5 px-3.5 text-left active:bg-elev-3"
+        className="flex min-h-7 w-full items-center gap-1.5 px-2 text-left active:bg-elev-2"
         aria-expanded={open}
       >
-        <Brain size={15} className={`shrink-0 ${streaming ? "animate-pulse text-accent" : "text-tertiary"}`} />
-        <span className="min-w-0 flex-1 truncate text-[0.8125rem]/[1.125rem] font-medium text-secondary">
-          {streaming ? "Thinking…" : "Thought about this"}
+        <Brain size={13} className={`shrink-0 ${streaming ? "animate-pulse text-accent" : "text-tertiary"}`} />
+        <span className="min-w-0 flex-1 truncate text-[0.6875rem]/4 font-medium text-tertiary">
+          {streaming ? "Thinking…" : "Thought"}
         </span>
-        <ChevronDown size={15} className={`shrink-0 text-tertiary transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+        <ChevronDown size={13} className={`shrink-0 text-tertiary transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open ? (
         /* Quieter than prose on purpose. This is working-out, not the answer,
            and styling it like the answer invites reading it as one. */
-        <div className="border-t border-[var(--border-subtle)] px-3.5 py-2.5">
-          <p className="max-h-72 overflow-y-auto whitespace-pre-wrap text-[0.75rem]/[1.25rem] text-tertiary">{text}</p>
+        <div className="border-t border-[var(--border-subtle)] px-2.5 py-2">
+          <p className="max-h-72 overflow-y-auto whitespace-pre-wrap text-[0.6875rem]/[1.125rem] text-tertiary">{text}</p>
         </div>
       ) : null}
     </div>
@@ -89,10 +89,10 @@ export function ReasoningDisclosure({ text, streaming, haptics }: {
 /** Shown when a reloaded turn is known to have reasoned but no longer has it. */
 export function ReasoningTrace() {
   return (
-    <div className="my-3 flex min-h-10 items-center gap-2.5 rounded-[18px] border border-[var(--border-subtle)] bg-elev-2 px-3.5">
-      <Brain size={15} className="shrink-0 text-tertiary" />
-      <span className="text-[0.8125rem]/[1.125rem] font-medium text-tertiary">
-        Thought about this — the notes are not kept
+    <div className="navi-reasoning-disclosure my-1.5 flex min-h-7 max-w-max items-center gap-1.5 rounded-[12px] px-2 text-tertiary">
+      <Brain size={13} className="shrink-0" />
+      <span className="text-[0.6875rem]/4 font-medium">
+        Thought · notes not kept
       </span>
     </div>
   );
