@@ -21,6 +21,7 @@ import "./theme-accessibility.css";
 import "./home-composer-reference.css";
 import "./settings-claude.css";
 import "./shell.css";
+import "./mobile-chat-density.css";
 import { GlobalPwaPlatformBanner } from "./components/pwa-platform-banner";
 import { ViewportMetrics } from "./components/viewport-metrics";
 import PWARegister from "./pwa-register";

@@ -1,0 +1,118 @@
+/* Mobile conversation density pass.
+   Keep all capabilities reachable while reducing what competes with the answer
+   on a phone-sized viewport. Desktop retains the richer persistent chrome. */
+@media (max-width: 767px) {
+  /* The display serif reads optically larger than the system face at the same
+     nominal size. Bring assistant prose back to a calm conversational scale. */
+  article[data-role="assistant"] .navi-markdown {
+    font-size: 15px !important;
+    line-height: 1.45rem !important;
+    letter-spacing: -0.006em;
+  }
+
+  article[data-role="assistant"] div:has(> .navi-markdown) {
+    padding: 10px 14px !important;
+    border-radius: 18px !important;
+  }
+
+  /* Reasoning stays available, but it should read like optional supporting
+     context rather than a second answer card. Target the Brain disclosure
+     specifically so plan/tool disclosures keep their own hierarchy. */
+  article[data-role="assistant"] div:has(> button[aria-expanded] > .lucide-brain) {
+    width: fit-content;
+    max-width: 100%;
+    margin-block: 6px !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+  }
+
+  article[data-role="assistant"] button[aria-expanded]:has(> .lucide-brain) {
+    min-height: 32px !important;
+    width: fit-content !important;
+    gap: 6px !important;
+    padding: 0 8px !important;
+    border-radius: 999px !important;
+    color: var(--text-tertiary) !important;
+  }
+
+  article[data-role="assistant"] button[aria-expanded]:has(> .lucide-brain) .lucide-brain,
+  article[data-role="assistant"] button[aria-expanded]:has(> .lucide-brain) .lucide-chevron-down {
+    width: 13px;
+    height: 13px;
+  }
+
+  article[data-role="assistant"] button[aria-expanded]:has(> .lucide-brain) span {
+    font-size: 12px !important;
+    line-height: 16px !important;
+    font-weight: 500 !important;
+  }
+
+  article[data-role="assistant"] div:has(> button[aria-expanded] > .lucide-brain) > div {
+    margin-top: 4px;
+    max-width: min(86vw, 560px);
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: 14px !important;
+    background: var(--bg-elev-1) !important;
+    padding: 8px 10px !important;
+  }
+
+  /* Ratings remain available on larger screens and can later move into a
+     response overflow menu. On phones, keep the immediate utility actions. */
+  article[data-role="assistant"] button[aria-label="Good response"],
+  article[data-role="assistant"] button[aria-label="Bad response"] {
+    display: none !important;
+  }
+
+  article[data-role="assistant"] button[aria-label="Copy response"],
+  article[data-role="assistant"] button[aria-label="Copied"],
+  article[data-role="assistant"] button[aria-label="Read aloud"],
+  article[data-role="assistant"] button[aria-label="Stop reading aloud"],
+  article[data-role="assistant"] button[aria-label="Retry response"] {
+    color: color-mix(in srgb, var(--text-tertiary) 82%, transparent);
+  }
+
+  /* Engine detail is useful diagnostics, but the composer already communicates
+     the selected strategy. Keep this metadata off the primary mobile reading
+     path instead of repeating Auto/Considered below every answer. */
+  article[data-role="assistant"] div:has(> span[data-engine-note]),
+  article[data-role="assistant"] div:has(> img[src="/brand-spark.png"]) {
+    display: none !important;
+  }
+
+  /* Neutral footer copy (including the permanent AI disclaimer) does not need
+     to reserve a line beneath every active-chat composer. Warning/accent status
+     still renders because those use a different tone class. */
+  .navi-composer-dock [role="status"] > span.text-tertiary {
+    display: none !important;
+  }
+
+  .navi-composer-dock [role="status"]:has(> span.text-tertiary) {
+    margin-bottom: 0 !important;
+    padding-bottom: max(0px, env(safe-area-inset-bottom)) !important;
+  }
+
+  /* Preserve the existing empty/active continuity contract: [data-home] exists
+     in both states, so the same geometry applies before and after first send.
+     Only trim dead vertical room; all primary touch targets remain 44px. */
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home] {
+    grid-template-rows: minmax(58px, 1fr) 44px !important;
+    min-height: 136px !important;
+    padding: 10px !important;
+  }
+
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home] > textarea {
+    min-height: 58px !important;
+    max-height: 82px !important;
+    padding-top: 6px !important;
+  }
+
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home] .home-attachment-action,
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home] .home-mic,
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-voice-action,
+  :root:not([data-keyboard-open="true"]) .navi-composer[data-home] .composer-send-action {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}
