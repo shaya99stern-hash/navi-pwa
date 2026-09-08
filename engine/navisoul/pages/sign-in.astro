@@ -1,0 +1,7 @@
+---
+const key=import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY??'';
+const configured=!!key;
+let host='';try{host=atob(key.split('_').slice(2).join('_')).replace(/\$$/,'');}catch{}
+if(!/^[a-z0-9.-]+$/.test(host))host='';
+---
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Sign in · Navi Soul</title></head><body style="background:#17191b;color:#ece9e2;font:16px system-ui;padding:40px"><a href="/" style="color:#dcc19a">← Navi Soul</a><h1>Welcome back</h1>{configured&&host?<><div id="sign-in"></div><script is:inline data-clerk-publishable-key={key} src={`https://${host}/npm/@clerk/clerk-js@5/dist/clerk.browser.js`} crossorigin="anonymous" onload="window.Clerk.load().then(()=>window.Clerk.mountSignIn(document.getElementById('sign-in'),{forceRedirectUrl:'/'}))"></script></>:<p>Authentication is not configured for this deployment yet. The server needs the Clerk publishable and secret keys.</p>}</body></html>

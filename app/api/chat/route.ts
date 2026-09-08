@@ -2219,9 +2219,12 @@ export async function POST(request: Request): Promise<Response> {
            property of the model, and a fallback lane can easily be a model
            that rejects a tools array outright — inheriting the primary's
            answer turns a recoverable failure into a guaranteed one. */
-        const attemptToolNames = routeToolCallingSupport(attempt) === "custom" ? toolNames : [];
+        // Buffered artifact delivery cannot hand client-only calls back to the
+        // browser. Keep server executors available without stranding a turn.
+        const attemptToolNames = routeToolCallingSupport(attempt) === "custom"
+          ? toolNames.filter((name) => !artifactRequested || typeof availableTools[name]?.execute === "function") : [];
         const metered = attempt.provider === "deepseek";
-        const attemptTools = attemptToolNames.length ? availableTools : {};
+        const attemptTools = Object.fromEntries(attemptToolNames.map((name) => [name, availableTools[name]]));
 
         /* Everything the reference blocks are competing with, so what is left
            over is what they may spend. Computed before the prompt is built
@@ -2235,10 +2238,21 @@ export async function POST(request: Request): Promise<Response> {
            on the 8,000-token free tier it leaves about 2,000, which buys the
            two that matter most instead of failing the request outright. */
         const provisionalCeiling = requestTokenCeiling(PROVIDERS[attempt.provider]) - CEILING_SAFETY_MARGIN;
-        const referenceBudget = Math.max(0, provisionalCeiling - PROMPT_RESERVE_TOKENS - turnBudget.minOutputTokens - estimateToolTokens(attemptTools) - estimateTextTokens(artifactRepair));
-        const attemptSystem = systemFor(attemptToolNames, referenceBudget)
-          + (artifactRequested ? `\n${artifactAcceptanceInstruction(lastUserText)}` : "")
-          + (artifactRepair ? `\n${artifactRepair}` : "");
+        const artifactContract = artifactRequested ? artifactAcceptanceInstruction(lastUserText) : "";
+        const referenceBudget = Math.max(0, provisionalCeiling - PROMPT_RESERVE_TOKENS - turnBudget.minOutputTokens - estimateToolTokens(attemptTools) - estimateTextTokens(artifactContract + artifactRepair));
+        const attemptBlocks: PromptBlock[] = [
+          ...blocksFor(attemptToolNames, referenceBudget),
+          ...(artifactContract ? [{ name: "artifact-contract", text: artifactContract }] : []),
+          ...(artifactRepair ? [{ name: "artifact-repair", text: artifactRepair }] : [])
+        ];
+        // Measure and send the same blocks. Rebuilding them at preflight used
+        // to silently discard the acceptance contract and every repair hint.
+        const promptRoom = provisionalCeiling - turnBudget.minOutputTokens - estimateToolTokens(attemptTools) - 256;
+        for (let index = attemptBlocks.length - 1; index >= 0; index--) {
+          if (estimateTextTokens(attemptBlocks.map((block) => block.text).join("\n\n")) <= promptRoom) break;
+          if (attemptBlocks[index].optional) attemptBlocks.splice(index, 1);
+        }
+        const attemptSystem = attemptBlocks.map((block) => block.text).join("\n\n");
 
         /* Size the request to what this route will actually take, before
            sending it. A turn of 20,805 tokens was offered to a route whose
@@ -2298,7 +2312,7 @@ export async function POST(request: Request): Promise<Response> {
         const outcome = preflightPayload({
           route: attempt,
           availability,
-          blocks: blocksFor(attemptToolNames, referenceBudget),
+          blocks: attemptBlocks,
           tools: attemptTools,
           messages: attemptMessages,
           outputReserve: attemptOutputTokens

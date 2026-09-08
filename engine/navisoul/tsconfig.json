@@ -1,0 +1,1 @@
+{ "extends": "astro/tsconfigs/strict", "compilerOptions": { "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"], "types": ["astro/client", "node"], "skipLibCheck": true, "allowJs": false, "checkJs": false }, "include": [".astro/types.d.ts", "**/*.ts", "**/*.astro"], "exclude": ["dist", "node_modules", ".vercel", "lib/sandbox/generated"] }

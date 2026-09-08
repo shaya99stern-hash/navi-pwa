@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { preflightPayload } from "../lib/ai/navi-soul/payload-preflight";
+import { ROUTES } from "../lib/ai/providers";
 import { artifactAcceptanceInstruction, checkArtifactCompletion } from "../lib/ai/artifact-completion";
 import { assessArtifact, artifactScriptError } from "../lib/ai/navi-soul/artifact-quality";
 import { createArtifactGate } from "../lib/ai/artifact-gate";
@@ -22,5 +25,23 @@ const gate = createArtifactGate();
 const output = gate.push(`\`\`\`navi-artifact\n${header}\n---\n${brokenMuseum}`) + gate.flush();
 assert.ok(!output.includes("```navi-artifact"), "partial salvage cannot bypass the script check");
 assert.match(artifactAcceptanceInstruction("a museum I can walk around"), /camera position/);
+assert.match(artifactAcceptanceInstruction("Create a walkable museum artifact"), /NaviScene.mount/);
 assert.ok(!artifactAcceptanceInstruction("make a tip calculator").includes("raycast"));
+const contract = artifactAcceptanceInstruction("Create a walkable museum");
+const repair = "Fix the incomplete camera initialization and finish every script.";
+const fitted = preflightPayload({
+  route: ROUTES.openRouterReasoning,
+  availability: { openrouter: true } as Parameters<typeof preflightPayload>[0]["availability"],
+  blocks: [{ name: "base", text: "You are Navi Soul." }, { name: "artifact-contract", text: contract }, { name: "artifact-repair", text: repair }],
+  tools: {}, messages: [{ role: "user", content: "Build it" }], outputReserve: 2_400
+});
+assert.ok(fitted.ok);
+if (fitted.ok) {
+  assert.ok(fitted.system.includes(contract), "preflight retains the complete spatial contract");
+  assert.ok(fitted.system.includes(repair), "preflight retains repair feedback");
+}
+const routeSource = readFileSync("app/api/chat/route.ts", "utf8");
+assert.match(routeSource, /const attemptSystem = attemptBlocks\.map/);
+assert.match(routeSource, /blocks: attemptBlocks/, "the chat endpoint must send the same blocks it measured");
+assert.match(routeSource, /!artifactRequested \|\| typeof availableTools\[name\]\?\.execute === "function"/, "buffered artifact turns cannot strand client-only calls");
 console.log("Artifact completion regressions passed.");
