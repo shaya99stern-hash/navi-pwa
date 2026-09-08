@@ -48,7 +48,9 @@ const DOCUMENT_ACCEPT = [
   "text/markdown",
   "text/csv",
   "application/json",
-  "application/pdf"
+  "application/pdf",
+  ".docx",
+  ".xlsx"
 ].join(",");
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";

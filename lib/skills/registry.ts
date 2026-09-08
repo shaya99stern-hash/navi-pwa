@@ -105,7 +105,7 @@ export async function run(
   // `navigator` is absent on the server, where being unable to reach the
   // network is not something we can conclude from its absence.
   const offline = typeof navigator !== "undefined" && navigator.onLine === false;
-  if (skill.executor.kind === "mcp" && offline) {
+  if (!skill.offline && offline) {
     return { ok: false, error: `${skill.name} needs a connection` };
   }
   const loader = impls.get(id);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { pcmToWav } from "../lib/ai/voice/wav";
+import { decodeMonoWav } from "../lib/ui/audio/wav-playback";
 
 const pcm = new Uint8Array([0, 0, 255, 127, 0, 128, 1, 0]);
 const wav = pcmToWav(pcm);
@@ -15,6 +16,11 @@ assert.equal(header.getUint32(28, true), 48000);
 assert.equal(header.getUint16(34, true), 16);
 assert.equal(header.getUint32(40, true), pcm.length);
 assert.deepEqual(wav.slice(44), pcm);
+const decoded = decodeMonoWav(Uint8Array.from(wav).buffer);
+assert.equal(decoded.sampleRate, 24000);
+assert.equal(decoded.samples[0], 0);
+assert.equal(decoded.samples[2], -1);
+assert.throws(() => decodeMonoWav(new ArrayBuffer(44)), /not a WAV/);
 assert.throws(() => pcmToWav(new Uint8Array(3)), /Incomplete PCM/);
 const client = readFileSync("lib/ui/speech.ts", "utf8");
 assert.match(client, /JSON\.stringify\(\{ text, rate, format: "wav" \}\)/);

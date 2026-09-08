@@ -183,6 +183,9 @@ export function AppShell({
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<NaviPreferences>(DEFAULT_PREFERENCES);
   const [draft, setDraft] = useState(initialDraft ?? "");
+  const [localRunning, setLocalRunning] = useState(false);
+  const localRun = useRef<AbortController | null>(null);
+  useEffect(() => () => { localRun.current?.abort(); }, [activeId]);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [durability, setDurability] = useState<StorageDurability>("unavailable");
@@ -353,7 +356,7 @@ export function AppShell({
     }
   });
 
-  const generating = status === "submitted" || status === "streaming";
+  const generating = localRunning || status === "submitted" || status === "streaming";
   const activeChat = chats.find((chat) => chat.id === activeId);
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
   const activeEffort = EFFORT_LEVELS.find((level) => level.id === preferences.effort) ?? EFFORT_LEVELS[1];
@@ -918,7 +921,7 @@ export function AppShell({
     const incoming = Array.from(list);
     const combined = [...pendingFiles, ...incoming].slice(0, MAX_ATTACHMENTS);
     for (const file of combined) {
-      if (!ALLOWED_TYPES.has(file.type)) {
+      if (!ALLOWED_TYPES.has(file.type) && !/\.(docx|xlsx)$/i.test(file.name)) {
         setAttachmentError(`${file.name} has an unsupported file type.`);
         haptic("warning", preferences.haptics);
         return;
@@ -936,6 +939,7 @@ export function AppShell({
   }
 
   async function runSkillCommand(): Promise<boolean> {
+    if (localRun.current) return true;
     const invocation = parseSlashCommand(draft);
     const decision = invocation
       ? null
@@ -957,15 +961,23 @@ export function AppShell({
       role: "user",
       parts: [{ type: "text", text: draft.trim() }]
     };
-    const answer: UIMessage = {
-      id: createId(),
-      role: "assistant",
-      parts: [{ type: "text", text: invocation ? await runSlash(invocation) : instant!.response }]
-    };
-    setMessages([...messages, question, answer]);
-    setStreamStatus(null);
+    const controller = new AbortController();
+    localRun.current = controller;
+    setLocalRunning(true);
+    setMessages([...messages, question]);
+    setStreamStatus({ stage: "gather", detail: invocation ? `Running ${invocation.skill.name}.` : "Preparing your answer." });
     if (window.location.pathname === "/" || window.location.pathname === "/new") {
       window.history.replaceState(window.history.state, "", `/chat/${encodeURIComponent(activeId)}`);
+    }
+    try {
+      const text = invocation ? await runSlash(invocation, controller.signal) : instant!.response;
+      if (!controller.signal.aborted) {
+        const answer: UIMessage = { id: createId(), role: "assistant", parts: [{ type: "text", text }] };
+        setMessages(current => [...current, answer]);
+        setStreamStatus(null);
+      }
+    } finally {
+      if (localRun.current === controller) { localRun.current = null; setLocalRunning(false); }
     }
     return true;
   }
@@ -1419,6 +1431,7 @@ export function AppShell({
           setSettingsOpen(true);
         }}
         onStop={() => {
+          localRun.current?.abort();
           stop();
           setStreamStatus({ stage: "interrupted", detail: "You stopped this response." });
         }}

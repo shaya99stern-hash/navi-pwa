@@ -1,5 +1,18 @@
 # Navi Soul checkpoint — 2026-09-08
 
+## Integration continuation
+
+PR 135 merged as `66c3f3180a39a546ed8a14cc938eaecbb6842154`. Production Settings visibly reported this SHA. The user then requested starting actual integration; work continued on `feat/navi-live-engine-tools`.
+
+- Shared `engine/navisoul/lib/documents/office.ts` is now imported by the production browser worker. Existing attachment controls accept DOCX/XLSX and extract text on device before uploading readable text. Original request-size limits remain; text is visibly marked when clipped at 58,000 characters. Spreadsheet formulas are not recalculated, and dates remain raw serials.
+- `/scrape https://example.com` reads up to five public URLs through the authenticated `/api/tools/scrape` endpoint, using existing bounded downloads and private-address/redirect checks. It calls no AI model and requires no model API key. It does not bypass paywalls, bot challenges, or render arbitrary JavaScript websites.
+- Local tools now show progress, accept Stop, and cancel across chat navigation. Network-dependent skills are unavailable offline.
+- The production WAV retest still failed HTML media playback. Added PCM Web Audio playback fallback with gesture priming and no additional synthesis call. This still needs live verification after the integration release.
+- Root integration tests passed, including real ZIP Office fixtures, malicious XML rejection, private-address blocking, model-free scraper transport, and WAV sample decoding. All 118 test files passed during the integration run. Final-head CI must confirm the last voice and progress changes.
+- Jujubit is a quality reference for future image/3D output: https://jujubit.ai/products/customize-your-own?variant=62485711716723. No Jujubit API integration or equivalent output quality has been verified.
+
+The sections below preserve the previous source-checkpoint state. Use this continuation first.
+
 ## User direction
 
 Preserve the existing NaviOS UI and design. Improve the engine underneath it. Use free routing by default, reserve stronger inference for complex work, and keep provider identities out of ordinary conversation. Latest instruction: copy the work, push and merge, then checkpoint. Do not restart a broad redesign before completing this release.

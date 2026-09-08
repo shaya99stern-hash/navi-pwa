@@ -1,23 +1,9 @@
 /// <reference lib="webworker" />
-import { unzipSync } from 'fflate';
-import { XMLParser } from 'fast-xml-parser';
+import { extractOffice } from '../documents/office';
 export type DocumentJob = { id: string; name: string; buffer: ArrayBuffer; renderPages?: boolean };
 export type ParsedDocument = { hash: string; name: string; text: string; chunks: { text: string; page?: number }[]; images: { page: number; blob: Blob }[]; warnings: string[] };
 const MAX_BYTES = 25_000_000, MAX_TEXT = 2_000_000;
-const xmlParser = new XMLParser({ ignoreAttributes: false, parseTagValue: false, processEntities: false });
-const list = <T>(value: T | T[] | undefined): T[] => value === undefined ? [] : Array.isArray(value) ? value : [value];
 const decode = (value: Uint8Array) => new TextDecoder().decode(value);
-function safeXml(value: Uint8Array): any { const text=decode(value); if (/<!DOCTYPE|<!ENTITY/i.test(text)) throw new Error('Document contains unsupported XML declarations'); return xmlParser.parse(text); }
-function zipXml(buffer: ArrayBuffer): Record<string, Uint8Array> {
-  let expanded = 0;
-  return unzipSync(new Uint8Array(buffer), { filter: file => { if (!/\.xml$|\.rels$/.test(file.name)) return false; expanded += file.originalSize; if (expanded > 40_000_000 || file.originalSize > 20_000_000) throw new Error('Expanded document exceeds the safety limit'); return true; } });
-}
-function nodeText(node: unknown): string {
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(nodeText).join('');
-  if (!node || typeof node !== 'object') return '';
-  return Object.entries(node).filter(([key]) => !key.startsWith('@_')).map(([key, value]) => nodeText(value) + (/^(w:p|w:tr)$/.test(key) ? '\n' : '')).join('');
-}
 
 export function parseCSV(text: string): string[][] {
   const rows: string[][]=[]; let row:string[]=[], cell='',quoted=false;
@@ -70,14 +56,8 @@ export async function parseDocument(job: DocumentJob): Promise<ParsedDocument> {
     if(!result.text.trim()||result.chunks.length===0)result.warnings.push('No text layer was found. This PDF needs OCR or a vision model.');
     return result;
   }
-  if(extension==='docx') {
-    const files=zipXml(job.buffer);const main=files['word/document.xml'];if(!main)throw new Error('DOCX document.xml is missing');
-    result.text=nodeText(safeXml(main));
-  } else if(extension==='xlsx') {
-    const files=zipXml(job.buffer);const strings=files['xl/sharedStrings.xml']?list(safeXml(files['xl/sharedStrings.xml']).sst?.si).map(nodeText):[];
-    const sheets=Object.keys(files).filter(name=>/^xl\/worksheets\/sheet\d+\.xml$/.test(name)).sort();
-    for(const name of sheets){const sheet=safeXml(files[name]);result.text+='\n\n'+name+'\n';for(const row of list<any>(sheet.worksheet?.sheetData?.row)){const cells=list<any>(row.c).map(c=>`${c['@_r']??''}: ${c['@_t']==='s'?strings[Number(c.v)]??'':c['@_t']==='inlineStr'?nodeText(c.is):String(c.v??'')}`);result.text+=cells.join('\t')+'\n';if(result.text.length>MAX_TEXT)throw new Error('Spreadsheet extracted text exceeds 2 MB');}}
-    result.warnings.push('Cell values are extracted; formulas are not recalculated and date serials remain raw.');
+  if(extension==='docx'||extension==='xlsx') {
+    const office=extractOffice(job.buffer,job.name);result.text=office.text;result.warnings.push(...office.warnings);
   } else if(extension==='csv')result.text=parseCSV(decode(new Uint8Array(job.buffer))).map(row=>row.join('\t')).join('\n');
   else if(['txt','md','json','log'].includes(extension??''))result.text=decode(new Uint8Array(job.buffer));
   else throw new Error('Supported documents: PDF, DOCX, XLSX, CSV, TXT, Markdown and JSON');

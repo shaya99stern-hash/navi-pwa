@@ -1,5 +1,16 @@
 [
   {
+    "id": "web.scrape",
+    "name": "Read Web Pages",
+    "category": "web",
+    "description": "Extract text from up to five public URLs without an AI model or API key.",
+    "triggers": { "keywords": ["scrape", "extract", "webpage"], "slash": "/scrape" },
+    "executor": { "kind": "local", "ref": "web.scrape" },
+    "requiresModel": false,
+    "offline": false,
+    "deps": []
+  },
+  {
     "id": "text.change-case",
     "name": "Change Case",
     "category": "text",
