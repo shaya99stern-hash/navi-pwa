@@ -1,4 +1,5 @@
 "use client";
+import { playPremiumWav, primePremiumAudio } from "./audio/wav-playback";
 
 /**
  * Picks the best voice the device actually has.
@@ -215,6 +216,7 @@ let priming: Promise<void> | null = null;
  */
 export function primeSpeech(): void {
   if (typeof window === "undefined") return;
+  primePremiumAudio();
   const audio = audioElement();
   /**
    * Unmuted, and that is the entire point.
@@ -359,6 +361,7 @@ export async function speakBest(text: string, language: string, rate = 1): Promi
   };
 
   if (typeof window === "undefined") return local("there is no browser here");
+  primePremiumAudio();
 
   try {
     const response = await fetch("/api/voice/speak", {
@@ -427,7 +430,12 @@ export async function speakBest(text: string, language: string, rate = 1): Promi
 
       if (!retried) {
         finish();
-        return local(refusalReason(name));
+        try {
+          const playback = await playPremiumWav(blob);
+          return { ...playback, engine: "premium", why: "" };
+        } catch (fallbackError) {
+          return local(`${refusalReason(name)}; ${fallbackError instanceof Error ? fallbackError.message : "Web Audio playback also failed"}`);
+        }
       }
     }
 

@@ -1,4 +1,5 @@
 "use client";
+import { isOfficeDocument, prepareOfficeDocument } from "./office-documents";
 
 /**
  * The chat route runs on the Edge runtime, which rejects request bodies over
@@ -144,6 +145,13 @@ export async function prepareAttachments(
   conversationBytes = 0
 ): Promise<PreparedAttachments> {
   if (!files.length) return { files, notice: null };
+  const officeCount = files.filter(isOfficeDocument).length;
+  if (officeCount) {
+    const parsed: File[] = [];
+    for (const file of files) parsed.push(await prepareOfficeDocument(file));
+    const prepared = await prepareAttachments(parsed, preserveDetail, conversationBytes);
+    return { ...prepared, notice: `${officeCount} document${officeCount === 1 ? "" : "s"} extracted on this device. ${prepared.notice ?? ""}`.trim() };
+  }
 
   const budget = attachmentBudgetFor(conversationBytes);
   const fixed = files.filter((file) => !isResizableImage(file));

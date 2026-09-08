@@ -2371,10 +2371,12 @@ export async function POST(request: Request): Promise<Response> {
           data: { engine: engineName(flightRoute), effort: EFFORT_LABELS[effortLevel], recovered: index > 0 || flight.rerouted } satisfies NaviEngineNote
         } as never);
 
+        let streamFailure: unknown;
         const result = streamText({
         model: createProviderModel(flightRoute, origin),
         system: flight.system,
         messages: flight.messages,
+        prepareStep: ({ messages }) => ({ messages: withoutReasoning(messages) }),
         ...(attemptToolNames.length
           ? { tools: flight.tools, stopWhen: stepCountIs(turnBudget.maxToolSteps) }
           : {}),
@@ -2402,7 +2404,7 @@ export async function POST(request: Request): Promise<Response> {
         timeout: { totalMs: artifactRequested ? Math.min(50_000, artifactDeadline - Date.now()) : 50_000, chunkMs: 14_000 },
         abortSignal: request.signal,
         experimental_transform: smoothStream({ delayInMs: 26, chunking: "word" }),
-        onError: ({ error }) => console.error("Navi Soul provider stream failed:", error)
+        onError: ({ error }) => { streamFailure = error; console.warn(describeAttemptFailure(facts, error)); }
       });
       /* Billed from what the response actually reported, not from an estimate.
          Cache hits and misses differ in price by roughly fifty times, so a
@@ -2439,8 +2441,9 @@ export async function POST(request: Request): Promise<Response> {
           writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
           return;
         } catch (error) {
-          markProviderFailure(flightRoute.provider, error);
-          lastFailure = failedWith(error);
+          const failure = streamFailure ?? error;
+          markProviderFailure(flightRoute.provider, failure);
+          lastFailure = failedWith(failure);
           continue;
         }
       }

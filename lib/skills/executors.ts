@@ -23,6 +23,7 @@ import * as color from "./impl/color";
 import * as convert from "./impl/convert";
 import * as finance from "./impl/finance";
 import * as web from "./impl/web";
+import { scrape } from "./impl/scrape";
 import * as markdown from "./impl/markdown";
 import * as list from "./impl/list";
 import * as validate from "./impl/validate";
@@ -44,6 +45,7 @@ function needsText(fn: Executor, usage: string): Executor {
 }
 
 register("text.change-case", async () => needsText(text.changeCase, "/change-case mode=snake Hello World"));
+register("web.scrape", async () => scrape);
 register("text.slugify", async () => needsText(text.slugify, "/slugify My Post Title"));
 register("text.trim-whitespace", async () => needsText(text.trimWhitespace, "/trim-whitespace  spaced   out "));
 register("text.dedupe-lines", async () => needsText(text.dedupeLines, "/dedupe-lines a b a"));
