@@ -35,6 +35,7 @@ export function complexity(text: string): Effort {
   const extreme = text.length > 1_800 || /\b(exhaustive|deep audit|production-ready|entire codebase|long-horizon|multi-agent|research report|principal architect)\b/i.test(text);
   if (extreme) return "extreme";
   const complex = text.length > 650
+    || /\b(?:build|make|create|design|implement)\b[\s\S]{0,100}\b(?:app|website|dashboard|artifact|calculator|interactive|prototype|simulation)\b/i.test(text)
     || NEEDS_JUDGEMENT.test(text)
     || /\b(architecture|audit|analy[sz]e|debug|proof|strategy|compare|research|legal|financial|medical|typescript|javascript|react|next\.?js|python|sql|multi-step|comprehensive)\b/i.test(text);
   return complex ? "complex" : "normal";

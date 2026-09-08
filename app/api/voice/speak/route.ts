@@ -36,15 +36,17 @@ export async function POST(request: Request) {
 
   let text = "";
   let rate = 1;
+  let format: "mp3" | "wav" = "mp3";
   try {
-    const body = (await request.json()) as { text?: unknown; rate?: unknown };
+    const body = (await request.json()) as { text?: unknown; rate?: unknown; format?: unknown };
     text = typeof body.text === "string" ? body.text : "";
     rate = typeof body.rate === "number" ? body.rate : 1;
+    format = body.format === "wav" ? "wav" : "mp3";
   } catch {
     return NextResponse.json({ error: "Send JSON with a text field." }, { status: 400 });
   }
 
-  const spoken = await synthesizeSpeech({ text, rate, signal: request.signal });
+  const spoken = await synthesizeSpeech({ text, rate, format, signal: request.signal });
 
   if (!spoken.ok) {
     /* 204 rather than an error: the client falls back to the on-device voice,

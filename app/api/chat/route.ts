@@ -2231,7 +2231,7 @@ export async function POST(request: Request): Promise<Response> {
            on the 8,000-token free tier it leaves about 2,000, which buys the
            two that matter most instead of failing the request outright. */
         const provisionalCeiling = requestTokenCeiling(PROVIDERS[attempt.provider]) - CEILING_SAFETY_MARGIN;
-        const referenceBudget = Math.max(0, provisionalCeiling - PROMPT_RESERVE_TOKENS - estimateToolTokens(attemptTools));
+        const referenceBudget = Math.max(0, provisionalCeiling - PROMPT_RESERVE_TOKENS - turnBudget.minOutputTokens - estimateToolTokens(attemptTools));
         const attemptSystem = systemFor(attemptToolNames, referenceBudget);
 
         /* Size the request to what this route will actually take, before

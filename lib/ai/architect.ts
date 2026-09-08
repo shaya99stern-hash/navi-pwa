@@ -249,7 +249,7 @@ function constraintsFor(lane: ExecutionLane): string[] {
     ];
   }
   if (lane === "reasoning") {
-    return ["State the assumptions that would change the answer if wrong.", "Give a recommendation, not only a survey of options."];
+    return ["Mention an assumption only when it materially changes the result; omit generic assumptions and boilerplate headings.", "Give a recommendation when the user asks for a decision. For creation requests, deliver the working artifact and a brief explanation."];
   }
   return [];
 }

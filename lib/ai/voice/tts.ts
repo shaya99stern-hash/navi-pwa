@@ -35,6 +35,8 @@
  */
 
 import { getSpendStore } from "../spend";
+import { pcmToWav } from "./wav";
+import { readCapped } from "../web-tools";
 
 /** Their free tier, as the default. An operator raises it deliberately. */
 const DEFAULT_MONTHLY_CHARS = 10_000;
@@ -189,6 +191,7 @@ function voiceSettings(rate?: number) {
  */
 export async function synthesizeSpeech(options: {
   text: string;
+  format?: "mp3" | "wav";
   /** The owner's speaking-rate dial, as a multiplier of normal. */
   rate?: number;
   signal?: AbortSignal;
@@ -234,7 +237,7 @@ export async function synthesizeSpeech(options: {
 
   try {
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}/stream`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}/stream${options.format === "wav" ? "?output_format=pcm_24000" : ""}`,
       {
         method: "POST",
         headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },
@@ -256,6 +259,15 @@ export async function synthesizeSpeech(options: {
        stream is bounded by the caller's own signal, not by ours — cancelling
        mid-sentence is exactly what this timer must not do. */
     clearTimeout(timer);
+    if (options.format === "wav") {
+      const bodyTimer = setTimeout(() => controller.abort(), 20_000);
+      try {
+        const { bytes, truncated } = await readCapped(response, 8_000_000);
+        if (truncated || !bytes.length) return { ok: false, reason: "provider-failed", detail: "Premium audio was empty or exceeded the size limit." };
+        const wav = pcmToWav(bytes);
+        return { ok: true, audio: new ReadableStream({ start(c) { c.enqueue(wav); c.close(); } }), contentType: "audio/wav", charged: text.length };
+      } finally { clearTimeout(bodyTimer); }
+    }
     options.signal?.removeEventListener("abort", forward);
     return {
       ok: true,

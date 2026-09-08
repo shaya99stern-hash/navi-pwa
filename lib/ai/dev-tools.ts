@@ -3,6 +3,7 @@ import { z } from "zod";
 import { githubWritesEnabled } from "../github/oauth";
 import { buildGitHubWriteTools } from "./github-write-tools";
 import { readCredential } from "./credentials";
+import { readVercel } from "@/lib/vercel/api";
 
 /**
  * GitHub and Vercel, as tools the model can actually call.
@@ -74,13 +75,7 @@ async function githubFetch(token: string, path: string, signal: AbortSignal, acc
 }
 
 async function vercel(path: string, signal: AbortSignal): Promise<any> {
-  const response = await fetch(`https://api.vercel.com${path}`, {
-    headers: { Authorization: `Bearer ${vercelToken()}`, "User-Agent": "NaviOS-Hub" },
-    signal
-  });
-  if (response.status === 403) throw new Error("Vercel refused the request; the token may lack access to that scope.");
-  if (!response.ok) throw new Error(`Vercel returned ${response.status}.`);
-  return response.json();
+  return readVercel(path, signal);
 }
 
 type Announce = (label: string) => void;
@@ -88,6 +83,8 @@ type Announce = (label: string) => void;
 export type DevToolContext = {
   /** The signed-in user's OAuth token. Falls back to the install-wide PAT. */
   githubToken?: string;
+  /** Registry applies its own mode and permission gates for writes. */
+  includeWrites?: boolean;
 };
 
 export function buildDevTools(onActivity?: Announce, context?: DevToolContext): ToolSet {
@@ -348,7 +345,7 @@ export function buildDevTools(onActivity?: Announce, context?: DevToolContext): 
 
   /* Off unless the install opts in. Read tools are always safe; these are not,
      so they are a separate switch rather than a scope on the same one. */
-  if (resolvedGithubToken && githubWritesEnabled()) {
+  if (context?.includeWrites !== false && resolvedGithubToken && githubWritesEnabled()) {
     Object.assign(tools, buildGitHubWriteTools({ token: resolvedGithubToken, onActivity }));
   }
 

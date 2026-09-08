@@ -1,5 +1,8 @@
 import type { ToolSet } from "ai";
-import { buildDevTools } from "@/lib/ai/dev-tools";
+import { buildWorkPlaybookTools } from "@/lib/ai/work-playbooks";
+import { buildPublicDataTools } from "@/lib/ai/public-data-tools";
+import { classifyIntent } from "@/lib/ai/navi-soul/intent";
+import { buildDevTools, githubToken as deploymentGithubToken, vercelToken } from "@/lib/ai/dev-tools";
 import { buildExecutionTools } from "@/lib/ai/execution-tools";
 import { buildGitHubWriteTools } from "@/lib/ai/github-write-tools";
 import { buildGoogleTools } from "@/lib/ai/google-tools";
@@ -200,7 +203,7 @@ const GROUPS: Group[] = [
        background work of every Code-mode answer. */
     name: "repository",
     tools: () => ({}),
-    when: ({ mode, githubToken, request }) => Boolean(githubToken) && (mode === "code" || wantsAccountTools(request))
+    when: ({ mode, githubToken, request }) => Boolean(githubToken || deploymentGithubToken() || vercelToken()) && (mode === "code" || wantsAccountTools(request))
   },
   {
     name: "repository-write",
@@ -335,6 +338,9 @@ export function buildToolset(context: ToolsetContext): ToolSet {
        the turns where it matters most are exactly the ones where something is
        already broken, and a model that cannot look is a model that invents. */
     ...buildDiagnosticTools({ clerkToken, hasUserGithub: Boolean(githubToken), onActivity }),
+    ...buildWorkPlaybookTools(),
+    ...(/\b(scrap\w*|crawl\w*|extract|deeds?|property|acris|parcel|mortgage)\b/i.test(context.request ?? "")
+      ? buildPublicDataTools({ signal, onActivity, onSource }) : {}),
     ...buildSkillTools(onActivity),
     ...(active("execution") ? buildExecutionTools({ origin, cookie }) : {}),
     ...buildWebTools({ search: policy.web, signal, onActivity, onSource }),
@@ -363,7 +369,7 @@ export function buildToolset(context: ToolsetContext): ToolSet {
     ...(active("self-update") ? buildSelfUpdateTools({ signal, onActivity }) : {}),
     // Repository and deployment reads, present only when their tokens are —
     // and only when this turn is plausibly about them; see `wantsAccountTools`.
-    ...(active("repository") || mode === "code" ? buildDevTools(onActivity, { githubToken }) : {}),
+    ...(active("repository") ? buildDevTools(onActivity, { githubToken, includeWrites: false }) : {}),
     ...(active("repository-write") && githubToken
       ? buildGitHubWriteTools({ token: githubToken, onActivity })
       : {}),
@@ -376,7 +382,32 @@ export function buildToolset(context: ToolsetContext): ToolSet {
   /* MCP last, so a connector can never displace a built-in capability when the
      cap trims. A user who connects ten servers loses connector tools, not the
      ability to run code. */
-  return capToolset({ ...local, ...mcpTools }, toolCeiling(mode));
+  return selectRequestedTools({ ...local, ...mcpTools }, context);
+}
+
+/** Keep the tools needed for the requested work ahead of unrelated utilities.
+ * Builders still enforce credentials, mode, and policy before selection. */
+export function selectRequestedTools(tools: ToolSet, context: Pick<ToolsetContext, "request" | "mode">): ToolSet {
+  const request = context.request ?? "";
+  const artifact = classifyIntent(request, { mode: context.mode, hasImageAttachments: false }).intent === "artifact";
+  if (artifact && !wantsAccountTools(request)) {
+    // Leave room for the artifact itself on free providers' request limits.
+    const required = ["load_work_playbook", "run_javascript", "calculate", "fetch_url", "inspect_environment", "diagnose_self"];
+    return Object.fromEntries(required.filter((name) => name in tools).map((name) => [name, tools[name]]));
+  }
+  const priority = (name: string): number => {
+    if (name === "diagnose_self" || name === "inspect_environment") return 0;
+    if (name === "load_work_playbook") return 0;
+    if (name === "scrape_pages" || name === "nyc_property_records") return 1;
+    if (MENTIONS_DEPLOYMENT.test(request) && name.startsWith("vercel_")) return 1;
+    if (MENTIONS_REPOSITORY.test(request) && name.startsWith("github_")) return 1;
+    if (/\b(mail|email|gmail|calendar|events?)\b/i.test(request) && /^(google_|gmail_|calendar_)/.test(name)) return 1;
+    if (wantsProvisioning(request) && /^(list_connectable_services|connect_service|test_service|query_connector|call_capability)/.test(name)) return 1;
+    if (context.mode === "code" && /^(github_|run_)/.test(name)) return 2;
+    return 3;
+  };
+  const entries = Object.entries(tools).sort(([a], [b]) => priority(a) - priority(b));
+  return capToolset(Object.fromEntries(entries), toolCeiling(context.mode));
 }
 
 /** Which groups are switched on, for diagnostics and for the settings screen. */

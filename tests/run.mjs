@@ -53,10 +53,10 @@ const summary = [];
 
 for (const file of files) {
   const isTs = file.endsWith(".ts");
-  const command = isTs ? "npx" : "node";
+  const command = process.execPath;
   const args = isTs
     // tsx resolves the "@/..." paths from tsconfig, so tests import real modules.
-    ? ["tsx", "--tsconfig", join(root, "tsconfig.json"), join(here, file)]
+    ? [join(root, "node_modules", "tsx", "dist", "cli.mjs"), "--tsconfig", join(root, "tsconfig.json"), join(here, file)]
     : [join(here, file)];
 
   const result = spawnSync(command, args, { cwd: root, encoding: "utf8", timeout: FILE_TIMEOUT_MS });

@@ -44,7 +44,7 @@ export function EngineNote({ note }: { note: NaviEngineNote }) {
   /* "Navi Deep · Extended" — engine, then how hard it was asked to work. The
      separator is a middle dot rather than a slash or a dash because both of
      those already mean something in this app's copy. */
-  const label = note.effort ? `${note.engine} · ${note.effort}` : note.engine;
+  const label = note.effort ? `Navi Soul · ${note.effort}` : "Navi Soul";
 
   return (
     <span
@@ -52,10 +52,8 @@ export function EngineNote({ note }: { note: NaviEngineNote }) {
       className="inline-flex items-center gap-1.5 text-[0.6875rem]/[0.875rem] font-medium text-tertiary"
       /* The visible text is already the whole content, so the title carries the
          part that is not obvious: why this reply came from where it did. */
-      title={note.recovered ? "An earlier engine did not respond, so this one answered instead." : undefined}
     >
       {label}
-      {note.recovered ? <span className="text-tertiary opacity-80">· recovered</span> : null}
     </span>
   );
 }

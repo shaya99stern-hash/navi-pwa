@@ -27,6 +27,11 @@ export type NaviSoulDecision =
 export function decideLocally(query: string, state: { routes?: string[]; version?: string; online?: boolean } = {}): NaviSoulDecision {
   const text = query.trim();
   if (!text) return { route: "model" };
+  // An explicit verbatim request needs neither inference nor research.
+  const verbatim = /^(?:please\s+)?(?:reply|respond|say|repeat)\s+(?:with\s+)?exactly\s*:\s*([\s\S]+)$/i.exec(text);
+  if (verbatim && verbatim[1].length <= 2000) {
+    return { route: "local", response: verbatim[1], kind: "command" };
+  }
 
   if (isSystemCommand(text)) {
     const command = text.toLowerCase();

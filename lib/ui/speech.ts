@@ -366,7 +366,7 @@ export async function speakBest(text: string, language: string, rate = 1): Promi
       headers: { "Content-Type": "application/json" },
       /* The premium voice takes a speed of its own, so the same dial moves
          both engines rather than only the fallback. */
-      body: JSON.stringify({ text, rate })
+      body: JSON.stringify({ text, rate, format: document.createElement("audio").canPlayType("audio/mpeg") ? "mp3" : "wav" })
     });
     /* 204 is the server saying "use the local voice" and is not a fault — but
        it is seven different situations wearing one status, and the person
