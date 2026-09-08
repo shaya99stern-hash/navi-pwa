@@ -64,6 +64,8 @@ const artifact = compileTurnBudget({
 check("artifact is output-heavy even when the sentence is short", artifact.class === "artifact");
 check("artifact gets more output than ordinary chat", artifact.maxOutputTokens > shortHardQuestion.maxOutputTokens);
 check("artifact still has a finite repair/tool loop", artifact.maxToolSteps === 8);
+const codedArtifact = compileTurnBudget({ request: "Create a walkable museum artifact", dispatch: "code", effort: "medium", style: "balanced", artifactRequested: true, hasFiles: false });
+check("code dispatch preserves the artifact completion reserve", codedArtifact.class === "artifact" && codedArtifact.minOutputTokens >= 2_400);
 
 const code = compileTurnBudget({
   request: "Find the bug, patch the repo, run the tests, and verify the deployment",

@@ -4,7 +4,7 @@ export type ArtifactCompletion = { ok: true; count: number } | { ok: false; erro
 
 export function artifactAcceptanceInstruction(request: string): string {
   const base = "Build the requested experience, not a list of placeholder controls. Initialize visible content on load and connect every control to real state. Use addEventListener, never inline onclick attributes. Reserve output for the full implementation; concise exhibit text is better than unfinished scripts. Verify historical dates and attributions; do not invent people, quotations, or citations.";
-  if (!/walk\s+(?:around|through)|first.person|immersive|3d\s+(?:museum|world|scene)/i.test(request)) return base;
+  if (!/walkable|walk\s+(?:around|through)|first.person|immersive|3d\s+(?:museum|world|scene)/i.test(request)) return base;
   return `${base} This request requires spatial exploration. Use the built-in NaviScene renderer: output <div id="scene"></div><script>NaviScene.mount("#scene", {title:"Museum", rooms:[{title:"Room name",period:"Date range",exhibits:[{title:"Scholar or exhibit",dates:"Life dates",description:"Accurate narrative",work:"Key contribution",source:"Source name if known"}]}]});</script> inside the HTML artifact. NaviScene supplies a Canvas perspective gallery, camera position, keyboard and touch movement, exhibit detail panels, room selection and reset. Supply substantive exhibits for every requested era, at most 12 rooms and 12 exhibits per room. Keep each description concise; place scholars in the period they lived, distinguish later influence, and avoid duplicate people under different names. Do not rewrite the scene engine or invent its API. A previous/next slideshow alone does not satisfy walking around.`;
 }
 

@@ -97,8 +97,8 @@ function classifyTurn(input: TurnBudgetInput): TurnBudgetClass {
   ) {
     return "trivial";
   }
-  if (input.dispatch === "code") return "code";
   if (input.artifactRequested) return "artifact";
+  if (input.dispatch === "code") return "code";
   if (input.dispatch === "research") return "research";
   if (input.dispatch === "reasoning" || input.effort === "high" || (input.planSteps ?? 0) >= 4) return "deep";
   return "standard";
