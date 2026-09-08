@@ -77,11 +77,10 @@ check("the facts are fixed once per attempt, before it runs",
   /const facts: AttemptFacts = \{/.test(route), true);
 check("every failed attempt is logged, not only the last",
   /console\.warn\(describeAttemptFailure\(facts, error\)\)/.test(route), true);
-/* Four exits record a failure: the draft throwing, the draft coming back
-   empty, the stream committing nothing, and the outer catch. Three of them
-   attached nothing at all, and the empty-draft one did not even name itself. */
+/* Five exits record a failure now that artifact completion failures are also
+   attributed before the outer catch. */
 const attributed = (route.match(/lastFailure = failedWith\(/g) ?? []).length;
-check("all four exits that record a failure attribute it", attributed, 4);
+check("all five exits that record a failure attribute it", attributed, 5);
 check("with none left assigning a bare error",
   /lastFailure = error;|lastFailure = failure \?\?/.test(route), false);
 

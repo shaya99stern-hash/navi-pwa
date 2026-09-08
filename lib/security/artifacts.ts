@@ -1,4 +1,5 @@
 import type { ArtifactPayload } from "../ai/types";
+import { SCENE_RUNTIME } from "../artifacts/scene-runtime";
 
 const MAX_ARTIFACT_BYTES = 180_000;
 
@@ -597,7 +598,8 @@ export function buildArtifactDocument(payload: ArtifactPayload, theme: "dark" | 
   const surface = theme === "dark" ? "#181D28" : "#F4F7FB";
   const accent = "#4F7CFF";
   const content = payload.kind === "svg" ? sanitizeSvgText(payload.svg ?? "") : sanitizeArtifactHtml(payload.html ?? "");
-  const rendered = payload.kind === "svg" ? `<div class="svg-wrap">${content}</div>` : content;
+  const rendered = payload.kind === "svg" ? `<div class="svg-wrap">${content}</div>`
+    : (/\bNaviScene\s*\.\s*mount\s*\(/.test(content) ? `<script>${SCENE_RUNTIME}</script>` : "") + content;
   const hasArtifactScript = payload.kind === "html" && /<script\b(?![^>]*\bsrc\s*=)/i.test(content);
 
   const fallbackInteractions = hasArtifactScript ? "" : `

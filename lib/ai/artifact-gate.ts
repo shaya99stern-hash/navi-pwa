@@ -118,6 +118,7 @@ function salvagePartial(inner: string): string | null {
   if (!split || split.content.trim().length < PARTIAL_CONTENT_FLOOR) return null;
   const recovered = recoverArtifactPayload(inner);
   if (!recovered.ok) return null;
+  if (!assessArtifact(JSON.stringify(recovered.payload)).ok) return null;
   return `\`\`\`navi-artifact\n${JSON.stringify(recovered.payload)}\n\`\`\`\n\n> This artifact was cut off before it finished — you are seeing the part that arrived. Ask for it again, or for a simpler version.\n`;
 }
 

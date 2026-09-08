@@ -29,6 +29,7 @@ import { decideLocally } from "@/lib/ai/navi-soul/router";
 import { describePlan, planTurn } from "@/lib/ai/navi-soul/orchestrator";
 import { compileTurnBudget, subcallOutputBudget } from "@/lib/ai/navi-soul/turn-budget";
 import { createArtifactGate } from "@/lib/ai/artifact-gate";
+import { artifactAcceptanceInstruction, checkArtifactCompletion } from "@/lib/ai/artifact-completion";
 import { IMAGE_ENGINES, generateNaviImage, type ImageAttachment } from "@/lib/ai/image-generation";
 import { audioGenerationIntent, classifyAudioRequest, generateNaviAudio } from "@/lib/ai/audio-generation";
 import { classifyTask, createProviderModel, engineName, fallbackRoutes, frontierConfigured, getProviderAvailability, lastResortRoute, routeForLane, routeToolCallingSupport, selectDirectRoute, selectLane, type ProviderAvailability } from "@/lib/ai/providers";
@@ -2206,8 +2207,11 @@ export async function POST(request: Request): Promise<Response> {
       const floor = turnPlan.kind === "model" ? turnPlan.lastResort : lastResortRoute(availability, meteredAllowed);
       if (floor && !attempts.some((candidate) => candidate.model === floor.model)) attempts.push(floor);
       let lastFailure: unknown = null;
+      let artifactRepair = "";
+      const artifactDeadline = requestStartedAt + 90_000;
 
       for (const [index, attempt] of attempts.entries()) {
+        if (artifactRequested && artifactDeadline - Date.now() < 8_000) break;
         if (index > 0) {
           writer.write(statusChunk({ stage: "gather", detail: "Switching to another engine." }));
         }
@@ -2231,8 +2235,10 @@ export async function POST(request: Request): Promise<Response> {
            on the 8,000-token free tier it leaves about 2,000, which buys the
            two that matter most instead of failing the request outright. */
         const provisionalCeiling = requestTokenCeiling(PROVIDERS[attempt.provider]) - CEILING_SAFETY_MARGIN;
-        const referenceBudget = Math.max(0, provisionalCeiling - PROMPT_RESERVE_TOKENS - turnBudget.minOutputTokens - estimateToolTokens(attemptTools));
-        const attemptSystem = systemFor(attemptToolNames, referenceBudget);
+        const referenceBudget = Math.max(0, provisionalCeiling - PROMPT_RESERVE_TOKENS - turnBudget.minOutputTokens - estimateToolTokens(attemptTools) - estimateTextTokens(artifactRepair));
+        const attemptSystem = systemFor(attemptToolNames, referenceBudget)
+          + (artifactRequested ? `\n${artifactAcceptanceInstruction(lastUserText)}` : "")
+          + (artifactRepair ? `\n${artifactRepair}` : "");
 
         /* Size the request to what this route will actually take, before
            sending it. A turn of 20,805 tokens was offered to a route whose
@@ -2378,8 +2384,8 @@ export async function POST(request: Request): Promise<Response> {
           });
           return providerOptions ? { providerOptions } : {};
         })(),
-        maxRetries: 1,
-        timeout: { totalMs: 50_000, chunkMs: 14_000 },
+        maxRetries: artifactRequested ? 0 : 1,
+        timeout: { totalMs: artifactRequested ? Math.min(50_000, artifactDeadline - Date.now()) : 50_000, chunkMs: 14_000 },
         abortSignal: request.signal,
         experimental_transform: smoothStream({ delayInMs: 26, chunking: "word" }),
         onError: ({ error }) => console.error("Navi Soul provider stream failed:", error)
@@ -2393,6 +2399,37 @@ export async function POST(request: Request): Promise<Response> {
          model that was not called would be a spending record of a request that
          never happened. */
       if (flightMetered) void meterSpend(result, flightRoute.model);
+      if (artifactRequested) {
+        writer.write(statusChunk({ stage: "draft", detail: artifactRepair ? "Rebuilding the incomplete artifact." : "Building the interactive artifact." }));
+        try {
+          const draft = await result.text;
+          const completion = checkArtifactCompletion(draft);
+          if (!completion.ok) {
+            artifactRepair = `The previous attempt failed the local completion check: ${completion.error.slice(0, 350)}. Produce a complete implementation within the output budget. Keep all requested interactions; reduce decoration and repeated prose first. Finish every script and initialize the interface.`;
+            console.warn("Navi Soul artifact completion rejected:", completion.error);
+            lastFailure = new Error("The interactive artifact could not be completed. Please retry; no broken preview was saved.");
+            continue;
+          }
+          markProviderSuccess(flightRoute.provider);
+          writer.write(statusChunk({ stage: "verify", detail: "Artifact structure and JavaScript checked." }));
+          const gate = createArtifactGate();
+          const artifactTextId = generateId();
+          writer.write({ type: "text-start", id: artifactTextId });
+          for (const chunk of splitLargePayload(draft, 2_000)) {
+            const safe = gate.push(chunk);
+            if (safe) writer.write({ type: "text-delta", id: artifactTextId, delta: safe });
+          }
+          const held = gate.flush();
+          if (held) writer.write({ type: "text-delta", id: artifactTextId, delta: held });
+          writer.write({ type: "text-end", id: artifactTextId });
+          writer.write(statusChunk({ stage: "complete", detail: "Response complete." }));
+          return;
+        } catch (error) {
+          markProviderFailure(flightRoute.provider, error);
+          lastFailure = failedWith(error);
+          continue;
+        }
+      }
       /* A provider that fails *mid-stream* never reaches the outer onError,
          and this inner stream's own default is the bare "An error occurred."
          that hid a hard model rejection behind three useless words. Route it
