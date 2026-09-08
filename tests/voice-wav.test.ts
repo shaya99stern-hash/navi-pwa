@@ -1,0 +1,22 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { pcmToWav } from "../lib/ai/voice/wav";
+
+const pcm = new Uint8Array([0, 0, 255, 127, 0, 128, 1, 0]);
+const wav = pcmToWav(pcm);
+const header = new DataView(wav.buffer);
+assert.equal(new TextDecoder().decode(wav.slice(0, 4)), "RIFF");
+assert.equal(new TextDecoder().decode(wav.slice(8, 16)), "WAVEfmt ");
+assert.equal(header.getUint32(4, true), wav.length - 8);
+assert.equal(header.getUint16(20, true), 1);
+assert.equal(header.getUint16(22, true), 1);
+assert.equal(header.getUint32(24, true), 24000);
+assert.equal(header.getUint32(28, true), 48000);
+assert.equal(header.getUint16(34, true), 16);
+assert.equal(header.getUint32(40, true), pcm.length);
+assert.deepEqual(wav.slice(44), pcm);
+assert.throws(() => pcmToWav(new Uint8Array(3)), /Incomplete PCM/);
+const client = readFileSync("lib/ui/speech.ts", "utf8");
+assert.match(client, /JSON\.stringify\(\{ text, rate, format: "wav" \}\)/);
+assert.doesNotMatch(client, /canPlayType\("audio\/mpeg"\)/);
+console.log("Premium WAV compatibility checks passed.");
