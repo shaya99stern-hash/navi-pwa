@@ -916,6 +916,7 @@ aside .scroll-area {
 @media (min-width: 768px) {
   [data-app-shell="true"] {
     max-width: var(--navi-content-max-width);
+    right: var(--navi-viewport-offset-left, 0px);
     margin: 0 auto;
     border-right: 1px solid var(--border-subtle);
     border-left: 1px solid var(--border-subtle);

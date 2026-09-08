@@ -1,6 +1,7 @@
 /* PATH: lib/ai/navi-soul/artifact-quality.ts  — NEW FILE, copy verbatim. */
 
 import { recoverArtifactPayload, validateArtifactPayload } from "../../security/artifacts";
+import { parse } from "acorn";
 
 /**
  * The difference between a valid artifact and a good one.
@@ -45,12 +46,30 @@ function renderableContent(payload: unknown): string | null {
  * These are the artifacts that render as half a page with no error anywhere.
  */
 export function truncationSuspect(content: string): string | null {
+  const scripts = content.match(/<script\b[^>]*>/gi) ?? [];
+  const closed = content.match(/<\/script\s*>/gi) ?? [];
+  if (scripts.length !== closed.length) return "has an unfinished script element";
   const trimmed = content.trimEnd();
   if (/<[a-zA-Z][^>]{0,80}$/.test(trimmed)) return "ends in the middle of an opening tag";
   if (/[,({\[]\s*$/.test(trimmed)) return "ends on a dangling bracket or comma";
   if (/(?:=>|&&|\|\||[+\-*/%=]|\breturn|\bconst|\blet|\bvar)\s*$/.test(trimmed)) return "ends mid-expression";
   const backticks = (content.match(/`/g) ?? []).length;
   if (backticks % 2 === 1) return "has an unterminated template literal";
+  return null;
+}
+
+/** Parse generated code without executing it or making any network calls. */
+export function artifactScriptError(content: string): string | null {
+  for (const match of content.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+    if (/\bsrc\s*=/i.test(match[1])) return "External scripts cannot run in the artifact sandbox. Inline the implementation.";
+    if (/\btype\s*=\s*["'](?:application\/ld\+json|application\/json)["']/i.test(match[1])) continue;
+    try {
+      // The renderer uses classic inline scripts. Module imports are unavailable.
+      parse(match[2], { ecmaVersion: "latest", sourceType: "script" });
+    } catch (error) {
+      return `JavaScript cannot parse: ${error instanceof Error ? error.message : "syntax error"}`;
+    }
+  }
   return null;
 }
 
@@ -108,6 +127,8 @@ export function assessArtifact(inner: string): ArtifactVerdict {
   if (cut) {
     return { ok: false, error: `The artifact appears truncated: it ${cut}.`, notes: [] };
   }
+  const scriptError = artifactScriptError(content);
+  if (scriptError) return { ok: false, error: scriptError, notes: [] };
 
   return { ok: true, payload, repaired, notes: lintArtifactContent(content) };
 }

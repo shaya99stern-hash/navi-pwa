@@ -48,6 +48,7 @@ type AccountStatus = {
   label: string | null;
   oauthAvailable: boolean;
   writesEnabled: boolean;
+  error?: string;
 };
 
 type CatalogProvider = {
@@ -91,6 +92,7 @@ const ACCOUNTS: AccountConnector[] = [
     id: "vercel",
     name: "Vercel",
     detail: "Deployments and build logs",
+    statusPath: "/api/vercel/status",
     setup: "Connected at the deployment level.",
     reads: "Read deployments and build logs"
   }
@@ -212,14 +214,15 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
       if (!account.statusPath) return [account.id, null] as const;
       try {
         const response = await fetch(account.statusPath, { cache: "no-store" });
-        const data = await response.json() as { connected?: boolean; login?: string | null; email?: string | null; oauthAvailable?: boolean; writesEnabled?: boolean };
+        const data = await response.json() as { connected?: boolean; login?: string | null; email?: string | null; oauthAvailable?: boolean; writesEnabled?: boolean; error?: string };
         return [account.id, {
           connected: data.connected === true,
           label: data.login ?? data.email ?? null,
           oauthAvailable: data.oauthAvailable === true,
-          writesEnabled: data.writesEnabled === true
+          writesEnabled: data.writesEnabled === true,
+          error: data.error
         }] as const;
-      } catch { return [account.id, null] as const; }
+      } catch { return [account.id, { connected: false, label: null, oauthAvailable: Boolean(account.connectPath), writesEnabled: false, error: "Connection status could not be checked." }] as const; }
     }));
     setAccounts((current) => {
       const next = { ...current };
@@ -417,7 +420,7 @@ export function ConnectorsSheet({ open, preferences, haptics, onClose, onPrefere
                     <BrandMark id={account.id} label={account.name} connected={connected} />
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-center gap-2"><span className="connectors-row-label truncate font-medium text-primary">{account.name}</span>{connected ? <span className="rounded-full connector-soft-success px-1.5 py-0.5 text-[10px] font-semibold text-success">Connected</span> : null}</div>
-                      <div className="connectors-row-description mt-0.5 truncate text-tertiary">{connected ? `${status?.label ? `${status.label} · ` : ""}${status?.writesEnabled && account.writes ? "Read + write" : "Read only"}` : account.detail}</div>
+                      <div className="connectors-row-description mt-0.5 text-tertiary">{connected ? `${status?.label ? `${status.label} · ` : ""}${status?.writesEnabled && account.writes ? "Read + write" : "Read only"}` : status?.error || account.detail}</div>
                     </div>
                     {!configurable ? <span className="text-[12px] font-medium text-tertiary">Deployment</span> : connected ? <button type="button" onClick={() => void disconnectAccount(account)} className="connector-action text-danger">Disconnect</button> : status?.oauthAvailable === false ? <span className="text-[12px] text-tertiary">Unavailable</span> : <a href={account.connectPath} className="connector-action flex items-center text-accent">Connect</a>}
                   </div>

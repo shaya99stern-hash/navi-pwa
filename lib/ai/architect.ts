@@ -163,8 +163,8 @@ export function heuristicPlan(options: {
     return { lane: "audio", summary: "Generating audio.", constraints: [], steps: [], risks: [], needsReview: false, source: "heuristic" };
   }
 
-  const code = CODE_SIGNAL.test(text);
-  const research = RESEARCH_SIGNAL.test(text);
+  const code = CODE_SIGNAL.test(text) || /\b(?:create|build|make|design)\b[^\n]{0,100}\b(?:artifact|app|dashboard|calculator|task board|prototype)\b/i.test(text);
+  const research = RESEARCH_SIGNAL.test(text) && !/\b(?:no|without|do not|don't)\s+(?:external\s+)?(?:web\s+)?(?:research|search|browsing)\b/i.test(text);
   /* Code wins a tie: "look up why my build fails" is a debugging job that
      happens to need a search, and answering it as research produces links
      where the user wanted a cause. */
@@ -249,7 +249,7 @@ function constraintsFor(lane: ExecutionLane): string[] {
     ];
   }
   if (lane === "reasoning") {
-    return ["State the assumptions that would change the answer if wrong.", "Give a recommendation, not only a survey of options."];
+    return ["Mention an assumption only when it materially changes the result; omit generic assumptions and boilerplate headings.", "Give a recommendation when the user asks for a decision. For creation requests, deliver the working artifact and a brief explanation."];
   }
   return [];
 }

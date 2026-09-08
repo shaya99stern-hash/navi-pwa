@@ -16,7 +16,10 @@ function load(path) {
   const source = readFileSync(path, "utf8");
   const { code } = transformSync(source, { loader: "ts", format: "cjs", target: "node18" });
   const module = { exports: {} };
-  new Function("module", "exports", "require", code)(module, module.exports, require_);
+  const requireShim = (request) => request === "../artifacts/scene-runtime"
+    ? load("lib/artifacts/scene-runtime.ts")
+    : require_(request);
+  new Function("module", "exports", "require", code)(module, module.exports, requireShim);
   return module.exports;
 }
 

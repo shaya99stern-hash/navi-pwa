@@ -210,9 +210,9 @@ export function planTurn(context: TurnContext): TurnPlan {
   const ordered = orderRoutesByHealth(
     withoutDeadModels([
       primary,
-      ...fallbackRoutes({ primary, availability: context.availability, complex: context.complex })
+      ...fallbackRoutes({ primary, availability: context.availability, complex: context.complex, allCandidates: true })
     ])
-  );
+  ).slice(0, 3);
 
   const promptBlocks: string[] = [];
   if (needsOrchestrationKnowledge(context.request, context.effort)) promptBlocks.push("orchestration-knowledge");

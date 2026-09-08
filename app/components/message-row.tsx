@@ -106,7 +106,6 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
     }
   };
 
-  if (!text && files.length === 0 && !streaming) return null;
 
   async function copy() {
     // On the gesture, not after the clipboard write; see code-block.tsx.
@@ -120,6 +119,10 @@ function MessageRowBase({ message, streaming, last, recent, theme, chatFont, hap
      `Audio` element and has to be stopped through its own handle;
      `speechSynthesis.cancel()` does nothing to it. */
   const spoken = useRef<SpokenHandle | null>(null);
+
+  // Empty failed streams still render this component. Keep the hook count
+  // identical to the preceding streaming render so the entire chat survives.
+  if (!text && files.length === 0 && !streaming) return null;
 
   function readAloud() {
     if (speaking) {

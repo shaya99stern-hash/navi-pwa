@@ -21,7 +21,7 @@ type Props = {
   status: NaviStreamStatus | null;
 };
 
-export function ConversationStatePanel({ research, generating, status }: Props) {
+export function ConversationStatePanel({ generating, status }: Props) {
   if (!generating && !status) return null;
 
   const stage = status?.stage ?? "gather";
@@ -66,7 +66,7 @@ export function ConversationStatePanel({ research, generating, status }: Props) 
      is more use than a generic stage name, so prefer it when one arrives. */
   const announced = status?.detail?.endsWith("…") ? status.detail : null;
   const label = announced
-    ?? `${research && (stage === "gather" || stage === "plan") ? "Researching" : LABELS[stage] || "Thinking"}…`;
+    ?? `${LABELS[stage] || "Thinking"}…`;
 
   return (
     <div className="mt-3 flex items-center gap-2 px-1" role="status" aria-live="polite">

@@ -62,8 +62,8 @@ const BASE: Record<TurnBudgetClass, TurnBudget> = {
   },
   artifact: {
     class: "artifact",
-    maxOutputTokens: 4_800,
-    minOutputTokens: 1_400,
+    maxOutputTokens: 6_400,
+    minOutputTokens: 2_400,
     maxToolSteps: 8,
     maxEngineCalls: 6,
     subcallTokens: { decompose: 700, step: 2_600, verify: 800, revise: 2_800, fast: 650 }

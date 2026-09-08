@@ -20,7 +20,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MenuSection, NaviPreferences, ThemePreference } from "@/lib/ai/types";
 import { DEFAULT_SELF_UPDATE_BRANCH } from "@/lib/ai/self-update-tools";
-import { clampVoiceRate, MAX_VOICE_RATE, MIN_VOICE_RATE } from "@/lib/ui/speech";
+import { clampVoiceRate, MAX_VOICE_RATE, MIN_VOICE_RATE, speakBest } from "@/lib/ui/speech";
 import { categories, isImplemented, type Skill } from "@/lib/skills";
 import { BUILT_IN_PLAYBOOKS, parseSkillMarkdown } from "@/lib/playbooks";
 import { DIAGNOSTIC_ROUTES } from "@/lib/chat";
@@ -354,6 +354,21 @@ export function SettingsSheet({
   const [factsOpen, setFactsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<PwaUpdateStatus>(DEFAULT_UPDATE_STATUS);
   const [micTest, setMicTest] = useState<{ running: boolean; step: string; checks: MicCheck[] }>({ running: false, step: "", checks: [] });
+  const [voiceTest, setVoiceTest] = useState("");
+  const voiceTesting = useRef(false);
+
+  async function testSpeakingVoice() {
+    if (voiceTesting.current) return;
+    voiceTesting.current = true;
+    setVoiceTest("Testing speaking voice…");
+    try {
+      const handle = await speakBest("Hello. I'm Navi Soul, and this is your speaking voice.", preferences.voiceLanguage === "auto" ? navigator.language : preferences.voiceLanguage, preferences.voiceRate);
+      setVoiceTest(handle.engine === "premium" ? "Premium voice is playing." : `Device voice: ${handle.why || "Premium voice is unavailable."}`);
+      await handle.done;
+    } catch {
+      setVoiceTest("Audio playback failed. Check your device's sound and browser permissions.");
+    } finally { voiceTesting.current = false; }
+  }
   const [systemChecks, setSystemChecks] = useState<{ running: boolean; results: Array<{ area: string; ok: boolean; detail: string }> }>({ running: false, results: [] });
   const [evalState, setEvalState] = useState<{ phase: "idle" | "running" | "done" | "error"; message: string }>({
     phase: "idle",
@@ -758,6 +773,9 @@ export function SettingsSheet({
                 )} />
                 <Divider />
                 <InlineButton onClick={() => void runMicTest()}>{micTest.running ? "Testing microphone…" : "Test microphone"}</InlineButton>
+                <Divider />
+                <InlineButton onClick={() => void testSpeakingVoice()}>Test speaking voice</InlineButton>
+                {voiceTest ? <p role="status" className="px-4 pb-3 text-[13px] text-secondary">{voiceTest}</p> : null}
               </Group>
               {micTest.running || micTest.checks.length ? (
                 <Group>

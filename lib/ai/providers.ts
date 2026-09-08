@@ -523,6 +523,19 @@ export function routeForLane(options: {
     if (availability.cerebras) return ROUTES.cerebrasFast;
   }
 
+  // Complex work keeps the strongest configured route when it supports the
+  // required tools. A free frontier needs no paid ledger authorization.
+  if (lane === 3 && !hasFiles) {
+    const frontier = ROUTES.openRouterFrontier;
+    if (frontierConfigured() && availability.openrouter
+      && (frontier.model.endsWith(":free") || meteredAllowed)
+      && (!(tools.web || tools.code) || routeToolCallingSupport(frontier) !== "none")) return frontier;
+    if (tools.web || tools.code) {
+      if (availability.groq) return ROUTES.groqReasoning;
+      if (availability.cerebras) return ROUTES.cerebrasLarge;
+    }
+  }
+
   /* A request that needs tools needs a model that accepts them, whatever the
      lane would have preferred. Capability beats tier. */
   if (tools.web || tools.code) {
@@ -697,6 +710,8 @@ export function fallbackRoutes(options: {
   primary: ProviderRoute;
   availability: ProviderAvailability;
   complex: boolean;
+  /** Let the planner consider every candidate before applying health and attempt limits. */
+  allCandidates?: boolean;
 }): ProviderRoute[] {
   const { primary, availability, complex } = options;
   const candidates: ProviderRoute[] = [];
@@ -717,8 +732,7 @@ export function fallbackRoutes(options: {
     seen.add(candidate.provider);
     ordered.push(candidate);
   }
-  // Two alternates is enough: a third costs more latency than it recovers.
-  return ordered.slice(0, 2);
+  return options.allCandidates ? ordered : ordered.slice(0, 2);
 }
 
 /**
