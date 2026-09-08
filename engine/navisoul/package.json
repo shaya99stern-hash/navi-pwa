@@ -1,0 +1,52 @@
+{
+  "name": "navisoul-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1",
+    "build": "astro build",
+    "check": "astro check && tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "predev": "node scripts/build-runtimes.mjs",
+    "prebuild": "node scripts/build-runtimes.mjs",
+    "precheck": "node scripts/build-runtimes.mjs"
+  },
+  "dependencies": {
+    "@astrojs/vercel": "8.2.11",
+    "@clerk/backend": "3.13.2",
+    "@huggingface/transformers": "4.2.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "acorn": "8.16.0",
+    "ajv": "8.20.0",
+    "astro": "5.18.2",
+    "fast-xml-parser": "5.11.1",
+    "fflate": "0.8.3",
+    "katex": "0.16.22",
+    "mermaid": "11.12.2",
+    "pdfjs-dist": "5.4.624",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "sucrase": "3.35.1",
+    "vue": "3.5.26"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.9",
+    "@types/katex": "0.16.8",
+    "@types/node": "22.18.0",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "esbuild": "0.25.12",
+    "fake-indexeddb": "6.2.4",
+    "tsx": "4.23.5",
+    "typescript": "5.9.2"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "overrides": {
+    "langium": {
+      "vscode-jsonrpc": "8.2.1"
+    }
+  }
+}

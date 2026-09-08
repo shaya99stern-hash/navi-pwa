@@ -1,0 +1,15 @@
+---
+import ArtifactCanvas from '../components/ArtifactCanvas.astro';
+---
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/><meta name="theme-color" content="#17191b"/><meta name="apple-mobile-web-app-capable" content="yes"/><link rel="manifest" href="/manifest.webmanifest"/><title>Navi Soul</title></head>
+<body><main class="app">
+  <aside class="sidebar" id="sidebar" hidden><div class="sidebar-top"><strong>Navi Soul</strong><button id="close-sidebar" aria-label="Close sidebar">✕</button></div><button id="new-chat">＋ New conversation</button><h2>Conversations</h2><div id="threads"></div><h2>Artifacts</h2><div id="artifacts"></div><button id="settings-open">Settings</button></aside>
+  <section class="conversation"><header class="topbar"><button id="menu" aria-label="Open sidebar">☰</button><button class="identity" id="title">Navi Soul <span>⌄</span></button><button id="compose" aria-label="New conversation">＋</button></header>
+    <div class="messages" id="messages" role="log" aria-label="Conversation"><div class="welcome" id="welcome"><div class="soul-mark" aria-hidden="true">✳</div><h1>What’s on your mind?</h1><p>Think it through. Make something real.</p><div class="suggestions"><button data-prompt="Build an interactive monthly budget calculator with income, expenses, and a savings chart.">Build something <span>↗</span></button><button data-prompt="Help me understand a document. I will attach it next.">Explore a document <span>↗</span></button></div></div></div>
+    <div class="composer-wrap"><div class="status" id="status" role="status"></div><div id="attachments"></div><form id="composer"><textarea id="prompt" rows="1" placeholder="Ask Navi Soul…" aria-label="Message Navi Soul"></textarea><div class="composer-controls"><label class="icon-button" aria-label="Attach a document">＋<input type="file" id="files" accept=".pdf,.docx,.xlsx,.csv,.txt,.md,.json" hidden/></label><button type="button" id="voice" aria-label="Dictate a message">♩</button><span class="mode-label">Navi Soul · Auto</span><button type="submit" id="send" aria-label="Send message">↑</button><button type="button" id="stop" hidden>Stop</button></div></form><p class="footnote">Your workspace stays on this device. Verify important facts.</p></div>
+  </section><ArtifactCanvas/>
+  <dialog id="settings"><header><h2>Settings</h2><button id="settings-close" aria-label="Close settings">✕</button></header><p id="connection-status">Checking connections…</p><div id="model-settings"></div><label><input type="checkbox" id="auto-repair" checked/> Automatically repair artifact runtime errors</label><label><input type="checkbox" id="read-aloud"/> Speak replies using this device’s voice</label><p>Model connections are configured on the server. Keys never enter chat or browser storage.</p><a href="/sign-in">Sign in</a></dialog>
+</main><script src="../client/app.ts"></script></body></html>
+<style is:global>
+@import '../styles/app.css';
+</style>

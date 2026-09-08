@@ -1,0 +1,37 @@
+<artifact-canvas class="artifact-workspace" hidden>
+  <header><div><span class="eyebrow">WORKSPACE</span><h2 data-title>Artifact</h2></div><div class="canvas-actions"><select data-version aria-label="Artifact version"></select><button data-code>Code</button><button data-download>Download</button><button data-close aria-label="Close artifact">✕</button></div></header>
+  <p data-notice role="status" hidden></p>
+  <iframe title="Artifact preview" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+  <form data-editor hidden><label>Artifact source<textarea data-source spellcheck="false"></textarea></label><button type="submit">Save new version</button><button type="button" data-cancel>Cancel</button></form>
+</artifact-canvas>
+<script>
+  import { sandboxDocument,validateArtifact } from '../lib/sandbox/runtime';
+  import type { Artifact } from '../lib/types';
+  class ArtifactCanvas extends HTMLElement {
+    artifact:Artifact|null=null;nonce='';generation=0;
+    connectedCallback(){
+      this.querySelector('[data-close]')!.addEventListener('click',()=>{this.hidden=true;});
+      this.querySelector('[data-code]')!.addEventListener('click',()=>{if(!this.artifact)return;this.querySelector<HTMLTextAreaElement>('[data-source]')!.value=this.artifact.source;this.querySelector<HTMLFormElement>('[data-editor]')!.hidden=false;});
+      this.querySelector('[data-cancel]')!.addEventListener('click',()=>{this.querySelector<HTMLFormElement>('[data-editor]')!.hidden=true;});
+      this.querySelector('[data-editor]')!.addEventListener('submit',event=>{event.preventDefault();void this.saveEdit();});
+      this.querySelector('[data-download]')!.addEventListener('click',()=>{if(!this.artifact)return;const blob=new Blob([this.artifact.source],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=this.artifact.id+'.'+({react:'jsx',vue:'js',markdown:'md',latex:'tex',mermaid:'mmd'}[this.artifact.kind as string]??this.artifact.kind);anchor.click();setTimeout(()=>URL.revokeObjectURL(url),500);});
+      this.querySelector('[data-version]')!.addEventListener('change',()=>this.dispatchEvent(new CustomEvent('artifact-version',{bubbles:true,detail:{id:this.artifact?.id,version:Number(this.querySelector<HTMLSelectElement>('[data-version]')!.value)}})));
+      window.addEventListener('message',this.receive);
+      window.addEventListener('navi:open-artifact',this.openEvent);
+    }
+    disconnectedCallback(){window.removeEventListener('message',this.receive);window.removeEventListener('navi:open-artifact',this.openEvent);}
+    openEvent=(event:Event)=>{const detail=(event as CustomEvent<{artifact:Artifact;versions:Artifact[]}>).detail;void this.open(detail.artifact,detail.versions);};
+    receive=(event:MessageEvent)=>{const frame=this.querySelector('iframe');if(event.source!==frame?.contentWindow||event.data?.nonce!==this.nonce)return;
+      if(event.data.type==='sandbox:error'&&this.artifact){const message=String(event.data.message).slice(0,600);this.notice('The preview encountered an error. Navi can repair it.');this.dispatchEvent(new CustomEvent('artifact-error',{bubbles:true,detail:{artifact:this.artifact,message,stack:String(event.data.stack??'').slice(0,1800)}}));}
+      if(event.data.type==='sandbox:escape')this.hidden=true;
+    };
+    notice(value:string){const node=this.querySelector<HTMLElement>('[data-notice]')!;node.textContent=value;node.hidden=!value;}
+    async open(artifact:Artifact,versions:Artifact[]){
+      const generation=++this.generation;this.artifact=artifact;this.nonce=crypto.randomUUID();this.hidden=false;this.notice('');this.querySelector('[data-title]')!.textContent=artifact.title;
+      const select=this.querySelector<HTMLSelectElement>('[data-version]')!;select.replaceChildren(...versions.map(item=>{const option=document.createElement('option');option.value=String(item.version);option.textContent='v'+item.version;option.selected=item.version===artifact.version;return option;}));
+      try{const source=await sandboxDocument(artifact,this.nonce);if(generation===this.generation)this.querySelector('iframe')!.srcdoc=source;}catch(error){this.notice(error instanceof Error?error.message:'Preview failed');}
+    }
+    async saveEdit(){if(!this.artifact)return;try{const edited=await validateArtifact({...this.artifact,source:this.querySelector<HTMLTextAreaElement>('[data-source]')!.value});this.dispatchEvent(new CustomEvent('artifact-save',{bubbles:true,detail:{artifact:edited,baseHash:this.artifact.hash}}));this.querySelector<HTMLFormElement>('[data-editor]')!.hidden=true;}catch(error){this.notice(error instanceof Error?error.message:'The edit is invalid');}}
+  }
+  if(!customElements.get('artifact-canvas'))customElements.define('artifact-canvas',ArtifactCanvas);
+</script>
