@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   let body: { urls?: unknown };
   try { const raw = await request.text(); if (raw.length > 8_000) throw new Error(); body = JSON.parse(raw); }
   catch { return Response.json({ error: "Send a short JSON list of URLs" }, { status: 400 }); }
-  if (!Array.isArray(body.urls) || !body.urls.length || body.urls.length > 5 || body.urls.some(url => typeof url !== "string" || url.length > 1_500)) {
+  if (!body || !Array.isArray(body.urls) || !body.urls.length || body.urls.length > 5 || body.urls.some(url => typeof url !== "string" || url.length > 1_500)) {
     return Response.json({ error: "Provide one to five public URLs" }, { status: 400 });
   }
   const urls = [...new Set(body.urls as string[])];

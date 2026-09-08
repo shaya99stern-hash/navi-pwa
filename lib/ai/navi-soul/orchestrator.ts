@@ -211,7 +211,8 @@ export function planTurn(context: TurnContext): TurnPlan {
     withoutDeadModels([
       primary,
       ...fallbackRoutes({ primary, availability: context.availability, complex: context.complex, allCandidates: true })
-    ])
+    ]).sort((left, right) => intent.intent === "artifact" && (context.preset === "navi-soul" || context.preset === "navi-code")
+      ? Number(right.provider === "openrouter") - Number(left.provider === "openrouter") : 0)
   ).slice(0, 3);
 
   const promptBlocks: string[] = [];
