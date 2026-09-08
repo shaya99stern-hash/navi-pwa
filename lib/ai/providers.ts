@@ -710,6 +710,8 @@ export function fallbackRoutes(options: {
   primary: ProviderRoute;
   availability: ProviderAvailability;
   complex: boolean;
+  /** Let the planner consider every candidate before applying health and attempt limits. */
+  allCandidates?: boolean;
 }): ProviderRoute[] {
   const { primary, availability, complex } = options;
   const candidates: ProviderRoute[] = [];
@@ -730,8 +732,7 @@ export function fallbackRoutes(options: {
     seen.add(candidate.provider);
     ordered.push(candidate);
   }
-  // Two alternates is enough: a third costs more latency than it recovers.
-  return ordered.slice(0, 2);
+  return options.allCandidates ? ordered : ordered.slice(0, 2);
 }
 
 /**

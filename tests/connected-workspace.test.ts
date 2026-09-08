@@ -40,7 +40,7 @@ assert.throws(() => pcmToWav(new Uint8Array(3)));
 const row = readFileSync("app/components/message-row.tsx", "utf8");
 assert.ok(row.indexOf("const spoken = useRef") < row.indexOf("if (!text && files.length"), "failed empty stream must preserve its hooks");
 const records = buildPublicDataTools({}).nyc_property_records;
-const result = await records.execute!({ borough: 5, block: 1, lot: 1 }, { toolCallId: "test", messages: [] });
+const result = await records.execute!({ borough: 5, block: 1, lot: 1 }, { toolCallId: "test", messages: [], context: {} });
 assert.equal((result as { status: string }).status, "unavailable");
 console.log("Connected workspace regressions passed.");
 }

@@ -59,6 +59,15 @@ async function main() {
   check("the cooled route survives as a fallback", cooled.kind === "model" && cooled.fallbacks.some((route) => route.provider === "groq"), true);
   resetProviderHealth();
 
+  // Healthy services beyond the old two-alternate cutoff must remain reachable.
+  for (const provider of ["groq", "gemini", "cerebras"] as const) {
+    markProviderFailure(provider, new Error("403 Forbidden"));
+  }
+  const recovered = planTurn({ ...context, availability: avail({ groq: true, gemini: true, cerebras: true, openrouter: true }) });
+  check("health ranking considers candidates beyond the old cutoff", recovered.kind === "model" && recovered.route.provider, "openrouter");
+  check("health ranking preserves a bounded attempt count", recovered.kind === "model" && recovered.fallbacks.length <= 2, true);
+  resetProviderHealth();
+
   check("a certain picture ask short-circuits to the image pipeline", planTurn({ ...context, request: "draw me a poster of a mountain at dawn" }).kind, "image");
   check("an artifact ask earns the artifact prompt block", (() => { const p = planTurn({ ...context, request: "build a pomodoro timer app with a progress ring" }); return p.kind === "model" && p.promptBlocks.includes("artifact-discipline"); })(), true);
   check("no providers means a named refusal, not a throw", planTurn({ ...context, availability: avail({}) }).kind, "unconfigured");
